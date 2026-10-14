@@ -13,9 +13,10 @@ try {
     $env:DRAWER_DATA_DIR = $dataRoot
     $env:PATH = Join-Path $env:SystemRoot 'System32'
     $receipt = Join-Path $testRoot 'receipt.txt'
-    $process = Start-Process -FilePath (Join-Path $installRoot 'Drawer.exe') -ArgumentList @('--smoke-test', ('"' + $receipt + '"')) -WorkingDirectory $testRoot -WindowStyle Hidden -PassThru
+    $errors = Join-Path $testRoot 'errors.txt'
+    $process = Start-Process -FilePath (Join-Path $installRoot 'Drawer.exe') -ArgumentList @('--smoke-test', ('"' + $receipt + '"')) -WorkingDirectory $testRoot -WindowStyle Hidden -RedirectStandardError $errors -PassThru
     if (-not $process.WaitForExit(30000)) { $process.Kill(); throw '설치 앱 시작 시간 초과' }
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $receipt)) { throw '설치 앱 실행 실패' }
+    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $receipt)) { Get-Content -LiteralPath $errors; throw '설치 앱 실행 실패' }
     $preferences = Join-Path $dataRoot 'settings/preferences.txt'
     if (-not (Test-Path -LiteralPath $preferences)) { throw '사용자 설정 저장 실패' }
     $before = (Get-FileHash -LiteralPath $preferences).Hash
@@ -32,6 +33,7 @@ try {
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
     if ($smokeResult -notmatch 'canvases=2' -or $smokeResult -notmatch 'views=2' -or $smokeResult -notmatch 'close_cancel=true') { throw '문서 전환/닫기 취소 시작 시험 실패' }
+    if ($smokeResult -notmatch 'sizing_dpi=true' -or $smokeResult -notmatch 'sizing_undo=true') { throw 'DPI 변경/취소 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 4개 보존.'
 } finally {

@@ -56,6 +56,7 @@ pub struct Document {
     pub view: crate::view::View,
     pub tool: crate::assets::BrushTip,
     pub revision: u64,
+    pub scene: crate::scene::Scene,
     pub(crate) history: crate::history::History,
 }
 
@@ -102,11 +103,16 @@ impl Document {
             view: crate::view::View::default(),
             tool: crate::assets::BrushTip::Pen,
             revision: 0,
+            scene: Default::default(),
             history: Default::default(),
         })
     }
     pub fn memory_bytes(&self) -> usize {
-        self.layers.iter().map(|layer| layer.pixels.len() * 4).sum()
+        self.layers
+            .iter()
+            .map(|layer| layer.pixels.len() * 4)
+            .sum::<usize>()
+            + self.scene.size_bytes()
     }
     pub fn mark_saved(&mut self, path: PathBuf) {
         self.title = path

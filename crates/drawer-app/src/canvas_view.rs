@@ -24,7 +24,13 @@ impl CanvasView {
             viewport: None,
         }
     }
-    pub fn show(&mut self, ui: &mut egui::Ui, _index: usize, document: &mut Document) -> bool {
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        _index: usize,
+        document: &mut Document,
+        overlay: Option<drawer_core::scene::Rect>,
+    ) -> bool {
         let before = document.view;
         ui.horizontal(|ui| {
             ui.label("Zoom");
@@ -92,9 +98,11 @@ impl CanvasView {
             let width = document.width.div_ceil(reduction);
             let height = document.height.div_ceil(reduction);
             let mut pixels = Vec::with_capacity((width * height) as usize);
+            let renderer = drawer_core::render::Renderer::new(document);
             for y in 0..height {
                 for x in 0..width {
-                    let pixel = document.composite_pixel(x * reduction, y * reduction);
+                    let pixel = renderer
+                        .pixel([(x * reduction) as f64 + 0.5, (y * reduction) as f64 + 0.5]);
                     pixels.push(egui::Color32::from_rgba_unmultiplied(
                         pixel[0], pixel[1], pixel[2], pixel[3],
                     ));
@@ -142,6 +150,24 @@ impl CanvasView {
             }
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
             painter.add(egui::Shape::mesh(mesh));
+        }
+        if let Some(boundary) = overlay {
+            let outline = [
+                boundary.min,
+                [boundary.max[0], boundary.min[1]],
+                boundary.max,
+                [boundary.min[0], boundary.max[1]],
+            ]
+            .map(|point| {
+                let point = document.view.document_to_screen(point, size, center, ppp);
+                egui::pos2(point[0] as f32, point[1] as f32)
+            });
+            for i in 0..4 {
+                painter.line_segment(
+                    [outline[i], outline[(i + 1) % 4]],
+                    egui::Stroke::new(2.0, egui::Color32::YELLOW),
+                );
+            }
         }
         document.view != before
     }

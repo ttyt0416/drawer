@@ -1,0 +1,662 @@
+use crate::{
+    document::{DEFAULT_DOCUMENT_BUDGET, Document, MAX_DIMENSION, RasterLayer},
+    scene::{Affine, Rect, Scene},
+};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocumentState {
+    pub width: u32,
+    pub height: u32,
+    pub dpi: f64,
+    pub layers: Vec<RasterLayer>,
+    pub scene: Scene,
+}
+impl DocumentState {
+    pub fn memory_bytes(&self) -> usize {
+        self.layers
+            .iter()
+            .map(|l| l.pixels.len() * 4)
+            .sum::<usize>()
+            + self.scene.size_bytes()
+    }
+    pub(crate) fn restore(&self, document: &mut Document) {
+        document.width = self.width;
+        document.height = self.height;
+        document.dpi = self.dpi;
+        document.layers = self.layers.clone();
+        document.scene = self.scene.clone();
+    }
+}
+impl Document {
+    pub fn snapshot(&self) -> DocumentState {
+        DocumentState {
+            width: self.width,
+            height: self.height,
+            dpi: self.dpi,
+            layers: self.layers.clone(),
+            scene: self.scene.clone(),
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Interpolation {
+    Nearest,
+    Bilinear,
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Change {
+    Resample {
+        width: u32,
+        height: u32,
+        dpi: f64,
+        filter: Interpolation,
+    },
+    Dpi(f64),
+    Canvas {
+        width: u32,
+        height: u32,
+        anchor: [f64; 2],
+    },
+    Crop {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
+}
+#[derive(Clone, Debug)]
+pub struct Plan {
+    pub width: u32,
+    pub height: u32,
+    pub dpi: f64,
+    pub offset: [i64; 2],
+    pub removed_pixels: u64,
+    pub clipped_objects: Vec<usize>,
+    pub source_boundary: Rect,
+}
+pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Plan, String> {
+    if !(1..=MAX_DIMENSION).contains(&source.width)
+        || !(1..=MAX_DIMENSION).contains(&source.height)
+        || source.layers.is_empty()
+        || !source.dpi.is_finite()
+        || source.dpi <= 0.0
+    {
+        return Err("Invalid source image.".into());
+    }
+    let (width, height, dpi, offset) = match change {
+        Change::Resample {
+            width, height, dpi, ..
+        } => (width, height, dpi, [0, 0]),
+        Change::Dpi(dpi) => (source.width, source.height, dpi, [0, 0]),
+        Change::Canvas {
+            width,
+            height,
+            anchor,
+        } => {
+            if anchor.iter().any(|v| ![0.0, 0.5, 1.0].contains(v)) {
+                return Err("Choose one of the nine canvas anchors.".into());
+            }
+            (
+                width,
+                height,
+                source.dpi,
+                [
+                    ((width as f64 - source.width as f64) * anchor[0]).round() as i64,
+                    ((height as f64 - source.height as f64) * anchor[1]).round() as i64,
+                ],
+            )
+        }
+        Change::Crop {
+            x,
+            y,
+            width,
+            height,
+        } => {
+            if x.checked_add(width).is_none_or(|r| r > source.width)
+                || y.checked_add(height).is_none_or(|b| b > source.height)
+            {
+                return Err("The crop must be inside the image.".into());
+            }
+            (width, height, source.dpi, [-i64::from(x), -i64::from(y)])
+        }
+    };
+    if !(1..=MAX_DIMENSION).contains(&width) || !(1..=MAX_DIMENSION).contains(&height) {
+        return Err("Image dimensions must be from 1 to 32768 pixels.".into());
+    }
+    if !dpi.is_finite() || dpi <= 0.0 {
+        return Err("DPI must be positive and finite.".into());
+    }
+    if !source.scene.valid() {
+        return Err("Invalid page geometry.".into());
+    }
+    let result_bytes = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .and_then(|n| n.checked_mul(source.layers.len()))
+        .and_then(|n| n.checked_add(source.scene.size_bytes()))
+        .ok_or("Image size overflow.")?;
+    let history_bytes = source
+        .memory_bytes()
+        .checked_add(result_bytes)
+        .ok_or("Image size overflow.")?;
+    if history_bytes > DEFAULT_DOCUMENT_BUDGET / 4 || history_bytes.saturating_mul(2) > budget {
+        return Err("This change exceeds the available memory / undo budget. Reduce the dimensions or close other drawings.".into());
+    }
+    let source_boundary = match change {
+        Change::Canvas { .. } | Change::Crop { .. } => Rect {
+            min: [-offset[0] as f64, -offset[1] as f64],
+            max: [
+                width as f64 - offset[0] as f64,
+                height as f64 - offset[1] as f64,
+            ],
+        },
+        _ => Rect {
+            min: [0.0, 0.0],
+            max: [source.width as f64, source.height as f64],
+        },
+    };
+    let overlap = source_boundary.intersection(Rect {
+        min: [0.0, 0.0],
+        max: [source.width as f64, source.height as f64],
+    });
+    let removed_pixels = u64::from(source.width) * u64::from(source.height)
+        - ((overlap.max[0] - overlap.min[0]) * (overlap.max[1] - overlap.min[1])) as u64;
+    Ok(Plan {
+        width,
+        height,
+        dpi,
+        offset,
+        removed_pixels: removed_pixels * source.layers.len() as u64,
+        clipped_objects: source.scene.clipped_objects(source_boundary),
+        source_boundary,
+    })
+}
+pub fn prepare(
+    source: &DocumentState,
+    change: Change,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> Result<DocumentState, String> {
+    let plan = plan(source, change, budget)?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err("Change canceled.".into());
+    }
+    let mut result = DocumentState {
+        width: plan.width,
+        height: plan.height,
+        dpi: plan.dpi,
+        layers: Vec::new(),
+        scene: source.scene.clone(),
+    };
+    let resampling = matches!(change, Change::Resample { .. });
+    let scale = [
+        plan.width as f64 / source.width as f64,
+        plan.height as f64 / source.height as f64,
+    ];
+    for layer in &source.layers {
+        if layer.pixels.len() != source.width as usize * source.height as usize {
+            return Err("Invalid raster data.".into());
+        }
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(plan.width as usize * plan.height as usize)
+            .map_err(|_| "Not enough image memory.")?;
+        for y in 0..plan.height {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("Change canceled.".into());
+            }
+            for x in 0..plan.width {
+                let color = if resampling {
+                    let filter = match change {
+                        Change::Resample { filter, .. } => filter,
+                        _ => unreachable!(),
+                    };
+                    sample(
+                        layer,
+                        source.width,
+                        source.height,
+                        [
+                            (x as f64 + 0.5) / scale[0] - 0.5,
+                            (y as f64 + 0.5) / scale[1] - 0.5,
+                        ],
+                        filter,
+                    )
+                } else {
+                    let sx = x as i64 - plan.offset[0];
+                    let sy = y as i64 - plan.offset[1];
+                    if sx >= 0
+                        && sy >= 0
+                        && sx < i64::from(source.width)
+                        && sy < i64::from(source.height)
+                    {
+                        layer.pixels[(sy * i64::from(source.width) + sx) as usize]
+                    } else {
+                        [0; 4]
+                    }
+                };
+                pixels.push(color);
+            }
+        }
+        result.layers.push(RasterLayer {
+            name: layer.name.clone(),
+            pixels,
+        });
+    }
+    let transform = if resampling {
+        Affine([scale[0], 0.0, 0.0, scale[1], 0.0, 0.0])
+    } else {
+        Affine([
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            plan.offset[0] as f64,
+            plan.offset[1] as f64,
+        ])
+    };
+    if matches!(change, Change::Crop { .. }) {
+        let inverse = source.scene.transform.inverse();
+        let boundary = plan.source_boundary;
+        result.scene.clips.push(
+            [
+                boundary.min,
+                [boundary.max[0], boundary.min[1]],
+                boundary.max,
+                [boundary.min[0], boundary.max[1]],
+            ]
+            .map(|p| inverse.map(p)),
+        );
+    }
+    result.scene.transform = result.scene.transform.then(transform);
+    if !result.scene.valid() {
+        return Err("The resulting geometry exceeds the supported coordinate range.".into());
+    }
+    Ok(result)
+}
+fn sample(
+    layer: &RasterLayer,
+    width: u32,
+    height: u32,
+    point: [f64; 2],
+    filter: Interpolation,
+) -> [u8; 4] {
+    let at = |x: i64, y: i64| {
+        layer.pixels[(y.clamp(0, i64::from(height) - 1) as u32 * width
+            + x.clamp(0, i64::from(width) - 1) as u32) as usize]
+    };
+    if filter == Interpolation::Nearest {
+        return at(point[0].round() as i64, point[1].round() as i64);
+    }
+    let x = point[0].floor() as i64;
+    let y = point[1].floor() as i64;
+    let fx = point[0] - x as f64;
+    let fy = point[1] - y as f64;
+    let mut premul = [0.0; 4];
+    for (pixel, weight) in [
+        (at(x, y), (1.0 - fx) * (1.0 - fy)),
+        (at(x + 1, y), fx * (1.0 - fy)),
+        (at(x, y + 1), (1.0 - fx) * fy),
+        (at(x + 1, y + 1), fx * fy),
+    ] {
+        let alpha = pixel[3] as f64 / 255.0;
+        for i in 0..3 {
+            premul[i] += pixel[i] as f64 * alpha * weight;
+        }
+        premul[3] += alpha * weight;
+    }
+    if premul[3] == 0.0 {
+        return [0; 4];
+    }
+    [
+        (premul[0] / premul[3]).round() as u8,
+        (premul[1] / premul[3]).round() as u8,
+        (premul[2] / premul[3]).round() as u8,
+        (premul[3] * 255.0).round() as u8,
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        document::{Background, CanvasSpec},
+        files,
+        render::Renderer,
+        scene::{Camera, PageObject, WorldMesh},
+        test_support::TempDir,
+    };
+    fn fixture() -> Document {
+        let mut doc = Document::create(
+            CanvasSpec {
+                width: 120,
+                height: 80,
+                dpi: 300.0,
+                background: Background::Transparent,
+            },
+            100000,
+        )
+        .unwrap();
+        doc.layers[0].pixels[0] = [255, 0, 0, 255];
+        doc.layers[0].pixels[119] = [0, 255, 0, 255];
+        doc.layers[0].pixels[120 * 79] = [0, 0, 255, 255];
+        doc.layers[0].pixels[120 * 80 - 1] = [255, 255, 0, 255];
+        doc.scene.objects = vec![
+            PageObject::Text {
+                baseline: [2.0, 38.0],
+                text: "Hi".into(),
+                size_px: 10.0 * 300.0 / 72.0,
+                color: [200, 10, 40, 255],
+            },
+            PageObject::Line {
+                start: [0.0, 45.0],
+                end: [120.0, 45.0],
+                width_px: 10.0,
+                color: [10, 90, 180, 255],
+            },
+            PageObject::Tone {
+                bounds: Rect {
+                    min: [0.0, 50.0],
+                    max: [120.0, 80.0],
+                },
+                period_px: 300.0 / 60.0,
+                coverage: 0.25,
+            },
+            PageObject::Shadow {
+                bounds: Rect {
+                    min: [60.0, 2.0],
+                    max: [75.0, 10.0],
+                },
+                offset: [10.0, 10.0],
+                radius_px: 10.0,
+                color: [40, 20, 0, 180],
+            },
+        ];
+        doc.scene.selection = Some(Rect {
+            min: [10.0, 5.0],
+            max: [50.0, 60.0],
+        });
+        doc.scene.guides = vec![[[15.0, 0.0], [15.0, 80.0]]];
+        doc.scene.camera = Some(Camera {
+            page_bounds: Rect {
+                min: [85.0, 0.0],
+                max: [120.0, 40.0],
+            },
+            position: [0.0, 0.0, 10.0],
+            pixels_per_unit: 10.0,
+        });
+        doc.scene.worlds = vec![WorldMesh {
+            vertices: vec![[-1.0, -1.0, 0.0], [1.0, -1.0, 1.0], [0.0, 1.0, 0.0]],
+            edges: vec![[0, 1], [1, 2], [2, 0]],
+            color: [0, 120, 30, 255],
+        }];
+        doc
+    }
+    fn prepared(doc: &Document, change: Change) -> DocumentState {
+        prepare(
+            &doc.snapshot(),
+            change,
+            DEFAULT_DOCUMENT_BUDGET,
+            &AtomicBool::new(false),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn mixed_geometry_resamples_without_rewriting_original_properties_and_round_trips() {
+        let root = TempDir::new();
+        for (width, height) in [(240, 160), (240, 120)] {
+            let mut doc = fixture();
+            let before = doc.snapshot();
+            let changed = prepared(
+                &doc,
+                Change::Resample {
+                    width,
+                    height,
+                    dpi: 300.0,
+                    filter: Interpolation::Nearest,
+                },
+            );
+            let scale = [width as f64 / 120.0, height as f64 / 80.0];
+            let original_renderer = Renderer::new(&doc);
+            let expected: Vec<_> = (0..80)
+                .flat_map(|y| (0..120).map(move |x| [x as f64 + 0.5, y as f64 + 0.5]))
+                .map(|p| original_renderer.pixel(p))
+                .collect();
+            assert_eq!(changed.scene.objects, before.scene.objects);
+            assert_eq!(changed.scene.selection, before.scene.selection);
+            assert_eq!(changed.scene.guides, before.scene.guides);
+            assert_eq!(changed.scene.camera, before.scene.camera);
+            assert_eq!(changed.scene.worlds, before.scene.worlds);
+            assert_eq!(
+                changed.scene.transform.map([15.0, 30.0]),
+                [15.0 * scale[0], 30.0 * scale[1]]
+            );
+            doc.commit_state(changed).unwrap();
+            let renderer = Renderer::new(&doc);
+            for y in 0..80 {
+                for x in 0..120 {
+                    let p = [(x as f64 + 0.5) * scale[0], (y as f64 + 0.5) * scale[1]];
+                    assert_eq!(renderer.pixel(p), expected[y * 120 + x], "{x},{y}");
+                }
+            }
+            assert_eq!(
+                doc.scene.physical_points(10.0 * 300.0 / 72.0, 300.0),
+                [10.0 * scale[0], 10.0 * scale[1]]
+            );
+            let path = root.0.join("mixed.drawer");
+            files::save(&mut doc, &path).unwrap();
+            let reopened = files::open(&path, DEFAULT_DOCUMENT_BUDGET).unwrap();
+            assert_eq!(doc.snapshot(), reopened.snapshot());
+            assert_eq!(
+                Renderer::new(&doc).output(300.0, 1000000).unwrap(),
+                Renderer::new(&reopened).output(300.0, 1000000).unwrap()
+            );
+            assert_eq!(doc.history_counts(), (1, 0));
+            assert!(doc.undo());
+            assert_eq!(doc.snapshot(), before);
+            assert!(doc.redo());
+            assert_eq!(doc.snapshot(), reopened.snapshot());
+        }
+    }
+    #[test]
+    fn dpi_only_keeps_pixels_geometry_and_tone_period_and_output_uses_physical_resolution() {
+        let mut doc = fixture();
+        let original = doc.snapshot();
+        let output300 = Renderer::new(&doc).output(300.0, 1000000).unwrap();
+        assert!(
+            output300
+                .2
+                .iter()
+                .filter(|p| **p == [200, 10, 40, 255])
+                .count()
+                > 100,
+            "Font contours must actually render"
+        );
+        assert!(output300.2.contains(&[10, 90, 180, 255]));
+        assert!(output300.2.contains(&[40, 20, 0, 180]));
+        assert!(output300.2.contains(&[0, 120, 30, 255]));
+        let output600 = Renderer::new(&doc).output(600.0, 1000000).unwrap();
+        let runs = |width: usize, pixels: &[[u8; 4]], row: usize| -> usize {
+            let mut count = 0;
+            let mut black = false;
+            for pixel in &pixels[row * width..(row + 1) * width] {
+                let next = *pixel == [0, 0, 0, 255];
+                if next && !black {
+                    count += 1;
+                }
+                black = next;
+            }
+            count
+        };
+        assert_eq!(runs(120, &output300.2, 52), 24);
+        assert_eq!(runs(240, &output600.2, 105), 24);
+        assert_eq!(doc.scene.tone_lpi(5.0, 300.0), [60.0; 2]);
+        doc.commit_state(prepared(&doc, Change::Dpi(600.0)))
+            .unwrap();
+        assert_eq!(doc.layers, original.layers);
+        assert_eq!(doc.scene, original.scene);
+        assert_eq!(
+            doc.scene.physical_points(10.0 * 300.0 / 72.0, 600.0),
+            [5.0; 2]
+        );
+        assert_eq!(doc.scene.tone_lpi(5.0, 600.0), [120.0; 2]);
+        assert_eq!(
+            Renderer::new(&doc).output(600.0, 1000000).unwrap(),
+            output300
+        );
+        assert!(doc.undo());
+        assert_eq!(doc.snapshot(), original);
+    }
+    #[test]
+    fn canvas_anchor_and_crop_keep_editable_geometry_and_undo_restores_removed_pixels() {
+        let mut doc = fixture();
+        let original = doc.snapshot();
+        let canvas = Change::Canvas {
+            width: 100,
+            height: 60,
+            anchor: [0.5; 2],
+        };
+        let preview = plan(&original, canvas, DEFAULT_DOCUMENT_BUDGET).unwrap();
+        assert_eq!(preview.offset, [-10, -10]);
+        assert_eq!(preview.removed_pixels, 3600);
+        doc.commit_state(prepared(&doc, canvas)).unwrap();
+        assert_eq!(doc.scene.objects, original.scene.objects);
+        assert_eq!(doc.scene.worlds, original.scene.worlds);
+        assert!(doc.scene.clips.is_empty());
+        assert!(doc.undo());
+        assert_eq!(doc.snapshot(), original);
+        let crop = Change::Crop {
+            x: 30,
+            y: 20,
+            width: 60,
+            height: 40,
+        };
+        let preview = plan(&original, crop, DEFAULT_DOCUMENT_BUDGET).unwrap();
+        assert!(!preview.clipped_objects.is_empty());
+        doc.commit_state(prepared(&doc, crop)).unwrap();
+        assert_eq!(doc.scene.objects, original.scene.objects);
+        assert_eq!(doc.scene.worlds, original.scene.worlds);
+        assert_eq!(doc.scene.clips.len(), 1);
+        assert_eq!(doc.width, 60);
+        let cropped = doc.snapshot();
+        doc.commit_state(prepared(
+            &doc,
+            Change::Canvas {
+                width: 120,
+                height: 80,
+                anchor: [0.5; 2],
+            },
+        ))
+        .unwrap();
+        assert_eq!(Renderer::new(&doc).pixel([2.5, 20.5]), [0; 4]);
+        assert!(doc.undo());
+        assert_eq!(doc.snapshot(), cropped);
+        assert!(doc.undo());
+        assert_eq!(doc.snapshot(), original);
+    }
+    #[test]
+    fn bilinear_uses_premultiplied_alpha_and_bad_or_canceled_changes_leave_source_untouched() {
+        let mut doc = Document::create(
+            CanvasSpec {
+                width: 2,
+                height: 1,
+                dpi: 300.0,
+                background: Background::Transparent,
+            },
+            8,
+        )
+        .unwrap();
+        doc.layers[0].pixels = vec![[255, 0, 0, 255], [0, 0, 255, 0]];
+        let original = doc.snapshot();
+        let changed = prepared(
+            &doc,
+            Change::Resample {
+                width: 3,
+                height: 1,
+                dpi: 300.0,
+                filter: Interpolation::Bilinear,
+            },
+        );
+        assert_eq!(changed.layers[0].pixels[1], [255, 0, 0, 128]);
+        for change in [
+            Change::Dpi(f64::NAN),
+            Change::Crop {
+                x: 1,
+                y: 0,
+                width: 2,
+                height: 1,
+            },
+            Change::Canvas {
+                width: 0,
+                height: 1,
+                anchor: [0.5; 2],
+            },
+            Change::Resample {
+                width: 32768,
+                height: 32768,
+                dpi: 300.0,
+                filter: Interpolation::Nearest,
+            },
+        ] {
+            assert!(
+                prepare(
+                    &original,
+                    change,
+                    DEFAULT_DOCUMENT_BUDGET,
+                    &AtomicBool::new(false)
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            prepare(
+                &original,
+                Change::Dpi(600.0),
+                DEFAULT_DOCUMENT_BUDGET,
+                &AtomicBool::new(true)
+            )
+            .is_err()
+        );
+        assert_eq!(doc.snapshot(), original);
+        assert_eq!(doc.history_counts(), (0, 0));
+    }
+    #[test]
+    fn all_boundary_and_dpi_changes_reopen_with_same_appearance_and_saved_undo_checkpoint() {
+        let root = TempDir::new();
+        for change in [
+            Change::Dpi(600.0),
+            Change::Canvas {
+                width: 150,
+                height: 100,
+                anchor: [1.0, 1.0],
+            },
+            Change::Crop {
+                x: 30,
+                y: 20,
+                width: 60,
+                height: 40,
+            },
+        ] {
+            let mut doc = fixture();
+            let original = doc.snapshot();
+            doc.commit_state(prepared(&doc, change)).unwrap();
+            let path = root.0.join("result.drawer");
+            files::save(&mut doc, &path).unwrap();
+            let reopened = files::open(&path, DEFAULT_DOCUMENT_BUDGET).unwrap();
+            assert_eq!(doc.snapshot(), reopened.snapshot());
+            assert_eq!(
+                Renderer::new(&doc).output(doc.dpi, 1000000).unwrap(),
+                Renderer::new(&reopened)
+                    .output(reopened.dpi, 1000000)
+                    .unwrap()
+            );
+            assert!(!doc.dirty);
+            assert!(doc.undo());
+            assert_eq!(doc.snapshot(), original);
+            assert!(doc.dirty);
+            assert!(doc.redo());
+            assert!(!doc.dirty);
+            assert_eq!(doc.snapshot(), reopened.snapshot());
+        }
+    }
+}

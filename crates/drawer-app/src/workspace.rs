@@ -78,7 +78,7 @@ impl Drawer {
             }
             return Ok(());
         }
-        let used: usize = self.documents.iter().map(Document::memory_bytes).sum();
+        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
         let mut document =
             drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;

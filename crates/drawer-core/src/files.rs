@@ -6,7 +6,8 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
+const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
@@ -69,13 +70,14 @@ fn read_png(path: &Path, budget: usize) -> io::Result<Document> {
 }
 fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     let file = fs::File::open(path)?;
-    if file.metadata()?.len() > budget as u64 + 1024 * 1024 {
+    if file.metadata()?.len() > budget as u64 + MAX_SCENE_BYTES as u64 + 1024 * 1024 {
         return Err(invalid("Document exceeds memory budget"));
     }
     let mut reader = BufReader::new(file);
     let mut magic = [0; 8];
     reader.read_exact(&mut magic)?;
-    if &magic != MAGIC || read_u32(&mut reader)? != VERSION {
+    let version = read_u32(&mut reader)?;
+    if &magic != MAGIC || !(1..=VERSION).contains(&version) {
         return Err(invalid("Unsupported Drawer document version"));
     }
     let width = read_u32(&mut reader)?;
@@ -135,6 +137,18 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
             }
         }
     }
+    if version >= 2 {
+        let length = read_u32(&mut reader)? as usize;
+        if length > MAX_SCENE_BYTES {
+            return Err(invalid("Page geometry is too large"));
+        }
+        let mut bytes = vec![0; length];
+        reader.read_exact(&mut bytes)?;
+        document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if !document.scene.valid() || document.memory_bytes() > budget {
+            return Err(invalid("Invalid or oversized page geometry"));
+        }
+    }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
@@ -181,6 +195,13 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
             return Err(invalid("Invalid raster layer"));
         }
     }
+    if !document.scene.valid() || document.scene.size_bytes() > MAX_SCENE_BYTES {
+        return Err(invalid("Invalid or oversized page geometry"));
+    }
+    let scene = serde_json::to_vec(&document.scene).map_err(|e| invalid(e.to_string()))?;
+    if scene.len() > MAX_SCENE_BYTES {
+        return Err(invalid("Page geometry is too large"));
+    }
     let mut temp_name = path.file_name().unwrap().to_owned();
     temp_name.push(".drawer-write.tmp");
     let temporary = path.with_file_name(temp_name);
@@ -208,6 +229,8 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
                 writer.write_all(&buffer[..chunk.len() * 4])?;
             }
         }
+        writer.write_all(&(scene.len() as u32).to_le_bytes())?;
+        writer.write_all(&scene)?;
         writer.flush()?;
         writer.get_ref().sync_all()
     })();
@@ -285,6 +308,22 @@ mod tests {
         assert!(open(&path, 16).is_err());
         fs::write(&path, original).unwrap();
         assert!(open(&path, 7).is_err());
+    }
+    #[test]
+    fn version_one_files_still_open_and_invalid_geometry_is_not_saved() {
+        let root = TempDir::new();
+        let path = root.0.join("legacy.drawer");
+        let mut doc = sample();
+        save(&mut doc, &path).unwrap();
+        let mut bytes = fs::read(&path).unwrap();
+        bytes[8..12].copy_from_slice(&1u32.to_le_bytes());
+        bytes.truncate(32 + 4 + "Layer 1".len() + 8 + 8);
+        fs::write(&path, &bytes).unwrap();
+        let reopened = open(&path, 16).unwrap();
+        assert_eq!(doc.snapshot(), reopened.snapshot());
+        doc.scene.transform.0[0] = f64::NAN;
+        assert!(save(&mut doc, &path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
     }
     #[test]
     fn png_import_preserves_original_and_starts_as_an_unsaved_document() {

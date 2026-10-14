@@ -45,3 +45,8 @@ crates/drawer-core/src/files.rs
 crates/drawer-core/src/history.rs
 crates/drawer-core/src/test_support.rs
 docs/process/native-format.md
+crates/drawer-app/src/sizing_dialog.rs
+crates/drawer-core/src/sizing.rs
+crates/drawer-core/src/scene.rs
+crates/drawer-core/src/render.rs
+docs/process/image-sizing.md

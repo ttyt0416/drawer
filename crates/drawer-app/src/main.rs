@@ -9,6 +9,7 @@ use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod canvas_view;
 mod new_canvas;
+mod sizing_dialog;
 mod workspace;
 use new_canvas::NewCanvas;
 
@@ -38,6 +39,7 @@ struct Drawer {
     active: Option<usize>,
     new_canvas: NewCanvas,
     show_new_canvas: bool,
+    sizing_dialog: Option<sizing_dialog::SizingDialog>,
     canvas_view: canvas_view::CanvasView,
     default_view: drawer_core::view::View,
     #[cfg(test)]
@@ -97,6 +99,7 @@ impl Drawer {
             active: None,
             new_canvas: NewCanvas::default(),
             show_new_canvas: false,
+            sizing_dialog: None,
             canvas_view: canvas_view::CanvasView::new(ctx),
             default_view: Default::default(),
             #[cfg(test)]
@@ -119,7 +122,7 @@ impl Drawer {
     }
 
     fn create_canvas(&mut self, spec: CanvasSpec) -> Result<(), CreateError> {
-        let used: usize = self.documents.iter().map(Document::memory_bytes).sum();
+        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
         let mut document = Document::create(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))?;
         document.view = self.default_view;
         self.documents
@@ -133,7 +136,7 @@ impl Drawer {
     }
 
     fn new_canvas_dialog(&mut self, ctx: &egui::Context) {
-        if !self.show_new_canvas || self.pending_close.is_some() {
+        if !self.show_new_canvas || self.pending_close.is_some() || self.sizing_dialog.is_some() {
             return;
         }
         let mut open = true;
@@ -219,69 +222,76 @@ impl Drawer {
 
     fn show(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.add_enabled_ui(self.pending_close.is_none(), |ui| {
-                ui.horizontal(|ui| {
-                    ui.heading(APP_NAME);
-                    ui.label("Local drawing workspace");
-                    let new_response = ui.button("New canvas");
-                    #[cfg(test)]
-                    {
-                        self.new_button = Some(new_response.rect);
-                    }
-                    if new_response.clicked() {
-                        self.new_canvas = NewCanvas::default();
-                        self.show_new_canvas = true;
-                    }
-                });
-                self.document_controls(ui);
-                ui.separator();
-                if let Some(status) = &self.status {
-                    ui.colored_label(egui::Color32::LIGHT_RED, status);
-                }
-                ui.columns(2, |columns| {
-                    columns[0].set_width(170.0);
-                    columns[0].heading("Tools");
-                    for tip in BrushTip::ALL {
-                        let response =
-                            columns[0].selectable_label(self.selected == tip, tip.name());
-                        if response.clicked() {
-                            self.set_tool(tip);
-                        }
-                    }
-                    columns[0].label("Brush preview");
-                    let index = BrushTip::ALL
-                        .iter()
-                        .position(|&tip| tip == self.selected)
-                        .unwrap();
-                    columns[0].add(
-                        egui::Image::new(&self.previews[index])
-                            .fit_to_exact_size(egui::vec2(160.0, 160.0)),
-                    );
-                    if let Some(active) = self.active {
-                        let document = &self.documents[active];
-                        columns[1].label(format!(
-                            "{} · {} × {} · {} DPI",
-                            document.title, document.width, document.height, document.dpi
-                        ));
-                        let changed = self.canvas_view.show(
-                            &mut columns[1],
-                            active,
-                            &mut self.documents[active],
-                        );
-                        if changed
-                            && let Some(storage) = &self.storage
-                            && let Err(error) = storage.save_view(self.documents[active].view)
+            ui.add_enabled_ui(
+                self.pending_close.is_none() && self.sizing_dialog.is_none(),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading(APP_NAME);
+                        ui.label("Local drawing workspace");
+                        let new_response = ui.button("New canvas");
+                        #[cfg(test)]
                         {
-                            self.status = Some(error.to_string());
+                            self.new_button = Some(new_response.rect);
                         }
-                    } else {
-                        columns[1].heading("Create a canvas to begin");
+                        if new_response.clicked() {
+                            self.new_canvas = NewCanvas::default();
+                            self.show_new_canvas = true;
+                        }
+                    });
+                    self.document_controls(ui);
+                    self.sizing_controls(ui);
+                    ui.separator();
+                    if let Some(status) = &self.status {
+                        ui.colored_label(egui::Color32::LIGHT_RED, status);
                     }
-                });
-            });
+                    ui.columns(2, |columns| {
+                        columns[0].set_width(170.0);
+                        columns[0].heading("Tools");
+                        for tip in BrushTip::ALL {
+                            let response =
+                                columns[0].selectable_label(self.selected == tip, tip.name());
+                            if response.clicked() {
+                                self.set_tool(tip);
+                            }
+                        }
+                        columns[0].label("Brush preview");
+                        let index = BrushTip::ALL
+                            .iter()
+                            .position(|&tip| tip == self.selected)
+                            .unwrap();
+                        columns[0].add(
+                            egui::Image::new(&self.previews[index])
+                                .fit_to_exact_size(egui::vec2(160.0, 160.0)),
+                        );
+                        if let Some(active) = self.active {
+                            let document = &self.documents[active];
+                            columns[1].label(format!(
+                                "{} · {} × {} · {} DPI",
+                                document.title, document.width, document.height, document.dpi
+                            ));
+                            let overlay = self.sizing_overlay();
+                            let changed = self.canvas_view.show(
+                                &mut columns[1],
+                                active,
+                                &mut self.documents[active],
+                                overlay,
+                            );
+                            if changed
+                                && let Some(storage) = &self.storage
+                                && let Err(error) = storage.save_view(self.documents[active].view)
+                            {
+                                self.status = Some(error.to_string());
+                            }
+                        } else {
+                            columns[1].heading("Create a canvas to begin");
+                        }
+                    });
+                },
+            );
         });
         self.new_canvas_dialog(ui.ctx());
         self.close_dialog(ui.ctx());
+        self.show_sizing(ui.ctx());
     }
 }
 
@@ -290,17 +300,21 @@ impl eframe::App for Drawer {
         if self.smoke_output.is_none()
             && !self.quit_ready
             && ui.ctx().input(|input| input.viewport().close_requested())
-            && self.documents.iter().any(|doc| doc.dirty)
+            && (self.documents.iter().any(|doc| doc.dirty) || self.sizing_dialog.is_some())
         {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.begin_quit();
+            if self.sizing_dialog.is_none() {
+                self.begin_quit();
+            }
         }
         self.show(ui);
         if self.quit_ready {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        if let Some(path) = self.smoke_output.clone() {
+        if let Some(path) = self.smoke_output.clone()
+            && !self.quit_ready
+        {
             self.frames += 1;
             if self.frames == 1 {
                 self.create_canvas(CanvasSpec {
@@ -317,16 +331,28 @@ impl eframe::App for Drawer {
             if self.frames == 3 {
                 self.cancel_close();
                 self.select_tab(0);
+                self.begin_sizing(sizing_dialog::Mode::Dpi);
+                self.sizing_dialog.as_mut().unwrap().dpi = "600".into();
             }
-            if self.frames >= 4 {
+            if self.frames == 4 {
+                self.smoke_start_sizing(ui.ctx());
+            }
+            if self.frames > 120 {
+                std::process::exit(1);
+            }
+            if self.frames >= 6 && self.sizing_dialog.is_none() {
                 let validated = self.documents.len() == 2
                     && self.tabs.len() == 2
-                    && self.pending_close.is_none();
+                    && self.pending_close.is_none()
+                    && self.documents[0].dpi == 600.0;
                 if !validated {
                     std::process::exit(1);
                 }
+                if !self.documents[0].undo() || self.documents[0].dpi != 300.0 {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -337,6 +363,7 @@ impl eframe::App for Drawer {
                     eprintln!("Smoke receipt: {error}");
                     std::process::exit(1);
                 }
+                self.quit_ready = true;
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             } else {
                 ui.ctx().request_repaint();
@@ -728,5 +755,124 @@ mod tests {
         assert!(app.tabs.is_empty());
         let restored = drawer_core::files::open(&path, 4).unwrap();
         assert_eq!(restored.layers[0].pixels[0], [50, 100, 150, 255]);
+    }
+    fn finish_sizing(ctx: &egui::Context, app: &mut Drawer) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while app.sizing_dialog.is_some() && std::time::Instant::now() < deadline {
+            frame(ctx, app, vec![]);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(app.sizing_dialog.is_none(), "Sizing job did not finish");
+    }
+    #[test]
+    fn mouse_sizing_apply_is_one_undo_and_preview_cancel_keeps_drawing() {
+        use sizing_dialog::Mode;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 4,
+            height: 2,
+            dpi: 300.0,
+            background: Background::Transparent,
+        })
+        .unwrap();
+        app.documents[0].layers[0].pixels[0] = [200, 10, 40, 255];
+        let original = app.documents[0].snapshot();
+        app.begin_sizing(Mode::Canvas);
+        app.sizing_dialog.as_mut().unwrap().width = "1".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.sizing_dialog.as_ref().unwrap().job_is_idle());
+        assert_eq!(app.documents[0].snapshot(), original);
+        let button = app.sizing_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.sizing_dialog.is_none());
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        app.begin_sizing(Mode::Resample);
+        app.sizing_dialog.as_mut().unwrap().width = "8".into();
+        app.sizing_dialog.as_mut().unwrap().height = "4".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        finish_sizing(&ctx, &mut app);
+        assert_eq!((app.documents[0].width, app.documents[0].height), (8, 4));
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        app.begin_sizing(Mode::Dpi);
+        app.sizing_dialog.as_mut().unwrap().dpi = "600".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        finish_sizing(&ctx, &mut app);
+        assert_eq!(app.documents[0].dpi, 600.0);
+        assert_eq!(app.documents[0].layers, original.layers);
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        app.begin_sizing(Mode::Crop);
+        let dialog = app.sizing_dialog.as_mut().unwrap();
+        dialog.x = "1".into();
+        dialog.width = "2".into();
+        dialog.confirmed = true;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        finish_sizing(&ctx, &mut app);
+        assert_eq!(app.documents[0].width, 2);
+        assert_eq!(app.documents[0].scene.clips.len(), 1);
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+    }
+    #[test]
+    fn canceling_background_sizing_and_invalid_input_preserve_saved_state() {
+        use sizing_dialog::Mode;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].mark_saved("test.drawer".into());
+        let original = app.documents[0].snapshot();
+        app.begin_sizing(Mode::Resample);
+        app.sizing_dialog.as_mut().unwrap().width = "0".into();
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        let button = app.sizing_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, button);
+        app.begin_sizing(Mode::Resample);
+        app.sizing_dialog.as_mut().unwrap().width = "1024".into();
+        app.sizing_dialog.as_mut().unwrap().height = "1024".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        app.sizing_dialog = None;
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        assert!(!app.documents[0].dirty);
+        app.begin_sizing(Mode::Dpi);
+        app.sizing_dialog.as_mut().unwrap().dpi = "600".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        finish_sizing(&ctx, &mut app);
+        assert_eq!(
+            (
+                app.documents[0].width,
+                app.documents[0].height,
+                app.documents[0].dpi
+            ),
+            (1, 1, 600.0)
+        );
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
     }
 }
