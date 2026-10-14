@@ -62,3 +62,6 @@ crates/drawer-core/src/image_import.rs
 crates/drawer-core/src/recent.rs
 crates/drawer-app/src/image_import_dialog.rs
 docs/process/image-import.md
+crates/drawer-core/src/display_view.rs
+crates/drawer-app/src/display_pane.rs
+docs/process/display-view.md

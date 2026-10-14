@@ -9,6 +9,7 @@ use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod aid_panel;
 mod canvas_view;
+mod display_pane;
 mod image_import_dialog;
 mod new_canvas;
 mod reference_pane;
@@ -52,6 +53,7 @@ struct Drawer {
     recent: drawer_core::recent::RecentFiles,
     import_dialog: Option<image_import_dialog::ImportDialog>,
     protected_sources: std::collections::HashSet<PathBuf>,
+    display: display_pane::DisplayPane,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -119,6 +121,7 @@ impl Drawer {
             recent: Default::default(),
             import_dialog: None,
             protected_sources: Default::default(),
+            display: display_pane::DisplayPane::new(ctx),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -217,6 +220,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::display_view::Preferences::load(&storage) {
+            Ok(prefs) => self.display.preferences = prefs,
+            Err(error) => self.display.error = Some(format!("Display settings reset: {error}")),
+        }
         match drawer_core::recent::RecentFiles::load(&storage) {
             Ok(recent) => self.recent = recent,
             Err(error) => self.status = Some(format!("Recent files reset: {error}")),
@@ -253,7 +260,7 @@ impl Drawer {
                     && self.sizing_dialog.is_none()
                     && self.import_dialog.is_none(),
                 |ui| {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.heading(APP_NAME);
                         ui.label("Local drawing workspace");
                         let new_response = ui.button("New canvas");
@@ -270,6 +277,9 @@ impl Drawer {
                         }
                         if ui.button("Canvas aids").clicked() {
                             self.aids.visible = true;
+                        }
+                        if ui.button("Display view").clicked() {
+                            self.display.settings_open = true;
                         }
                     });
                     self.document_controls(ui);
@@ -339,11 +349,13 @@ impl Drawer {
         self.show_references(ui.ctx());
         self.show_aids(ui.ctx());
         self.show_import(ui.ctx());
+        self.show_display(ui.ctx());
     }
 }
 
 impl eframe::App for Drawer {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.display.poll_monitors(ui.ctx(), frame);
         if self.smoke_output.is_none()
             && !self.quit_ready
             && ui.ctx().input(|input| input.viewport().close_requested())
@@ -392,6 +404,12 @@ impl eframe::App for Drawer {
                 self.aids.visible = true;
                 self.aids.preferences.monitor_ppi = Some(96.0);
                 self.aids.preferences.grid = true;
+                self.display.preferences.visible = true;
+                self.display.preferences.fullscreen = false;
+                self.display
+                    .preferences
+                    .save(self.storage.as_ref().unwrap())
+                    .unwrap();
             }
             if self.frames == 3 {
                 self.cancel_close();
@@ -485,8 +503,20 @@ impl eframe::App for Drawer {
                 if recent.paths() != self.recent.paths() || recent.paths().len() != 2 {
                     std::process::exit(1);
                 }
+                if self.display.monitors.is_empty()
+                    || !self.display.rendered_native
+                    || self.display.rendered_frames < 2
+                    || !self.display.native_windowed
+                {
+                    std::process::exit(1);
+                }
+                self.display.preferences.visible = false;
+                self.display
+                    .preferences
+                    .save(self.storage.as_ref().unwrap())
+                    .unwrap();
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1502,5 +1532,255 @@ mod tests {
         assert!(app.accept_import().is_err());
         app.import_dialog = None;
         assert_eq!(app.documents[0].snapshot(), original);
+    }
+
+    fn display_monitors() -> Vec<drawer_core::display_view::Monitor> {
+        vec![
+            drawer_core::display_view::Monitor {
+                key: "main".into(),
+                index: 0,
+                position: [0, 0],
+                size: [1920, 1080],
+                scale: 1.0,
+                primary: true,
+            },
+            drawer_core::display_view::Monitor {
+                key: "external".into(),
+                index: 1,
+                position: [-3840, -200],
+                size: [3840, 2160],
+                scale: 2.0,
+                primary: false,
+            },
+        ]
+    }
+    #[test]
+    fn display_and_document_tabs_share_pixel_updates_but_keep_independent_framing() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 4,
+            height: 3,
+            ..tiny_spec()
+        })
+        .unwrap();
+        app.display.monitors = display_monitors();
+        app.display.preferences.visible = true;
+        app.display.preferences.synced = false;
+        app.display.preferences.framing = drawer_core::display_view::Framing {
+            zoom: 4.0,
+            center: [0.25, 0.75],
+            angle: 37.0,
+            flipped: true,
+        };
+        app.documents[0].view.zoom = 2.0;
+        app.duplicate_view();
+        app.documents[0].view.zoom = 3.0;
+        frame(&ctx, &mut app, vec![]);
+        let id = app.documents[0].id;
+        let independent = app.display.framing_for(id).unwrap();
+        assert_eq!(independent.zoom, 4.0);
+        assert_eq!(app.documents[0].view.zoom, 3.0);
+        let original = app.documents[0].snapshot();
+        app.documents[0].edit_pixel(0, 1, 1, [200, 30, 70, 255]);
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            app.canvas_view.rendered_revision(),
+            app.display.canvas.rendered_revision()
+        );
+        assert_eq!(
+            app.display.canvas.rendered_revision(),
+            Some((id, app.documents[0].revision))
+        );
+        assert_eq!(app.display.framing_for(id), Some(independent));
+        app.select_tab(0);
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.documents[0].view.zoom, 2.0);
+        assert_eq!(
+            app.canvas_view.rendered_revision(),
+            app.display.canvas.rendered_revision()
+        );
+        app.request_close(1);
+        assert_eq!(app.documents.len(), 1);
+        assert_eq!(app.tabs.len(), 1);
+        assert!(app.documents[0].undo());
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(
+            app.canvas_view.rendered_revision(),
+            app.display.canvas.rendered_revision()
+        );
+        app.create_canvas(CanvasSpec {
+            width: 2,
+            height: 2,
+            ..tiny_spec()
+        })
+        .unwrap();
+        frame(&ctx, &mut app, vec![]);
+        let second = app.documents[1].id;
+        assert_eq!(
+            app.display.canvas.rendered_revision(),
+            Some((second, app.documents[1].revision))
+        );
+        app.display.preferences.framing.zoom = 6.0;
+        app.select_tab(0);
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.display.framing_for(id), Some(independent));
+        assert_eq!(app.documents[0].view.zoom, 2.0);
+        assert_eq!(app.documents[0].snapshot(), original);
+    }
+    #[test]
+    fn display_navigation_fullscreen_keys_disconnect_and_close_preserve_drawing() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 80,
+            height: 60,
+            ..tiny_spec()
+        })
+        .unwrap();
+        let original = app.documents[0].snapshot();
+        let before = app.documents[0].view;
+        let history = app.documents[0].history_counts();
+        app.display.monitors = display_monitors();
+        app.display.preferences.visible = true;
+        app.display.preferences.synced = false;
+        app.display.preferences.preferred = Some("external".into());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.display.canvas.viewport.unwrap();
+        let pos = rect.center();
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(pos)]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, 120.0),
+                modifiers: Default::default(),
+                phase: egui::TouchPhase::Move,
+            }],
+        );
+        assert!(app.display.preferences.framing.zoom > 1.0);
+        assert_eq!(app.documents[0].view, before);
+        let key = |key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        frame(&ctx, &mut app, vec![key(egui::Key::Escape)]);
+        assert!(!app.display.preferences.fullscreen);
+        frame(&ctx, &mut app, vec![key(egui::Key::F11)]);
+        assert!(app.display.preferences.fullscreen);
+        app.display.monitors.pop();
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            drawer_core::display_view::selected(
+                &app.display.monitors,
+                app.display.preferences.preferred.as_deref()
+            )
+            .unwrap()
+            .key,
+            "main"
+        );
+        assert_eq!(
+            app.display.preferences.preferred.as_deref(),
+            Some("external")
+        );
+        app.display.monitors = display_monitors();
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            drawer_core::display_view::selected(
+                &app.display.monitors,
+                app.display.preferences.preferred.as_deref()
+            )
+            .unwrap()
+            .key,
+            "external"
+        );
+        let mut raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1100.0, 760.0),
+            )),
+            ..Default::default()
+        };
+        raw.viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .events
+            .push(egui::ViewportEvent::Close);
+        let mut output = ctx.run_ui(raw, |ui| app.show(ui));
+        output.textures_delta.clear();
+        assert!(!app.display.preferences.visible);
+        assert_eq!(app.documents.len(), 1);
+        assert_eq!(app.tabs.len(), 1);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert_eq!(app.documents[0].view, before);
+    }
+    #[test]
+    fn display_settings_undo_redo_restart_and_save_failure_never_prevent_closing() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None).with_storage(storage);
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        app.display.settings_open = true;
+        app.display.preferences.visible = true;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let close = app.display.close_button.unwrap();
+        click(&ctx, &mut app, close);
+        assert!(!app.display.preferences.visible);
+        frame(&ctx, &mut app, vec![]);
+        let undo = app.display.undo_button.unwrap();
+        click(&ctx, &mut app, undo);
+        assert!(app.display.preferences.visible);
+        frame(&ctx, &mut app, vec![]);
+        let redo = app.display.redo_button.unwrap();
+        click(&ctx, &mut app, redo);
+        assert!(!app.display.preferences.visible);
+        let storage = app.storage.as_ref().unwrap();
+        assert_eq!(
+            drawer_core::display_view::Preferences::load(storage).unwrap(),
+            app.display.preferences
+        );
+        assert!(
+            drawer_core::display_view::Preferences::previous(storage)
+                .unwrap()
+                .visible
+        );
+        let mut restarted =
+            Drawer::new(&ctx, None).with_storage(UserStorage::at(root.0.join("userdata")).unwrap());
+        assert_eq!(restarted.display.preferences, app.display.preferences);
+        restarted.display.preferences.visible = true;
+        restarted
+            .display
+            .preferences
+            .save(restarted.storage.as_ref().unwrap())
+            .unwrap();
+        restarted.display.settings_open = true;
+        std::fs::write(
+            root.0.join("userdata/settings/display.json.write.tmp"),
+            "foreign operation",
+        )
+        .unwrap();
+        frame(&ctx, &mut restarted, vec![]);
+        frame(&ctx, &mut restarted, vec![]);
+        let close = restarted.display.close_button.unwrap();
+        click(&ctx, &mut restarted, close);
+        assert!(!restarted.display.preferences.visible);
+        assert!(restarted.display.error.is_some());
+        assert!(
+            drawer_core::display_view::Preferences::load(restarted.storage.as_ref().unwrap())
+                .unwrap()
+                .visible
+        );
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
 }

@@ -98,6 +98,32 @@ impl CanvasView {
                 );
             }
         }
+        self.update_image(ui, document);
+        self.show_navigator(navigator_ui, document, rect, ppp);
+        self.paint_paper(ui, document, document.view, rect);
+        let painter = ui.painter_at(rect);
+        if let Some(boundary) = overlay {
+            let outline = [
+                boundary.min,
+                [boundary.max[0], boundary.min[1]],
+                boundary.max,
+                [boundary.min[0], boundary.max[1]],
+            ]
+            .map(|point| {
+                let point = document.view.document_to_screen(point, size, center, ppp);
+                egui::pos2(point[0] as f32, point[1] as f32)
+            });
+            for i in 0..4 {
+                painter.line_segment(
+                    [outline[i], outline[(i + 1) % 4]],
+                    egui::Stroke::new(2.0, egui::Color32::YELLOW),
+                );
+            }
+        }
+        self.paint_aids(ui, document, rect, aids, ppp);
+        document.view != before
+    }
+    fn update_image(&mut self, ui: &egui::Ui, document: &Document) {
         if self.image.as_ref().map(|(active, _)| *active) != Some((document.id, document.revision))
         {
             let reduction = document.width.max(document.height).div_ceil(2048).max(1);
@@ -121,7 +147,17 @@ impl CanvasView {
             );
             self.image = Some(((document.id, document.revision), texture));
         }
-        self.show_navigator(navigator_ui, document, rect, ppp);
+    }
+    fn paint_paper(
+        &self,
+        ui: &egui::Ui,
+        document: &Document,
+        view: drawer_core::view::View,
+        rect: egui::Rect,
+    ) {
+        let size = [document.width as f64, document.height as f64];
+        let center = [rect.center().x as f64, rect.center().y as f64];
+        let ppp = ui.ctx().pixels_per_point() as f64;
         let corners = [
             [0.0, 0.0],
             [size[0], 0.0],
@@ -129,7 +165,7 @@ impl CanvasView {
             [0.0, size[1]],
         ]
         .map(|point| {
-            let pos = document.view.document_to_screen(point, size, center, ppp);
+            let pos = view.document_to_screen(point, size, center, ppp);
             egui::pos2(pos[0] as f32, pos[1] as f32)
         });
         let painter = ui.painter_at(rect);
@@ -158,26 +194,54 @@ impl CanvasView {
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
             painter.add(egui::Shape::mesh(mesh));
         }
-        if let Some(boundary) = overlay {
-            let outline = [
-                boundary.min,
-                [boundary.max[0], boundary.min[1]],
-                boundary.max,
-                [boundary.min[0], boundary.max[1]],
-            ]
-            .map(|point| {
-                let point = document.view.document_to_screen(point, size, center, ppp);
-                egui::pos2(point[0] as f32, point[1] as f32)
-            });
-            for i in 0..4 {
-                painter.line_segment(
-                    [outline[i], outline[(i + 1) % 4]],
-                    egui::Stroke::new(2.0, egui::Color32::YELLOW),
-                );
+    }
+    pub fn show_only(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        view: &mut drawer_core::view::View,
+        interactive: bool,
+    ) {
+        let (rect, response) = ui.allocate_exact_size(
+            ui.available_size().max(egui::vec2(1.0, 1.0)),
+            egui::Sense::drag(),
+        );
+        #[cfg(test)]
+        {
+            self.viewport = Some(rect);
+        }
+        let size = [document.width as f64, document.height as f64];
+        let center = [rect.center().x as f64, rect.center().y as f64];
+        let ppp = ui.ctx().pixels_per_point() as f64;
+        if interactive {
+            if response.dragged_by(egui::PointerButton::Middle)
+                || (response.dragged_by(egui::PointerButton::Primary)
+                    && ui.input(|i| i.key_down(egui::Key::Space)))
+            {
+                let delta = response.drag_delta();
+                view.pan_by([delta.x as f64, delta.y as f64]);
+            }
+            if response.hovered() {
+                let wheel = ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta).y);
+                if wheel != 0.0
+                    && let Some(pos) = response.hover_pos()
+                {
+                    view.zoom_about(
+                        (wheel as f64 * 0.002).exp(),
+                        [pos.x as f64, pos.y as f64],
+                        size,
+                        center,
+                        ppp,
+                    );
+                }
             }
         }
-        self.paint_aids(ui, document, rect, aids, ppp);
-        document.view != before
+        self.update_image(ui, document);
+        self.paint_paper(ui, document, *view, rect);
+    }
+    #[cfg(test)]
+    pub fn rendered_revision(&self) -> Option<(u64, u64)> {
+        self.image.as_ref().map(|(key, _)| *key)
     }
     fn show_navigator(
         &mut self,
