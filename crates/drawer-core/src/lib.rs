@@ -8,12 +8,14 @@ mod history;
 pub mod image_import;
 pub mod interpolation;
 pub mod navigator;
+pub mod navigator_preferences;
 pub mod paste;
 pub mod png_export;
 pub mod recent;
 pub mod references;
 pub mod render;
 pub mod scene;
+pub mod selection;
 pub mod sizing;
 pub mod storage;
 #[cfg(test)]

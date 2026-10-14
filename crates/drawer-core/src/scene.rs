@@ -188,6 +188,8 @@ pub struct Scene {
     pub clips: Vec<[Point; 4]>,
     pub objects: Vec<PageObject>,
     pub selection: Option<Rect>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_mask: Option<crate::selection::Mask>,
     pub guides: Vec<[Point; 2]>,
     pub camera: Option<Camera>,
     pub worlds: Vec<WorldMesh>,
@@ -199,6 +201,10 @@ impl Scene {
             && self.clips.len() <= 4096
             && self.clips.iter().flatten().flatten().all(|v| v.is_finite())
             && self.selection.is_none_or(Rect::valid)
+            && self
+                .selection_mask
+                .as_ref()
+                .is_none_or(crate::selection::Mask::valid)
             && self.objects.len() <= 4096
             && self.objects.iter().all(PageObject::valid)
             && self
@@ -263,6 +269,9 @@ impl Scene {
                 .map(|w| w.vertices.len() * 24 + w.edges.len() * 16)
                 .sum::<usize>()
             + usize::from(self.selection.is_some()) * 32
+            + self.selection_mask.as_ref().map_or(0, |m| {
+                m.runs.len() * std::mem::size_of::<crate::selection::Run>()
+            })
             + usize::from(self.camera.is_some()) * 64
     }
     pub fn physical_points(&self, original_pixels: f64, dpi: f64) -> Point {

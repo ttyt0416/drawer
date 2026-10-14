@@ -73,3 +73,6 @@ crates/drawer-core/src/interpolation.rs
 crates/drawer-app/src/quality.rs
 crates/drawer-core/src/view_layout.rs
 crates/drawer-app/src/view_commands.rs
+crates/drawer-core/src/selection.rs
+crates/drawer-core/src/navigator_preferences.rs
+crates/drawer-app/src/navigator_panel.rs

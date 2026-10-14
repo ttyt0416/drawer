@@ -11,6 +11,7 @@ mod aid_panel;
 mod canvas_view;
 mod display_pane;
 mod image_import_dialog;
+mod navigator_panel;
 mod new_canvas;
 mod paste_dialog;
 mod quality;
@@ -67,6 +68,10 @@ struct Drawer {
     saved_layout: drawer_core::view_layout::Layout,
     last_layout: drawer_core::view_layout::Layout,
     view_session: u64,
+    navigator_saved: Option<drawer_core::navigator_preferences::Preferences>,
+    navigator_undo: Vec<drawer_core::navigator_preferences::Preferences>,
+    navigator_redo: Vec<drawer_core::navigator_preferences::Preferences>,
+    show_navigator_settings: bool,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -143,6 +148,10 @@ impl Drawer {
             quality_redo: Vec::new(),
             saved_layout: drawer_core::view_layout::Layout::empty(),
             last_layout: drawer_core::view_layout::Layout::empty(),
+            navigator_saved: None,
+            navigator_undo: Vec::new(),
+            navigator_redo: Vec::new(),
+            show_navigator_settings: false,
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -240,6 +249,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::navigator_preferences::Preferences::load(&storage) {
+            Ok(p) => self.canvas_view.navigator = p,
+            Err(e) => self.status = Some(format!("Navigator settings reset: {e}")),
+        }
         match drawer_core::view_layout::Layout::load(&storage) {
             Ok(layout) => self.saved_layout = layout,
             Err(error) => self.status = Some(format!("Saved views unavailable: {error}")),
@@ -317,6 +330,9 @@ impl Drawer {
                         if ui.button("Image quality").clicked() {
                             self.show_interpolation = true;
                         }
+                        if ui.button("Navigator settings").clicked() {
+                            self.show_navigator_settings = true;
+                        }
                     });
                     self.document_controls(ui);
                     self.sizing_controls(ui);
@@ -390,6 +406,8 @@ impl Drawer {
         self.show_paste(ui.ctx());
         self.interpolation_settings(ui.ctx());
         self.persist_views(ui.ctx().pixels_per_point() as f64);
+        self.navigator_settings(ui.ctx());
+        self.persist_navigator();
     }
 }
 
@@ -656,8 +674,17 @@ impl eframe::App for Drawer {
                 {
                     std::process::exit(1);
                 }
+                self.persist_navigator();
+                if drawer_core::navigator_preferences::Preferences::load(
+                    self.storage.as_ref().unwrap(),
+                )
+                .unwrap()
+                    != self.canvas_view.navigator
+                {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -2365,5 +2392,206 @@ mod tests {
         assert_eq!(app.documents[0].history_counts(), history);
         assert!(!app.documents[0].dirty);
         assert_eq!(app.documents.len(), 1);
+    }
+    #[test]
+    fn navigator_selections_hover_focus_panel_layout_and_history_are_read_only() {
+        use drawer_core::{
+            navigator_preferences::Preferences,
+            selection::{Mask, Run},
+        };
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(CanvasSpec {
+            width: 20,
+            height: 10,
+            ..tiny_spec()
+        })
+        .unwrap();
+        let mut scene = app.documents[0].scene.clone();
+        scene.selection_mask = Some(Mask {
+            runs: vec![
+                Run {
+                    x: 2,
+                    y: 2,
+                    length: 3,
+                    alpha: 128,
+                },
+                Run {
+                    x: 12,
+                    y: 2,
+                    length: 2,
+                    alpha: 255,
+                },
+                Run {
+                    x: 2,
+                    y: 3,
+                    length: 3,
+                    alpha: 64,
+                },
+            ],
+        });
+        app.documents[0].edit_scene(scene).unwrap();
+        app.save_to(0, &root.0.join("selection.drawer")).unwrap();
+        assert_eq!(
+            drawer_core::files::open(&root.0.join("selection.drawer"), DEFAULT_DOCUMENT_BUDGET)
+                .unwrap()
+                .snapshot(),
+            app.documents[0].snapshot()
+        );
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        app.documents[0].view.angle = 37.0;
+        app.documents[0].view.flipped = true;
+        app.canvas_view.navigator.hover_outline = true;
+        frame(&ctx, &mut app, vec![egui::Event::PointerGone]);
+        assert!(!app.canvas_view.navigator_outline);
+        let rect = app.canvas_view.navigator_rect.unwrap();
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(rect.center())],
+        );
+        assert!(app.canvas_view.navigator_outline);
+        click(&ctx, &mut app, rect);
+        frame(&ctx, &mut app, vec![egui::Event::PointerGone]);
+        assert!(app.canvas_view.navigator_outline);
+        let viewport = app.canvas_view.viewport.unwrap();
+        let poly = drawer_core::navigator::visible_polygon(
+            app.documents[0].view,
+            [20.0, 10.0],
+            [
+                [viewport.min.x as f64, viewport.min.y as f64],
+                [viewport.max.x as f64, viewport.max.y as f64],
+            ],
+            ctx.pixels_per_point() as f64,
+        );
+        for (p, screen) in poly.into_iter().zip([
+            viewport.left_top(),
+            viewport.right_top(),
+            viewport.right_bottom(),
+            viewport.left_bottom(),
+        ]) {
+            let mapped = app.documents[0].view.document_to_screen(
+                p,
+                [20.0, 10.0],
+                [viewport.center().x as f64, viewport.center().y as f64],
+                1.0,
+            );
+            assert!(
+                (mapped[0] - screen.x as f64).abs() < 1e-6
+                    && (mapped[1] - screen.y as f64).abs() < 1e-6
+            );
+        }
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1100.0, 760.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        assert!(output.shapes.iter().any(|shape|matches!(&shape.shape,egui::Shape::Path(path) if path.fill==egui::Color32::from_rgba_unmultiplied(90,130,255,45))));
+        output.textures_delta.clear();
+        app.canvas_view.navigator.selection_outline = false;
+        app.canvas_view.navigator.size = [80.0, 80.0];
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            app.canvas_view.navigator_rect.unwrap().size(),
+            egui::vec2(80.0, 80.0)
+        );
+        app.canvas_view.navigator.floating = true;
+        app.canvas_view.navigator.position = [500.0, 300.0];
+        app.canvas_view.navigator_generation += 1;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let initial = app.canvas_view.navigator.position;
+        let title = egui::pos2(initial[0] + 40.0, initial[1] + 10.0);
+        let end = title + egui::vec2(70.0, 30.0);
+        for events in [
+            vec![egui::Event::PointerMoved(title)],
+            vec![egui::Event::PointerButton {
+                pos: title,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+            vec![egui::Event::PointerMoved(end)],
+            vec![egui::Event::PointerButton {
+                pos: end,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        ] {
+            frame(&ctx, &mut app, events);
+        }
+        assert_ne!(app.canvas_view.navigator.position, initial);
+        let moved = app.canvas_view.navigator;
+        app.navigator_history(false).unwrap();
+        app.navigator_history(true).unwrap();
+        assert_eq!(app.canvas_view.navigator, moved);
+        assert_eq!(Preferences::load(&storage).unwrap(), moved);
+        let restarted = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.canvas_view.navigator, moved);
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert!(!app.documents[0].dirty);
+        let previous = std::fs::read(storage.root().join("settings/navigator.json")).unwrap();
+        std::fs::write(
+            storage.root().join("settings/navigator.json.write.tmp"),
+            "foreign",
+        )
+        .unwrap();
+        assert!(moved.save(&storage).is_err());
+        assert_eq!(
+            std::fs::read(storage.root().join("settings/navigator.json")).unwrap(),
+            previous
+        );
+        app.documents[0].scene.selection_mask = Some(Mask::default());
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            canvas_view::selection_status(&app.documents[0]),
+            "Empty selection: all pixels blocked"
+        );
+        app.documents[0].scene.selection_mask = None;
+        assert_eq!(
+            canvas_view::selection_status(&app.documents[0]),
+            "No selection: all pixels allowed"
+        );
+        std::fs::remove_file(storage.root().join("settings/navigator.json.write.tmp")).unwrap();
+        std::fs::write(storage.root().join("settings/navigator.json"), "damaged").unwrap();
+        assert!(Preferences::load(&storage).is_err());
+        let mut recovered = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(recovered.canvas_view.navigator, Preferences::default());
+        assert!(recovered.status.as_ref().unwrap().contains("Navigator"));
+        recovered.persist_navigator();
+        assert_eq!(
+            std::fs::read_to_string(storage.root().join("settings/navigator.damaged.json"))
+                .unwrap(),
+            "damaged"
+        );
+        let settings = Preferences::default();
+        assert!(settings.outline_visible(false, false));
+        assert!(
+            !Preferences {
+                hover_outline: true,
+                ..settings
+            }
+            .outline_visible(false, false)
+        );
+        assert!(
+            Preferences {
+                hover_outline: true,
+                ..settings
+            }
+            .outline_visible(false, true)
+        );
     }
 }
