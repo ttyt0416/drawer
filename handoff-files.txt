@@ -36,3 +36,5 @@ scripts/Install.ps1
 scripts/Uninstall.ps1
 scripts/test-install.ps1
 docs/START-HERE.md
+crates/drawer-core/src/document.rs
+crates/drawer-app/src/new_canvas.rs
