@@ -39,11 +39,7 @@ impl Document {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Interpolation {
-    Nearest,
-    Bilinear,
-}
+pub use crate::interpolation::Filter as Interpolation;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Change {
     Resample {
@@ -371,6 +367,7 @@ pub fn prepare(
                             (y as f64 + 0.5) / scale[1] - 0.5,
                         ],
                         filter,
+                        [1.0 / scale[0], 1.0 / scale[1]],
                     )
                 } else {
                     let (sx, sy) = match change {
@@ -451,44 +448,21 @@ fn sample(
     height: u32,
     point: [f64; 2],
     filter: Interpolation,
+    step: [f64; 2],
 ) -> [u8; 4] {
-    let at = |x: i64, y: i64| {
-        layer.pixel(
-            width,
-            height,
-            x.clamp(0, i64::from(width) - 1),
-            y.clamp(0, i64::from(height) - 1),
-        )
-    };
-    if filter == Interpolation::Nearest {
-        return at(point[0].round() as i64, point[1].round() as i64);
-    }
-    let x = point[0].floor() as i64;
-    let y = point[1].floor() as i64;
-    let fx = point[0] - x as f64;
-    let fy = point[1] - y as f64;
-    let mut premul = [0.0; 4];
-    for (pixel, weight) in [
-        (at(x, y), (1.0 - fx) * (1.0 - fy)),
-        (at(x + 1, y), fx * (1.0 - fy)),
-        (at(x, y + 1), (1.0 - fx) * fy),
-        (at(x + 1, y + 1), fx * fy),
-    ] {
-        let alpha = pixel[3] as f64 / 255.0;
-        for i in 0..3 {
-            premul[i] += pixel[i] as f64 * alpha * weight;
-        }
-        premul[3] += alpha * weight;
-    }
-    if premul[3] == 0.0 {
-        return [0; 4];
-    }
-    [
-        (premul[0] / premul[3]).round() as u8,
-        (premul[1] / premul[3]).round() as u8,
-        (premul[2] / premul[3]).round() as u8,
-        (premul[3] * 255.0).round() as u8,
-    ]
+    crate::interpolation::sample(
+        point,
+        crate::interpolation::box_footprint(point, step),
+        filter,
+        |x, y| {
+            layer.pixel(
+                width,
+                height,
+                x.clamp(0, i64::from(width) - 1),
+                y.clamp(0, i64::from(height) - 1),
+            )
+        },
+    )
 }
 
 #[cfg(test)]

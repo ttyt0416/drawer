@@ -208,6 +208,7 @@ impl Drawer {
                 return;
             }
             self.sizing_dialog = Some(SizingDialog::new(&self.documents[index], mode));
+            self.sizing_dialog.as_mut().unwrap().filter = self.interpolation.resolution;
         }
     }
     pub(super) fn sizing_controls(&mut self, ui: &mut egui::Ui) {
@@ -375,8 +376,7 @@ impl Drawer {
                 }
                 if dialog.mode == Mode::Resample && !dialog.keep_pixels {
                     ui.horizontal(|ui| {
-                        changed |= ui.selectable_value(&mut dialog.filter, Interpolation::Nearest, "Nearest (pixel art)").changed();
-                        changed |= ui.selectable_value(&mut dialog.filter, Interpolation::Bilinear, "Bilinear").changed();
+                        for filter in Interpolation::ALL {changed|=ui.selectable_value(&mut dialog.filter,filter,filter.label()).changed();}
                     });
                 }
                 if changed {

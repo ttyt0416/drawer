@@ -69,3 +69,5 @@ crates/drawer-core/src/canvas_size.rs
 crates/drawer-app/src/size_fields.rs
 crates/drawer-core/src/paste.rs
 crates/drawer-app/src/paste_dialog.rs
+crates/drawer-core/src/interpolation.rs
+crates/drawer-app/src/quality.rs

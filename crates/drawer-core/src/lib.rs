@@ -6,6 +6,7 @@ pub mod document;
 pub mod files;
 mod history;
 pub mod image_import;
+pub mod interpolation;
 pub mod navigator;
 pub mod paste;
 pub mod png_export;

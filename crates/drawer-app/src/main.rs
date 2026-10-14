@@ -13,6 +13,7 @@ mod display_pane;
 mod image_import_dialog;
 mod new_canvas;
 mod paste_dialog;
+mod quality;
 mod reference_pane;
 mod size_fields;
 mod sizing_dialog;
@@ -58,6 +59,10 @@ struct Drawer {
     display: display_pane::DisplayPane,
     size_presets: size_fields::Presets,
     paste_dialog: Option<paste_dialog::PasteDialog>,
+    interpolation: drawer_core::interpolation::Settings,
+    show_interpolation: bool,
+    quality_undo: Vec<drawer_core::interpolation::Settings>,
+    quality_redo: Vec<drawer_core::interpolation::Settings>,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -128,6 +133,10 @@ impl Drawer {
             display: display_pane::DisplayPane::new(ctx),
             size_presets: Default::default(),
             paste_dialog: None,
+            interpolation: Default::default(),
+            show_interpolation: false,
+            quality_undo: Vec::new(),
+            quality_redo: Vec::new(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -218,6 +227,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::interpolation::Settings::load(&storage) {
+            Ok(s) => self.interpolation = s,
+            Err(e) => self.status = Some(format!("Interpolation reset: {e}")),
+        }
         self.size_presets.load(&storage);
         match drawer_core::display_view::Preferences::load(&storage) {
             Ok(prefs) => self.display.preferences = prefs,
@@ -253,6 +266,8 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.canvas_view.filter = self.interpolation.view;
+        self.display.canvas.filter = self.interpolation.view;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_enabled_ui(
                 self.pending_close.is_none()
@@ -280,6 +295,9 @@ impl Drawer {
                         }
                         if ui.button("Display view").clicked() {
                             self.display.settings_open = true;
+                        }
+                        if ui.button("Image quality").clicked() {
+                            self.show_interpolation = true;
                         }
                     });
                     self.document_controls(ui);
@@ -352,6 +370,7 @@ impl Drawer {
         self.show_import(ui.ctx());
         self.show_display(ui.ctx());
         self.show_paste(ui.ctx());
+        self.interpolation_settings(ui.ctx());
     }
 }
 
@@ -411,6 +430,10 @@ impl eframe::App for Drawer {
                 self.aids.preferences.monitor_ppi = Some(96.0);
                 self.aids.preferences.grid = true;
                 self.display.preferences.visible = true;
+                self.interpolation.view = drawer_core::interpolation::Filter::Bicubic;
+                self.interpolation
+                    .save(self.storage.as_ref().unwrap())
+                    .unwrap();
                 self.display.preferences.fullscreen = false;
                 self.display
                     .preferences
@@ -551,6 +574,12 @@ impl eframe::App for Drawer {
                     std::process::exit(1);
                 }
                 self.display.preferences.visible = false;
+                if drawer_core::interpolation::Settings::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    != self.interpolation
+                {
+                    std::process::exit(1);
+                }
                 self.select_tab(0);
                 let original = self.documents[0].snapshot();
                 self.begin_paste(ui.ctx(), || {
@@ -596,7 +625,7 @@ impl eframe::App for Drawer {
                     .save(self.storage.as_ref().unwrap())
                     .unwrap();
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -2078,5 +2107,46 @@ mod tests {
         app.accept_paste().unwrap();
         assert_eq!(app.documents[0].layers[1].pixels.len(), 48);
         assert_eq!(app.documents[0].layers[1].pixels[0], [255, 0, 0, 0]);
+    }
+    #[test]
+    fn view_quality_changes_render_all_filters_and_leave_saved_pixels_and_history_unchanged() {
+        use drawer_core::interpolation::Filter;
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 8,
+            height: 8,
+            ..tiny_spec()
+        })
+        .unwrap();
+        for (i, p) in app.documents[0].layers[0].pixels.iter_mut().enumerate() {
+            *p = if (i % 8 + i / 8) % 2 == 0 {
+                [255; 4]
+            } else {
+                [255, 0, 0, 0]
+            };
+        }
+        app.save_to(0, &root.0.join("quality.drawer")).unwrap();
+        let original = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        app.export_png_to(0, &root.0.join("before.png")).unwrap();
+        let bytes = std::fs::read(root.0.join("before.png")).unwrap();
+        for angle in [0.0, 37.0, 90.0] {
+            for filter in Filter::ALL {
+                app.documents[0].view.angle = angle;
+                app.documents[0].view.zoom = 0.5;
+                app.interpolation.view = filter;
+                frame(&ctx, &mut app, vec![]);
+                assert_eq!(app.documents[0].snapshot(), original);
+                assert_eq!(app.documents[0].history_counts(), history);
+                assert!(!app.documents[0].dirty);
+            }
+        }
+        app.export_png_to(0, &root.0.join("after.png")).unwrap();
+        assert_eq!(std::fs::read(root.0.join("after.png")).unwrap(), bytes);
+        app.interpolation.resolution = Filter::Area;
+        app.begin_sizing(sizing_dialog::Mode::Resample);
+        app.sizing_dialog = None;
     }
 }

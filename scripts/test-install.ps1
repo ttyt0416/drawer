@@ -27,8 +27,9 @@ try {
     $recentSettings = Join-Path $dataRoot 'settings/recent.json'
     $displaySettings = Join-Path $dataRoot 'settings/display.json'
     $presetSettings = Join-Path $dataRoot 'settings/canvas-presets.json'
+    $interpolationSettings = Join-Path $dataRoot 'settings/interpolation.json'
     $referenceHashes = @{}
-    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings) {
+    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings) {
         if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
         $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
     }
@@ -40,7 +41,7 @@ try {
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
@@ -53,8 +54,9 @@ try {
     if ($smokeResult -notmatch 'native_display_view=true' -or $smokeResult -notmatch 'monitor_inventory=true') { throw '별도 보기 창/모니터 목록 시작 시험 실패' }
     if ($smokeResult -notmatch 'canvas_presets=true' -or $smokeResult -notmatch 'signed_edges_undo=true') { throw '크기 프리셋/각 변 증감 시작 시험 실패' }
     if ($smokeResult -notmatch 'paste_layer_undo=true' -or $smokeResult -notmatch 'paste_native_reopen=true') { throw '붙여넣기 레이어/실행 취소/재열기 시작 시험 실패' }
+    if ($smokeResult -notmatch 'interpolation_view=true' -or $smokeResult -notmatch 'interpolation_settings=true') { throw '보기 보간/설정 저장 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 11개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 12개 보존.'
 } finally {
     $env:DRAWER_DATA_DIR = $oldData
     $env:PATH = $oldPath

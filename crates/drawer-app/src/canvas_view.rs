@@ -5,10 +5,21 @@ pub struct CanvasView {
     image: Option<((u64, u64), egui::TextureHandle)>,
     checker: egui::TextureHandle,
     pub move_delta: Option<[f64; 2]>,
+    pub filter: drawer_core::interpolation::Filter,
+    screen_image: Option<(ScreenKey, egui::TextureHandle)>,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
     #[cfg(test)]
     pub navigator_rect: Option<egui::Rect>,
+}
+#[derive(Clone, Copy, PartialEq)]
+struct ScreenKey {
+    id: u64,
+    revision: u64,
+    view: drawer_core::view::View,
+    size: [usize; 2],
+    ppp: f64,
+    filter: drawer_core::interpolation::Filter,
 }
 impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
@@ -16,6 +27,8 @@ impl CanvasView {
         Self {
             image: None,
             move_delta: None,
+            filter: drawer_core::interpolation::Filter::Nearest,
+            screen_image: None,
             checker: ctx.load_texture(
                 "transparency-grid",
                 egui::ColorImage::new([2, 2], vec![gray(196), gray(224), gray(224), gray(196)]),
@@ -151,7 +164,7 @@ impl CanvasView {
         }
     }
     fn paint_paper(
-        &self,
+        &mut self,
         ui: &egui::Ui,
         document: &Document,
         view: drawer_core::view::View,
@@ -172,29 +185,136 @@ impl CanvasView {
         });
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, egui::Color32::from_gray(32));
-        for (texture, uv_max) in [
-            (
-                self.checker.id(),
-                egui::pos2(document.width as f32 / 32.0, document.height as f32 / 32.0),
-            ),
-            (self.image.as_ref().unwrap().1.id(), egui::pos2(1.0, 1.0)),
-        ] {
-            let mut mesh = egui::Mesh::with_texture(texture);
-            let uv = [
-                egui::pos2(0.0, 0.0),
-                egui::pos2(uv_max.x, 0.0),
-                uv_max,
-                egui::pos2(0.0, uv_max.y),
+        let mut mesh = egui::Mesh::with_texture(self.checker.id());
+        let uv_max = egui::pos2(document.width as f32 / 32.0, document.height as f32 / 32.0);
+        let uv = [
+            egui::Pos2::ZERO,
+            egui::pos2(uv_max.x, 0.0),
+            uv_max,
+            egui::pos2(0.0, uv_max.y),
+        ];
+        for (pos, uv) in corners.into_iter().zip(uv) {
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos,
+                uv,
+                color: egui::Color32::WHITE,
+            });
+        }
+        mesh.indices = vec![0, 1, 2, 0, 2, 3];
+        painter.add(egui::Shape::mesh(mesh));
+        {
+            let scale = (2048.0 / (rect.width().max(rect.height()) as f64 * ppp)).min(1.0);
+            let dimensions = [
+                (rect.width() as f64 * ppp * scale).ceil().max(1.0) as usize,
+                (rect.height() as f64 * ppp * scale).ceil().max(1.0) as usize,
             ];
-            for (pos, uv) in corners.into_iter().zip(uv) {
-                mesh.vertices.push(egui::epaint::Vertex {
-                    pos,
-                    uv,
-                    color: egui::Color32::WHITE,
-                });
+            let key = ScreenKey {
+                id: document.id,
+                revision: document.revision,
+                view,
+                size: dimensions,
+                ppp,
+                filter: self.filter,
+            };
+            if self.screen_image.as_ref().map(|(k, _)| *k) != Some(key) {
+                let renderer = drawer_core::render::Renderer::new(document);
+                let mut pixels = Vec::with_capacity(dimensions[0] * dimensions[1]);
+                let origin = view.screen_to_document(
+                    [rect.min.x as f64, rect.min.y as f64],
+                    size,
+                    center,
+                    ppp,
+                );
+                let horizontal = view.screen_to_document(
+                    [
+                        rect.min.x as f64 + rect.width() as f64 / dimensions[0] as f64,
+                        rect.min.y as f64,
+                    ],
+                    size,
+                    center,
+                    ppp,
+                );
+                let vertical = view.screen_to_document(
+                    [
+                        rect.min.x as f64,
+                        rect.min.y as f64 + rect.height() as f64 / dimensions[1] as f64,
+                    ],
+                    size,
+                    center,
+                    ppp,
+                );
+                let map = |x: f64, y: f64| {
+                    [
+                        origin[0] - 0.5
+                            + x * (horizontal[0] - origin[0])
+                            + y * (vertical[0] - origin[0]),
+                        origin[1] - 0.5
+                            + x * (horizontal[1] - origin[1])
+                            + y * (vertical[1] - origin[1]),
+                    ]
+                };
+                let bounds = corners
+                    .iter()
+                    .fold(egui::Rect::NOTHING, |bounds, p| {
+                        bounds.union(egui::Rect::from_min_max(*p, *p))
+                    })
+                    .intersect(rect);
+                let start = [
+                    ((bounds.min.x - rect.min.x).max(0.0) / rect.width() * dimensions[0] as f32)
+                        .floor() as usize,
+                    ((bounds.min.y - rect.min.y).max(0.0) / rect.height() * dimensions[1] as f32)
+                        .floor() as usize,
+                ];
+                let end = [
+                    ((bounds.max.x - rect.min.x).max(0.0) / rect.width() * dimensions[0] as f32)
+                        .ceil() as usize,
+                    ((bounds.max.y - rect.min.y).max(0.0) / rect.height() * dimensions[1] as f32)
+                        .ceil() as usize,
+                ];
+                pixels.resize(dimensions[0] * dimensions[1], egui::Color32::TRANSPARENT);
+                for y in start[1].min(dimensions[1])..end[1].min(dimensions[1]) {
+                    for x in start[0].min(dimensions[0])..end[0].min(dimensions[0]) {
+                        let point = map(x as f64 + 0.5, y as f64 + 0.5);
+                        let footprint = [
+                            map(x as f64, y as f64),
+                            map(x as f64 + 1.0, y as f64),
+                            map(x as f64 + 1.0, y as f64 + 1.0),
+                            map(x as f64, y as f64 + 1.0),
+                        ];
+                        let outside = footprint.iter().all(|p| p[0] < -0.5)
+                            || footprint.iter().all(|p| p[1] < -0.5)
+                            || footprint.iter().all(|p| p[0] >= size[0] - 0.5)
+                            || footprint.iter().all(|p| p[1] >= size[1] - 0.5);
+                        let pixel = if outside {
+                            [0; 4]
+                        } else {
+                            drawer_core::interpolation::sample(
+                                point,
+                                footprint,
+                                self.filter,
+                                |x, y| renderer.pixel([x as f64 + 0.5, y as f64 + 0.5]),
+                            )
+                        };
+                        pixels[y * dimensions[0] + x] = egui::Color32::from_rgba_unmultiplied(
+                            pixel[0], pixel[1], pixel[2], pixel[3],
+                        );
+                    }
+                }
+                self.screen_image = Some((
+                    key,
+                    ui.ctx().load_texture(
+                        "interpolated-canvas-view",
+                        egui::ColorImage::new(dimensions, pixels),
+                        egui::TextureOptions::NEAREST,
+                    ),
+                ));
             }
-            mesh.indices = vec![0, 1, 2, 0, 2, 3];
-            painter.add(egui::Shape::mesh(mesh));
+            painter.image(
+                self.screen_image.as_ref().unwrap().1.id(),
+                rect,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
         }
     }
     pub fn show_only(

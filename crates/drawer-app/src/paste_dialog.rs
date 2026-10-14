@@ -202,6 +202,7 @@ impl Drawer {
         let Some(dialog) = &mut self.paste_dialog else {
             return;
         };
+        dialog.canvas.filter = self.interpolation.view;
         let mut accept = false;
         let mut cancel = false;
         egui::Modal::new(egui::Id::new("paste-layer")).show(ctx, |ui| {
