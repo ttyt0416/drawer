@@ -88,7 +88,7 @@ impl Drawer {
         });
         self.select_tab(self.tabs.len() - 1);
     }
-    fn sync_active_view(&mut self) {
+    pub(super) fn sync_active_view(&mut self) {
         if let (Some(tab), Some(document)) = (self.active_tab, self.active) {
             self.tabs[tab].view = self.documents[document].view;
         }
@@ -109,6 +109,10 @@ impl Drawer {
         }
     }
     pub(super) fn duplicate_view(&mut self) {
+        if self.tabs.len() >= 256 {
+            self.status = Some("The workspace supports up to 256 views.".into());
+            return;
+        }
         let Some(document) = self.active else {
             return;
         };
@@ -147,6 +151,9 @@ impl Drawer {
             return Ok(());
         }
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
+        if self.tabs.len() >= 256 {
+            return Err("The workspace supports up to 256 views.".into());
+        }
         let mut document =
             drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;
@@ -358,6 +365,7 @@ impl Drawer {
                 self.status = Some(error);
             }
             self.recent_menu(ui);
+            self.view_menu(ui);
             if let Some(active) = self.active {
                 if ui.button("Save").clicked()
                     && let Err(error) = self.save_document(active)

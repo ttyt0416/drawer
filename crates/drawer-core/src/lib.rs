@@ -19,3 +19,4 @@ pub mod storage;
 #[cfg(test)]
 mod test_support;
 pub mod view;
+pub mod view_layout;

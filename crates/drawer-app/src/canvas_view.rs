@@ -7,6 +7,9 @@ pub struct CanvasView {
     pub move_delta: Option<[f64; 2]>,
     pub filter: drawer_core::interpolation::Filter,
     screen_image: Option<(ScreenKey, egui::TextureHandle)>,
+    pub area_zoom: bool,
+    area_start: Option<egui::Pos2>,
+    pub view_notice: Option<String>,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
     #[cfg(test)]
@@ -29,6 +32,9 @@ impl CanvasView {
             move_delta: None,
             filter: drawer_core::interpolation::Filter::Nearest,
             screen_image: None,
+            area_zoom: false,
+            area_start: None,
+            view_notice: None,
             checker: ctx.load_texture(
                 "transparency-grid",
                 egui::ColorImage::new([2, 2], vec![gray(196), gray(224), gray(224), gray(196)]),
@@ -53,6 +59,8 @@ impl CanvasView {
         aids: drawer_core::aids::AidPreferences,
     ) -> bool {
         let before = document.view;
+        let size = [document.width as f64, document.height as f64];
+        let ppp = ui.ctx().pixels_per_point() as f64;
         ui.horizontal(|ui| {
             ui.label("Zoom");
             let mut percent = document.view.zoom * 100.0;
@@ -76,11 +84,27 @@ impl CanvasView {
                 document.view.rotate(angle);
             }
             ui.checkbox(&mut document.view.flipped, "Mirror");
+            if ui.button("100%").clicked() {
+                document.view.reset_zoom(size, ppp);
+            }
+            if ui.button("0°").clicked() {
+                document.view.reset_angle(size, ppp);
+            }
+            if ui.button("Center").clicked() {
+                document.view.pan = [0.0; 2];
+            }
             if ui.button("Reset view").clicked() {
                 document.view = Default::default();
             }
+            if ui.checkbox(&mut self.area_zoom, "Zoom region").changed() {
+                self.area_start = None;
+                self.view_notice = None;
+            }
         });
         ui.label("Wheel to zoom · Middle drag or Space + drag to pan");
+        if let Some(notice) = &self.view_notice {
+            ui.label(notice);
+        }
         let (rect, response) = ui.allocate_exact_size(
             ui.available_size().max(egui::vec2(1.0, 1.0)),
             egui::Sense::drag(),
@@ -90,8 +114,40 @@ impl CanvasView {
             self.viewport = Some(rect);
         }
         let center = [rect.center().x as f64, rect.center().y as f64];
-        let size = [document.width as f64, document.height as f64];
-        let ppp = ui.ctx().pixels_per_point() as f64;
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.area_start = None;
+            self.area_zoom = false;
+        }
+        if self.area_zoom && !ui.input(|i| i.key_down(egui::Key::Space)) {
+            if response.drag_started_by(egui::PointerButton::Primary) {
+                self.area_start = ui.input(|i| i.pointer.press_origin());
+            }
+            if response.drag_stopped_by(egui::PointerButton::Primary)
+                && let Some(start) = self.area_start.take()
+                && let Some(end) = response.interact_pointer_pos()
+            {
+                let selection = egui::Rect::from_two_pos(start, end).intersect(rect);
+                self.view_notice = document
+                    .view
+                    .fit_screen_region(
+                        drawer_core::scene::Rect {
+                            min: [selection.min.x as f64, selection.min.y as f64],
+                            max: [selection.max.x as f64, selection.max.y as f64],
+                        },
+                        drawer_core::scene::Rect {
+                            min: [rect.min.x as f64, rect.min.y as f64],
+                            max: [rect.max.x as f64, rect.max.y as f64],
+                        },
+                        size,
+                        ppp,
+                    )
+                    .err();
+            }
+            if response.clicked() {
+                self.view_notice =
+                    Some("Drag a region larger than one document pixel in each direction.".into());
+            }
+        }
         if response.dragged_by(egui::PointerButton::Middle)
             || (response.dragged_by(egui::PointerButton::Primary)
                 && ui.input(|input| input.key_down(egui::Key::Space)))
@@ -99,7 +155,7 @@ impl CanvasView {
             let delta = response.drag_delta();
             document.view.pan_by([delta.x as f64, delta.y as f64]);
         }
-        if response.hovered() {
+        if response.hovered() && self.area_start.is_none() {
             let wheel = ui.input_mut(|input| std::mem::take(&mut input.smooth_scroll_delta).y);
             if wheel != 0.0
                 && let Some(pos) = response.hover_pos()
@@ -117,6 +173,16 @@ impl CanvasView {
         self.show_navigator(navigator_ui, document, rect, ppp);
         self.paint_paper(ui, document, document.view, rect);
         let painter = ui.painter_at(rect);
+        if let Some(start) = self.area_start
+            && let Some(end) = response.interact_pointer_pos()
+        {
+            painter.rect_stroke(
+                egui::Rect::from_two_pos(start, end).intersect(rect),
+                0.0,
+                egui::Stroke::new(1.5, egui::Color32::YELLOW),
+                egui::StrokeKind::Inside,
+            );
+        }
         if let Some(boundary) = overlay {
             let outline = [
                 boundary.min,

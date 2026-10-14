@@ -17,6 +17,51 @@ impl Default for View {
     }
 }
 impl View {
+    pub fn reset_zoom(&mut self, size: [f64; 2], ppp: f64) {
+        let point = self.screen_to_document([0.0; 2], size, [0.0; 2], ppp);
+        self.zoom = 1.0;
+        self.center_on(point, size, [0.0; 2], ppp);
+    }
+    pub fn reset_angle(&mut self, size: [f64; 2], ppp: f64) {
+        let point = self.screen_to_document([0.0; 2], size, [0.0; 2], ppp);
+        self.angle = 0.0;
+        self.center_on(point, size, [0.0; 2], ppp);
+    }
+    pub fn fit_screen_region(
+        &mut self,
+        region: crate::scene::Rect,
+        viewport: crate::scene::Rect,
+        size: [f64; 2],
+        ppp: f64,
+    ) -> Result<(), String> {
+        if !region.valid() || !viewport.valid() || !ppp.is_finite() || ppp <= 0.0 {
+            return Err("Invalid zoom region".into());
+        }
+        let region = region.intersection(viewport);
+        let w = region.max[0] - region.min[0];
+        let h = region.max[1] - region.min[1];
+        if w * ppp / self.zoom <= 1.0 + 1e-9 || h * ppp / self.zoom <= 1.0 + 1e-9 {
+            return Err("Drag a region larger than one document pixel in each direction.".into());
+        }
+        let center = [
+            (viewport.min[0] + viewport.max[0]) / 2.0,
+            (viewport.min[1] + viewport.max[1]) / 2.0,
+        ];
+        let point = self.screen_to_document(
+            [
+                (region.min[0] + region.max[0]) / 2.0,
+                (region.min[1] + region.max[1]) / 2.0,
+            ],
+            size,
+            center,
+            ppp,
+        );
+        let factor =
+            ((viewport.max[0] - viewport.min[0]) / w).min((viewport.max[1] - viewport.min[1]) / h);
+        self.zoom = (self.zoom * factor).clamp(0.01, 64.0);
+        self.center_on(point, size, center, ppp);
+        Ok(())
+    }
     pub fn document_to_screen(
         self,
         point: [f64; 2],
@@ -182,5 +227,65 @@ mod tests {
         assert_eq!(view, before);
         assert_eq!(View::decode(&view.encode()), Some(view));
         assert!(View::decode("1 NaN 0 0 0 0").is_none());
+    }
+    #[test]
+    fn region_fit_resets_and_cursor_hold_preserve_rotation_mirror_at_150_percent_dpi() {
+        let size = [800.0, 600.0];
+        let center = [500.0, 400.0];
+        let ppp = 1.5;
+        let mut view = View {
+            zoom: 1.3,
+            angle: 37.0,
+            flipped: true,
+            pan: [43.0, -18.0],
+        };
+        let anchor = [220.0, 160.0];
+        let point = view.screen_to_document(anchor, size, center, ppp);
+        view.zoom_about(1.7, anchor, size, center, ppp);
+        close(view.screen_to_document(anchor, size, center, ppp), point);
+        let viewport = crate::scene::Rect {
+            min: [100.0, 100.0],
+            max: [900.0, 700.0],
+        };
+        let region = crate::scene::Rect {
+            min: [200.0, 180.0],
+            max: [400.0, 280.0],
+        };
+        let midpoint = view.screen_to_document([300.0, 230.0], size, center, ppp);
+        let old = view.zoom;
+        view.fit_screen_region(region, viewport, size, ppp).unwrap();
+        assert!((view.zoom - old * 4.0).abs() < 1e-9);
+        close(view.document_to_screen(midpoint, size, center, ppp), center);
+        let current = view;
+        for width in [0.0, view.zoom / ppp] {
+            assert!(
+                view.fit_screen_region(
+                    crate::scene::Rect {
+                        min: [200.0, 200.0],
+                        max: [200.0 + width, 230.0]
+                    },
+                    viewport,
+                    size,
+                    ppp
+                )
+                .is_err()
+            );
+            assert_eq!(view, current);
+        }
+        let center_point = view.screen_to_document([0.0; 2], size, [0.0; 2], ppp);
+        view.reset_zoom(size, ppp);
+        assert_eq!(view.zoom, 1.0);
+        assert_eq!(view.angle, 37.0);
+        assert!(view.flipped);
+        close(
+            view.screen_to_document([0.0; 2], size, [0.0; 2], ppp),
+            center_point,
+        );
+        view.reset_angle(size, ppp);
+        assert_eq!(view.angle, 0.0);
+        close(
+            view.screen_to_document([0.0; 2], size, [0.0; 2], ppp),
+            center_point,
+        );
     }
 }

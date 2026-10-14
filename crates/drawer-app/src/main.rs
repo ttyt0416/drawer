@@ -17,6 +17,7 @@ mod quality;
 mod reference_pane;
 mod size_fields;
 mod sizing_dialog;
+mod view_commands;
 mod workspace;
 use new_canvas::NewCanvas;
 
@@ -63,6 +64,9 @@ struct Drawer {
     show_interpolation: bool,
     quality_undo: Vec<drawer_core::interpolation::Settings>,
     quality_redo: Vec<drawer_core::interpolation::Settings>,
+    saved_layout: drawer_core::view_layout::Layout,
+    last_layout: drawer_core::view_layout::Layout,
+    view_session: u64,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -137,6 +141,12 @@ impl Drawer {
             show_interpolation: false,
             quality_undo: Vec::new(),
             quality_redo: Vec::new(),
+            saved_layout: drawer_core::view_layout::Layout::empty(),
+            last_layout: drawer_core::view_layout::Layout::empty(),
+            view_session: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64,
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -157,6 +167,9 @@ impl Drawer {
     }
 
     fn create_canvas(&mut self, spec: CanvasSpec) -> Result<(), CreateError> {
+        if self.tabs.len() >= 256 {
+            return Err(CreateError::ViewLimit);
+        }
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
         let mut document = Document::create(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))?;
         document.view = self.default_view;
@@ -227,6 +240,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::view_layout::Layout::load(&storage) {
+            Ok(layout) => self.saved_layout = layout,
+            Err(error) => self.status = Some(format!("Saved views unavailable: {error}")),
+        }
         match drawer_core::interpolation::Settings::load(&storage) {
             Ok(s) => self.interpolation = s,
             Err(e) => self.status = Some(format!("Interpolation reset: {e}")),
@@ -266,6 +283,7 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.view_shortcuts(ui.ctx());
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -371,6 +389,7 @@ impl Drawer {
         self.show_display(ui.ctx());
         self.show_paste(ui.ctx());
         self.interpolation_settings(ui.ctx());
+        self.persist_views(ui.ctx().pixels_per_point() as f64);
     }
 }
 
@@ -624,8 +643,21 @@ impl eframe::App for Drawer {
                     .preferences
                     .save(self.storage.as_ref().unwrap())
                     .unwrap();
+                self.persist_views(ui.ctx().pixels_per_point() as f64);
+                let layout =
+                    drawer_core::view_layout::Layout::load(self.storage.as_ref().unwrap()).unwrap();
+                self.restore_views(layout.clone(), ui.ctx().pixels_per_point() as f64)
+                    .unwrap();
+                if self
+                    .capture_views(ui.ctx().pixels_per_point() as f64)
+                    .rows
+                    .len()
+                    != layout.rows.len()
+                {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -2148,5 +2180,190 @@ mod tests {
         app.interpolation.resolution = Filter::Area;
         app.begin_sizing(sizing_dialog::Mode::Resample);
         app.sizing_dialog = None;
+    }
+    #[test]
+    fn ordered_views_restore_saved_documents_and_handle_missing_and_unsaved_views() {
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        for n in 0..2 {
+            app.create_canvas(CanvasSpec {
+                width: 20,
+                height: 10,
+                ..tiny_spec()
+            })
+            .unwrap();
+            app.save_to(n, &root.0.join(format!("{n}.drawer"))).unwrap();
+            app.duplicate_view();
+        }
+        let original: Vec<_> = app
+            .documents
+            .iter()
+            .map(|d| (d.snapshot(), d.dirty, d.history_counts()))
+            .collect();
+        app.tabs.swap(1, 2);
+        app.active_tab = None;
+        app.active = None;
+        for n in 0..4 {
+            app.select_tab(n);
+            app.documents[app.active.unwrap()].view = drawer_core::view::View {
+                zoom: (n + 1) as f64,
+                angle: 37.0,
+                flipped: true,
+                pan: [n as f64 * 10.0, -30.0],
+            };
+        }
+        app.select_tab(2);
+        app.persist_views(1.5);
+        let saved = app.saved_layout.clone();
+        app.select_tab(8);
+        assert_eq!(app.active_tab, Some(2));
+        assert_eq!(app.documents.len(), 2);
+        app.step_view(1);
+        assert_eq!(app.active_tab, Some(3));
+        app.step_view(1);
+        assert_eq!(app.active_tab, Some(0));
+        app.step_view(-1);
+        assert_eq!(app.active_tab, Some(3));
+        for (doc, before) in app.documents.iter().zip(&original) {
+            assert_eq!((doc.snapshot(), doc.dirty, doc.history_counts()), *before);
+        }
+        let mut restart = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        restart.persist_views(1.5);
+        assert_eq!(
+            drawer_core::view_layout::Layout::load(&storage).unwrap(),
+            saved
+        );
+        restart.restore_views(saved.clone(), 1.5).unwrap();
+        assert_eq!(restart.documents.len(), 2);
+        assert_eq!(restart.tabs.len(), 4);
+        assert_eq!(restart.active_tab, Some(2));
+        let after = restart.capture_views(1.5);
+        for (a, b) in after.rows.iter().zip(&saved.rows) {
+            assert_eq!(a.path, b.path);
+            assert_eq!(
+                (a.framing.zoom, a.framing.angle, a.framing.flipped),
+                (b.framing.zoom, b.framing.angle, b.framing.flipped)
+            );
+            for axis in 0..2 {
+                assert!((a.framing.center[axis] - b.framing.center[axis]).abs() < 1e-9);
+            }
+        }
+        let mut invalid = saved.clone();
+        invalid.rows[0].path = Some(root.0.join("missing.drawer"));
+        assert!(
+            restart
+                .restore_views(invalid, 1.5)
+                .unwrap_err()
+                .contains("missing")
+        );
+        assert_eq!(restart.documents.len(), 2);
+        restart.create_canvas(tiny_spec()).unwrap();
+        let unsaved = restart.capture_views(1.5);
+        let mut second = Drawer::new(&ctx, None);
+        assert!(
+            second
+                .restore_views(unsaved, 1.5)
+                .unwrap_err()
+                .contains("not saved")
+        );
+        assert_eq!(second.documents.len(), 2);
+        // Close the middle view: the remaining sequence has no gap in direct shortcut numbering.
+        app.request_close(1);
+        app.select_tab(1);
+        assert_eq!(app.tabs.len(), 3);
+        assert_eq!(app.documents.len(), 2);
+        let before = std::fs::read(storage.root().join("settings/views.json")).unwrap();
+        std::fs::write(
+            storage.root().join("settings/views.json.write.tmp"),
+            "foreign temp",
+        )
+        .unwrap();
+        assert!(saved.save(&storage).is_err());
+        assert_eq!(
+            std::fs::read(storage.root().join("settings/views.json")).unwrap(),
+            before
+        );
+    }
+    #[test]
+    fn mouse_region_zoom_and_direct_shortcuts_leave_drawing_and_history_unchanged() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 400,
+            height: 300,
+            ..tiny_spec()
+        })
+        .unwrap();
+        app.duplicate_view();
+        app.duplicate_view();
+        app.documents[0].dirty = false;
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        app.canvas_view.area_zoom = true;
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.canvas_view.viewport.unwrap();
+        let a = rect.center() - egui::vec2(40.0, 30.0);
+        let b = rect.center() + egui::vec2(40.0, 30.0);
+        for events in [
+            vec![
+                egui::Event::PointerMoved(a),
+                egui::Event::PointerButton {
+                    pos: a,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+            vec![egui::Event::PointerMoved(b)],
+            vec![egui::Event::PointerButton {
+                pos: b,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        ] {
+            frame(&ctx, &mut app, events);
+        }
+        assert!(app.documents[0].view.zoom > 1.0);
+        assert!(app.canvas_view.view_notice.is_none());
+        click(
+            &ctx,
+            &mut app,
+            egui::Rect::from_center_size(rect.center(), egui::vec2(2.0, 2.0)),
+        );
+        assert!(app.canvas_view.view_notice.is_some());
+        for (key, expected) in [
+            (egui::Key::Num1, 0),
+            (egui::Key::Num3, 2),
+            (egui::Key::Num9, 2),
+        ] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1100.0, 760.0),
+                    )),
+                    events: vec![egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::ALT,
+                    }],
+                    ..Default::default()
+                },
+                |ui| app.show(ui),
+            );
+            output.textures_delta.clear();
+            assert_eq!(app.active_tab, Some(expected));
+        }
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert!(!app.documents[0].dirty);
+        assert_eq!(app.documents.len(), 1);
     }
 }

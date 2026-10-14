@@ -24,6 +24,7 @@ pub enum CreateError {
     InvalidDpi,
     ResourceLimit,
     Allocation,
+    ViewLimit,
 }
 
 impl fmt::Display for CreateError {
@@ -33,6 +34,7 @@ impl fmt::Display for CreateError {
             Self::InvalidDpi => "DPI must be a positive finite number.",
             Self::ResourceLimit => "The canvas exceeds the available document memory budget.",
             Self::Allocation => "There is not enough memory to create the canvas.",
+            Self::ViewLimit => "The workspace supports up to 256 views.",
         })
     }
 }

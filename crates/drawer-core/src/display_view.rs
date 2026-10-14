@@ -69,7 +69,7 @@ impl Framing {
         self.zoom.is_finite()
             && (0.01..=64.0).contains(&self.zoom)
             && self.angle.is_finite()
-            && self.center.iter().all(|n| n.is_finite() && n.abs() <= 1e6)
+            && self.center.iter().all(|n| n.is_finite() && n.abs() <= 1e12)
     }
     pub fn capture(view: View, size: [f64; 2], ppp: f64) -> Self {
         let center = view.screen_to_document([0.0; 2], size, [0.0; 2], ppp);

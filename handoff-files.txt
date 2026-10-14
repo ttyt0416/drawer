@@ -71,3 +71,5 @@ crates/drawer-core/src/paste.rs
 crates/drawer-app/src/paste_dialog.rs
 crates/drawer-core/src/interpolation.rs
 crates/drawer-app/src/quality.rs
+crates/drawer-core/src/view_layout.rs
+crates/drawer-app/src/view_commands.rs
