@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][ValidatePattern('^item-[0-9]{3}$')][string]$KeepBuild)
+param([ValidatePattern('^(item-[0-9]{3}|latest)$')][string]$KeepBuild = 'latest')
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $cacheRoot = Join-Path $projectRoot 'target'

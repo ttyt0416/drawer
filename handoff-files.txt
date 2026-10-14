@@ -9,3 +9,9 @@ docs/process/clean-room.md
 docs/process/progress.md
 docs/process/spec-review.md
 scripts/cleanup.ps1
+crates/drawer-core/Cargo.toml
+crates/drawer-core/src/lib.rs
+crates/drawer-core/src/assets.rs
+crates/drawer-app/Cargo.toml
+crates/drawer-app/src/main.rs
+docs/process/own-assets.md

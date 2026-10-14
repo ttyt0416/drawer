@@ -1,0 +1,12 @@
+[package]
+name = "drawer-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+drawer-core = { path = "../drawer-core" }
+eframe = { version = "=0.36.2", default-features = false, features = ["default_fonts", "glow"] }
+
+[lints]
+workspace = true
