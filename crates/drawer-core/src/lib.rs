@@ -24,5 +24,6 @@ pub mod storage;
 #[cfg(test)]
 mod test_support;
 pub mod thumbnail;
+pub mod ui_scale;
 pub mod view;
 pub mod view_layout;

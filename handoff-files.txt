@@ -84,3 +84,5 @@ docs/process/movie-import.md
 crates/drawer-core/src/panels.rs
 crates/drawer-core/src/thumbnail.rs
 crates/drawer-app/src/panels.rs
+crates/drawer-core/src/ui_scale.rs
+crates/drawer-app/src/ui_scale.rs

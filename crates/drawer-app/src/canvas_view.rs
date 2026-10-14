@@ -13,6 +13,8 @@ pub struct CanvasView {
     pub navigator: drawer_core::navigator_preferences::Preferences,
     pub navigator_generation: u64,
     #[cfg(test)]
+    pub cursor_rect: Option<egui::Rect>,
+    #[cfg(test)]
     pub navigator_outline: bool,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
@@ -42,6 +44,8 @@ impl CanvasView {
             view_notice: None,
             navigator: Default::default(),
             navigator_generation: 0,
+            #[cfg(test)]
+            cursor_rect: None,
             #[cfg(test)]
             navigator_outline: false,
             checker: ctx.load_texture(
@@ -236,6 +240,26 @@ impl CanvasView {
             }
         }
         self.paint_aids(ui, document, rect, aids, ppp);
+        #[cfg(test)]
+        {
+            self.cursor_rect = None;
+        }
+        if (response.hovered() || response.dragged())
+            && let Some(pos) = response
+                .hover_pos()
+                .or_else(|| response.interact_pointer_pos())
+        {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            for delta in [egui::vec2(7.0, 0.0), egui::vec2(0.0, 7.0)] {
+                let line = [pos - delta, pos + delta];
+                painter.line_segment(line, egui::Stroke::new(3.0, egui::Color32::BLACK));
+                painter.line_segment(line, egui::Stroke::new(1.0, egui::Color32::WHITE));
+            }
+            #[cfg(test)]
+            {
+                self.cursor_rect = Some(egui::Rect::from_center_size(pos, egui::vec2(14.0, 14.0)));
+            }
+        }
         document.view != before
     }
     fn update_image(&mut self, ui: &egui::Ui, document: &Document) {

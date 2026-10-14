@@ -21,6 +21,7 @@ mod reference_pane;
 mod revert;
 mod size_fields;
 mod sizing_dialog;
+mod ui_scale;
 mod view_commands;
 mod workspace;
 use new_canvas::NewCanvas;
@@ -78,6 +79,7 @@ struct Drawer {
     movie_dialog: Option<movie_dialog::MovieDialog>,
     revert_pending: Option<u64>,
     panels: panels::Panels,
+    interface: ui_scale::Interface,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -161,6 +163,7 @@ impl Drawer {
             movie_dialog: None,
             revert_pending: None,
             panels: panels::Panels::new(ctx),
+            interface: ui_scale::Interface::new(ctx),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -301,6 +304,16 @@ impl Drawer {
             Ok(view) => self.default_view = view,
             Err(error) => self.status = Some(error.to_string()),
         }
+        match drawer_core::ui_scale::Settings::load(&storage) {
+            Ok(settings) => {
+                self.interface.settings = settings;
+                if let Some(mut view) = settings.default_view {
+                    view.pan = view.pan.map(|p| p / self.interface.ppp);
+                    self.default_view = view;
+                }
+            }
+            Err(e) => self.status = Some(format!("Interface settings reset: {e}")),
+        }
         if let Some(active) = self.active {
             self.documents[active].tool = self.selected;
         }
@@ -309,6 +322,10 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        if ui.ctx().zoom_factor() != self.interface.settings.zoom {
+            ui.ctx().set_zoom_factor(self.interface.settings.zoom);
+        }
+        self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
         self.canvas_view.filter = self.interpolation.view;
@@ -349,6 +366,9 @@ impl Drawer {
                                 }
                                 if ui.button("Image quality").clicked() {
                                     self.show_interpolation = true;
+                                }
+                                if ui.button("Interface size").clicked() {
+                                    self.interface.open = true;
                                 }
                                 if ui.button("Panels").clicked() {
                                     self.panels.open = true;
@@ -413,6 +433,8 @@ impl Drawer {
         self.navigator_settings(ui.ctx());
         self.persist_navigator();
         self.panel_settings(ui.ctx());
+        self.interface_settings(ui.ctx());
+        self.persist_interface();
         if let Err(e) = self.panels.persist(self.storage.as_ref()) {
             self.status = Some(e);
         }
@@ -746,8 +768,14 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                self.persist_interface();
+                if drawer_core::ui_scale::Settings::load(self.storage.as_ref().unwrap()).unwrap()
+                    != self.interface.settings
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3059,5 +3087,147 @@ mod tests {
             vec![event(egui::Key::E, egui::Modifiers::NONE)],
         );
         assert_eq!(app.selected, BrushTip::Pen);
+    }
+    fn dpi_frame(
+        ctx: &egui::Context,
+        app: &mut Drawer,
+        native: f32,
+        events: Vec<egui::Event>,
+    ) -> f32 {
+        let mut input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1100.0, 760.0),
+            )),
+            events,
+            ..Default::default()
+        };
+        input
+            .viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .native_pixels_per_point = Some(native);
+        let mut output = ctx.run_ui(input, |ui| app.show(ui));
+        let ppp = output.pixels_per_point;
+        output.textures_delta.clear();
+        ppp
+    }
+    #[test]
+    fn mixed_monitor_scale_ui_zoom_cursor_and_all_view_centers_preserve_document_data() {
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(CanvasSpec {
+            width: 400,
+            height: 300,
+            ..tiny_spec()
+        })
+        .unwrap();
+        app.documents[0].view = drawer_core::view::View {
+            zoom: 1.2,
+            angle: 37.0,
+            pan: [43.0, -18.0],
+            flipped: true,
+        };
+        app.duplicate_view();
+        app.documents[0].view.pan = [-10.0, 30.0];
+        app.sync_active_view();
+        app.save_to(0, &root.0.join("dpi.drawer")).unwrap();
+        let original = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let centers: Vec<_> = app
+            .tabs
+            .iter()
+            .map(|t| {
+                t.view
+                    .screen_to_document([0.0; 2], [400.0, 300.0], [0.0; 2], 1.0)
+            })
+            .collect();
+        let mut physical_widths = Vec::new();
+        for native in [1.0, 1.5, 2.0, 1.0] {
+            dpi_frame(&ctx, &mut app, native, vec![]);
+            let ppp = dpi_frame(&ctx, &mut app, native, vec![]);
+            assert_eq!(ppp, native);
+            let viewport = app.canvas_view.viewport.unwrap();
+            assert!(viewport.max.x <= 1100.0 && viewport.max.y <= 760.0);
+            let pos = viewport.center();
+            dpi_frame(&ctx, &mut app, native, vec![egui::Event::PointerMoved(pos)]);
+            let cursor = app.canvas_view.cursor_rect.unwrap();
+            assert_eq!(cursor.width() * ppp, 14.0 * native);
+            assert_eq!(cursor.center(), pos);
+            physical_widths.push(app.new_button.unwrap().width() * ppp);
+            for (tab, before) in app.tabs.iter().zip(&centers) {
+                let center =
+                    tab.view
+                        .screen_to_document([0.0; 2], [400.0, 300.0], [0.0; 2], ppp as f64);
+                assert!(
+                    (center[0] - before[0]).abs() < 1e-6 && (center[1] - before[1]).abs() < 1e-6
+                );
+                let screen =
+                    tab.view
+                        .document_to_screen(center, [400.0, 300.0], [0.0; 2], ppp as f64);
+                assert!(screen[0].abs() < 1e-6 && screen[1].abs() < 1e-6);
+            }
+            assert_eq!(app.documents[0].snapshot(), original);
+            assert_eq!(app.documents[0].history_counts(), history);
+            assert!(!app.documents[0].dirty);
+        }
+        assert!((physical_widths[1] / physical_widths[0] - 1.5).abs() < 0.05);
+        assert!((physical_widths[2] / physical_widths[0] - 2.0).abs() < 0.05);
+        app.interface_zoom(&ctx, 1.5).unwrap();
+        dpi_frame(&ctx, &mut app, 2.0, vec![]);
+        assert_eq!(dpi_frame(&ctx, &mut app, 2.0, vec![]), 3.0);
+        app.interface_history(&ctx, false).unwrap();
+        dpi_frame(&ctx, &mut app, 2.0, vec![]);
+        assert_eq!(dpi_frame(&ctx, &mut app, 2.0, vec![]), 2.0);
+        app.interface_history(&ctx, true).unwrap();
+        dpi_frame(&ctx, &mut app, 2.0, vec![]);
+        dpi_frame(&ctx, &mut app, 2.0, vec![]);
+        let settings = drawer_core::ui_scale::Settings::load(&storage).unwrap();
+        assert_eq!(settings.zoom, 1.5);
+        let new_ctx = egui::Context::default();
+        let mut restarted = Drawer::new(&new_ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        restarted
+            .create_canvas(CanvasSpec {
+                width: 400,
+                height: 300,
+                ..tiny_spec()
+            })
+            .unwrap();
+        dpi_frame(&new_ctx, &mut restarted, 1.0, vec![]);
+        dpi_frame(&new_ctx, &mut restarted, 1.0, vec![]);
+        let center =
+            restarted.documents[0]
+                .view
+                .screen_to_document([0.0; 2], [400.0, 300.0], [0.0; 2], 1.5);
+        assert!(
+            (center[0] - centers[1][0]).abs() < 1e-6 && (center[1] - centers[1][1]).abs() < 1e-6
+        );
+        let normal = std::fs::read(storage.root().join("settings/interface.json")).unwrap();
+        std::fs::write(
+            storage.root().join("settings/interface.json.write.tmp"),
+            "foreign",
+        )
+        .unwrap();
+        assert!(app.interface_zoom(&ctx, 1.0).is_err());
+        assert_eq!(
+            std::fs::read(storage.root().join("settings/interface.json")).unwrap(),
+            normal
+        );
+        assert_eq!(app.interface.settings.zoom, 1.5);
+        std::fs::remove_file(storage.root().join("settings/interface.json.write.tmp")).unwrap();
+        std::fs::write(storage.root().join("settings/interface.json"), "bad").unwrap();
+        assert!(drawer_core::ui_scale::Settings::load(&storage).is_err());
+        drawer_core::ui_scale::Settings::default()
+            .save(&storage)
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(storage.root().join("settings/interface.damaged.json"))
+                .unwrap(),
+            "bad"
+        );
     }
 }
