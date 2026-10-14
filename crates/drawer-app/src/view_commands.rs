@@ -21,6 +21,7 @@ impl Drawer {
             || self.paste_dialog.is_some()
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
+            || self.workspaces.staged.is_some()
             || self.show_new_canvas
         {
             return;

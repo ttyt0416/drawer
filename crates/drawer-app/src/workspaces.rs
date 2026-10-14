@@ -1,0 +1,647 @@
+use super::*;
+use drawer_core::workspaces::{self, Dock, Placement, Scope, Snapshot, Store};
+use std::collections::HashSet;
+
+pub(super) struct Workspaces {
+    pub store: Store,
+    saved: Option<Snapshot>,
+    pub open: bool,
+    name: String,
+    selection: String,
+    pub staged: Option<(Snapshot, Option<String>)>,
+    scope: Scope,
+    save_before: bool,
+    before_name: String,
+    pub reports: Vec<String>,
+    placed: [Option<(Placement, drawer_core::display_view::Monitor)>; 4],
+    pad_texture: Option<egui::TextureHandle>,
+    pad_point: Option<[f64; 2]>,
+    focused: bool,
+    keys: HashSet<egui::Key>,
+    buttons: HashSet<usize>,
+    pub native_panels: usize,
+    #[cfg(test)]
+    pub apply_button: Option<egui::Rect>,
+    #[cfg(test)]
+    pub cancel_button: Option<egui::Rect>,
+    #[cfg(test)]
+    pub pad_rect: Option<egui::Rect>,
+}
+impl Default for Workspaces {
+    fn default() -> Self {
+        Self {
+            store: Default::default(),
+            saved: None,
+            open: false,
+            name: String::new(),
+            selection: String::new(),
+            staged: None,
+            scope: Scope::ALL,
+            save_before: false,
+            before_name: String::new(),
+            reports: Vec::new(),
+            placed: Default::default(),
+            pad_texture: None,
+            pad_point: None,
+            focused: true,
+            keys: HashSet::new(),
+            buttons: HashSet::new(),
+            native_panels: 0,
+            #[cfg(test)]
+            apply_button: None,
+            #[cfg(test)]
+            cancel_button: None,
+            #[cfg(test)]
+            pad_rect: None,
+        }
+    }
+}
+impl Workspaces {
+    // Inspect every release, including multiple device/key releases in one frame.
+    pub fn input(&mut self, ctx: &egui::Context) {
+        ctx.input(|i| {
+            for event in &i.events {
+                match event {
+                    egui::Event::Key { key, pressed, .. } => {
+                        if *pressed {
+                            self.keys.insert(*key);
+                        } else {
+                            self.keys.remove(key);
+                        }
+                    }
+                    egui::Event::PointerButton {
+                        button, pressed, ..
+                    } => {
+                        if *pressed {
+                            self.buttons.insert(*button as usize);
+                        } else {
+                            self.buttons.remove(&(*button as usize));
+                            if *button == egui::PointerButton::Primary {
+                                self.pad_point = None;
+                            }
+                        }
+                    }
+                    egui::Event::WindowFocused(true) => self.focused = true,
+                    egui::Event::WindowFocused(false) => {
+                        self.focused = false;
+                        self.keys.clear();
+                        self.buttons.clear();
+                        self.pad_point = None;
+                    }
+                    egui::Event::PointerGone => {
+                        self.keys.clear();
+                        self.buttons.clear();
+                        self.pad_point = None;
+                    }
+                    _ => {}
+                }
+            }
+            if !i.focused {
+                self.focused = false;
+                self.keys.clear();
+                self.buttons.clear();
+                self.pad_point = None;
+            }
+        });
+    }
+    #[cfg(test)]
+    pub fn input_idle(&self) -> bool {
+        self.keys.is_empty() && self.buttons.is_empty() && self.pad_point.is_none()
+    }
+    pub fn command_label(&self, command: &str) -> String {
+        self.store
+            .current
+            .bindings
+            .iter()
+            .filter(|b| b.command == command)
+            .map(|b| b.label())
+            .collect::<Vec<_>>()
+            .join(" / ")
+    }
+}
+impl Drawer {
+    pub(super) fn capture_workspace(&self) -> Snapshot {
+        let mut s = self.workspaces.store.current.clone();
+        s.panels = self.panels.settings;
+        s.navigator = self.canvas_view.navigator;
+        s.display = self.display.preferences.clone();
+        s.interface = self.interface.settings;
+        s.interpolation = self.interpolation;
+        s.aids = self.aids.preferences;
+        s.tool = self.selected.name().into();
+        s.color = self.references.session.workspace.color;
+        s
+    }
+    pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
+        self.panels.settings = s.panels;
+        self.canvas_view.navigator = s.navigator;
+        self.canvas_view.navigator_generation += 1;
+        self.display.preferences = s.display.clone();
+        self.interface.settings = s.interface;
+        self.interpolation = s.interpolation;
+        self.aids.preferences = s.aids;
+        self.references.session.workspace.color = s.color;
+        self.selected = BrushTip::ALL
+            .into_iter()
+            .find(|t| t.name() == s.tool)
+            .unwrap_or(BrushTip::Pen);
+        if let Some(n) = self.active {
+            self.documents[n].tool = self.selected;
+        }
+        self.workspaces.placed = Default::default();
+        self.workspaces.pad_point = None;
+    }
+    pub(super) fn load_workspaces(&mut self, storage: &UserStorage) {
+        match Store::load(storage) {
+            Ok(Some(mut store)) => {
+                // Individual settings editors remain compatible. Prefer a file explicitly
+                // changed after the last workspace transaction, including damaged-file recovery.
+                let legacy = self.capture_workspace();
+                let saved_at = std::fs::metadata(storage.root().join("settings/workspaces.json"))
+                    .and_then(|m| m.modified())
+                    .ok();
+                let newer = |file: &str| {
+                    std::fs::metadata(storage.root().join("settings").join(file))
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .is_some_and(|t| saved_at.is_none_or(|s| t > s))
+                };
+                if newer("panels.json") {
+                    store.current.panels = legacy.panels;
+                }
+                if newer("navigator.json") {
+                    store.current.navigator = legacy.navigator;
+                }
+                if newer("display.json") {
+                    store.current.display = legacy.display;
+                }
+                if newer("interface.json") {
+                    store.current.interface = legacy.interface;
+                }
+                if newer("interpolation.json") {
+                    store.current.interpolation = legacy.interpolation;
+                }
+                if newer("aids.json") {
+                    store.current.aids = legacy.aids;
+                }
+
+                self.workspaces.reports = store.current.recover(&self.display.monitors);
+                // Also validate bindings on restart; a damaged collection never silently overwrites keys.
+                match workspaces::validate_bindings(&store.current.bindings) {
+                    Ok(()) => {
+                        self.restore_workspace(&store.current);
+                        self.workspaces.saved = Some(store.current.clone());
+                        self.workspaces.store = store;
+                    }
+                    Err(e) => self.status = Some(format!("Workspace settings unavailable: {e}")),
+                }
+            }
+            Ok(None) => self.workspaces.store.current = self.capture_workspace(),
+            Err(e) => {
+                self.status = Some(format!("Workspace settings unavailable: {e}"));
+                self.workspaces.store.current = self.capture_workspace();
+            }
+        }
+    }
+    pub(super) fn persist_workspace(&mut self) -> Result<(), String> {
+        let current = self.capture_workspace();
+        if self.workspaces.saved.as_ref() != Some(&current) {
+            let mut next = self.workspaces.store.clone();
+            next.current = current.clone();
+            if let Some(storage) = &self.storage {
+                next.save(storage).map_err(|e| e.to_string())?;
+            }
+            self.workspaces.store = next;
+            self.workspaces.saved = Some(current);
+        }
+        Ok(())
+    }
+    pub(super) fn apply_workspace(
+        &mut self,
+        scope: Scope,
+        save_before: Option<&str>,
+    ) -> Result<(), String> {
+        let Some((incoming, active)) = self.workspaces.staged.clone() else {
+            return Ok(());
+        };
+        let current = self.capture_workspace();
+        let reports = self
+            .workspaces
+            .store
+            .apply(
+                self.storage.as_ref(),
+                current,
+                &incoming,
+                scope,
+                active,
+                save_before,
+                &self.display.monitors,
+            )
+            .map_err(|e| e.to_string())?;
+        let snapshot = self.workspaces.store.current.clone();
+        self.restore_workspace(&snapshot);
+        self.workspaces.saved = Some(snapshot);
+        self.workspaces.reports = reports;
+        self.workspaces.staged = None;
+        Ok(())
+    }
+    pub(super) fn stage_workspace(&mut self, snapshot: Snapshot, active: Option<String>) {
+        self.workspaces.staged = Some((snapshot, active));
+        self.workspaces.scope = Scope::ALL;
+        self.workspaces.save_before = false;
+    }
+    pub(super) fn workspace_settings(&mut self, ctx: &egui::Context) {
+        if self.workspaces.open && self.workspaces.staged.is_none() {
+            let mut open = true;
+            let mut action = None;
+            egui::Window::new("Workspaces").open(&mut open).vscroll(true).show(ctx, |ui| {
+                ui.label("Layout changes are saved locally. Named workspaces keep a separate saved layout.");
+                for kind in drawer_core::panels::Kind::ALL {
+                    ui.push_id(kind.index(), |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(kind.label());
+                            let p = &mut self.workspaces.store.current.placements[kind.index()];
+                            for dock in Dock::ALL { ui.selectable_value(&mut p.dock, dock, format!("{dock:?}")); }
+                            if p.dock == Dock::Floating {
+                                egui::ComboBox::from_id_salt("screen").selected_text(p.monitor.as_deref().unwrap_or("Primary screen")).show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut p.monitor, None, "Primary screen");
+                                    for m in &self.display.monitors { ui.selectable_value(&mut p.monitor, Some(m.key.clone()), &m.key); }
+                                });
+                            }
+                            let order = &mut self.workspaces.store.current.order;
+                            let n = order.iter().position(|k| *k == kind).unwrap();
+                            if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() { order.swap(n, n - 1); }
+                            if ui.add_enabled(n < 3, egui::Button::new("Down")).clicked() { order.swap(n, n + 1); }
+                        });
+                    });
+                }
+                ui.separator();
+                ui.horizontal(|ui| { ui.label("New name"); ui.text_edit_singleline(&mut self.workspaces.name); if ui.button("Save new workspace").clicked() { action = Some(0); } });
+                egui::ComboBox::from_id_salt("named-workspace").selected_text(&self.workspaces.selection).show_ui(ui, |ui| {
+                    for n in &self.workspaces.store.named { ui.selectable_value(&mut self.workspaces.selection, n.name.clone(), &n.name); }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    for (id, label) in [(1, "Switch / preview"), (2, "Update selected saved workspace"), (3, "Delete selected")] { if ui.button(label).clicked() { action = Some(id); } }
+                    if ui.add_enabled(self.workspaces.store.active.is_some(), egui::Button::new("Reapply current saved workspace")).clicked() { action = Some(4); }
+                    if ui.button("Reset workspace").clicked() { action = Some(5); }
+                    if ui.button("Import local workspace").clicked() { action = Some(6); }
+                    if ui.button("Export current workspace").clicked() { action = Some(7); }
+                    if ui.add_enabled(self.storage.is_some(), egui::Button::new("Restore before-apply backup")).clicked() { action = Some(8); }
+                });
+                if ui.button("Popup test painting").clicked() { self.workspaces.store.current.scratchpad.visible = true; }
+                for report in &self.workspaces.reports { ui.colored_label(egui::Color32::YELLOW, report); }
+            });
+            self.workspaces.open = open;
+            if let Some(action) = action {
+                let result = (|| -> Result<(), String> {
+                    let mut next = self.workspaces.store.clone();
+                    match action {
+                        0 => next
+                            .save_named(self.workspaces.name.trim(), self.capture_workspace())
+                            .map_err(|e| e.to_string())?,
+                        1 | 4 => {
+                            let name = if action == 4 {
+                                next.active.as_ref()
+                            } else {
+                                Some(&self.workspaces.selection)
+                            };
+                            let n = next
+                                .named
+                                .iter()
+                                .find(|n| Some(&n.name) == name)
+                                .ok_or("Select a saved workspace")?;
+                            self.stage_workspace(n.snapshot.clone(), Some(n.name.clone()));
+                            return Ok(());
+                        }
+                        2 => {
+                            let current = self.capture_workspace();
+                            let n = next
+                                .named
+                                .iter_mut()
+                                .find(|n| n.name == self.workspaces.selection)
+                                .ok_or("Select a saved workspace")?;
+                            n.snapshot = current;
+                        }
+                        3 => {
+                            next.named.retain(|n| n.name != self.workspaces.selection);
+                            if next.active.as_ref() == Some(&self.workspaces.selection) {
+                                next.active = None;
+                            }
+                        }
+                        5 => {
+                            self.stage_workspace(Snapshot::default(), None);
+                            return Ok(());
+                        }
+                        6 => {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Local workspace", &["json"])
+                                .pick_file()
+                            {
+                                self.stage_workspace(
+                                    Snapshot::read(&path).map_err(|e| e.to_string())?,
+                                    None,
+                                );
+                            }
+                            return Ok(());
+                        }
+                        7 => {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_file_name("workspace.json")
+                                .save_file()
+                            {
+                                self.capture_workspace()
+                                    .export(&path)
+                                    .map_err(|e| e.to_string())?;
+                            }
+                            return Ok(());
+                        }
+                        8 => {
+                            let s = Snapshot::read(
+                                &self
+                                    .storage
+                                    .as_ref()
+                                    .unwrap()
+                                    .root()
+                                    .join("settings/workspace-before-apply.json"),
+                            )
+                            .map_err(|e| e.to_string())?;
+                            self.stage_workspace(s, None);
+                            return Ok(());
+                        }
+                        _ => return Ok(()),
+                    }
+                    next.current = self.capture_workspace();
+                    if let Some(storage) = &self.storage {
+                        next.save(storage).map_err(|e| e.to_string())?;
+                    }
+                    self.workspaces.store = next;
+                    Ok(())
+                })();
+                if let Err(e) = result {
+                    self.status = Some(e);
+                }
+            }
+        }
+        if let Some((incoming, _)) = self.workspaces.staged.clone() {
+            let mut open = true;
+            let mut apply = false;
+            let mut cancel = false;
+            egui::Window::new("Apply workspace settings")
+                .open(&mut open)
+                .collapsible(false)
+                .vscroll(true)
+                .show(ctx, |ui| {
+                    ui.label(
+                        "Choose groups to apply. Current settings are backed up before applying.",
+                    );
+                    let s = &mut self.workspaces.scope;
+                    ui.checkbox(&mut s.layout, "Panel layout and appearance");
+                    ui.checkbox(&mut s.keys, "Shortcuts");
+                    ui.checkbox(&mut s.bars, "Panel command bars");
+                    ui.checkbox(
+                        &mut s.other,
+                        "Tool, color, test painting, interface, aids and image quality",
+                    );
+                    ui.checkbox(
+                        &mut self.workspaces.save_before,
+                        "Also save the current unsaved layout as a named workspace",
+                    );
+                    if self.workspaces.save_before {
+                        ui.text_edit_singleline(&mut self.workspaces.before_name);
+                    }
+                    match self.capture_workspace().merge(
+                        &incoming,
+                        self.workspaces.scope,
+                        &self.display.monitors,
+                    ) {
+                        Ok((_, reports)) => {
+                            for report in reports {
+                                ui.colored_label(egui::Color32::YELLOW, report);
+                            }
+                        }
+                        Err(e) => {
+                            ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                        }
+                    }
+                    ui.horizontal(|ui| {
+                        let a = ui.button("Apply selected groups");
+                        let c = ui.button("Cancel workspace apply");
+                        apply = a.clicked();
+                        cancel = c.clicked();
+                        #[cfg(test)]
+                        {
+                            self.workspaces.apply_button = Some(a.rect);
+                            self.workspaces.cancel_button = Some(c.rect);
+                        }
+                    });
+                });
+            if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.workspaces.staged = None;
+            } else if apply {
+                let name = self
+                    .workspaces
+                    .save_before
+                    .then(|| self.workspaces.before_name.trim().to_string());
+                if let Err(e) = self.apply_workspace(self.workspaces.scope, name.as_deref()) {
+                    self.status = Some(e);
+                }
+            }
+        }
+    }
+    pub(super) fn floating_panels(&mut self, ctx: &egui::Context) {
+        let order = self.workspaces.store.current.order;
+        for kind in order {
+            let index = kind.index();
+            let mut p = self.workspaces.store.current.placements[index].clone();
+            if p.dock != Dock::Floating || !self.panels.settings.panels[index].visible {
+                continue;
+            }
+            if let Some(reason) = p.recover(&self.display.monitors) {
+                self.workspaces
+                    .reports
+                    .push(format!("{}: {reason}", kind.label()));
+            }
+            let monitor =
+                drawer_core::display_view::selected(&self.display.monitors, p.monitor.as_deref())
+                    .cloned();
+            if let Some(monitor) = monitor {
+                let reposition =
+                    self.workspaces.placed[index].as_ref() != Some(&(p.clone(), monitor.clone()));
+                let mut builder = egui::ViewportBuilder::default()
+                    .with_title(format!("Drawer — {}", kind.label()))
+                    .with_inner_size([p.size[0] as f32, p.size[1] as f32])
+                    .with_min_inner_size([80.0, 80.0])
+                    .with_visible(self.smoke_output.is_none());
+                builder.monitor = Some(monitor.index);
+                ctx.show_viewport_immediate(
+                    egui::ViewportId::from_hash_of(("drawer-panel", index)),
+                    builder,
+                    |ui, class| {
+                        if class != egui::ViewportClass::EmbeddedWindow {
+                            self.workspaces.native_panels += 1;
+                            let ppp = ui.ctx().pixels_per_point() as f64;
+                            if reposition {
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::SetMonitor(
+                                        monitor.index,
+                                    ));
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                        egui::pos2(
+                                            (p.position[0] / ppp) as f32,
+                                            (p.position[1] / ppp) as f32,
+                                        ),
+                                    ));
+                                ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2((p.size[0] / ppp) as f32, (p.size[1] / ppp) as f32),
+                                ));
+                            } else {
+                                ui.ctx().input(|i| {
+                                    if let Some(r) = i.viewport().outer_rect {
+                                        p.position = [r.min.x as f64 * ppp, r.min.y as f64 * ppp];
+                                    }
+                                    if let Some(r) = i.viewport().inner_rect {
+                                        p.size = [r.width() as f64 * ppp, r.height() as f64 * ppp]
+                                            .map(|n| n.clamp(80.0, 4096.0));
+                                    }
+                                });
+                            }
+                        }
+                        if ui.ctx().input(|i| i.viewport().close_requested()) {
+                            self.panels.settings.panels[index].visible = false;
+                        }
+                        egui::CentralPanel::default().show(ui, |ui| {
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
+                                    self.show_panel(ui, kind)
+                                })
+                            });
+                        });
+                    },
+                );
+                // Header docking controls can change the dock while this window is open.
+                p.dock = self.workspaces.store.current.placements[index].dock;
+                self.workspaces.placed[index] = Some((p.clone(), monitor.clone()));
+            } else {
+                let mut visible = true;
+                egui::Window::new(format!("{} — floating", kind.label()))
+                    .id(egui::Id::new(("floating-panel", index)))
+                    .open(&mut visible)
+                    .default_size([260.0, 320.0])
+                    .constrain(true)
+                    .vscroll(true)
+                    .show(ctx, |ui| {
+                        ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
+                            self.show_panel(ui, kind)
+                        })
+                    });
+                self.panels.settings.panels[index].visible = visible;
+            }
+            p.dock = self.workspaces.store.current.placements[index].dock;
+            self.workspaces.store.current.placements[index] = p;
+        }
+    }
+    pub(super) fn scratchpad(&mut self, ctx: &egui::Context) {
+        if !self.workspaces.store.current.scratchpad.visible {
+            return;
+        }
+        let mut visible = true;
+        egui::Window::new("Popup test painting")
+            .open(&mut visible)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(
+                    "Independent test area — no document edits. Uses current tool, color and size.",
+                );
+                let size = workspaces::PAD_SIZE;
+                let image = egui::ColorImage::new(
+                    size,
+                    self.workspaces
+                        .store
+                        .current
+                        .scratchpad
+                        .pixels
+                        .iter()
+                        .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+                        .collect(),
+                );
+                let texture = self.workspaces.pad_texture.get_or_insert_with(|| {
+                    ctx.load_texture(
+                        "workspace-test-painting",
+                        image.clone(),
+                        egui::TextureOptions::NEAREST,
+                    )
+                });
+                texture.set(image, egui::TextureOptions::NEAREST);
+                let response = ui.add(
+                    egui::Image::new(&*texture)
+                        .fit_to_exact_size(egui::vec2(384.0, 288.0))
+                        .sense(egui::Sense::drag()),
+                );
+                #[cfg(test)]
+                {
+                    self.workspaces.pad_rect = Some(response.rect);
+                }
+                if self.workspaces.focused
+                    && response.is_pointer_button_down_on()
+                    && let Some(pos) = response.interact_pointer_pos()
+                {
+                    let point = [
+                        (pos.x - response.rect.min.x) as f64 / 3.0,
+                        (pos.y - response.rect.min.y) as f64 / 3.0,
+                    ];
+                    let from = self.workspaces.pad_point.unwrap_or(point);
+                    self.workspaces.store.current.scratchpad.stroke(
+                        from,
+                        point,
+                        self.panels.settings.brush_size,
+                        self.selected,
+                        self.references.session.workspace.color,
+                    );
+                    self.workspaces.pad_point = Some(point);
+                } else {
+                    self.workspaces.pad_point = None;
+                }
+                if ui.button("Clear test area").clicked() {
+                    self.workspaces.store.current.scratchpad.pixels.fill([0; 4]);
+                }
+            });
+        self.workspaces.store.current.scratchpad.visible = visible;
+    }
+}
+
+pub(super) fn shortcut(
+    input: &mut egui::InputState,
+    bindings: &[workspaces::Binding],
+) -> Option<u8> {
+    let found = input.events.iter().enumerate().find_map(|(index, event)| {
+        let egui::Event::Key {
+            key,
+            pressed: true,
+            modifiers,
+            ..
+        } = event
+        else {
+            return None;
+        };
+        bindings.iter().find_map(|b| {
+            let expected = egui::Key::from_name(&b.key)?;
+            (expected == *key
+                && modifiers.ctrl == b.ctrl
+                && modifiers.shift == b.shift
+                && modifiers.alt == b.alt
+                && !modifiers.mac_cmd)
+                .then(|| {
+                    workspaces::COMMANDS
+                        .iter()
+                        .position(|c| *c == b.command)
+                        .map(|action| (index, action as u8))
+                })
+                .flatten()
+        })
+    });
+    found.map(|(i, a)| {
+        input.events.remove(i);
+        a
+    })
+}

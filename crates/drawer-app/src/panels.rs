@@ -163,11 +163,14 @@ impl Drawer {
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
             || self.show_new_canvas
+            || self.workspaces.staged.is_some()
             || ctx.egui_wants_keyboard_input()
         {
             return;
         }
-        let action = ctx.input_mut(shortcut_action);
+        let action = ctx.input_mut(|input| {
+            super::workspaces::shortcut(input, &self.workspaces.store.current.bindings)
+        });
         match action {
             Some(0 | 1) => {
                 if let Some(n) = self.active {
@@ -195,99 +198,126 @@ impl Drawer {
             _ => {}
         }
     }
-    pub(super) fn show_panels(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn show_panels_at(
+        &mut self,
+        ui: &mut egui::Ui,
+        dock: drawer_core::workspaces::Dock,
+    ) {
         let height = (ui.available_height() * 0.58).clamp(60.0, 360.0);
         egui::ScrollArea::vertical()
-            .id_salt("workspace-panels")
+            .id_salt(("workspace-panels", format!("{dock:?}")))
             .max_height(height)
             .show(ui, |ui| {
-                for kind in Kind::ALL {
-                    let cfg = self.panels.settings.panels[kind.index()];
-                    if !cfg.visible {
-                        continue;
+                let order = self.workspaces.store.current.order;
+                for kind in order {
+                    if self.workspaces.store.current.placements[kind.index()].dock == dock
+                        && self.panels.settings.panels[kind.index()].visible
+                    {
+                        self.show_panel(ui, kind);
                     }
-                    ui.push_id(kind.index(), |ui| {
-                        ui.heading(kind.label());
-                        if cfg.properties == Bar::Top {
-                            self.panel_properties(ui, kind);
-                        }
-                        if cfg.commands == Bar::Top {
-                            self.panel_commands(ui, kind);
-                        }
-                        match kind {
-                            Kind::Brush => {
-                                for (n, tip) in BrushTip::ALL.into_iter().enumerate() {
-                                    ui.horizontal(|ui| {
-                                        let label = if cfg.names {
-                                            format!("{}  {}", tip.name(), tool_key(tip))
-                                        } else {
-                                            String::new()
-                                        };
-                                        let response =
-                                            ui.selectable_label(self.selected == tip, label);
-                                        response.widget_info(|| {
-                                            egui::WidgetInfo::selected(
-                                                egui::WidgetType::SelectableLabel,
-                                                ui.is_enabled(),
-                                                self.selected == tip,
-                                                tip.name(),
-                                            )
-                                        });
-                                        let response = response.on_hover_text(format!(
-                                            "{} ({})",
-                                            tip.name(),
-                                            tool_key(tip)
-                                        ));
-                                        let mut clicked = response.clicked();
-                                        if cfg.icons {
-                                            clicked |= ui
-                                                .add(
-                                                    egui::Image::new(&self.previews[n])
-                                                        .fit_to_exact_size(egui::vec2(16.0, 16.0))
-                                                        .sense(egui::Sense::click()),
-                                                )
-                                                .on_hover_text(tip.name())
-                                                .clicked();
-                                        }
-                                        if cfg.strokes {
-                                            clicked |= ui
-                                                .add(
-                                                    egui::Image::new(&self.panels.strokes[n])
-                                                        .fit_to_exact_size(egui::vec2(64.0, 20.0))
-                                                        .sense(egui::Sense::click()),
-                                                )
-                                                .on_hover_text(tip.name())
-                                                .clicked();
-                                        }
-                                        if clicked {
-                                            self.set_tool(tip);
-                                        }
-                                    });
-                                }
-                            }
-                            Kind::Color => {
-                                let mut color = self.references.session.workspace.color;
-                                if ui
-                                    .color_edit_button_srgba_unmultiplied(&mut color)
-                                    .changed()
-                                {
-                                    self.panels.previous_color =
-                                        self.references.session.workspace.color;
-                                    self.references.session.workspace.color = color;
-                                }
-                            }
-                            Kind::Layers | Kind::Timeline => self.panel_layers(ui, kind),
-                        }
-                        if cfg.properties == Bar::Bottom {
-                            self.panel_properties(ui, kind);
-                        }
-                        if cfg.commands == Bar::Bottom {
-                            self.panel_commands(ui, kind);
-                        }
-                        ui.separator();
-                    });
                 }
             });
+    }
+    pub(super) fn show_panel(&mut self, ui: &mut egui::Ui, kind: Kind) {
+        let cfg = self.panels.settings.panels[kind.index()];
+        ui.push_id(kind.index(), |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.heading(kind.label());
+                ui.menu_button("Dock", |ui| {
+                    for dock in drawer_core::workspaces::Dock::ALL {
+                        if ui
+                            .selectable_label(
+                                self.workspaces.store.current.placements[kind.index()].dock == dock,
+                                format!("{dock:?}"),
+                            )
+                            .clicked()
+                        {
+                            self.workspaces.store.current.placements[kind.index()].dock = dock;
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            if cfg.properties == Bar::Top {
+                self.panel_properties(ui, kind);
+            }
+            if cfg.commands == Bar::Top {
+                self.panel_commands(ui, kind);
+            }
+            match kind {
+                Kind::Brush => {
+                    for (n, tip) in BrushTip::ALL.into_iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            let label = if cfg.names {
+                                format!(
+                                    "{}  {}",
+                                    tip.name(),
+                                    self.workspaces.command_label(tip.name())
+                                )
+                            } else {
+                                String::new()
+                            };
+                            let response = ui.selectable_label(self.selected == tip, label);
+                            response.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::WidgetType::SelectableLabel,
+                                    ui.is_enabled(),
+                                    self.selected == tip,
+                                    tip.name(),
+                                )
+                            });
+                            let response = response.on_hover_text(format!(
+                                "{} ({})",
+                                tip.name(),
+                                self.workspaces.command_label(tip.name())
+                            ));
+                            let mut clicked = response.clicked();
+                            if cfg.icons {
+                                clicked |= ui
+                                    .add(
+                                        egui::Image::new(&self.previews[n])
+                                            .fit_to_exact_size(egui::vec2(16.0, 16.0))
+                                            .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text(tip.name())
+                                    .clicked();
+                            }
+                            if cfg.strokes {
+                                clicked |= ui
+                                    .add(
+                                        egui::Image::new(&self.panels.strokes[n])
+                                            .fit_to_exact_size(egui::vec2(64.0, 20.0))
+                                            .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text(tip.name())
+                                    .clicked();
+                            }
+                            if clicked {
+                                self.set_tool(tip);
+                            }
+                        });
+                    }
+                }
+                Kind::Color => {
+                    let mut color = self.references.session.workspace.color;
+                    if ui
+                        .color_edit_button_srgba_unmultiplied(&mut color)
+                        .changed()
+                    {
+                        self.panels.previous_color = self.references.session.workspace.color;
+                        self.references.session.workspace.color = color;
+                    }
+                }
+                Kind::Layers | Kind::Timeline => self.panel_layers(ui, kind),
+            }
+            if cfg.properties == Bar::Bottom {
+                self.panel_properties(ui, kind);
+            }
+            if cfg.commands == Bar::Bottom {
+                self.panel_commands(ui, kind);
+            }
+            ui.separator();
+        });
     }
     fn panel_layers(&mut self, ui: &mut egui::Ui, kind: Kind) {
         let Some(n) = self.active else {
@@ -421,7 +451,11 @@ impl Drawer {
             Kind::Brush => {
                 for tip in BrushTip::ALL {
                     if ui
-                        .small_button(tool_key(tip))
+                        .small_button(format!(
+                            "{} {}",
+                            tip.name(),
+                            self.workspaces.command_label(tip.name())
+                        ))
                         .on_hover_text(tip.name())
                         .clicked()
                     {
@@ -477,22 +511,104 @@ impl Drawer {
         }
         let mut open = true;
         let mut history = None;
-        egui::Window::new("Panels and shortcuts").open(&mut open).show(ctx,|ui| {
-            egui::ComboBox::from_id_salt("panel-kind").selected_text(self.panels.kind.label()).show_ui(ui,|ui|{for kind in Kind::ALL {ui.selectable_value(&mut self.panels.kind,kind,kind.label());}});
-            let cfg=&mut self.panels.settings.panels[self.panels.kind.index()];ui.checkbox(&mut cfg.visible,"Show panel");
-            if self.panels.kind==Kind::Brush {ui.checkbox(&mut cfg.icons,"Tool icons");ui.checkbox(&mut cfg.names,"Tool names");ui.checkbox(&mut cfg.strokes,"Stroke previews");}
-            if matches!(self.panels.kind,Kind::Layers|Kind::Timeline) {
-                egui::ComboBox::from_id_salt("panel-thumb").selected_text(cfg.thumbnail.label()).show_ui(ui,|ui| {for size in Thumbnail::ALL {ui.selectable_value(&mut cfg.thumbnail,size,size.label());}});
-                ui.checkbox(&mut cfg.content,"Show content bounds instead of whole canvas");ui.checkbox(&mut cfg.checker,"Transparency checker");
-                if self.panels.kind==Kind::Timeline {ui.checkbox(&mut cfg.animation_only,"Animation tracks only");}
-            }
-            for (label,bar) in [("Properties bar",&mut cfg.properties),("Commands bar",&mut cfg.commands)] {egui::ComboBox::from_id_salt(label).selected_text(format!("{label}: {}",bar.label())).show_ui(ui,|ui|{for value in Bar::ALL {ui.selectable_value(bar,value,value.label());}});}
-            ui.separator();ui.label("Save Ctrl+S · Save as Ctrl+Shift+S · Undo Ctrl+Z · Redo Ctrl+Y / Ctrl+Shift+Z · Pen B · Pencil N · Eraser E · Wash W");
-            if ui.button("Restore all panels").clicked() {self.panels.settings=Settings::default();}
-            if ui.add_enabled(!self.panels.undo.is_empty(),egui::Button::new("Undo panel setting")).clicked() {history=Some(false);}
-            if ui.add_enabled(!self.panels.redo.is_empty(),egui::Button::new("Redo panel setting")).clicked() {history=Some(true);}
-            if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore previous panels")).clicked() {match Settings::read(&self.storage.as_ref().unwrap().root().join("settings/panels.previous.json")) {Ok(s)=>self.panels.settings=s,Err(e)=>self.status=Some(e.to_string())}}
-        });
+        egui::Window::new("Panels and shortcuts")
+            .open(&mut open)
+            .show(ctx, |ui| {
+                egui::ComboBox::from_id_salt("panel-kind")
+                    .selected_text(self.panels.kind.label())
+                    .show_ui(ui, |ui| {
+                        for kind in Kind::ALL {
+                            ui.selectable_value(&mut self.panels.kind, kind, kind.label());
+                        }
+                    });
+                let cfg = &mut self.panels.settings.panels[self.panels.kind.index()];
+                ui.checkbox(&mut cfg.visible, "Show panel");
+                if self.panels.kind == Kind::Brush {
+                    ui.checkbox(&mut cfg.icons, "Tool icons");
+                    ui.checkbox(&mut cfg.names, "Tool names");
+                    ui.checkbox(&mut cfg.strokes, "Stroke previews");
+                }
+                if matches!(self.panels.kind, Kind::Layers | Kind::Timeline) {
+                    egui::ComboBox::from_id_salt("panel-thumb")
+                        .selected_text(cfg.thumbnail.label())
+                        .show_ui(ui, |ui| {
+                            for size in Thumbnail::ALL {
+                                ui.selectable_value(&mut cfg.thumbnail, size, size.label());
+                            }
+                        });
+                    ui.checkbox(
+                        &mut cfg.content,
+                        "Show content bounds instead of whole canvas",
+                    );
+                    ui.checkbox(&mut cfg.checker, "Transparency checker");
+                    if self.panels.kind == Kind::Timeline {
+                        ui.checkbox(&mut cfg.animation_only, "Animation tracks only");
+                    }
+                }
+                for (label, bar) in [
+                    ("Properties bar", &mut cfg.properties),
+                    ("Commands bar", &mut cfg.commands),
+                ] {
+                    egui::ComboBox::from_id_salt(label)
+                        .selected_text(format!("{label}: {}", bar.label()))
+                        .show_ui(ui, |ui| {
+                            for value in Bar::ALL {
+                                ui.selectable_value(bar, value, value.label());
+                            }
+                        });
+                }
+                ui.separator();
+                ui.label(
+                    self.workspaces
+                        .store
+                        .current
+                        .bindings
+                        .iter()
+                        .map(|b| format!("{} {}", b.command, b.label()))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                );
+                if ui.button("Restore all panels").clicked() {
+                    self.panels.settings = Settings::default();
+                }
+                if ui
+                    .add_enabled(
+                        !self.panels.undo.is_empty(),
+                        egui::Button::new("Undo panel setting"),
+                    )
+                    .clicked()
+                {
+                    history = Some(false);
+                }
+                if ui
+                    .add_enabled(
+                        !self.panels.redo.is_empty(),
+                        egui::Button::new("Redo panel setting"),
+                    )
+                    .clicked()
+                {
+                    history = Some(true);
+                }
+                if ui
+                    .add_enabled(
+                        self.storage.is_some(),
+                        egui::Button::new("Restore previous panels"),
+                    )
+                    .clicked()
+                {
+                    match Settings::read(
+                        &self
+                            .storage
+                            .as_ref()
+                            .unwrap()
+                            .root()
+                            .join("settings/panels.previous.json"),
+                    ) {
+                        Ok(s) => self.panels.settings = s,
+                        Err(e) => self.status = Some(e.to_string()),
+                    }
+                }
+            });
         self.panels.open = open;
         if let Some(redo) = history
             && let Err(e) = self.panels.history(redo, self.storage.as_ref())
@@ -501,60 +617,7 @@ impl Drawer {
         }
     }
 }
-pub(super) fn tool_key(tip: BrushTip) -> &'static str {
-    match tip {
-        BrushTip::Pen => "B",
-        BrushTip::Pencil => "N",
-        BrushTip::Eraser => "E",
-        BrushTip::Wash => "W",
-    }
-}
-
+#[cfg(test)]
 pub(super) fn shortcut_action(input: &mut egui::InputState) -> Option<u8> {
-    let binding = input.events.iter().enumerate().find_map(|(index, event)| {
-        let egui::Event::Key {
-            key,
-            pressed: true,
-            modifiers,
-            ..
-        } = event
-        else {
-            return None;
-        };
-        // On Windows command mirrors Control; retain actual modifier specificity.
-        let normalized = egui::Modifiers {
-            command: false,
-            ..*modifiers
-        };
-        let bindings = [
-            (
-                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
-                egui::Key::S,
-                1,
-            ),
-            (egui::Modifiers::CTRL, egui::Key::S, 0),
-            (
-                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
-                egui::Key::Z,
-                3,
-            ),
-            (egui::Modifiers::CTRL, egui::Key::Y, 3),
-            (egui::Modifiers::CTRL, egui::Key::Z, 2),
-            (egui::Modifiers::NONE, egui::Key::B, 4),
-            (egui::Modifiers::NONE, egui::Key::N, 5),
-            (egui::Modifiers::NONE, egui::Key::E, 6),
-            (egui::Modifiers::NONE, egui::Key::W, 7),
-        ];
-        bindings
-            .into_iter()
-            .find_map(|(required, expected, action)| {
-                (*key == expected && normalized.matches_exact(required)).then_some((index, action))
-            })
-    });
-    if let Some((index, action)) = binding {
-        input.events.remove(index);
-        Some(action)
-    } else {
-        None
-    }
+    super::workspaces::shortcut(input, &drawer_core::workspaces::default_bindings())
 }

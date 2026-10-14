@@ -87,3 +87,5 @@ crates/drawer-app/src/panels.rs
 crates/drawer-core/src/ui_scale.rs
 crates/drawer-app/src/ui_scale.rs
 crates/drawer-core/src/brush_cursor.rs
+crates/drawer-core/src/workspaces.rs
+crates/drawer-app/src/workspaces.rs

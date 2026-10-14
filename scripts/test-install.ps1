@@ -33,9 +33,11 @@ try {
     $layoutSettings = Join-Path $dataRoot 'settings/views.json'
     $navigatorSettings = Join-Path $dataRoot 'settings/navigator.json'
     $panelSettings = Join-Path $dataRoot 'settings/panels.json'
+    $workspaceSettings = Join-Path $dataRoot 'settings/workspaces.json'
+    $workspaceBackup = Join-Path $dataRoot 'settings/workspace-before-apply.json'
     $interfaceSettings = Join-Path $dataRoot 'settings/interface.json'
     $referenceHashes = @{}
-    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings) {
+    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup) {
         if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
         $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
     }
@@ -47,7 +49,7 @@ try {
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
@@ -66,9 +68,10 @@ try {
     if ($smokeResult -notmatch 'revert_saved=true' -or $smokeResult -notmatch 'movie_decoder_missing=true' -or $smokeResult -notmatch 'animation_native=true') { throw '되돌리기/로컬 디코더 누락/애니메이션 재열기 시작 시험 실패' }
     if ($smokeResult -notmatch 'panel_settings=true') { throw '패널 설정 저장/복원 시작 시험 실패' }
     if ($smokeResult -notmatch 'interface_settings=true') { throw '화면 배율 설정 저장/복원 시작 시험 실패' }
+    if ($smokeResult -notmatch 'workspace_settings=true' -or $smokeResult -notmatch 'native_floating_panels=true' -or $smokeResult -notmatch 'popup_test_painting=true') { throw '작업공간/분리 패널/시험 칠하기 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_assets=true') { throw '브러시 커서 도구 소재 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 16개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {
     $env:DRAWER_DATA_DIR = $oldData
     $env:PATH = $oldPath

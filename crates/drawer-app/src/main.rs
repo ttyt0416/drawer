@@ -24,6 +24,7 @@ mod sizing_dialog;
 mod ui_scale;
 mod view_commands;
 mod workspace;
+mod workspaces;
 use new_canvas::NewCanvas;
 
 struct Drawer {
@@ -80,6 +81,7 @@ struct Drawer {
     revert_pending: Option<u64>,
     panels: panels::Panels,
     interface: ui_scale::Interface,
+    workspaces: workspaces::Workspaces,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -164,6 +166,7 @@ impl Drawer {
             revert_pending: None,
             panels: panels::Panels::new(ctx),
             interface: ui_scale::Interface::new(ctx),
+            workspaces: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -317,6 +320,7 @@ impl Drawer {
         if let Some(active) = self.active {
             self.documents[active].tool = self.selected;
         }
+        self.load_workspaces(&storage);
         self.storage = Some(storage);
         self
     }
@@ -325,6 +329,7 @@ impl Drawer {
         if ui.ctx().zoom_factor() != self.interface.settings.zoom {
             ui.ctx().set_zoom_factor(self.interface.settings.zoom);
         }
+        self.workspaces.input(ui.ctx());
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
@@ -342,7 +347,8 @@ impl Drawer {
                     && self.import_dialog.is_none()
                     && self.paste_dialog.is_none()
                     && self.movie_dialog.is_none()
-                    && self.revert_pending.is_none(),
+                    && self.revert_pending.is_none()
+                    && self.workspaces.staged.is_none(),
                 |ui| {
                     egui::ScrollArea::vertical()
                         .id_salt("document-commands")
@@ -375,6 +381,12 @@ impl Drawer {
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
                                 }
+                                if ui.button("Workspaces").clicked() {
+                                    self.workspaces.open = true;
+                                }
+                                if ui.button("Test painting").clicked() {
+                                    self.workspaces.store.current.scratchpad.visible = true;
+                                }
                                 if ui.button("Panels").clicked() {
                                     self.panels.open = true;
                                 }
@@ -391,9 +403,21 @@ impl Drawer {
                                 ui.colored_label(egui::Color32::LIGHT_RED, status);
                             }
                         });
-                    ui.columns(2, |columns| {
+                    let right_docked = drawer_core::panels::Kind::ALL.iter().any(|k| {
+                        self.panels.settings.panels[k.index()].visible
+                            && self.workspaces.store.current.placements[k.index()].dock
+                                == drawer_core::workspaces::Dock::Right
+                    });
+                    ui.columns(if right_docked { 3 } else { 2 }, |columns| {
                         columns[0].set_width(170.0);
-                        self.show_panels(&mut columns[0]);
+                        self.show_panels_at(&mut columns[0], drawer_core::workspaces::Dock::Left);
+                        if right_docked {
+                            columns[2].set_width(170.0);
+                            self.show_panels_at(
+                                &mut columns[2],
+                                drawer_core::workspaces::Dock::Right,
+                            );
+                        }
                         if let Some(active) = self.active {
                             let document = &self.documents[active];
                             columns[1].label(format!(
@@ -423,6 +447,9 @@ impl Drawer {
                 },
             );
         });
+        self.floating_panels(ui.ctx());
+        self.scratchpad(ui.ctx());
+        self.workspace_settings(ui.ctx());
         self.new_canvas_dialog(ui.ctx());
         self.close_dialog(ui.ctx());
         self.show_sizing(ui.ctx());
@@ -440,6 +467,9 @@ impl Drawer {
         self.panel_settings(ui.ctx());
         self.interface_settings(ui.ctx());
         self.persist_interface();
+        if let Err(e) = self.persist_workspace() {
+            self.status = Some(e);
+        }
         if let Err(e) = self.panels.persist(self.storage.as_ref()) {
             self.status = Some(e);
         }
@@ -505,6 +535,16 @@ impl eframe::App for Drawer {
                 self.aids.visible = true;
                 self.aids.preferences.monitor_ppi = Some(96.0);
                 self.aids.preferences.grid = true;
+                self.workspaces.store.current.placements[0].dock =
+                    drawer_core::workspaces::Dock::Floating;
+                self.workspaces.store.current.scratchpad.visible = true;
+                self.workspaces.store.current.scratchpad.stroke(
+                    [20.0, 20.0],
+                    [80.0, 60.0],
+                    8.0,
+                    BrushTip::Pen,
+                    [80, 90, 100, 255],
+                );
                 self.display.preferences.visible = true;
                 self.interpolation.view = drawer_core::interpolation::Filter::Bicubic;
                 self.interpolation
@@ -784,8 +824,30 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if self.workspaces.native_panels == 0 {
+                    fail_smoke();
+                }
+                let current_workspace = self.capture_workspace();
+                self.stage_workspace(drawer_core::workspaces::Snapshot::default(), None);
+                self.apply_workspace(
+                    drawer_core::workspaces::Scope {
+                        bars: true,
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .unwrap();
+                self.persist_workspace().unwrap();
+                let loaded = drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    .unwrap();
+                if loaded.current.scratchpad != current_workspace.scratchpad
+                    || loaded.current.placements != current_workspace.placements
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -897,6 +959,214 @@ mod tests {
             dpi: 300.0,
             background: Background::Transparent,
         }
+    }
+    #[test]
+    fn workspace_selective_apply_cancel_restart_backup_and_document_invariance() {
+        use drawer_core::workspaces::{Dock, Scope, Snapshot};
+        let ctx = egui::Context::default();
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [1, 2, 3, 128]);
+        let document = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let dirty = app.documents[0].dirty;
+        frame(&ctx, &mut app, vec![]);
+        let before = app.capture_workspace();
+        let mut incoming = before.clone();
+        incoming.placements[0].dock = Dock::Right;
+        incoming.panels.panels[1].visible = false;
+        incoming.bindings[5].key = "F2".into();
+        incoming.interface.zoom = 1.5;
+        app.stage_workspace(incoming.clone(), None);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let cancel = app.workspaces.cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(app.workspaces.staged.is_none());
+        assert_eq!(app.capture_workspace(), before);
+        app.stage_workspace(incoming.clone(), None);
+        app.apply_workspace(
+            Scope {
+                layout: true,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(app.capture_workspace().bindings, before.bindings);
+        assert_eq!(app.interface.settings, before.interface);
+        assert_eq!(app.workspaces.store.current.placements[0].dock, Dock::Right);
+        assert_eq!(
+            Snapshot::read(&storage.root().join("settings/workspace-before-apply.json")).unwrap(),
+            before
+        );
+        let layout = app.capture_workspace();
+        app.stage_workspace(incoming.clone(), None);
+        app.apply_workspace(
+            Scope {
+                keys: true,
+                ..Default::default()
+            },
+            Some("Before keys"),
+        )
+        .unwrap();
+        assert_eq!(app.capture_workspace().placements, layout.placements);
+        assert_eq!(app.capture_workspace().bindings, incoming.bindings);
+        assert_eq!(app.workspaces.store.named[0].snapshot, layout);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::F2,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_eq!(app.selected, BrushTip::Pen);
+        app.workspaces
+            .store
+            .save_named("Saved", before.clone())
+            .unwrap();
+        app.workspaces.store.active = Some("Saved".into());
+        app.persist_workspace().unwrap();
+        app.stage_workspace(before.clone(), Some("Saved".into()));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let cancel = app.workspaces.cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert_eq!(app.capture_workspace().placements, layout.placements);
+        let current = app.capture_workspace();
+        incoming.bindings.push(incoming.bindings[0].clone());
+        app.stage_workspace(incoming, None);
+        assert!(app.apply_workspace(Scope::ALL, None).is_err());
+        assert_eq!(app.capture_workspace(), current);
+        app.workspaces.staged = None;
+        std::fs::write(root.0.join("damaged.json"), "damaged").unwrap();
+        assert!(Snapshot::read(&root.0.join("damaged.json")).is_err());
+        assert_eq!(app.documents[0].snapshot(), document);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert_eq!(app.documents[0].dirty, dirty);
+        let restarted = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.capture_workspace(), current);
+    }
+    #[test]
+    fn popup_test_painting_device_releases_and_restart_preserve_document() {
+        let ctx = egui::Context::default();
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        app.workspaces.store.current.scratchpad.visible = true;
+        app.set_tool(BrushTip::Wash);
+        app.references.session.workspace.color = [10, 80, 90, 255];
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.workspaces.pad_rect.unwrap();
+        let pos = rect.center();
+        let key = |pressed| egui::Event::Key {
+            key: egui::Key::Space,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        let button = |button, pressed| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(pos),
+                key(true),
+                button(egui::PointerButton::Primary, true),
+                button(egui::PointerButton::Secondary, true),
+            ],
+        );
+        assert!(!app.workspaces.input_idle());
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(pos + egui::vec2(45.0, 20.0))],
+        );
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                key(false),
+                button(egui::PointerButton::Primary, false),
+                button(egui::PointerButton::Secondary, false),
+            ],
+        );
+        assert!(app.workspaces.input_idle());
+        assert!(
+            app.workspaces
+                .store
+                .current
+                .scratchpad
+                .pixels
+                .iter()
+                .any(|p| p[3] > 0)
+        );
+        let pixels = app.workspaces.store.current.scratchpad.pixels.clone();
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                key(true),
+                button(egui::PointerButton::Primary, true),
+                egui::Event::WindowFocused(false),
+            ],
+        );
+        assert!(app.workspaces.input_idle());
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.selected, BrushTip::Wash);
+        assert!(restarted.workspaces.store.current.scratchpad.visible);
+        assert_eq!(restarted.workspaces.store.current.scratchpad.pixels, pixels);
+    }
+    #[test]
+    fn floating_workspace_panels_recover_missing_screen_without_drawing_changes() {
+        use drawer_core::{display_view::Monitor, workspaces::Dock};
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        for p in &mut app.workspaces.store.current.placements {
+            p.dock = Dock::Floating;
+            p.monitor = Some("removed".into());
+            p.position = [5000.0, -5000.0];
+        }
+        app.display.monitors = vec![Monitor {
+            key: "main".into(),
+            index: 0,
+            position: [0, 0],
+            size: [1920, 1080],
+            scale: 2.0,
+            primary: true,
+        }];
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        for p in &app.workspaces.store.current.placements {
+            assert_eq!(p.monitor.as_deref(), Some("main"));
+            assert!(p.position[0] >= 0.0 && p.position[1] >= 0.0);
+        }
+        assert!(app.workspaces.reports.len() >= 4);
+        assert_eq!(app.documents[0].snapshot(), before);
     }
     #[test]
     fn new_context_displays_all_built_in_tools() {

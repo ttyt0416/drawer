@@ -368,25 +368,44 @@ impl Drawer {
             self.view_menu(ui);
             self.local_file_menu(ui);
             if let Some(active) = self.active {
-                if ui.button("Save  Ctrl+S").clicked()
+                if ui
+                    .button(format!("Save  {}", self.workspaces.command_label("save")))
+                    .clicked()
                     && let Err(error) = self.save_document(active)
                 {
                     self.status = Some(error);
                 }
-                if ui.button("Save as…  Ctrl+Shift+S").clicked()
+                if ui
+                    .button(format!(
+                        "Save as…  {}",
+                        self.workspaces.command_label("save-as")
+                    ))
+                    .clicked()
                     && let Err(error) = self.save_as(active)
                 {
                     self.status = Some(error);
                 }
                 let (undo, redo) = self.documents[active].history_counts();
                 if ui
-                    .add_enabled(undo > 0, egui::Button::new("Undo  Ctrl+Z"))
+                    .add_enabled(
+                        undo > 0,
+                        egui::Button::new(format!(
+                            "Undo  {}",
+                            self.workspaces.command_label("undo")
+                        )),
+                    )
                     .clicked()
                 {
                     self.documents[active].undo();
                 }
                 if ui
-                    .add_enabled(redo > 0, egui::Button::new("Redo  Ctrl+Y / Ctrl+Shift+Z"))
+                    .add_enabled(
+                        redo > 0,
+                        egui::Button::new(format!(
+                            "Redo  {}",
+                            self.workspaces.command_label("redo")
+                        )),
+                    )
                     .clicked()
                 {
                     self.documents[active].redo();
@@ -489,7 +508,7 @@ impl Drawer {
             ui.heading(format!("Save changes to {title}?"));
             ui.label("Your drawing will stay open until you choose.");
             ui.horizontal(|ui| {
-                let save = ui.button("Save  Ctrl+S");
+                let save = ui.button(format!("Save  {}", self.workspaces.command_label("save")));
                 if save.clicked() {
                     action = Some(0);
                 }
