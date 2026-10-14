@@ -22,7 +22,10 @@ fn relative_path(text: &str) -> io::Result<PathBuf> {
         return Err(invalid(format!("허용하지 않는 전달 경로: {text}")));
     }
     let extension = path.extension().and_then(|value| value.to_str());
-    if !matches!(extension, Some("rs" | "md" | "toml" | "txt" | "lock")) {
+    if !matches!(
+        extension,
+        Some("rs" | "md" | "toml" | "txt" | "lock" | "ps1")
+    ) {
         return Err(invalid(format!("허용하지 않는 전달 파일 형식: {text}")));
     }
     Ok(path.to_owned())
@@ -116,8 +119,72 @@ fn verify_bundle(root: &Path, bundle: &Path) -> io::Result<usize> {
     Ok(expected.len())
 }
 
+fn specification_violations(text: &str) -> Vec<&'static str> {
+    let mut violations = Vec::new();
+    for token in
+        text.split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+    {
+        if ["FUN_", "DAT_", "LAB_"].iter().any(|prefix| {
+            token.strip_prefix(prefix).is_some_and(|suffix| {
+                suffix.len() >= 6 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+        }) {
+            violations.push("디컴파일 식별자");
+        }
+        if token.strip_prefix("0x").is_some_and(|suffix| {
+            suffix.len() >= 9 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+        }) {
+            violations.push("원본 주소로 의심되는 긴 16진수");
+        }
+    }
+    for marker in [
+        "boost::",
+        "Planeswalker::",
+        "::vftable",
+        "TypeDescriptor",
+        "undefined8",
+        "undefined4",
+        "param_1",
+        "C:\\PaintToolSAI",
+        "C:\\Program Files\\CELSYS",
+        "C:/PaintToolSAI",
+        "C:/Program Files/CELSYS",
+    ] {
+        if text.contains(marker) {
+            violations.push("원본 코드·자료구조·경로 표기");
+        }
+    }
+    violations.sort();
+    violations.dedup();
+    violations
+}
+
+fn audit_specifications(root: &Path) -> io::Result<usize> {
+    let files = inputs(root)?;
+    let mut specifications = 0;
+    for (path, bytes) in files {
+        if path.starts_with("docs/specs") {
+            specifications += 1;
+            let text = std::str::from_utf8(&bytes).unwrap();
+            let violations = specification_violations(text);
+            if !violations.is_empty() {
+                return Err(invalid(format!(
+                    "{}: {}",
+                    path.display(),
+                    violations.join(", ")
+                )));
+            }
+        }
+    }
+    if specifications == 0 {
+        return Err(invalid("검토할 구현 명세가 없습니다"));
+    }
+    Ok(specifications)
+}
+
 fn prepare(root: &Path) -> io::Result<usize> {
     let files = inputs(root)?;
+    audit_specifications(root)?;
     let staging = root.join(".handoff-staging");
     if staging.exists() {
         return Err(invalid("이전 임시 전달 폴더를 먼저 정리해야 합니다"));
@@ -171,7 +238,16 @@ fn run() -> io::Result<()> {
     let count = match command.as_str() {
         "prepare-handoff" => prepare(&root)?,
         "verify-handoff" => verify_bundle(&root, &root.join("handoff/latest"))?,
-        _ => return Err(invalid("사용법: xtask prepare-handoff | verify-handoff")),
+        "audit-specs" => {
+            let count = audit_specifications(&root)?;
+            println!("구현 명세 {count}개 검사; 원본 내부 코드·주소·자료구조 흔적 0개");
+            return Ok(());
+        }
+        _ => {
+            return Err(invalid(
+                "사용법: xtask prepare-handoff | verify-handoff | audit-specs",
+            ));
+        }
     };
     println!("전달 파일 {count}개 검증; 바이너리·추출 리소스·디컴파일 산출물 전달 0개");
     Ok(())
@@ -286,5 +362,46 @@ mod tests {
         )
         .unwrap();
         assert!(inputs(&fixture.0).is_err());
+    }
+
+    #[test]
+    fn refuses_original_code_and_addresses_in_specs() {
+        for text in [
+            "FUN_140123456",
+            "DAT_145000000",
+            "0x140123456",
+            "boost::shared_ptr",
+            "Planeswalker::PWLayer",
+            "param_1",
+            "C:\\PaintToolSAI\\sai.exe",
+        ] {
+            assert!(!specification_violations(text).is_empty(), "{text}");
+        }
+        assert!(
+            specification_violations("새 앱의 색상 #FF00AA, 필압 0~1, DPI 300, 실행 취소 100단계")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn refuses_contaminated_spec_before_replacing_bundle() {
+        let fixture = Fixture::new();
+        prepare(&fixture.0).unwrap();
+        fs::write(
+            fixture.0.join("docs/specs/feature-checklist.md"),
+            "FUN_140123456",
+        )
+        .unwrap();
+        assert!(prepare(&fixture.0).is_err());
+        assert_eq!(
+            fs::read_to_string(
+                fixture
+                    .0
+                    .join("handoff/latest/docs/specs/feature-checklist.md")
+            )
+            .unwrap(),
+            "독립 명세"
+        );
+        assert!(!fixture.0.join(".handoff-staging").exists());
     }
 }

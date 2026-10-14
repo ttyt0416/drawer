@@ -7,3 +7,5 @@ crates/xtask/src/main.rs
 docs/specs/feature-checklist.md
 docs/process/clean-room.md
 docs/process/progress.md
+docs/process/spec-review.md
+scripts/cleanup.ps1
