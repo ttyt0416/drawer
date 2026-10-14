@@ -1,0 +1,311 @@
+use crate::document::{Background, CanvasSpec, Document, MAX_DIMENSION, RasterLayer};
+use std::{
+    fs,
+    io::{self, BufReader, BufWriter, Read, Write},
+    path::Path,
+};
+
+const MAGIC: &[u8; 8] = b"DRAWER\r\n";
+const VERSION: u32 = 1;
+fn invalid(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
+}
+fn read_u32(reader: &mut impl Read) -> io::Result<u32> {
+    let mut bytes = [0; 4];
+    reader.read_exact(&mut bytes)?;
+    Ok(u32::from_le_bytes(bytes))
+}
+fn read_u64(reader: &mut impl Read) -> io::Result<u64> {
+    let mut bytes = [0; 8];
+    reader.read_exact(&mut bytes)?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
+    let path = path.canonicalize()?;
+    let ext = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "drawer" => read_native(&path, budget),
+        "png" => read_png(&path, budget),
+        _ => Err(invalid("Supported open formats: .drawer and .png")),
+    }
+}
+fn read_png(path: &Path, budget: usize) -> io::Result<Document> {
+    let mut reader = image::ImageReader::open(path)?;
+    reader.set_format(image::ImageFormat::Png);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DIMENSION);
+    limits.max_image_height = Some(MAX_DIMENSION);
+    limits.max_alloc = Some(budget as u64);
+    reader.limits(limits);
+    let image = reader
+        .decode()
+        .map_err(|error| invalid(error.to_string()))?
+        .into_rgba8();
+    let mut document = Document::create(
+        CanvasSpec {
+            width: image.width(),
+            height: image.height(),
+            dpi: 300.0,
+            background: Background::Transparent,
+        },
+        budget,
+    )
+    .map_err(|e| invalid(e.to_string()))?;
+    for (destination, source) in document.layers[0].pixels.iter_mut().zip(image.pixels()) {
+        *destination = source.0;
+    }
+    document.title = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    document.source_path = Some(path.into());
+    Ok(document)
+}
+fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
+    let file = fs::File::open(path)?;
+    if file.metadata()?.len() > budget as u64 + 1024 * 1024 {
+        return Err(invalid("Document exceeds memory budget"));
+    }
+    let mut reader = BufReader::new(file);
+    let mut magic = [0; 8];
+    reader.read_exact(&mut magic)?;
+    if &magic != MAGIC || read_u32(&mut reader)? != VERSION {
+        return Err(invalid("Unsupported Drawer document version"));
+    }
+    let width = read_u32(&mut reader)?;
+    let height = read_u32(&mut reader)?;
+    let dpi = f64::from_bits(read_u64(&mut reader)?);
+    let layers = read_u32(&mut reader)? as usize;
+    if !(1..=256).contains(&layers) {
+        return Err(invalid("Invalid layer count"));
+    }
+    let total = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .and_then(|bytes| bytes.checked_mul(layers))
+        .ok_or_else(|| invalid("Document size overflow"))?;
+    if total > budget {
+        return Err(invalid("Document exceeds memory budget"));
+    }
+    let mut document = Document::create(
+        CanvasSpec {
+            width,
+            height,
+            dpi,
+            background: Background::Transparent,
+        },
+        budget,
+    )
+    .map_err(|e| invalid(e.to_string()))?;
+    for index in 0..layers {
+        let name_len = read_u32(&mut reader)? as usize;
+        if !(1..=4096).contains(&name_len) {
+            return Err(invalid("Invalid layer name"));
+        }
+        let mut name = vec![0; name_len];
+        reader.read_exact(&mut name)?;
+        let name = String::from_utf8(name).map_err(|_| invalid("Layer name must be UTF-8"))?;
+        if read_u64(&mut reader)? != (width as u64 * height as u64 * 4) {
+            return Err(invalid("Invalid pixel payload length"));
+        }
+        if index != 0 {
+            let mut pixels = Vec::new();
+            pixels
+                .try_reserve_exact((width * height) as usize)
+                .map_err(|_| invalid("Not enough document memory"))?;
+            pixels.resize((width * height) as usize, [0; 4]);
+            document.layers.push(RasterLayer {
+                name: String::new(),
+                pixels,
+            });
+        }
+        document.layers[index].name = name;
+        for chunk in document.layers[index].pixels.chunks_mut(4096) {
+            let mut buffer = [0u8; 16384];
+            let count = chunk.len() * 4;
+            reader.read_exact(&mut buffer[..count])?;
+            for (pixel, bytes) in chunk.iter_mut().zip(buffer[..count].as_chunks::<4>().0) {
+                pixel.copy_from_slice(bytes);
+            }
+        }
+    }
+    let mut trailing = [0];
+    if reader.read(&mut trailing)? != 0 {
+        return Err(invalid("Unexpected document data"));
+    }
+    document.mark_saved(path.into());
+    Ok(document)
+}
+
+pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
+    if !path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("drawer"))
+    {
+        return Err(invalid("Editable documents must be saved as .drawer"));
+    }
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let path = parent.canonicalize()?.join(
+        path.file_name()
+            .ok_or_else(|| invalid("Missing filename"))?,
+    );
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Err(invalid("Choose a regular destination file"));
+    }
+    let path = if path.exists() {
+        path.canonicalize()?
+    } else {
+        path
+    };
+    if !(1..=MAX_DIMENSION).contains(&document.width)
+        || !(1..=MAX_DIMENSION).contains(&document.height)
+        || !document.dpi.is_finite()
+        || document.dpi <= 0.0
+        || !(1..=256).contains(&document.layers.len())
+    {
+        return Err(invalid("Invalid document"));
+    }
+    for layer in &document.layers {
+        if !(1..=4096).contains(&layer.name.len())
+            || layer.pixels.len() != document.width as usize * document.height as usize
+        {
+            return Err(invalid("Invalid raster layer"));
+        }
+    }
+    let mut temp_name = path.file_name().unwrap().to_owned();
+    temp_name.push(".drawer-write.tmp");
+    let temporary = path.with_file_name(temp_name);
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let mut writer = BufWriter::new(file);
+    let result = (|| {
+        writer.write_all(MAGIC)?;
+        writer.write_all(&VERSION.to_le_bytes())?;
+        writer.write_all(&document.width.to_le_bytes())?;
+        writer.write_all(&document.height.to_le_bytes())?;
+        writer.write_all(&document.dpi.to_bits().to_le_bytes())?;
+        writer.write_all(&(document.layers.len() as u32).to_le_bytes())?;
+        for layer in &document.layers {
+            writer.write_all(&(layer.name.len() as u32).to_le_bytes())?;
+            writer.write_all(layer.name.as_bytes())?;
+            writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
+            for chunk in layer.pixels.chunks(4096) {
+                let mut buffer = [0u8; 16384];
+                for (bytes, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(chunk) {
+                    bytes.copy_from_slice(pixel);
+                }
+                writer.write_all(&buffer[..chunk.len() * 4])?;
+            }
+        }
+        writer.flush()?;
+        writer.get_ref().sync_all()
+    })();
+    drop(writer);
+    let result = result.and_then(|_| fs::rename(&temporary, &path));
+    if let Err(error) = result {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    document.mark_saved(path);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::TempDir;
+    fn sample() -> Document {
+        Document::create(
+            CanvasSpec {
+                width: 2,
+                height: 1,
+                dpi: 144.0,
+                background: Background::Transparent,
+            },
+            16,
+        )
+        .unwrap()
+    }
+    #[test]
+    fn native_round_trip_preserves_layers_and_failed_save_keeps_previous_file() {
+        let root = TempDir::new();
+        let path = root.0.join("same.drawer");
+        let mut document = sample();
+        document.layers[0].name = "원본 레이어".into();
+        document.edit_pixel(0, 1, 0, [20, 40, 60, 255]);
+        document.layers.push(RasterLayer {
+            name: "Second".into(),
+            pixels: vec![[0; 4]; 2],
+        });
+        save(&mut document, &path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let restored = open(&path, 16).unwrap();
+        assert_eq!(restored.layers, document.layers);
+        assert_eq!(restored.dpi, 144.0);
+        assert!(!restored.dirty);
+        assert_eq!(restored.history_counts(), (0, 0));
+        let temporary = root.0.join("same.drawer.drawer-write.tmp");
+        fs::write(&temporary, "other operation").unwrap();
+        assert!(save(&mut document, &path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read_to_string(&temporary).unwrap(), "other operation");
+        fs::remove_file(temporary).unwrap();
+        document.layers[0].pixels.clear();
+        assert!(save(&mut document, &path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+    #[test]
+    fn rejects_truncation_bad_versions_and_oversized_documents() {
+        let root = TempDir::new();
+        let path = root.0.join("bad.drawer");
+        save(&mut sample(), &path).unwrap();
+        let original = fs::read(&path).unwrap();
+        for bytes in [
+            &original[..7],
+            &original[..35],
+            &original[..original.len() - 1],
+        ] {
+            fs::write(&path, bytes).unwrap();
+            assert!(open(&path, 16).is_err());
+        }
+        let mut bytes = original.clone();
+        bytes[8..12].copy_from_slice(&99u32.to_le_bytes());
+        fs::write(&path, bytes).unwrap();
+        assert!(open(&path, 16).is_err());
+        fs::write(&path, original).unwrap();
+        assert!(open(&path, 7).is_err());
+    }
+    #[test]
+    fn png_import_preserves_original_and_starts_as_an_unsaved_document() {
+        let root = TempDir::new();
+        let path = root.0.join("picture.png");
+        let rgba = vec![1, 2, 3, 255, 0, 0, 0, 0];
+        image::save_buffer_with_format(
+            &path,
+            &rgba,
+            2,
+            1,
+            image::ColorType::Rgba8,
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        let document = open(&path, 1024 * 1024).unwrap();
+        assert_eq!(document.layers[0].pixels, [[1, 2, 3, 255], [0; 4]]);
+        assert!(document.dirty && document.path.is_none());
+        assert!(document.source_path.is_some());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(open(&path, 1).is_err());
+    }
+}

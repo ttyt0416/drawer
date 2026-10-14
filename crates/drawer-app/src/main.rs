@@ -9,6 +9,7 @@ use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod canvas_view;
 mod new_canvas;
+mod workspace;
 use new_canvas::NewCanvas;
 
 struct Drawer {
@@ -19,6 +20,21 @@ struct Drawer {
     storage: Option<UserStorage>,
     status: Option<String>,
     documents: Vec<Document>,
+    tabs: Vec<workspace::DocumentTab>,
+    active_tab: Option<usize>,
+    next_tab_id: u64,
+    pending_close: Option<u64>,
+    quit_requested: bool,
+    quit_ready: bool,
+    quit_approved: std::collections::HashSet<u64>,
+    #[cfg(test)]
+    close_buttons: std::collections::HashMap<u64, egui::Rect>,
+    #[cfg(test)]
+    cancel_close_button: Option<egui::Rect>,
+    #[cfg(test)]
+    discard_close_button: Option<egui::Rect>,
+    #[cfg(test)]
+    save_close_button: Option<egui::Rect>,
     active: Option<usize>,
     new_canvas: NewCanvas,
     show_new_canvas: bool,
@@ -63,6 +79,21 @@ impl Drawer {
             storage: None,
             status: None,
             documents: Vec::new(),
+            tabs: Vec::new(),
+            active_tab: None,
+            next_tab_id: 0,
+            pending_close: None,
+            quit_requested: false,
+            quit_ready: false,
+            quit_approved: workspace::empty_approvals(),
+            #[cfg(test)]
+            close_buttons: Default::default(),
+            #[cfg(test)]
+            cancel_close_button: None,
+            #[cfg(test)]
+            discard_close_button: None,
+            #[cfg(test)]
+            save_close_button: None,
             active: None,
             new_canvas: NewCanvas::default(),
             show_new_canvas: false,
@@ -94,13 +125,15 @@ impl Drawer {
         self.documents
             .try_reserve(1)
             .map_err(|_| CreateError::Allocation)?;
-        self.documents.push(document);
-        self.active = Some(self.documents.len() - 1);
+        self.tabs
+            .try_reserve(1)
+            .map_err(|_| CreateError::Allocation)?;
+        self.add_document(document);
         Ok(())
     }
 
     fn new_canvas_dialog(&mut self, ctx: &egui::Context) {
-        if !self.show_new_canvas {
+        if !self.show_new_canvas || self.pending_close.is_some() {
             return;
         }
         let mut open = true;
@@ -177,90 +210,128 @@ impl Drawer {
             Ok(view) => self.default_view = view,
             Err(error) => self.status = Some(error.to_string()),
         }
+        if let Some(active) = self.active {
+            self.documents[active].tool = self.selected;
+        }
         self.storage = Some(storage);
         self
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading(APP_NAME);
-                ui.label("Local drawing workspace");
-                let new_response = ui.button("New canvas");
-                #[cfg(test)]
-                {
-                    self.new_button = Some(new_response.rect);
+            ui.add_enabled_ui(self.pending_close.is_none(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading(APP_NAME);
+                    ui.label("Local drawing workspace");
+                    let new_response = ui.button("New canvas");
+                    #[cfg(test)]
+                    {
+                        self.new_button = Some(new_response.rect);
+                    }
+                    if new_response.clicked() {
+                        self.new_canvas = NewCanvas::default();
+                        self.show_new_canvas = true;
+                    }
+                });
+                self.document_controls(ui);
+                ui.separator();
+                if let Some(status) = &self.status {
+                    ui.colored_label(egui::Color32::LIGHT_RED, status);
                 }
-                if new_response.clicked() {
-                    self.new_canvas = NewCanvas::default();
-                    self.show_new_canvas = true;
-                }
-            });
-            ui.separator();
-            if let Some(status) = &self.status {
-                ui.colored_label(egui::Color32::LIGHT_RED, status);
-            }
-            ui.columns(2, |columns| {
-                columns[0].set_width(170.0);
-                columns[0].heading("Tools");
-                for tip in BrushTip::ALL {
-                    let response = columns[0].selectable_label(self.selected == tip, tip.name());
-                    if response.clicked() {
-                        self.selected = tip;
-                        if let Some(storage) = &self.storage
-                            && let Err(error) = storage.save_brush(tip)
+                ui.columns(2, |columns| {
+                    columns[0].set_width(170.0);
+                    columns[0].heading("Tools");
+                    for tip in BrushTip::ALL {
+                        let response =
+                            columns[0].selectable_label(self.selected == tip, tip.name());
+                        if response.clicked() {
+                            self.set_tool(tip);
+                        }
+                    }
+                    columns[0].label("Brush preview");
+                    let index = BrushTip::ALL
+                        .iter()
+                        .position(|&tip| tip == self.selected)
+                        .unwrap();
+                    columns[0].add(
+                        egui::Image::new(&self.previews[index])
+                            .fit_to_exact_size(egui::vec2(160.0, 160.0)),
+                    );
+                    if let Some(active) = self.active {
+                        let document = &self.documents[active];
+                        columns[1].label(format!(
+                            "{} · {} × {} · {} DPI",
+                            document.title, document.width, document.height, document.dpi
+                        ));
+                        let changed = self.canvas_view.show(
+                            &mut columns[1],
+                            active,
+                            &mut self.documents[active],
+                        );
+                        if changed
+                            && let Some(storage) = &self.storage
+                            && let Err(error) = storage.save_view(self.documents[active].view)
                         {
                             self.status = Some(error.to_string());
                         }
+                    } else {
+                        columns[1].heading("Create a canvas to begin");
                     }
-                }
-                columns[0].label("Brush preview");
-                let index = BrushTip::ALL
-                    .iter()
-                    .position(|&tip| tip == self.selected)
-                    .unwrap();
-                columns[0].add(
-                    egui::Image::new(&self.previews[index])
-                        .fit_to_exact_size(egui::vec2(160.0, 160.0)),
-                );
-                if let Some(active) = self.active {
-                    let document = &self.documents[active];
-                    columns[1].label(format!(
-                        "Untitled {} · {} × {} · {} DPI · Unsaved",
-                        active + 1,
-                        document.width,
-                        document.height,
-                        document.dpi
-                    ));
-                    let changed =
-                        self.canvas_view
-                            .show(&mut columns[1], active, &mut self.documents[active]);
-                    if changed
-                        && let Some(storage) = &self.storage
-                        && let Err(error) = storage.save_view(self.documents[active].view)
-                    {
-                        self.status = Some(error.to_string());
-                    }
-                } else {
-                    columns[1].heading("Create a canvas to begin");
-                }
+                });
             });
         });
         self.new_canvas_dialog(ui.ctx());
+        self.close_dialog(ui.ctx());
     }
 }
 
 impl eframe::App for Drawer {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if self.smoke_output.is_none()
+            && !self.quit_ready
+            && ui.ctx().input(|input| input.viewport().close_requested())
+            && self.documents.iter().any(|doc| doc.dirty)
+        {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.begin_quit();
+        }
         self.show(ui);
-        if let Some(path) = &self.smoke_output {
+        if self.quit_ready {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if let Some(path) = self.smoke_output.clone() {
             self.frames += 1;
+            if self.frames == 1 {
+                self.create_canvas(CanvasSpec {
+                    width: 5,
+                    height: 3,
+                    dpi: 300.0,
+                    background: Background::Color([20, 80, 140]),
+                })
+                .unwrap();
+                self.duplicate_view();
+                self.request_close(self.tabs.len() - 1);
+                self.request_close(self.tabs.len() - 1);
+            }
+            if self.frames == 3 {
+                self.cancel_close();
+                self.select_tab(0);
+            }
             if self.frames >= 4 {
+                let validated = self.documents.len() == 2
+                    && self.tabs.len() == 2
+                    && self.pending_close.is_none();
+                if !validated {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
+                    self.tabs.len(),
+                    validated,
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -312,6 +383,33 @@ fn main() -> eframe::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct TestDirectory(PathBuf);
+    impl TestDirectory {
+        fn new() -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "drawer-workspace-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+    fn tiny_spec() -> CanvasSpec {
+        CanvasSpec {
+            width: 1,
+            height: 1,
+            dpi: 300.0,
+            background: Background::Transparent,
+        }
+    }
     #[test]
     fn new_context_displays_all_built_in_tools() {
         let ctx = egui::Context::default();
@@ -500,5 +598,135 @@ mod tests {
         frame(&ctx, &mut app, vec![]);
         assert_eq!(pixels_hash(&app.documents[0]), hash);
         assert!(!app.documents[0].dirty);
+    }
+
+    #[test]
+    fn same_named_files_keep_separate_tools_views_and_histories() {
+        let root = TestDirectory::new();
+        let a = root.0.join("a");
+        let b = root.0.join("b");
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        for (directory, color) in [(&a, [200, 0, 0, 255]), (&b, [0, 0, 200, 255])] {
+            let mut doc = Document::create(tiny_spec(), 4).unwrap();
+            doc.edit_pixel(0, 0, 0, color);
+            drawer_core::files::save(&mut doc, &directory.join("same.drawer")).unwrap();
+        }
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.open_path(&a.join("same.drawer")).unwrap();
+        let first = app.documents[0].id;
+        app.set_tool(BrushTip::Wash);
+        app.documents[0].view.zoom = 2.0;
+        app.documents[0].edit_pixel(0, 0, 0, [20, 30, 40, 255]);
+        app.open_path(&b.join("same.drawer")).unwrap();
+        let second = app.documents[1].id;
+        assert_ne!(first, second);
+        assert_eq!(app.documents[0].title, app.documents[1].title);
+        assert_eq!(app.selected, BrushTip::Wash);
+        app.set_tool(BrushTip::Eraser);
+        app.select_tab(0);
+        assert_eq!(app.selected, BrushTip::Wash);
+        assert_eq!(app.documents[0].view.zoom, 2.0);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.documents[1].history_counts(), (0, 0));
+        app.select_tab(1);
+        assert_eq!(app.selected, BrushTip::Eraser);
+        app.open_path(&a.join("same.drawer")).unwrap();
+        assert_eq!(app.documents.len(), 2);
+        assert_eq!(app.active, Some(0));
+        let state = (app.documents.len(), app.active);
+        assert!(app.open_path(&root.0.join("missing.png")).is_err());
+        assert_eq!((app.documents.len(), app.active), state);
+    }
+
+    #[test]
+    fn mouse_close_prompts_only_for_last_view_and_cancel_keeps_state() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [90, 80, 70, 255]);
+        app.set_tool(BrushTip::Pencil);
+        app.documents[0].view.zoom = 2.0;
+        app.duplicate_view();
+        app.documents[0].view.zoom = 4.0;
+        app.select_tab(0);
+        assert_eq!(app.documents[0].view.zoom, 2.0);
+        frame(&ctx, &mut app, vec![]);
+        let id = app.tabs[1].id;
+        let button = app.close_buttons[&id];
+        click(&ctx, &mut app, button);
+        assert_eq!(app.tabs.len(), 1);
+        assert_eq!(app.documents.len(), 1);
+        assert!(app.pending_close.is_none());
+        frame(&ctx, &mut app, vec![]);
+        let button = app.close_buttons[&app.tabs[0].id];
+        click(&ctx, &mut app, button);
+        frame(&ctx, &mut app, vec![]);
+        assert!(app.pending_close.is_some());
+        let button = app.cancel_close_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.pending_close.is_none());
+        assert_eq!(app.documents[0].layers[0].pixels[0], [90, 80, 70, 255]);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.selected, BrushTip::Pencil);
+    }
+
+    #[test]
+    fn quit_cancellation_does_not_drop_previously_approved_documents() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.create_canvas(tiny_spec()).unwrap();
+        let ids: Vec<_> = app.documents.iter().map(|doc| doc.id).collect();
+        app.begin_quit();
+        app.accept_close();
+        assert_eq!(app.quit_approved.len(), 1);
+        assert!(!app.quit_ready);
+        app.cancel_close();
+        assert_eq!(
+            app.documents.iter().map(|doc| doc.id).collect::<Vec<_>>(),
+            ids
+        );
+        assert_eq!(app.tabs.len(), 2);
+        assert!(!app.quit_ready);
+        app.begin_quit();
+        app.accept_close();
+        app.accept_close();
+        assert!(app.quit_ready);
+        assert_eq!(app.documents.len(), 2);
+    }
+
+    #[test]
+    fn failed_save_keeps_close_prompt_and_successful_save_closes_document() {
+        let root = TestDirectory::new();
+        let path = root.0.join("picture.drawer");
+        let mut doc = Document::create(tiny_spec(), 4).unwrap();
+        drawer_core::files::save(&mut doc, &path).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.open_path(&path).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [50, 100, 150, 255]);
+        let temporary = root.0.join("picture.drawer.drawer-write.tmp");
+        std::fs::write(&temporary, "blocked operation").unwrap();
+        app.request_close(0);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.save_close_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.pending_close.is_some());
+        assert!(app.status.is_some());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert!(app.documents[0].dirty);
+        std::fs::remove_file(temporary).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.save_close_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.documents.is_empty());
+        assert!(app.tabs.is_empty());
+        let restored = drawer_core::files::open(&path, 4).unwrap();
+        assert_eq!(restored.layers[0].pixels[0], [50, 100, 150, 255]);
     }
 }

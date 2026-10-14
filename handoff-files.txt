@@ -40,3 +40,8 @@ crates/drawer-core/src/document.rs
 crates/drawer-app/src/new_canvas.rs
 crates/drawer-core/src/view.rs
 crates/drawer-app/src/canvas_view.rs
+crates/drawer-app/src/workspace.rs
+crates/drawer-core/src/files.rs
+crates/drawer-core/src/history.rs
+crates/drawer-core/src/test_support.rs
+docs/process/native-format.md

@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fmt, path::PathBuf};
 
 pub const MAX_DIMENSION: u32 = 32768;
@@ -37,11 +38,15 @@ impl fmt::Display for CreateError {
 }
 impl std::error::Error for CreateError {}
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct RasterLayer {
     pub name: String,
     pub pixels: Vec<[u8; 4]>,
 }
 pub struct Document {
+    pub id: u64,
+    pub title: String,
+    pub source_path: Option<PathBuf>,
     pub width: u32,
     pub height: u32,
     pub dpi: f64,
@@ -49,6 +54,9 @@ pub struct Document {
     pub path: Option<PathBuf>,
     pub dirty: bool,
     pub view: crate::view::View,
+    pub tool: crate::assets::BrushTip,
+    pub revision: u64,
+    pub(crate) history: crate::history::History,
 }
 
 impl Document {
@@ -76,7 +84,12 @@ impl Document {
             .try_reserve_exact(count)
             .map_err(|_| CreateError::Allocation)?;
         pixels.resize(count, color);
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
+            id,
+            title: format!("Untitled {id}"),
+            source_path: None,
             width: spec.width,
             height: spec.height,
             dpi: spec.dpi,
@@ -87,10 +100,47 @@ impl Document {
             path: None,
             dirty: true,
             view: crate::view::View::default(),
+            tool: crate::assets::BrushTip::Pen,
+            revision: 0,
+            history: Default::default(),
         })
     }
     pub fn memory_bytes(&self) -> usize {
         self.layers.iter().map(|layer| layer.pixels.len() * 4).sum()
+    }
+    pub fn mark_saved(&mut self, path: PathBuf) {
+        self.title = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        self.path = Some(path);
+        self.source_path = None;
+        self.history.mark_saved();
+        self.dirty = false;
+    }
+    pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        let offset = (y * self.width + x) as usize;
+        let mut color = [0.0f32; 3];
+        let mut alpha = 0.0;
+        for layer in &self.layers {
+            let pixel = layer.pixels[offset];
+            let source_alpha = pixel[3] as f32 / 255.0;
+            for channel in 0..3 {
+                color[channel] =
+                    pixel[channel] as f32 * source_alpha + color[channel] * (1.0 - source_alpha);
+            }
+            alpha = source_alpha + alpha * (1.0 - source_alpha);
+        }
+        if alpha == 0.0 {
+            return [0; 4];
+        }
+        [
+            (color[0] / alpha).round() as u8,
+            (color[1] / alpha).round() as u8,
+            (color[2] / alpha).round() as u8,
+            (alpha * 255.0).round() as u8,
+        ]
     }
 }
 
@@ -118,6 +168,22 @@ mod tests {
         let document = Document::create(colored, 24).unwrap();
         assert_eq!(document.layers[0].pixels, vec![[20, 40, 60, 255]; 6]);
         assert_eq!(document.dpi, 300.0);
+    }
+    #[test]
+    fn opened_layers_composite_in_order_with_straight_alpha() {
+        let mut document = Document::create(spec(), 4).unwrap();
+        document.layers[0].pixels[0] = [255, 0, 0, 128];
+        document.layers.push(RasterLayer {
+            name: "Top".into(),
+            pixels: vec![[0, 0, 255, 128]],
+        });
+        assert_eq!(document.composite_pixel(0, 0), [85, 0, 170, 192]);
+        document.layers[1].pixels[0] = [9, 10, 11, 255];
+        assert_eq!(document.composite_pixel(0, 0), [9, 10, 11, 255]);
+        for layer in &mut document.layers {
+            layer.pixels[0] = [255, 40, 10, 0];
+        }
+        assert_eq!(document.composite_pixel(0, 0), [0; 4]);
     }
     #[test]
     fn rejects_bad_dimensions_dpi_and_budget_before_allocation() {

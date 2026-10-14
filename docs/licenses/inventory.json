@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "fc933e8a62849f7590b1e5311c93a451280ec653152a01da05296e3db52b9e76",
+  "cargo_lock_sha256": "21a1e33750e486eefeaa9e7c5decc8a78279ad176d59f115d89f2a53e3abd2a7",
   "libraries": [
     {
       "name": "accesskit",
@@ -1444,6 +1444,21 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "7b4c9a3946dfcea7967582760e963e27799e225dcf20565c8ef55324bb017427"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "rfd",
+      "version": "0.17.2",
+      "source": "https://crates.io/crates/rfd/0.17.2",
+      "repository": "https://github.com/PolyMeilex/rfd",
+      "license": "MIT",
+      "crate_sha256": "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071"
         }
       ],
       "supplement_sources": []

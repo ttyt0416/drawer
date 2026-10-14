@@ -30,6 +30,8 @@ try {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
+    $smokeResult = Get-Content -LiteralPath $receipt -Raw
+    if ($smokeResult -notmatch 'canvases=2' -or $smokeResult -notmatch 'views=2' -or $smokeResult -notmatch 'close_cancel=true') { throw '문서 전환/닫기 취소 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 4개 보존.'
 } finally {

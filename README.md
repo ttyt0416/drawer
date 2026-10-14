@@ -14,3 +14,5 @@ cargo run -p xtask --offline --target-dir target/latest -- prepare-handoff
 `prepare-handoff`는 목록에 있는 텍스트 파일만 `handoff/latest`에 복사하고 전달 목록을 검사한다. 빌드 결과와 전달 묶음은 Git에 포함하지 않는다.
 
 앱 실행: `cargo run -p drawer-app --offline --target-dir target/latest`.
+
+여러 로컬 `.drawer`/PNG 문서와 문서별 도구·이력, 같은 그림의 여러 보기를 지원한다. 실행 방법은 [사용 안내](docs/START-HERE.md), 파일 보존 범위는 [문서 형식](docs/process/native-format.md)에 있다.

@@ -2,7 +2,7 @@ use drawer_core::document::Document;
 use eframe::egui;
 
 pub struct CanvasView {
-    image: Option<(usize, egui::TextureHandle)>,
+    image: Option<((u64, u64), egui::TextureHandle)>,
     checker: egui::TextureHandle,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
@@ -24,7 +24,7 @@ impl CanvasView {
             viewport: None,
         }
     }
-    pub fn show(&mut self, ui: &mut egui::Ui, index: usize, document: &mut Document) -> bool {
+    pub fn show(&mut self, ui: &mut egui::Ui, _index: usize, document: &mut Document) -> bool {
         let before = document.view;
         ui.horizontal(|ui| {
             ui.label("Zoom");
@@ -86,15 +86,15 @@ impl CanvasView {
                 );
             }
         }
-        if self.image.as_ref().map(|(active, _)| *active) != Some(index) {
+        if self.image.as_ref().map(|(active, _)| *active) != Some((document.id, document.revision))
+        {
             let reduction = document.width.max(document.height).div_ceil(2048).max(1);
             let width = document.width.div_ceil(reduction);
             let height = document.height.div_ceil(reduction);
             let mut pixels = Vec::with_capacity((width * height) as usize);
             for y in 0..height {
                 for x in 0..width {
-                    let pixel = document.layers[0].pixels
-                        [((y * reduction) * document.width + x * reduction) as usize];
+                    let pixel = document.composite_pixel(x * reduction, y * reduction);
                     pixels.push(egui::Color32::from_rgba_unmultiplied(
                         pixel[0], pixel[1], pixel[2], pixel[3],
                     ));
@@ -105,7 +105,7 @@ impl CanvasView {
                 egui::ColorImage::new([width as usize, height as usize], pixels),
                 egui::TextureOptions::NEAREST,
             );
-            self.image = Some((index, texture));
+            self.image = Some(((document.id, document.revision), texture));
         }
         let corners = [
             [0.0, 0.0],
