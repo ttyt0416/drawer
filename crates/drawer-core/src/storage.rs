@@ -28,6 +28,35 @@ impl UserStorage {
     pub fn root(&self) -> &Path {
         &self.root
     }
+    pub fn load_view(&self) -> io::Result<crate::view::View> {
+        let text = match fs::read_to_string(self.root.join("settings/view.txt")) {
+            Ok(text) => text,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(crate::view::View::default());
+            }
+            Err(error) => return Err(error),
+        };
+        crate::view::View::decode(&text)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Damaged view preferences"))
+    }
+    pub fn save_view(&self, view: crate::view::View) -> io::Result<()> {
+        let temporary = self.root.join("settings/view.tmp");
+        let path = self.root.join("settings/view.txt");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        let result = (|| {
+            file.write_all(view.encode().as_bytes())?;
+            file.sync_all()?;
+            drop(file);
+            fs::rename(&temporary, path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(temporary);
+        }
+        result
+    }
     pub fn load_brush(&self) -> io::Result<BrushTip> {
         let path = self.root.join("settings/preferences.txt");
         let text = match fs::read_to_string(path) {
@@ -78,6 +107,14 @@ mod tests {
         assert_eq!(storage.load_brush().unwrap(), BrushTip::Pen);
         storage.save_brush(BrushTip::Wash).unwrap();
         assert_eq!(storage.load_brush().unwrap(), BrushTip::Wash);
+        let view = crate::view::View {
+            zoom: 2.0,
+            angle: 37.0,
+            pan: [12.0, -8.0],
+            flipped: true,
+        };
+        storage.save_view(view).unwrap();
+        assert_eq!(storage.load_view().unwrap(), view);
         fs::write(root.join("settings/preferences.tmp"), "interrupted write").unwrap();
         assert!(storage.save_brush(BrushTip::Pencil).is_err());
         assert_eq!(storage.load_brush().unwrap(), BrushTip::Wash);

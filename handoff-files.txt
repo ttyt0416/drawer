@@ -38,3 +38,5 @@ scripts/test-install.ps1
 docs/START-HERE.md
 crates/drawer-core/src/document.rs
 crates/drawer-app/src/new_canvas.rs
+crates/drawer-core/src/view.rs
+crates/drawer-app/src/canvas_view.rs

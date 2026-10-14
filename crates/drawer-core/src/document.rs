@@ -48,6 +48,7 @@ pub struct Document {
     pub layers: Vec<RasterLayer>,
     pub path: Option<PathBuf>,
     pub dirty: bool,
+    pub view: crate::view::View,
 }
 
 impl Document {
@@ -85,6 +86,7 @@ impl Document {
             }],
             path: None,
             dirty: true,
+            view: crate::view::View::default(),
         })
     }
     pub fn memory_bytes(&self) -> usize {

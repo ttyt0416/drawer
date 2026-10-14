@@ -7,6 +7,7 @@ use drawer_core::document::{
 use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
+mod canvas_view;
 mod new_canvas;
 use new_canvas::NewCanvas;
 
@@ -21,6 +22,8 @@ struct Drawer {
     active: Option<usize>,
     new_canvas: NewCanvas,
     show_new_canvas: bool,
+    canvas_view: canvas_view::CanvasView,
+    default_view: drawer_core::view::View,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -63,6 +66,8 @@ impl Drawer {
             active: None,
             new_canvas: NewCanvas::default(),
             show_new_canvas: false,
+            canvas_view: canvas_view::CanvasView::new(ctx),
+            default_view: Default::default(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -84,7 +89,8 @@ impl Drawer {
 
     fn create_canvas(&mut self, spec: CanvasSpec) -> Result<(), CreateError> {
         let used: usize = self.documents.iter().map(Document::memory_bytes).sum();
-        let document = Document::create(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))?;
+        let mut document = Document::create(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))?;
+        document.view = self.default_view;
         self.documents
             .try_reserve(1)
             .map_err(|_| CreateError::Allocation)?;
@@ -167,6 +173,10 @@ impl Drawer {
             }
             Err(error) => self.status = Some(error.to_string()),
         }
+        match storage.load_view() {
+            Ok(view) => self.default_view = view,
+            Err(error) => self.status = Some(error.to_string()),
+        }
         self.storage = Some(storage);
         self
     }
@@ -222,39 +232,14 @@ impl Drawer {
                         document.height,
                         document.dpi
                     ));
-                    let available = columns[1].available_size().max(egui::vec2(1.0, 1.0));
-                    let scale = (available.x / document.width as f32)
-                        .min(available.y / document.height as f32)
-                        .min(1.0);
-                    let size = egui::vec2(
-                        document.width as f32 * scale,
-                        document.height as f32 * scale,
-                    );
-                    let (rect, _) = columns[1].allocate_exact_size(size, egui::Sense::hover());
-                    let painter = columns[1].painter_at(rect);
-                    for y in 0..(rect.height() / 16.0).ceil() as usize {
-                        for x in 0..(rect.width() / 16.0).ceil() as usize {
-                            let tile = egui::Rect::from_min_size(
-                                rect.min + egui::vec2(x as f32 * 16.0, y as f32 * 16.0),
-                                egui::vec2(16.0, 16.0),
-                            )
-                            .intersect(rect);
-                            painter.rect_filled(
-                                tile,
-                                0.0,
-                                egui::Color32::from_gray(if (x + y) % 2 == 0 { 196 } else { 224 }),
-                            );
-                        }
-                    }
-                    let color = document.layers[0].pixels[0];
-                    if color[3] != 0 {
-                        painter.rect_filled(
-                            rect,
-                            0.0,
-                            egui::Color32::from_rgba_unmultiplied(
-                                color[0], color[1], color[2], color[3],
-                            ),
-                        );
+                    let changed =
+                        self.canvas_view
+                            .show(&mut columns[1], active, &mut self.documents[active]);
+                    if changed
+                        && let Some(storage) = &self.storage
+                        && let Err(error) = storage.save_view(self.documents[active].view)
+                    {
+                        self.status = Some(error.to_string());
                     }
                 } else {
                     columns[1].heading("Create a canvas to begin");
@@ -450,5 +435,70 @@ mod tests {
         click(&ctx, &mut app, button);
         assert!(!app.show_new_canvas);
         assert_eq!(app.documents.len(), 1);
+    }
+
+    #[test]
+    fn wheel_and_middle_drag_change_only_view_state() {
+        use std::hash::{Hash, Hasher};
+        fn pixels_hash(document: &Document) -> u64 {
+            let mut hash = std::hash::DefaultHasher::new();
+            document.layers[0].pixels.hash(&mut hash);
+            hash.finish()
+        }
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 32,
+            height: 16,
+            dpi: 300.0,
+            background: Background::Color([10, 20, 30]),
+        })
+        .unwrap();
+        app.documents[0].layers[0].pixels[0] = [200, 10, 40, 255];
+        app.documents[0].dirty = false;
+        let hash = pixels_hash(&app.documents[0]);
+        frame(&ctx, &mut app, vec![]);
+        let point = app.canvas_view.viewport.unwrap().center();
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(point)]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                phase: egui::TouchPhase::Move,
+                delta: egui::vec2(0.0, 120.0),
+                modifiers: Default::default(),
+            }],
+        );
+        assert!(app.documents[0].view.zoom > 1.0);
+        let before = app.documents[0].view.pan;
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: point,
+                button: egui::PointerButton::Middle,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+        );
+        let moved = point + egui::vec2(40.0, 25.0);
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(moved)]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: moved,
+                button: egui::PointerButton::Middle,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_ne!(app.documents[0].view.pan, before);
+        app.documents[0].view.rotate(90.0);
+        app.documents[0].view.flipped = true;
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(pixels_hash(&app.documents[0]), hash);
+        assert!(!app.documents[0].dirty);
     }
 }
