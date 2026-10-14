@@ -81,3 +81,6 @@ crates/drawer-core/src/movie.rs
 crates/drawer-app/src/movie_dialog.rs
 crates/drawer-app/src/revert.rs
 docs/process/movie-import.md
+crates/drawer-core/src/panels.rs
+crates/drawer-core/src/thumbnail.rs
+crates/drawer-app/src/panels.rs

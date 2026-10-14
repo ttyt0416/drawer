@@ -11,6 +11,7 @@ pub mod interpolation;
 pub mod movie;
 pub mod navigator;
 pub mod navigator_preferences;
+pub mod panels;
 pub mod paste;
 pub mod png_export;
 pub mod recent;
@@ -22,5 +23,6 @@ pub mod sizing;
 pub mod storage;
 #[cfg(test)]
 mod test_support;
+pub mod thumbnail;
 pub mod view;
 pub mod view_layout;

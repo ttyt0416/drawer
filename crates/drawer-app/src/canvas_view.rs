@@ -70,7 +70,7 @@ impl CanvasView {
         let before = document.view;
         let size = [document.width as f64, document.height as f64];
         let ppp = ui.ctx().pixels_per_point() as f64;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label("Zoom");
             let mut percent = document.view.zoom * 100.0;
             if ui

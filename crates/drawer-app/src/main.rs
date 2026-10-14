@@ -14,6 +14,7 @@ mod image_import_dialog;
 mod movie_dialog;
 mod navigator_panel;
 mod new_canvas;
+mod panels;
 mod paste_dialog;
 mod quality;
 mod reference_pane;
@@ -76,6 +77,7 @@ struct Drawer {
     show_navigator_settings: bool,
     movie_dialog: Option<movie_dialog::MovieDialog>,
     revert_pending: Option<u64>,
+    panels: panels::Panels,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -158,6 +160,7 @@ impl Drawer {
             show_navigator_settings: false,
             movie_dialog: None,
             revert_pending: None,
+            panels: panels::Panels::new(ctx),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -255,6 +258,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::panels::Settings::load(&storage) {
+            Ok(s) => self.panels.settings = s,
+            Err(e) => self.status = Some(format!("Panel settings reset: {e}")),
+        }
         match drawer_core::navigator_preferences::Preferences::load(&storage) {
             Ok(p) => self.canvas_view.navigator = p,
             Err(e) => self.status = Some(format!("Navigator settings reset: {e}")),
@@ -303,6 +310,7 @@ impl Drawer {
 
     fn show(&mut self, ui: &mut egui::Ui) {
         self.view_shortcuts(ui.ctx());
+        self.basic_shortcuts(ui.ctx());
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -314,68 +322,53 @@ impl Drawer {
                     && self.movie_dialog.is_none()
                     && self.revert_pending.is_none(),
                 |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.heading(APP_NAME);
-                        ui.label("Local drawing workspace");
-                        let new_response = ui.button("New canvas");
-                        #[cfg(test)]
-                        {
-                            self.new_button = Some(new_response.rect);
-                        }
-                        if new_response.clicked() {
-                            self.new_canvas = NewCanvas::default();
-                            self.show_new_canvas = true;
-                        }
-                        if ui.button("References").clicked() {
-                            self.references.session.workspace.visible = true;
-                        }
-                        if ui.button("Canvas aids").clicked() {
-                            self.aids.visible = true;
-                        }
-                        if ui.button("Display view").clicked() {
-                            self.display.settings_open = true;
-                        }
-                        if ui.button("Image quality").clicked() {
-                            self.show_interpolation = true;
-                        }
-                        if ui.button("Navigator settings").clicked() {
-                            self.show_navigator_settings = true;
-                        }
-                    });
-                    self.document_controls(ui);
-                    self.sizing_controls(ui);
-                    self.paste_controls(ui);
-                    self.movie_controls(ui);
-                    ui.separator();
-                    if let Some(status) = &self.status {
-                        ui.colored_label(egui::Color32::LIGHT_RED, status);
-                    }
+                    egui::ScrollArea::vertical()
+                        .id_salt("document-commands")
+                        .max_height((ui.available_height() * 0.5).clamp(100.0, 360.0))
+                        .show(ui, |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.heading(APP_NAME);
+                                ui.label("Local drawing workspace");
+                                let new_response = ui.button("New canvas");
+                                #[cfg(test)]
+                                {
+                                    self.new_button = Some(new_response.rect);
+                                }
+                                if new_response.clicked() {
+                                    self.new_canvas = NewCanvas::default();
+                                    self.show_new_canvas = true;
+                                }
+                                if ui.button("References").clicked() {
+                                    self.references.session.workspace.visible = true;
+                                }
+                                if ui.button("Canvas aids").clicked() {
+                                    self.aids.visible = true;
+                                }
+                                if ui.button("Display view").clicked() {
+                                    self.display.settings_open = true;
+                                }
+                                if ui.button("Image quality").clicked() {
+                                    self.show_interpolation = true;
+                                }
+                                if ui.button("Panels").clicked() {
+                                    self.panels.open = true;
+                                }
+                                if ui.button("Navigator settings").clicked() {
+                                    self.show_navigator_settings = true;
+                                }
+                            });
+                            self.document_controls(ui);
+                            self.sizing_controls(ui);
+                            self.paste_controls(ui);
+                            self.movie_controls(ui);
+                            ui.separator();
+                            if let Some(status) = &self.status {
+                                ui.colored_label(egui::Color32::LIGHT_RED, status);
+                            }
+                        });
                     ui.columns(2, |columns| {
                         columns[0].set_width(170.0);
-                        columns[0].heading("Tools");
-                        let mut color = self.references.session.workspace.color;
-                        if columns[0]
-                            .color_edit_button_srgba_unmultiplied(&mut color)
-                            .changed()
-                        {
-                            self.references.session.workspace.color = color;
-                        }
-                        for tip in BrushTip::ALL {
-                            let response =
-                                columns[0].selectable_label(self.selected == tip, tip.name());
-                            if response.clicked() {
-                                self.set_tool(tip);
-                            }
-                        }
-                        columns[0].label("Brush preview");
-                        let index = BrushTip::ALL
-                            .iter()
-                            .position(|&tip| tip == self.selected)
-                            .unwrap();
-                        columns[0].add(
-                            egui::Image::new(&self.previews[index])
-                                .fit_to_exact_size(egui::vec2(160.0, 160.0)),
-                        );
+                        self.show_panels(&mut columns[0]);
                         if let Some(active) = self.active {
                             let document = &self.documents[active];
                             columns[1].label(format!(
@@ -419,6 +412,10 @@ impl Drawer {
         self.persist_views(ui.ctx().pixels_per_point() as f64);
         self.navigator_settings(ui.ctx());
         self.persist_navigator();
+        self.panel_settings(ui.ctx());
+        if let Err(e) = self.panels.persist(self.storage.as_ref()) {
+            self.status = Some(e);
+        }
     }
 }
 
@@ -743,8 +740,14 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                self.panels.persist(self.storage.as_ref()).unwrap();
+                if drawer_core::panels::Settings::load(self.storage.as_ref().unwrap()).unwrap()
+                    != self.panels.settings
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -2839,5 +2842,222 @@ mod tests {
         assert!(app.documents[1].undo());
         assert_eq!(app.documents[1].snapshot(), changed);
         assert_eq!(std::fs::read(source).unwrap(), original);
+    }
+    #[test]
+    fn panel_modes_restore_settings_and_keep_targets_dense_timeline_and_document_unchanged() {
+        use drawer_core::{
+            panels::{Bar, Kind, Settings, Thumbnail},
+            thumbnail::Target,
+        };
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        let mut doc = movie_clip().document(1000000).unwrap();
+        doc.layers.push(drawer_core::document::RasterLayer {
+            name: "Outside".into(),
+            placement: Some(drawer_core::document::PlacedRaster {
+                width: 2,
+                height: 1,
+                offset: [50, -20],
+            }),
+            pixels: vec![[250, 0, 0, 128], [4, 5, 6, 0]],
+        });
+        let a = doc.animation.as_mut().unwrap();
+        a.frames = 10000;
+        a.tracks[0].end = 10000;
+        a.tracks[0].exposures = (0..10000)
+            .map(|frame| drawer_core::animation::Exposure {
+                frame,
+                cell: (frame % 2) as usize,
+            })
+            .collect();
+        app.add_document(doc);
+        app.save_to(0, &root.0.join("panels.drawer")).unwrap();
+        let id = app.documents[0].id;
+        app.panels.targets.insert(id, Target::Raster(1));
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let view = app.documents[0].view;
+        for size in Thumbnail::ALL {
+            for content in [false, true] {
+                for checker in [false, true] {
+                    for kind in [Kind::Layers, Kind::Timeline] {
+                        let cfg = &mut app.panels.settings.panels[kind.index()];
+                        cfg.thumbnail = size;
+                        cfg.content = content;
+                        cfg.checker = checker;
+                        cfg.properties = Bar::Bottom;
+                        cfg.commands = Bar::Top;
+                    }
+                    app.panels.settings.panels[Kind::Timeline.index()].animation_only = true;
+                    frame(&ctx, &mut app, vec![]);
+                    assert_eq!(app.panels.targets[&id], Target::Raster(1));
+                    assert_eq!(app.documents[0].snapshot(), before);
+                    assert_eq!(app.documents[0].view, view);
+                    assert_eq!(app.documents[0].history_counts(), history);
+                    assert!(!app.documents[0].dirty);
+                }
+            }
+        }
+        for panel in &mut app.panels.settings.panels {
+            panel.visible = false;
+        }
+        frame(&ctx, &mut app, vec![]);
+        let hidden = app.panels.settings;
+        app.panels.settings = Settings::default();
+        frame(&ctx, &mut app, vec![]);
+        app.panels.history(false, app.storage.as_ref()).unwrap();
+        assert_eq!(app.panels.settings, hidden);
+        app.panels.history(true, app.storage.as_ref()).unwrap();
+        assert_eq!(app.panels.settings, Settings::default());
+        let expected = app.panels.settings;
+        let restarted = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.panels.settings, expected);
+        for panel in &mut app.panels.settings.panels {
+            panel.visible = false;
+        }
+        app.panels.settings.panels[Kind::Layers.index()].visible = true;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.panels.targets_buttons[&Target::Track(0)];
+        click(&ctx, &mut app, rect);
+        assert_eq!(app.panels.targets[&id], Target::Track(0));
+        assert_eq!(app.documents[0].snapshot(), before);
+        let mut small = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(640.0, 480.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        small.textures_delta.clear();
+        let viewport = app.canvas_view.viewport.unwrap();
+        assert!(
+            viewport.min.x >= 0.0
+                && viewport.min.y >= 0.0
+                && viewport.max.x <= 640.0
+                && viewport.max.y <= 480.0,
+            "{viewport:?}"
+        );
+        assert_eq!(app.panels.targets[&id], Target::Track(0));
+        assert_eq!(app.documents[0].snapshot(), before);
+        let normal = std::fs::read(storage.root().join("settings/panels.json")).unwrap();
+        std::fs::write(
+            storage.root().join("settings/panels.json.write.tmp"),
+            "foreign temp",
+        )
+        .unwrap();
+        assert!(app.panels.settings.save(&storage).is_err());
+        assert_eq!(
+            std::fs::read(storage.root().join("settings/panels.json")).unwrap(),
+            normal
+        );
+        std::fs::remove_file(storage.root().join("settings/panels.json.write.tmp")).unwrap();
+        std::fs::write(storage.root().join("settings/panels.json"), "damaged").unwrap();
+        assert!(Settings::load(&storage).is_err());
+        Settings::default().save(&storage).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(storage.root().join("settings/panels.damaged.json")).unwrap(),
+            "damaged"
+        );
+    }
+    #[test]
+    fn default_shortcut_modifiers_save_undo_tool_selection_and_text_focus() {
+        let ctx = egui::Context::default();
+        let root = TestDirectory::new();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let path = root.0.join("keys.drawer");
+        app.save_to(0, &path).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [10, 20, 30, 255]);
+        let event = |key, modifiers| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        };
+        frame(
+            &ctx,
+            &mut app,
+            vec![event(egui::Key::Z, egui::Modifiers::CTRL)],
+        );
+        assert_eq!(app.documents[0].layers[0].pixels[0], [0; 4]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![event(egui::Key::Y, egui::Modifiers::CTRL)],
+        );
+        assert_eq!(app.documents[0].layers[0].pixels[0], [10, 20, 30, 255]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![event(egui::Key::S, egui::Modifiers::CTRL)],
+        );
+        assert!(!app.documents[0].dirty);
+        assert_eq!(
+            drawer_core::files::open(&path, 1000000).unwrap().snapshot(),
+            app.documents[0].snapshot()
+        );
+        for (key, tip) in [
+            (egui::Key::N, BrushTip::Pencil),
+            (egui::Key::E, BrushTip::Eraser),
+            (egui::Key::W, BrushTip::Wash),
+            (egui::Key::B, BrushTip::Pen),
+        ] {
+            frame(&ctx, &mut app, vec![event(key, egui::Modifiers::NONE)]);
+            assert_eq!(app.selected, tip);
+        }
+        for (key, modifiers, expected) in [
+            (egui::Key::S, egui::Modifiers::CTRL, Some(0)),
+            (
+                egui::Key::S,
+                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                Some(1),
+            ),
+            (
+                egui::Key::Z,
+                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                Some(3),
+            ),
+            (egui::Key::B, egui::Modifiers::ALT, None),
+            (egui::Key::B, egui::Modifiers::SHIFT, None),
+            (
+                egui::Key::S,
+                egui::Modifiers::CTRL | egui::Modifiers::COMMAND,
+                Some(0),
+            ),
+        ] {
+            let mut action = None;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![event(key, modifiers)],
+                    ..Default::default()
+                },
+                |ui| {
+                    action = ui.ctx().input_mut(panels::shortcut_action);
+                },
+            );
+            output.textures_delta.clear();
+            assert_eq!(action, expected);
+        }
+        let mut text = String::new();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.text_edit_singleline(&mut text).request_focus();
+        });
+        output.textures_delta.clear();
+        assert!(ctx.egui_wants_keyboard_input());
+        frame(
+            &ctx,
+            &mut app,
+            vec![event(egui::Key::E, egui::Modifiers::NONE)],
+        );
+        assert_eq!(app.selected, BrushTip::Pen);
     }
 }

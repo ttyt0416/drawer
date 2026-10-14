@@ -202,7 +202,7 @@ impl Drawer {
         self.save_to(index, &path)?;
         Ok(true)
     }
-    fn save_as(&mut self, index: usize) -> Result<bool, String> {
+    pub(super) fn save_as(&mut self, index: usize) -> Result<bool, String> {
         let filename = Path::new(&self.documents[index].title)
             .file_stem()
             .unwrap_or_default()
@@ -217,7 +217,7 @@ impl Drawer {
                 .save_file()
         })
     }
-    fn save_document(&mut self, index: usize) -> Result<bool, String> {
+    pub(super) fn save_document(&mut self, index: usize) -> Result<bool, String> {
         if let Some(path) = self.documents[index].path.clone() {
             self.save_to(index, &path)?;
             Ok(true)
@@ -368,25 +368,25 @@ impl Drawer {
             self.view_menu(ui);
             self.local_file_menu(ui);
             if let Some(active) = self.active {
-                if ui.button("Save").clicked()
+                if ui.button("Save  Ctrl+S").clicked()
                     && let Err(error) = self.save_document(active)
                 {
                     self.status = Some(error);
                 }
-                if ui.button("Save as…").clicked()
+                if ui.button("Save as…  Ctrl+Shift+S").clicked()
                     && let Err(error) = self.save_as(active)
                 {
                     self.status = Some(error);
                 }
                 let (undo, redo) = self.documents[active].history_counts();
                 if ui
-                    .add_enabled(undo > 0, egui::Button::new("Undo"))
+                    .add_enabled(undo > 0, egui::Button::new("Undo  Ctrl+Z"))
                     .clicked()
                 {
                     self.documents[active].undo();
                 }
                 if ui
-                    .add_enabled(redo > 0, egui::Button::new("Redo"))
+                    .add_enabled(redo > 0, egui::Button::new("Redo  Ctrl+Y / Ctrl+Shift+Z"))
                     .clicked()
                 {
                     self.documents[active].redo();
@@ -489,7 +489,7 @@ impl Drawer {
             ui.heading(format!("Save changes to {title}?"));
             ui.label("Your drawing will stay open until you choose.");
             ui.horizontal(|ui| {
-                let save = ui.button("Save");
+                let save = ui.button("Save  Ctrl+S");
                 if save.clicked() {
                     action = Some(0);
                 }
