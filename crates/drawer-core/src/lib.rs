@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod aids;
 pub mod animation;
 pub mod assets;

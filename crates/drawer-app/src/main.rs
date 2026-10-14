@@ -7,6 +7,7 @@ use drawer_core::document::{
 use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
+mod action_controls;
 mod aid_panel;
 mod canvas_view;
 mod display_pane;
@@ -82,6 +83,7 @@ struct Drawer {
     panels: panels::Panels,
     interface: ui_scale::Interface,
     workspaces: workspaces::Workspaces,
+    controls: action_controls::Controls,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -167,6 +169,7 @@ impl Drawer {
             panels: panels::Panels::new(ctx),
             interface: ui_scale::Interface::new(ctx),
             workspaces: Default::default(),
+            controls: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -333,6 +336,7 @@ impl Drawer {
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
+        self.direct_actions(ui.ctx());
         self.canvas_view.brush_shape = drawer_core::brush_cursor::Shape {
             size: self.panels.settings.brush_size,
             aspect: self.panels.settings.brush_aspect,
@@ -348,7 +352,9 @@ impl Drawer {
                     && self.paste_dialog.is_none()
                     && self.movie_dialog.is_none()
                     && self.revert_pending.is_none()
-                    && self.workspaces.staged.is_none(),
+                    && self.workspaces.staged.is_none()
+                    && !self.controls.open
+                    && self.controls.radial.is_none(),
                 |ui| {
                     egui::ScrollArea::vertical()
                         .id_salt("document-commands")
@@ -381,6 +387,9 @@ impl Drawer {
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
                                 }
+                                if ui.button("Input and commands").clicked() {
+                                    self.controls.open = true;
+                                }
                                 if ui.button("Workspaces").clicked() {
                                     self.workspaces.open = true;
                                 }
@@ -398,6 +407,7 @@ impl Drawer {
                             self.sizing_controls(ui);
                             self.paste_controls(ui);
                             self.movie_controls(ui);
+                            self.access_controls(ui);
                             ui.separator();
                             if let Some(status) = &self.status {
                                 ui.colored_label(egui::Color32::LIGHT_RED, status);
@@ -450,6 +460,8 @@ impl Drawer {
         self.floating_panels(ui.ctx());
         self.scratchpad(ui.ctx());
         self.workspace_settings(ui.ctx());
+        self.command_settings(ui.ctx());
+        self.command_popups(ui.ctx());
         self.new_canvas_dialog(ui.ctx());
         self.close_dialog(ui.ctx());
         self.show_sizing(ui.ctx());
@@ -824,6 +836,33 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                let expected_tool = self.workspaces.store.current.actions.cycles[0]
+                    .next(self.selected.name(), false)
+                    .unwrap();
+                self.execute_command(ui.ctx(), "cycle-next:1");
+                if self.selected != expected_tool {
+                    fail_smoke();
+                }
+                let mut commands = self.capture_workspace();
+                commands.actions.radials[0].resize(8);
+                commands
+                    .actions
+                    .devices
+                    .push(drawer_core::actions::DeviceBinding {
+                        device: "pointer".into(),
+                        action: "extra-1".into(),
+                        command: "cycle-prev:1".into(),
+                    });
+                self.apply_commands(commands.clone()).unwrap();
+                if drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    .unwrap()
+                    .current
+                    .actions
+                    != commands.actions
+                {
+                    fail_smoke();
+                }
                 if self.workspaces.native_panels == 0 {
                     fail_smoke();
                 }
@@ -847,7 +886,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -933,9 +972,9 @@ fn main() -> eframe::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    struct TestDirectory(PathBuf);
+    pub(crate) struct TestDirectory(pub(crate) PathBuf);
     impl TestDirectory {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             use std::sync::atomic::{AtomicU64, Ordering};
             static NEXT: AtomicU64 = AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
@@ -952,7 +991,7 @@ mod tests {
             std::fs::remove_dir_all(&self.0).unwrap();
         }
     }
-    fn tiny_spec() -> CanvasSpec {
+    pub(crate) fn tiny_spec() -> CanvasSpec {
         CanvasSpec {
             width: 1,
             height: 1,
@@ -1227,7 +1266,7 @@ mod tests {
         output.textures_delta.clear();
     }
 
-    fn frame(ctx: &egui::Context, app: &mut Drawer, events: Vec<egui::Event>) {
+    pub(crate) fn frame(ctx: &egui::Context, app: &mut Drawer, events: Vec<egui::Event>) {
         let mut output = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(egui::Rect::from_min_size(
@@ -1241,7 +1280,7 @@ mod tests {
         );
         output.textures_delta.clear();
     }
-    fn click(ctx: &egui::Context, app: &mut Drawer, rect: egui::Rect) {
+    pub(crate) fn click(ctx: &egui::Context, app: &mut Drawer, rect: egui::Rect) {
         let pos = rect.center();
         frame(ctx, app, vec![egui::Event::PointerMoved(pos)]);
         for pressed in [true, false] {

@@ -613,11 +613,12 @@ impl Drawer {
 pub(super) fn shortcut(
     input: &mut egui::InputState,
     bindings: &[workspaces::Binding],
-) -> Option<u8> {
+) -> Option<String> {
     let found = input.events.iter().enumerate().find_map(|(index, event)| {
         let egui::Event::Key {
             key,
             pressed: true,
+            repeat,
             modifiers,
             ..
         } = event
@@ -625,19 +626,20 @@ pub(super) fn shortcut(
             return None;
         };
         bindings.iter().find_map(|b| {
+            if *repeat
+                && ["cycle-next:", "cycle-prev:", "quick:", "radial:"]
+                    .iter()
+                    .any(|prefix| b.command.starts_with(prefix))
+            {
+                return None;
+            }
             let expected = egui::Key::from_name(&b.key)?;
             (expected == *key
                 && modifiers.ctrl == b.ctrl
                 && modifiers.shift == b.shift
                 && modifiers.alt == b.alt
                 && !modifiers.mac_cmd)
-                .then(|| {
-                    workspaces::COMMANDS
-                        .iter()
-                        .position(|c| *c == b.command)
-                        .map(|action| (index, action as u8))
-                })
-                .flatten()
+                .then(|| (index, b.command.clone()))
         })
     });
     found.map(|(i, a)| {

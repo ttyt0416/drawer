@@ -1,0 +1,1431 @@
+use super::*;
+use drawer_core::{
+    actions::{self, AccessSet, Cycle, Display, Item, Radial, SetKind},
+    workspaces::{Binding, Scope, Snapshot},
+};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Clone, Copy)]
+enum Target {
+    Binding(usize),
+    Item(u64, usize),
+    Slot(u64, usize),
+    Device(usize),
+}
+struct Picker {
+    target: Target,
+    selected: String,
+}
+#[derive(Default)]
+struct Editor {
+    draft: Snapshot,
+    page: u8,
+    selected: usize,
+    picker: Option<Picker>,
+    #[cfg(test)]
+    picker_confirm: Option<egui::Rect>,
+}
+#[derive(Default)]
+pub(super) struct Controls {
+    pub open: bool,
+    editor: Option<Editor>,
+    pub quick: Option<u64>,
+    pub radial: Option<(u64, egui::Pos2)>,
+    just_opened: bool,
+    query: HashMap<u64, String>,
+    drag: Option<(u64, usize)>,
+    pointer_down: HashSet<usize>,
+    devices: actions::DeviceEvents,
+    token: u64,
+    #[cfg(test)]
+    pub radial_center: Option<egui::Pos2>,
+    #[cfg(test)]
+    pub item_rects: HashMap<(u64, usize), egui::Rect>,
+    #[cfg(test)]
+    pub item_ids: HashMap<(u64, usize), egui::Id>,
+    #[cfg(test)]
+    pub cancel_button: Option<egui::Rect>,
+}
+impl Drawer {
+    pub(super) fn command_reason(&self, command: &str) -> Option<String> {
+        if !self.workspaces.store.current.actions.has_command(command) {
+            return Some(format!("Command unavailable: {command}"));
+        }
+        match command {
+            "save" | "save-as" | "view-center" | "view-reset" if self.active.is_none() => {
+                Some("Open a document first".into())
+            }
+            "undo"
+                if self
+                    .active
+                    .is_none_or(|n| self.documents[n].history_counts().0 == 0) =>
+            {
+                Some("No drawing command to undo".into())
+            }
+            "redo"
+                if self
+                    .active
+                    .is_none_or(|n| self.documents[n].history_counts().1 == 0) =>
+            {
+                Some("No drawing command to redo".into())
+            }
+            _ => None,
+        }
+    }
+    pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if let Some(reason) = self.command_reason(command) {
+            self.status = Some(reason);
+            return;
+        }
+        let result = (|| -> Result<(), String> {
+            match command {
+                "save" => {
+                    if let Some(n) = self.active {
+                        self.save_document(n)?;
+                    }
+                }
+                "save-as" => {
+                    if let Some(n) = self.active {
+                        self.save_as(n)?;
+                    }
+                }
+                "undo" => {
+                    if let Some(n) = self.active {
+                        self.documents[n].undo();
+                    }
+                }
+                "redo" => {
+                    if let Some(n) = self.active {
+                        self.documents[n].redo();
+                    }
+                }
+                "view-center" => {
+                    if let Some(n) = self.active {
+                        self.documents[n].view.pan = [0.0; 2];
+                    }
+                }
+                "view-reset" => {
+                    if let Some(n) = self.active {
+                        self.documents[n].view = Default::default();
+                    }
+                }
+                "new-canvas" => {
+                    self.new_canvas = Default::default();
+                    self.show_new_canvas = true;
+                }
+                "test-painting" => self.workspaces.store.current.scratchpad.visible = true,
+                _ => {
+                    if let Some(tip) = BrushTip::ALL.iter().find(|t| t.name() == command) {
+                        self.set_tool(*tip);
+                    } else if let Some((prefix, id)) = command.split_once(':') {
+                        let id: u64 = id.parse().map_err(|_| "Invalid command reference")?;
+                        match prefix {
+                            "cycle-next" | "cycle-prev" => {
+                                let c = self
+                                    .workspaces
+                                    .store
+                                    .current
+                                    .actions
+                                    .cycles
+                                    .iter()
+                                    .find(|c| c.id == id)
+                                    .ok_or("Tool cycle unavailable")?;
+                                let tip = c
+                                    .next(self.selected.name(), prefix == "cycle-prev")
+                                    .map_err(|e| e.to_string())?;
+                                self.set_tool(tip);
+                            }
+                            "quick" => self.controls.quick = Some(id),
+                            "radial" => {
+                                self.controls.radial = Some((
+                                    id,
+                                    ctx.pointer_latest_pos()
+                                        .unwrap_or(ctx.content_rect().center()),
+                                ));
+                                self.controls.just_opened = true;
+                            }
+                            _ => return Err("Command unavailable".into()),
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })();
+        if let Err(e) = result {
+            self.status = Some(e);
+        }
+    }
+    fn execute_item(&mut self, ctx: &egui::Context, item: &Item) {
+        match item {
+            Item::Command(c) | Item::Tool(c) => self.execute_command(ctx, c),
+            Item::Color(c) => self.references.session.workspace.color = *c,
+            Item::Separator => {}
+        }
+    }
+    pub(super) fn direct_actions(&mut self, ctx: &egui::Context) {
+        let events = ctx.input(|i| i.events.clone());
+        let mut commands = Vec::new();
+        for event in events {
+            match event {
+                egui::Event::PointerButton {
+                    button, pressed, ..
+                } if matches!(
+                    button,
+                    egui::PointerButton::Extra1 | egui::PointerButton::Extra2
+                ) =>
+                {
+                    let n = button as usize;
+                    if pressed && self.controls.pointer_down.insert(n) {
+                        self.controls.token = self.controls.token.wrapping_add(1);
+                        let action = if button == egui::PointerButton::Extra1 {
+                            "extra-1"
+                        } else {
+                            "extra-2"
+                        };
+                        if let Some(c) = self.controls.devices.dispatch(
+                            &self.workspaces.store.current.actions,
+                            "pointer",
+                            action,
+                            self.controls.token,
+                        ) {
+                            commands.push(c.to_string());
+                        }
+                    } else if !pressed {
+                        self.controls.pointer_down.remove(&n);
+                    }
+                }
+                egui::Event::PointerGone | egui::Event::WindowFocused(false) => {
+                    self.controls.pointer_down.clear();
+                    self.controls.devices.disconnect("pointer");
+                    self.controls.drag = None;
+                }
+                _ => {}
+            }
+        }
+        if self.workspaces.staged.is_none()
+            && self.controls.editor.is_none()
+            && self.controls.radial.is_none()
+            && !ctx.egui_wants_keyboard_input()
+        {
+            for c in commands {
+                self.execute_command(ctx, &c);
+            }
+        }
+    }
+    fn access_set(&mut self, ui: &mut egui::Ui, set: &AccessSet) {
+        ui.push_id(set.id, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(&set.name);
+                ui.text_edit_singleline(self.controls.query.entry(set.id).or_default())
+                    .on_hover_text("Search this set");
+            });
+            let query = self
+                .controls
+                .query
+                .get(&set.id)
+                .map(|q| q.to_lowercase())
+                .unwrap_or_default();
+            let mut execute = None;
+            let mut reorder = None;
+            let mut items = |ui: &mut egui::Ui| {
+                for (index, item) in set.items.iter().enumerate() {
+                    let label = match item {
+                        Item::Command(c) => self.workspaces.store.current.actions.label(c),
+                        _ => item.label(),
+                    };
+                    if !query.is_empty() && !label.to_lowercase().contains(&query) {
+                        continue;
+                    }
+
+                    let reason = match item {
+                        Item::Command(c) | Item::Tool(c) => self.command_reason(c),
+                        _ => None,
+                    };
+                    let text = if *item == Item::Separator {
+                        egui::RichText::new("—")
+                    } else if reason.is_some() {
+                        egui::RichText::new(&label).color(egui::Color32::GRAY)
+                    } else {
+                        egui::RichText::new(&label)
+                    };
+                    let r = ui
+                        .add(egui::Button::new(text).sense(egui::Sense::click_and_drag()))
+                        .on_hover_text(
+                            reason.unwrap_or_else(|| "Click to run; drag to reorder".into()),
+                        );
+                    #[cfg(test)]
+                    {
+                        self.controls.item_rects.insert((set.id, index), r.rect);
+                        self.controls.item_ids.insert((set.id, index), r.id);
+                    }
+                    if r.drag_started() && (!set.ctrl_drag || ui.input(|i| i.modifiers.ctrl)) {
+                        self.controls.drag = Some((set.id, index));
+                    }
+                    if r.hovered()
+                        && ui.input(|i| i.pointer.any_released())
+                        && let Some((id, from)) = self.controls.drag
+                        && id == set.id
+                        && from != index
+                    {
+                        reorder = Some((from, index));
+                    }
+                    if r.clicked() && self.controls.drag.is_none() {
+                        execute = Some(item.clone());
+                    }
+                    if set.display == Display::List {
+                        ui.end_row();
+                    }
+                }
+            };
+            if set.display == Display::List {
+                egui::Grid::new("access-list")
+                    .num_columns(1)
+                    .show(ui, |ui| items(ui));
+            } else {
+                ui.horizontal_wrapped(|ui| items(ui));
+            }
+            if ui.input(|i| i.pointer.any_released()) {
+                self.controls.drag = None;
+            }
+            if let Some((from, to)) = reorder
+                && let Some(s) = self
+                    .workspaces
+                    .store
+                    .current
+                    .actions
+                    .access
+                    .iter_mut()
+                    .find(|s| s.id == set.id)
+            {
+                let item = s.items.remove(from);
+                s.items.insert(to, item);
+            }
+            if set.items.is_empty() {
+                ui.label("This set is empty. Add items in Input and commands.");
+            }
+            if let Some(item) = execute {
+                self.execute_item(ui.ctx(), &item);
+            }
+        });
+    }
+    pub(super) fn access_controls(&mut self, ui: &mut egui::Ui) {
+        let sets = self.workspaces.store.current.actions.access.clone();
+        for set in sets {
+            if set.display == Display::Popup {
+                if ui.button(format!("{}…", set.name)).clicked() {
+                    self.controls.quick = Some(set.id);
+                }
+            } else {
+                self.access_set(ui, &set);
+            }
+        }
+    }
+    pub(super) fn command_popups(&mut self, ctx: &egui::Context) {
+        if let Some(id) = self.controls.quick {
+            if let Some(mut set) = self
+                .workspaces
+                .store
+                .current
+                .actions
+                .access
+                .iter()
+                .find(|s| s.id == id)
+                .cloned()
+            {
+                set.display = Display::List;
+                let mut open = true;
+                egui::Window::new(format!("Quick access — {}", set.name))
+                    .id(egui::Id::new("quick-access-popup"))
+                    .open(&mut open)
+                    .constrain(true)
+                    .vscroll(true)
+                    .show(ctx, |ui| self.access_set(ui, &set));
+                if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    self.controls.quick = None;
+                }
+            } else {
+                self.controls.quick = None;
+                self.status = Some("Quick access set unavailable".into());
+            }
+        }
+        if let Some((id, requested)) = self.controls.radial {
+            let Some(radial) = self
+                .workspaces
+                .store
+                .current
+                .actions
+                .radials
+                .iter()
+                .find(|r| r.id == id)
+                .cloned()
+            else {
+                self.controls.radial = None;
+                return;
+            };
+            let rect = ctx.content_rect();
+            let margin = egui::vec2(130.0, 130.0);
+            let mut center = requested;
+            center.x = center.x.clamp(
+                rect.min.x + margin.x,
+                (rect.max.x - margin.x).max(rect.min.x + margin.x),
+            );
+            center.y = center.y.clamp(
+                rect.min.y + margin.y,
+                (rect.max.y - margin.y).max(rect.min.y + margin.y),
+            );
+            #[cfg(test)]
+            {
+                self.controls.radial_center = Some(center);
+            }
+            let mut selected = None;
+            let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+            ctx.input_mut(|i| {
+                for (n, key) in [
+                    egui::Key::Num1,
+                    egui::Key::Num2,
+                    egui::Key::Num3,
+                    egui::Key::Num4,
+                    egui::Key::Num5,
+                    egui::Key::Num6,
+                    egui::Key::Num7,
+                    egui::Key::Num8,
+                ]
+                .iter()
+                .enumerate()
+                .take(radial.directions as usize)
+                {
+                    if i.consume_key(egui::Modifiers::NONE, *key) {
+                        selected = Some(n);
+                    }
+                }
+                for (n, key) in [
+                    egui::Key::ArrowUp,
+                    egui::Key::ArrowRight,
+                    egui::Key::ArrowDown,
+                    egui::Key::ArrowLeft,
+                ]
+                .iter()
+                .enumerate()
+                {
+                    if i.consume_key(egui::Modifiers::NONE, *key) {
+                        selected = Some(n * radial.directions as usize / 4);
+                    }
+                }
+            });
+            egui::Area::new(egui::Id::new("radial-popup"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(center - margin)
+                .show(ctx, |ui| {
+                    let (_, painter) = ui.allocate_painter(margin * 2.0, egui::Sense::hover());
+                    painter.circle_filled(center, 120.0, egui::Color32::from_rgb(30, 45, 42));
+                    painter.circle_filled(center, 30.0, egui::Color32::DARK_GRAY);
+                    painter.text(
+                        center,
+                        egui::Align2::CENTER_CENTER,
+                        "Cancel",
+                        egui::FontId::proportional(12.0),
+                        egui::Color32::WHITE,
+                    );
+                    for (n, slot) in radial.slots.iter().enumerate() {
+                        let angle = n as f32 * std::f32::consts::TAU / radial.directions as f32
+                            - std::f32::consts::FRAC_PI_2;
+                        let pos = center + egui::vec2(angle.cos(), angle.sin()) * 80.0;
+                        let label = format!(
+                            "{}\n{}",
+                            n + 1,
+                            slot.as_ref()
+                                .map(|c| self.workspaces.store.current.actions.label(c))
+                                .unwrap_or_else(|| "Empty".into())
+                        );
+                        let disabled = slot.as_ref().and_then(|c| self.command_reason(c));
+                        painter.text(
+                            pos,
+                            egui::Align2::CENTER_CENTER,
+                            label,
+                            egui::FontId::proportional(12.0),
+                            if disabled.is_some() {
+                                egui::Color32::GRAY
+                            } else {
+                                egui::Color32::WHITE
+                            },
+                        );
+                    }
+                });
+            if !self.controls.just_opened
+                && ctx.input(|i| i.pointer.primary_pressed())
+                && let Some(pos) = ctx.pointer_latest_pos()
+            {
+                selected = radial.slot_at([pos.x - center.x, pos.y - center.y]);
+                cancel = selected.is_none();
+            }
+            self.controls.just_opened = false;
+            if cancel {
+                self.controls.radial = None;
+            } else if let Some(n) = selected {
+                self.controls.radial = None;
+                if let Some(command) = &radial.slots[n] {
+                    self.execute_command(ctx, command);
+                }
+            }
+        }
+    }
+    pub(super) fn apply_commands(&mut self, draft: Snapshot) -> Result<(), String> {
+        if !draft.actions.valid() {
+            return Err("Invalid or duplicate list name, tool, item, or device assignment".into());
+        }
+        drawer_core::workspaces::validate_bindings(&draft.bindings).map_err(|e| e.to_string())?;
+        self.stage_workspace(draft, self.workspaces.store.active.clone());
+        let result = self.apply_workspace(
+            Scope {
+                keys: true,
+                bars: true,
+                ..Default::default()
+            },
+            None,
+        );
+        if result.is_err() {
+            self.workspaces.staged = None;
+        }
+        result
+    }
+    pub(super) fn command_settings(&mut self, ctx: &egui::Context) {
+        if self.controls.open && self.controls.editor.is_none() {
+            self.controls.editor = Some(Editor {
+                draft: self.capture_workspace(),
+                page: 0,
+                selected: 0,
+                ..Default::default()
+            });
+        }
+        let Some(mut editor) = self.controls.editor.take() else {
+            return;
+        };
+        let mut open = true;
+        let mut apply = false;
+        let mut cancel = false;
+        let mut import = false;
+        let mut export = false;
+        egui::Window::new("Input and commands")
+            .open(&mut open)
+            .vscroll(true)
+            .default_width(520.0)
+            .show(ctx, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for (n, label) in [
+                        "Shortcuts",
+                        "Tool cycles",
+                        "Quick access / command bars",
+                        "Radial menus",
+                        "Device actions",
+                    ]
+                    .iter()
+                    .enumerate()
+                    {
+                        if ui
+                            .selectable_value(&mut editor.page, n as u8, *label)
+                            .clicked()
+                        {
+                            editor.selected = 0;
+                        }
+                    }
+                });
+                let keys = drawer_core::workspaces::validate_bindings(&editor.draft.bindings);
+                ui.horizontal_wrapped(|ui| {
+                    apply = ui
+                        .add_enabled(
+                            keys.is_ok() && editor.draft.actions.valid(),
+                            egui::Button::new("Apply command settings"),
+                        )
+                        .clicked();
+                    let c = ui.button("Cancel command settings");
+                    cancel = c.clicked();
+                    #[cfg(test)]
+                    {
+                        self.controls.cancel_button = Some(c.rect);
+                    }
+                    if ui.button("Reset draft to defaults").clicked() {
+                        editor.draft.actions = Default::default();
+                        editor.draft.bindings = drawer_core::workspaces::default_bindings();
+                        editor.selected = 0;
+                    }
+                    import = ui.button("Import local settings…").clicked();
+                    export = ui.button("Export draft…").clicked();
+                    if ui
+                        .add_enabled(
+                            self.storage.is_some(),
+                            egui::Button::new("Load before-apply backup into draft"),
+                        )
+                        .clicked()
+                    {
+                        match Snapshot::read(
+                            &self
+                                .storage
+                                .as_ref()
+                                .unwrap()
+                                .root()
+                                .join("settings/workspace-before-apply.json"),
+                        ) {
+                            Ok(s) => {
+                                editor.draft.actions = s.actions;
+                                editor.draft.bindings = s.bindings;
+                                editor.selected = 0;
+                            }
+                            Err(e) => self.status = Some(e.to_string()),
+                        }
+                    }
+                });
+                egui::ScrollArea::vertical()
+                    .id_salt("command-editor-body")
+                    .max_height((ctx.content_rect().height() * 0.5).max(100.0))
+                    .show(ui, |ui| match editor.page {
+                        0 => edit_bindings(ui, &mut editor),
+                        1 => edit_cycles(ui, &mut editor),
+                        2 => edit_access(ui, &mut editor, self.references.session.workspace.color),
+                        3 => edit_radials(ui, &mut editor),
+                        _ => edit_devices(ui, &mut editor),
+                    });
+                if !editor.draft.actions.valid() {
+                    ui.colored_label(
+                        egui::Color32::LIGHT_RED,
+                        "Duplicate/empty name or invalid list, item or device assignment",
+                    );
+                }
+                let keys = drawer_core::workspaces::validate_bindings(&editor.draft.bindings);
+                if let Err(e) = &keys {
+                    ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                }
+                for report in editor.draft.actions.missing() {
+                    ui.colored_label(egui::Color32::YELLOW, report);
+                }
+            });
+        if import
+            && let Some(path) = rfd::FileDialog::new()
+                .add_filter("Local commands", &["json"])
+                .pick_file()
+        {
+            match Snapshot::read(&path) {
+                Ok(s) => {
+                    editor.draft.actions = s.actions;
+                    editor.draft.bindings = s.bindings;
+                    editor.selected = 0;
+                }
+                Err(e) => self.status = Some(e.to_string()),
+            }
+        }
+        if export
+            && let Some(path) = rfd::FileDialog::new()
+                .set_file_name("commands.json")
+                .save_file()
+            && let Err(e) = editor.draft.export(&path)
+        {
+            self.status = Some(e.to_string());
+        }
+        picker(ctx, &mut editor);
+        if cancel
+            || !open
+            || (editor.picker.is_none() && ctx.input(|i| i.key_pressed(egui::Key::Escape)))
+        {
+            self.controls.open = false;
+        } else if apply {
+            match self.apply_commands(editor.draft.clone()) {
+                Ok(()) => self.controls.open = false,
+                Err(e) => {
+                    self.status = Some(e);
+                    self.controls.editor = Some(editor);
+                }
+            }
+        } else {
+            self.controls.editor = Some(editor);
+        }
+    }
+}
+
+fn edit_bindings(ui: &mut egui::Ui, e: &mut Editor) {
+    let mut remove = None;
+    let mut pick = None;
+    for (n, b) in e.draft.bindings.iter_mut().enumerate() {
+        ui.push_id(n,|ui|ui.horizontal_wrapped(|ui|{
+        ui.text_edit_singleline(&mut b.key).on_hover_text("Key name: A–Z, 0–9, F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");ui.checkbox(&mut b.ctrl,"Ctrl");ui.checkbox(&mut b.shift,"Shift");ui.checkbox(&mut b.alt,"Alt");if ui.button(e.draft.actions.label(&b.command)).clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
+if ui.small_button("Remove").clicked(){remove=Some(n);}
+    }));
+    }
+    if let Some(n) = remove {
+        e.draft.bindings.remove(n);
+    }
+    if ui.button("Add shortcut").clicked() {
+        e.draft.bindings.push(Binding {
+            key: "F2".into(),
+            ctrl: false,
+            shift: false,
+            alt: false,
+            command: "Pen".into(),
+        });
+    }
+    if let Some(p) = pick {
+        e.picker = Some(p);
+    }
+}
+fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
+    let s = &mut e.draft.actions;
+    for (n, c) in s.cycles.iter().enumerate() {
+        ui.selectable_value(&mut e.selected, n, &c.name);
+    }
+    let mut add = false;
+    let mut duplicate = false;
+    let mut delete = false;
+    if let Some(c) = s.cycles.get_mut(e.selected) {
+        ui.text_edit_singleline(&mut c.name);
+        let mut remove = None;
+        let mut move_to = None;
+        for (n, t) in c.tools.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(t);
+                if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
+                    move_to = Some((n, n - 1));
+                }
+                if ui
+                    .add_enabled(n + 1 < c.tools.len(), egui::Button::new("Down"))
+                    .clicked()
+                {
+                    move_to = Some((n, n + 1));
+                }
+                if ui.button("Remove").clicked() {
+                    remove = Some(n);
+                }
+            });
+        }
+        if let Some((a, b)) = move_to {
+            c.tools.swap(a, b);
+        }
+        if let Some(n) = remove {
+            c.tools.remove(n);
+        }
+        ui.horizontal_wrapped(|ui| {
+            for t in BrushTip::ALL {
+                if ui
+                    .add_enabled(
+                        !c.tools.iter().any(|v| v == t.name()),
+                        egui::Button::new(format!("Add {}", t.name())),
+                    )
+                    .clicked()
+                {
+                    c.tools.push(t.name().into());
+                }
+            }
+        });
+        if ui.button("Reverse order").clicked() {
+            c.tools.reverse();
+        }
+        ui.label("Assign Next tool / Previous tool for this list in Shortcuts or Device actions");
+    } else {
+        ui.label("No tool cycles. Create a list to assign next/previous.");
+    }
+    ui.horizontal(|ui| {
+        add = ui.button("New cycle").clicked();
+        duplicate = ui.button("Duplicate cycle").clicked();
+        delete = ui.button("Delete cycle").clicked();
+    });
+    if delete && e.selected < s.cycles.len() {
+        s.cycles.remove(e.selected);
+        e.selected = 0;
+    }
+    if duplicate
+        && let Some(mut c) = s.cycles.get(e.selected).cloned()
+        && let Ok(id) = s.allocate_id()
+    {
+        c.id = id;
+        c.name = format!("{} copy {id}", c.name);
+        s.cycles.push(c);
+        e.selected = s.cycles.len() - 1;
+    }
+    if add && let Ok(id) = s.allocate_id() {
+        s.cycles.push(Cycle {
+            id,
+            name: format!("Cycle {id}"),
+            tools: Vec::new(),
+        });
+        e.selected = s.cycles.len() - 1;
+    }
+}
+fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
+    let s = &mut e.draft.actions;
+    for (n, set) in s.access.iter().enumerate() {
+        ui.selectable_value(&mut e.selected, n, format!("{:?}: {}", set.kind, set.name));
+    }
+    let mut pick = None;
+    if let Some(set) = s.access.get_mut(e.selected) {
+        ui.text_edit_singleline(&mut set.name);
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut set.kind, SetKind::QuickAccess, "Quick access");
+            ui.selectable_value(&mut set.kind, SetKind::CommandBar, "Command bar");
+        });
+        ui.horizontal(|ui| {
+            for d in Display::ALL {
+                ui.selectable_value(&mut set.display, d, format!("{d:?}"));
+            }
+        });
+        ui.checkbox(&mut set.ctrl_drag, "Require Ctrl while dragging to reorder");
+        let mut remove = None;
+        let mut swap = None;
+        for (n, item) in set.items.iter_mut().enumerate() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(item.label());
+                match item {
+                    Item::Command(c) | Item::Tool(c) => {
+                        if ui.button("Choose command / tool").clicked() {
+                            pick = Some(Picker {
+                                target: Target::Item(set.id, n),
+                                selected: c.clone(),
+                            });
+                        }
+                    }
+                    Item::Color(c) => {
+                        ui.color_edit_button_srgba_unmultiplied(c);
+                    }
+                    _ => {}
+                }
+                if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
+                    swap = Some((n, n - 1));
+                }
+                if ui.button("Remove").clicked() {
+                    remove = Some(n);
+                }
+            });
+        }
+        if let Some((a, b)) = swap {
+            set.items.swap(a, b);
+        }
+        if let Some(n) = remove {
+            set.items.remove(n);
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Add command").clicked() {
+                set.items.push(Item::Command("undo".into()));
+            }
+            if ui.button("Add tool").clicked() {
+                set.items.push(Item::Tool("Pen".into()));
+            }
+            if ui.button("Register current fixed color").clicked() {
+                set.items.push(Item::Color(color));
+            }
+            if ui.button("Add separator").clicked() {
+                set.items.push(Item::Separator);
+            }
+        });
+    } else {
+        ui.label("No quick access or command bars.");
+    }
+    let mut new = false;
+    let mut copy = false;
+    let mut delete = false;
+    ui.horizontal(|ui| {
+        new = ui.button("New set").clicked();
+        copy = ui.button("Duplicate set").clicked();
+        delete = ui.button("Delete set").clicked();
+    });
+    if delete && e.selected < s.access.len() {
+        s.access.remove(e.selected);
+        e.selected = 0;
+    }
+    if copy
+        && let Some(mut set) = s.access.get(e.selected).cloned()
+        && let Ok(id) = s.allocate_id()
+    {
+        set.id = id;
+        set.name = format!("{} copy {id}", set.name);
+        s.access.push(set);
+        e.selected = s.access.len() - 1;
+    }
+    if new && let Ok(id) = s.allocate_id() {
+        s.access.push(AccessSet {
+            id,
+            name: format!("Set {id}"),
+            kind: SetKind::QuickAccess,
+            display: Display::Tiles,
+            ctrl_drag: false,
+            items: Vec::new(),
+        });
+        e.selected = s.access.len() - 1;
+    }
+    if let Some(p) = pick {
+        e.picker = Some(p);
+    }
+}
+fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
+    let labels = e.draft.actions.clone();
+    let s = &mut e.draft.actions;
+    for (n, r) in s.radials.iter().enumerate() {
+        ui.selectable_value(&mut e.selected, n, &r.name);
+    }
+    let mut pick = None;
+    if let Some(r) = s.radials.get_mut(e.selected) {
+        ui.text_edit_singleline(&mut r.name);
+        ui.horizontal(|ui| {
+            for n in [4, 8] {
+                if ui
+                    .selectable_label(r.directions == n, format!("{n} directions"))
+                    .clicked()
+                {
+                    r.resize(n);
+                }
+            }
+        });
+        for (n, slot) in r.slots.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(format!("Slot {}", n + 1));
+                if ui
+                    .button(
+                        slot.as_ref()
+                            .map(|c| labels.label(c))
+                            .unwrap_or_else(|| "Empty".into()),
+                    )
+                    .clicked()
+                {
+                    pick = Some(Picker {
+                        target: Target::Slot(r.id, n),
+                        selected: slot.clone().unwrap_or_default(),
+                    });
+                }
+                if ui.button("Clear").clicked() {
+                    *slot = None;
+                }
+            });
+        }
+        ui.label("Assign Open radial menu for this list in Shortcuts or Device actions. Popup keys 1–8 select slots; arrows select cardinal slots.");
+    }
+    let mut new = false;
+    let mut delete = false;
+    ui.horizontal(|ui| {
+        new = ui.button("New radial menu").clicked();
+        delete = ui.button("Delete radial menu").clicked();
+    });
+    if delete && e.selected < s.radials.len() {
+        s.radials.remove(e.selected);
+        e.selected = 0;
+    }
+    if new && let Ok(id) = s.allocate_id() {
+        s.radials.push(Radial {
+            id,
+            name: format!("Radial {id}"),
+            directions: 4,
+            slots: vec![None; 4],
+        });
+        e.selected = s.radials.len() - 1;
+    }
+    if let Some(p) = pick {
+        e.picker = Some(p);
+    }
+}
+fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
+    let labels = e.draft.actions.clone();
+    ui.label("The pointer adapter exposes Extra1 / Extra2 buttons. Assign named actions from a device adapter; keyboard assignments provide the same command for testing. Physical device validation is pending.");
+    let mut pick = None;
+    let mut remove = None;
+    for (n, d) in e.draft.actions.devices.iter_mut().enumerate() {
+        ui.horizontal_wrapped(|ui| {
+            ui.text_edit_singleline(&mut d.device);
+            ui.text_edit_singleline(&mut d.action);
+            if ui.button(labels.label(&d.command)).clicked() {
+                pick = Some(Picker {
+                    target: Target::Device(n),
+                    selected: d.command.clone(),
+                });
+            }
+            if ui.button("Remove").clicked() {
+                remove = Some(n);
+            }
+        });
+    }
+    if let Some(n) = remove {
+        e.draft.actions.devices.remove(n);
+    }
+    if ui.button("Assign pointer action").clicked() {
+        e.draft.actions.devices.push(actions::DeviceBinding {
+            device: "pointer".into(),
+            action: "extra-1".into(),
+            command: "cycle-next:1".into(),
+        });
+    }
+    if let Some(p) = pick {
+        e.picker = Some(p);
+    }
+}
+fn picker(ctx: &egui::Context, e: &mut Editor) {
+    let Some(mut p) = e.picker.take() else {
+        return;
+    };
+    let mut open = true;
+    let mut apply = false;
+    let mut cancel = false;
+    egui::Window::new("Choose command")
+        .open(&mut open)
+        .vscroll(true)
+        .show(ctx, |ui| {
+            ui.label("Current assignment is selected. Only Confirm changes it.");
+            ui.label(format!("Selected: {}", e.draft.actions.label(&p.selected)));
+            ui.horizontal(|ui| {
+                let confirm = ui.button("Confirm command");
+                apply = confirm.clicked();
+                #[cfg(test)]
+                {
+                    e.picker_confirm = Some(confirm.rect);
+                }
+                cancel = ui.button("Cancel command choice").clicked();
+            });
+            egui::ScrollArea::vertical()
+                .id_salt("command-picker-list")
+                .max_height(ctx.content_rect().height() * 0.5)
+                .show(ui, |ui| {
+                    for command in e.draft.actions.commands() {
+                        ui.selectable_value(
+                            &mut p.selected,
+                            command.clone(),
+                            e.draft.actions.label(&command),
+                        );
+                    }
+                });
+        });
+    if apply {
+        match p.target {
+            Target::Binding(n) => {
+                if let Some(b) = e.draft.bindings.get_mut(n) {
+                    b.command = p.selected;
+                }
+            }
+            Target::Item(id, n) => {
+                if let Some(item) = e
+                    .draft
+                    .actions
+                    .access
+                    .iter_mut()
+                    .find(|s| s.id == id)
+                    .and_then(|s| s.items.get_mut(n))
+                {
+                    *item = if BrushTip::ALL.iter().any(|t| t.name() == p.selected) {
+                        Item::Tool(p.selected)
+                    } else {
+                        Item::Command(p.selected)
+                    };
+                }
+            }
+            Target::Slot(id, n) => {
+                if let Some(slot) = e
+                    .draft
+                    .actions
+                    .radials
+                    .iter_mut()
+                    .find(|r| r.id == id)
+                    .and_then(|r| r.slots.get_mut(n))
+                {
+                    *slot = (!p.selected.is_empty()).then_some(p.selected);
+                }
+            }
+            Target::Device(n) => {
+                if let Some(d) = e.draft.actions.devices.get_mut(n) {
+                    d.command = p.selected;
+                }
+            }
+        }
+    } else if !cancel && open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        e.picker = Some(p);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::{TestDirectory, click, frame, tiny_spec};
+    fn key(key: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: Default::default(),
+        }
+    }
+    #[test]
+    fn command_picker_confirms_only_draft_and_cancel_restores_assignments() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        let original = app.capture_workspace();
+        app.controls.open = true;
+        frame(&ctx, &mut app, vec![]);
+        app.controls.editor.as_mut().unwrap().picker = Some(Picker {
+            target: Target::Slot(4, 0),
+            selected: "Pen".into(),
+        });
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(
+            app.controls
+                .editor
+                .as_ref()
+                .unwrap()
+                .picker
+                .as_ref()
+                .unwrap()
+                .selected,
+            "Pen"
+        );
+        app.controls
+            .editor
+            .as_mut()
+            .unwrap()
+            .picker
+            .as_mut()
+            .unwrap()
+            .selected = "Wash".into();
+        let button = app
+            .controls
+            .editor
+            .as_ref()
+            .unwrap()
+            .picker_confirm
+            .unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.controls.editor.as_ref().unwrap().picker.is_none());
+        assert_eq!(
+            app.controls.editor.as_ref().unwrap().draft.actions.radials[0].slots[0].as_deref(),
+            Some("Wash")
+        );
+        assert_eq!(app.capture_workspace(), original);
+        let cancel = app.controls.cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(!app.controls.open);
+        assert_eq!(app.capture_workspace(), original);
+        let id = app.controls.item_ids.get(&(2, 5)).copied();
+        frame(&ctx, &mut app, vec![]);
+        let id = id.unwrap_or(app.controls.item_ids[&(2, 5)]);
+        app.references.session.workspace.color = [255, 255, 255, 255];
+        ctx.memory_mut(|m| m.request_focus(id));
+        frame(&ctx, &mut app, vec![key(egui::Key::Enter, true)]);
+        assert_eq!(app.references.session.workspace.color, [0, 0, 0, 255]);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+    #[test]
+    fn edited_shortcuts_cycle_devices_conflict_cancel_and_restart() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        let document = app.documents[0].snapshot();
+        let mut draft = app.capture_workspace();
+        draft.bindings[5].key = "F2".into();
+        draft.actions.cycles[0].tools = vec!["Pen".into(), "deleted-preset".into(), "Wash".into()];
+        draft.actions.devices.push(actions::DeviceBinding {
+            device: "pointer".into(),
+            action: "extra-1".into(),
+            command: "cycle-next:1".into(),
+        });
+        app.apply_commands(draft.clone()).unwrap();
+        app.set_tool(BrushTip::Eraser);
+        frame(&ctx, &mut app, vec![key(egui::Key::B, true)]);
+        assert_eq!(app.selected, BrushTip::Eraser);
+        frame(
+            &ctx,
+            &mut app,
+            vec![key(egui::Key::B, false), key(egui::Key::F2, true)],
+        );
+        assert_eq!(app.selected, BrushTip::Pen);
+        let event = |pressed| egui::Event::PointerButton {
+            pos: egui::pos2(500.0, 500.0),
+            button: egui::PointerButton::Extra1,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(&ctx, &mut app, vec![event(true), event(true)]);
+        assert_eq!(app.selected, BrushTip::Wash);
+        frame(&ctx, &mut app, vec![event(true)]);
+        assert_eq!(app.selected, BrushTip::Wash);
+        frame(&ctx, &mut app, vec![event(false), event(true)]);
+        assert_eq!(app.selected, BrushTip::Pen);
+        frame(&ctx, &mut app, vec![egui::Event::PointerGone, event(true)]);
+        assert_eq!(app.selected, BrushTip::Wash);
+        frame(
+            &ctx,
+            &mut app,
+            vec![event(false), key(egui::Key::F2, false)],
+        );
+        let before = app.capture_workspace();
+        let mut conflict = before.clone();
+        conflict.bindings.push(conflict.bindings[0].clone());
+        assert!(app.apply_commands(conflict).is_err());
+        assert_eq!(app.capture_workspace(), before);
+        assert!(app.workspaces.staged.is_none());
+        app.controls.open = true;
+        frame(&ctx, &mut app, vec![]);
+        app.controls
+            .editor
+            .as_mut()
+            .unwrap()
+            .draft
+            .actions
+            .cycles
+            .clear();
+        frame(&ctx, &mut app, vec![]);
+        let cancel = app.controls.cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(
+            !app.controls.open,
+            "before={cancel:?} after={:?} staged={}",
+            app.controls.cancel_button,
+            app.workspaces.staged.is_some(),
+        );
+        assert_eq!(app.capture_workspace(), before);
+        assert_eq!(app.documents[0].snapshot(), document);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.capture_workspace().actions, draft.actions);
+        assert_eq!(restarted.capture_workspace().bindings, draft.bindings);
+        let mut export = app.capture_workspace();
+        export.actions.radials[0].resize(8);
+        let path = root.0.join("commands.json");
+        export.export(&path).unwrap();
+        assert_eq!(Snapshot::read(&path).unwrap(), export);
+        frame(&ctx, &mut app, vec![key(egui::Key::T, true)]);
+        assert_eq!(app.selected, BrushTip::Pen);
+        frame(&ctx, &mut app, vec![key(egui::Key::T, true)]);
+        assert_eq!(app.selected, BrushTip::Pen);
+    }
+    #[test]
+    fn radial_mouse_keyboard_empty_escape_outside_and_screen_edge_agree() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        for directions in [4, 8] {
+            app.workspaces.store.current.actions.radials[0].resize(directions);
+            app.workspaces.store.current.actions.radials[0].slots = (0..directions)
+                .map(|n| Some(BrushTip::ALL[n as usize % 4].name().into()))
+                .collect();
+            for n in 0..directions {
+                app.execute_command(&ctx, "radial:4");
+                app.controls.radial.as_mut().unwrap().1 = egui::pos2(1099.0, 759.0);
+                frame(&ctx, &mut app, vec![]);
+                let center = app.controls.radial_center.unwrap();
+                assert!(center.x <= 970.0 && center.y <= 630.0);
+                let angle = n as f32 * std::f32::consts::TAU / directions as f32
+                    - std::f32::consts::FRAC_PI_2;
+                let pos = center + egui::vec2(angle.cos(), angle.sin()) * 80.0;
+                frame(
+                    &ctx,
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            modifiers: Default::default(),
+                        },
+                    ],
+                );
+                let mouse = app.selected;
+                assert!(app.controls.radial.is_none());
+                frame(
+                    &ctx,
+                    &mut app,
+                    vec![egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: Default::default(),
+                    }],
+                );
+                app.execute_command(&ctx, "radial:4");
+                frame(&ctx, &mut app, vec![]);
+                let k = [
+                    egui::Key::Num1,
+                    egui::Key::Num2,
+                    egui::Key::Num3,
+                    egui::Key::Num4,
+                    egui::Key::Num5,
+                    egui::Key::Num6,
+                    egui::Key::Num7,
+                    egui::Key::Num8,
+                ][n as usize];
+                frame(&ctx, &mut app, vec![key(k, true)]);
+                assert_eq!(app.selected, mouse);
+                assert!(app.controls.radial.is_none());
+                frame(&ctx, &mut app, vec![key(k, false)]);
+            }
+        }
+        app.workspaces.store.current.actions.radials[0].slots[0] = None;
+        let tool = app.selected;
+        app.execute_command(&ctx, "radial:4");
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![key(egui::Key::Num1, true)]);
+        assert_eq!(app.selected, tool);
+        for cancel in [
+            egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            },
+            egui::Event::PointerButton {
+                pos: egui::pos2(0.0, 0.0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            },
+        ] {
+            app.execute_command(&ctx, "radial:4");
+            frame(&ctx, &mut app, vec![]);
+            frame(&ctx, &mut app, vec![cancel]);
+            assert!(app.controls.radial.is_none());
+            assert_eq!(app.selected, tool);
+        }
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+    #[test]
+    fn quick_access_fixed_color_missing_commands_reorder_and_keyboard_focus() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        app.workspaces.store.current.actions.access[0].items = vec![
+            Item::Tool("Pen".into()),
+            Item::Tool("Wash".into()),
+            Item::Color([40, 50, 60, 128]),
+            Item::Command("removed-command".into()),
+        ];
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        app.references.session.workspace.color = [200, 0, 0, 255];
+        let color = app.controls.item_rects[&(2, 2)];
+        click(&ctx, &mut app, color);
+        assert_eq!(app.references.session.workspace.color, [40, 50, 60, 128]);
+        assert!(app.command_reason("removed-command").is_some());
+        let a = app.controls.item_rects[&(2, 0)].center();
+        let b = app.controls.item_rects[&(2, 1)].center();
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(a),
+                egui::Event::PointerButton {
+                    pos: a,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(b)]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: b,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_eq!(
+            app.workspaces.store.current.actions.access[0].items[0],
+            Item::Tool("Wash".into())
+        );
+        app.workspaces.store.current.actions.access[0].ctrl_drag = true;
+        for ctrl in [false, true] {
+            let old = app.workspaces.store.current.actions.access[0].items.clone();
+            let a = app.controls.item_rects[&(2, 0)].center();
+            let b = app.controls.item_rects[&(2, 1)].center();
+            let mods = if ctrl {
+                egui::Modifiers::CTRL
+            } else {
+                egui::Modifiers::NONE
+            };
+            for mut events in [
+                vec![
+                    egui::Event::PointerMoved(a),
+                    egui::Event::PointerButton {
+                        pos: a,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: mods,
+                    },
+                ],
+                vec![egui::Event::PointerMoved(b)],
+                vec![egui::Event::PointerButton {
+                    pos: b,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: mods,
+                }],
+            ] {
+                events.insert(0, egui::Event::ModifiersChanged(mods));
+                let mut o = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1100.0, 760.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| app.show(ui),
+                );
+                o.textures_delta.clear();
+            }
+            if ctrl {
+                assert_eq!(
+                    app.workspaces.store.current.actions.access[0].items[0],
+                    old[1]
+                );
+            } else {
+                assert_eq!(app.workspaces.store.current.actions.access[0].items, old);
+            }
+        }
+        app.workspaces.store.current.actions.access[0].display = Display::Popup;
+        app.execute_command(&ctx, "quick:2");
+        for _ in 0..2 {
+            let mut o = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(640.0, 480.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| app.show(ui),
+            );
+            o.textures_delta.clear();
+        }
+        assert_eq!(app.controls.quick, Some(2));
+        frame(&ctx, &mut app, vec![key(egui::Key::Escape, true)]);
+        assert!(app.controls.quick.is_none());
+        let mut text = String::new();
+        let mut o = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.text_edit_singleline(&mut text).request_focus();
+        });
+        o.textures_delta.clear();
+        let tool = app.selected;
+        let mut o = ctx.run_ui(
+            egui::RawInput {
+                events: vec![
+                    egui::Event::Ime(egui::ImeEvent::Preedit {
+                        text: "한".into(),
+                        active_range_chars: None,
+                    }),
+                    key(egui::Key::T, true),
+                ],
+                ..Default::default()
+            },
+            |ui| app.basic_shortcuts(ui.ctx()),
+        );
+        o.textures_delta.clear();
+        assert_eq!(app.selected, tool);
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+}

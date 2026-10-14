@@ -163,6 +163,8 @@ impl Drawer {
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
             || self.show_new_canvas
+            || self.controls.open
+            || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
             || ctx.egui_wants_keyboard_input()
         {
@@ -171,31 +173,8 @@ impl Drawer {
         let action = ctx.input_mut(|input| {
             super::workspaces::shortcut(input, &self.workspaces.store.current.bindings)
         });
-        match action {
-            Some(0 | 1) => {
-                if let Some(n) = self.active {
-                    let result = if action == Some(0) {
-                        self.save_document(n)
-                    } else {
-                        self.save_as(n)
-                    };
-                    if let Err(e) = result {
-                        self.status = Some(e);
-                    }
-                }
-            }
-            Some(2) => {
-                if let Some(n) = self.active {
-                    self.documents[n].undo();
-                }
-            }
-            Some(3) => {
-                if let Some(n) = self.active {
-                    self.documents[n].redo();
-                }
-            }
-            Some(n @ 4..=7) => self.set_tool(BrushTip::ALL[(n - 4) as usize]),
-            _ => {}
+        if let Some(action) = action {
+            self.execute_command(ctx, &action);
         }
     }
     pub(super) fn show_panels_at(
@@ -619,5 +598,10 @@ impl Drawer {
 }
 #[cfg(test)]
 pub(super) fn shortcut_action(input: &mut egui::InputState) -> Option<u8> {
-    super::workspaces::shortcut(input, &drawer_core::workspaces::default_bindings())
+    super::workspaces::shortcut(input, &drawer_core::workspaces::default_bindings()).and_then(|c| {
+        drawer_core::workspaces::COMMANDS
+            .iter()
+            .position(|a| *a == c)
+            .map(|n| n as u8)
+    })
 }

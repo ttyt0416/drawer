@@ -118,6 +118,10 @@ pub fn default_bindings() -> Vec<Binding> {
         ("N", false, false, "Pencil"),
         ("E", false, false, "Eraser"),
         ("W", false, false, "Wash"),
+        ("T", false, false, "cycle-next:1"),
+        ("T", false, true, "cycle-prev:1"),
+        ("Q", false, false, "quick:2"),
+        ("R", false, false, "radial:4"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {
@@ -132,7 +136,7 @@ pub fn default_bindings() -> Vec<Binding> {
 pub fn validate_bindings(bindings: &[Binding]) -> io::Result<()> {
     let mut used = HashSet::new();
     for b in bindings {
-        if !b.valid() || !used.insert((&b.key, b.ctrl, b.shift, b.alt)) {
+        if !b.valid() || !supported_key(&b.key) || !used.insert((&b.key, b.ctrl, b.shift, b.alt)) {
             return Err(io::Error::other(format!(
                 "Conflicting or invalid shortcut: {}",
                 b.label()
@@ -236,6 +240,8 @@ pub struct Snapshot {
     pub navigator: crate::navigator_preferences::Preferences,
     pub display: crate::display_view::Preferences,
     pub bindings: Vec<Binding>,
+    #[serde(default)]
+    pub actions: crate::actions::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -253,6 +259,7 @@ impl Default for Snapshot {
             navigator: Default::default(),
             display: Default::default(),
             bindings: default_bindings(),
+            actions: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -293,6 +300,7 @@ impl Snapshot {
             && self.interface.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
+            && self.actions.valid()
             && self.bindings.len() <= 256
             && self.bindings.iter().all(Binding::valid)
             && !self.tool.is_empty()
@@ -335,6 +343,9 @@ impl Snapshot {
             next.display = incoming.display.clone();
         }
         if scope.bars {
+            next.actions.access = incoming.actions.access.clone();
+            next.actions.radials = incoming.actions.radials.clone();
+            next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
             for i in 0..4 {
                 next.panels.panels[i].commands = incoming.panels.panels[i].commands;
             }
@@ -342,6 +353,9 @@ impl Snapshot {
         if scope.keys {
             validate_bindings(&incoming.bindings)?;
             next.bindings = incoming.bindings.clone();
+            next.actions.cycles = incoming.actions.cycles.clone();
+            next.actions.devices = incoming.actions.devices.clone();
+            next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
             next.interface = incoming.interface;
@@ -354,10 +368,16 @@ impl Snapshot {
             next.panels.brush_aspect = incoming.panels.brush_aspect;
             next.panels.brush_angle = incoming.panels.brush_angle;
         }
+        if !next.valid() {
+            return Err(io::Error::other(
+                "Selected workspace groups have invalid or colliding collection IDs/names",
+            ));
+        }
         let mut reports = next.recover(monitors);
+        reports.extend(next.actions.missing());
         if scope.keys {
             next.bindings.retain(|b| {
-                let found = COMMANDS.contains(&b.command.as_str()) && supported_key(&b.key);
+                let found = next.actions.has_command(&b.command) && supported_key(&b.key);
                 if !found {
                     reports.push(format!(
                         "Unavailable command/key: {} ({}) — skipped",
@@ -385,10 +405,30 @@ impl Snapshot {
     }
 }
 pub fn supported_key(key: &str) -> bool {
-    (key.len() == 1 && key.as_bytes()[0].is_ascii_uppercase())
+    (key.len() == 1
+        && (key.as_bytes()[0].is_ascii_uppercase() || key.as_bytes()[0].is_ascii_digit()))
         || [
-            "Space", "Escape", "Enter", "Tab", "Delete", "F1", "F2", "F3", "F4", "F5", "F6", "F7",
-            "F8", "F9", "F10", "F11", "F12",
+            "ArrowUp",
+            "ArrowRight",
+            "ArrowDown",
+            "ArrowLeft",
+            "Space",
+            "Escape",
+            "Enter",
+            "Tab",
+            "Delete",
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12",
         ]
         .contains(&key)
 }
@@ -594,7 +634,7 @@ mod tests {
         imported.bindings[0].command = "missing-command".into();
         let (next, reports) = before.merge(&imported, Scope::ALL, &[screen]).unwrap();
         assert_eq!(next.tool, "Pen");
-        assert_eq!(next.bindings.len(), 8);
+        assert_eq!(next.bindings.len(), before.bindings.len() - 1);
         assert!(reports.iter().any(|s| s.contains("missing-command")));
     }
     #[test]

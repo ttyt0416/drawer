@@ -69,6 +69,7 @@ try {
     if ($smokeResult -notmatch 'panel_settings=true') { throw '패널 설정 저장/복원 시작 시험 실패' }
     if ($smokeResult -notmatch 'interface_settings=true') { throw '화면 배율 설정 저장/복원 시작 시험 실패' }
     if ($smokeResult -notmatch 'workspace_settings=true' -or $smokeResult -notmatch 'native_floating_panels=true' -or $smokeResult -notmatch 'popup_test_painting=true') { throw '작업공간/분리 패널/시험 칠하기 시작 시험 실패' }
+    if ($smokeResult -notmatch 'command_settings=true' -or $smokeResult -notmatch 'tool_cycle=true' -or $smokeResult -notmatch 'radial_settings=true' -or $smokeResult -notmatch 'device_action_profile=true') { throw '단축키/순환/원형 메뉴/장치 배정 저장 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_assets=true') { throw '브러시 커서 도구 소재 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
