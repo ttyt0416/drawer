@@ -24,7 +24,7 @@ fn relative_path(text: &str) -> io::Result<PathBuf> {
     let extension = path.extension().and_then(|value| value.to_str());
     if !matches!(
         extension,
-        Some("rs" | "md" | "toml" | "txt" | "lock" | "ps1")
+        Some("rs" | "md" | "toml" | "txt" | "lock" | "ps1" | "py" | "json")
     ) {
         return Err(invalid(format!("허용하지 않는 전달 파일 형식: {text}")));
     }

@@ -1,5 +1,6 @@
 /target/
 /handoff/
+/dist/
 /.handoff-staging/
 *.tmp
 *.bak
