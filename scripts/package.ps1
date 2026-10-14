@@ -14,6 +14,9 @@ try {
         'docs/licenses/inventory.json' = 'COMPONENTS.json'
         'Cargo.lock' = 'Cargo.lock'
         'docs/process/own-assets.md' = 'OWN-ASSETS.md'
+        'docs/START-HERE.md' = 'START-HERE.md'
+        'scripts/Install.ps1' = 'Install.ps1'
+        'scripts/Uninstall.ps1' = 'Uninstall.ps1'
     }.GetEnumerator()) {
         Copy-Item -LiteralPath (Join-Path $projectRoot $entry.Key) -Destination (Join-Path $packageRoot $entry.Value)
     }

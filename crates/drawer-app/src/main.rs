@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use drawer_core::assets::{APP_NAME, BrushTip, application_icon};
+use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 
@@ -9,6 +10,8 @@ struct Drawer {
     previews: Vec<egui::TextureHandle>,
     smoke_output: Option<PathBuf>,
     frames: usize,
+    storage: Option<UserStorage>,
+    status: Option<String>,
 }
 
 impl Drawer {
@@ -39,7 +42,23 @@ impl Drawer {
             previews,
             smoke_output,
             frames: 0,
+            storage: None,
+            status: None,
         }
+    }
+
+    fn with_storage(mut self, storage: UserStorage) -> Self {
+        match storage.load_brush() {
+            Ok(brush) => {
+                self.selected = brush;
+                if let Err(error) = storage.save_brush(self.selected) {
+                    self.status = Some(error.to_string());
+                }
+            }
+            Err(error) => self.status = Some(error.to_string()),
+        }
+        self.storage = Some(storage);
+        self
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
@@ -49,6 +68,9 @@ impl Drawer {
                 ui.label("Local drawing workspace");
             });
             ui.separator();
+            if let Some(status) = &self.status {
+                ui.colored_label(egui::Color32::LIGHT_RED, status);
+            }
             ui.columns(2, |columns| {
                 columns[0].set_width(170.0);
                 columns[0].heading("Tools");
@@ -56,6 +78,11 @@ impl Drawer {
                     let response = columns[0].selectable_label(self.selected == tip, tip.name());
                     if response.clicked() {
                         self.selected = tip;
+                        if let Some(storage) = &self.storage
+                            && let Err(error) = storage.save_brush(tip)
+                        {
+                            self.status = Some(error.to_string());
+                        }
                     }
                 }
                 columns[1].heading("Brush preview");
@@ -121,7 +148,12 @@ fn main() -> eframe::Result {
     eframe::run_native(
         APP_NAME,
         options,
-        Box::new(move |cc| Ok(Box::new(Drawer::new(&cc.egui_ctx, smoke_output)))),
+        Box::new(move |cc| {
+            Ok(Box::new(
+                Drawer::new(&cc.egui_ctx, smoke_output)
+                    .with_storage(UserStorage::from_environment()?),
+            ))
+        }),
     )
 }
 

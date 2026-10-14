@@ -31,3 +31,8 @@ docs/licenses/upstream/brendanzab-gl-rs-f150967b1c44-LICENSE.txt
 docs/licenses/upstream/DoumanAsh-clipboard-win-3b27cf2bfd1a-LICENSE.txt
 docs/licenses/upstream/emilk-egui-49682f8baa05-LICENSE-APACHE.txt
 docs/licenses/upstream/emilk-egui-49682f8baa05-LICENSE-MIT.txt
+crates/drawer-core/src/storage.rs
+scripts/Install.ps1
+scripts/Uninstall.ps1
+scripts/test-install.ps1
+docs/START-HERE.md
