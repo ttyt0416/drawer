@@ -109,6 +109,10 @@ pub struct Settings {
     pub version: u32,
     pub panels: [Panel; 4],
     pub brush_size: f64,
+    #[serde(default = "default_aspect")]
+    pub brush_aspect: f64,
+    #[serde(default)]
+    pub brush_angle: f64,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -116,6 +120,8 @@ impl Default for Settings {
             version: 1,
             panels: [Panel::default(); 4],
             brush_size: 12.0,
+            brush_aspect: 1.0,
+            brush_angle: 0.0,
         }
     }
 }
@@ -125,6 +131,8 @@ impl Settings {
             && self.brush_size.is_finite()
             && self.brush_size > 0.0
             && self.brush_size <= 4096.0
+            && (0.05..=1.0).contains(&self.brush_aspect)
+            && self.brush_angle.is_finite()
     }
     pub fn read(path: &Path) -> io::Result<Self> {
         if fs::metadata(path)?.len() > 65536 {
@@ -164,6 +172,9 @@ impl Settings {
         }
         atomic(&path, &serde_json::to_vec(&self).map_err(io::Error::other)?)
     }
+}
+fn default_aspect() -> f64 {
+    1.0
 }
 fn atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let temp = path.with_extension("json.write.tmp");

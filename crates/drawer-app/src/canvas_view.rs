@@ -12,6 +12,11 @@ pub struct CanvasView {
     pub view_notice: Option<String>,
     pub navigator: drawer_core::navigator_preferences::Preferences,
     pub navigator_generation: u64,
+    pub brush_shape: drawer_core::brush_cursor::Shape,
+    pub first_point: Option<(u64, [f64; 2])>,
+    tool_icons: Vec<egui::TextureHandle>,
+    #[cfg(test)]
+    pub brush_outline: Vec<egui::Pos2>,
     #[cfg(test)]
     pub cursor_rect: Option<egui::Rect>,
     #[cfg(test)]
@@ -32,6 +37,9 @@ struct ScreenKey {
     filter: drawer_core::interpolation::Filter,
 }
 impl CanvasView {
+    pub fn cursor_tool_count(&self) -> usize {
+        self.tool_icons.len()
+    }
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
@@ -44,6 +52,28 @@ impl CanvasView {
             view_notice: None,
             navigator: Default::default(),
             navigator_generation: 0,
+            brush_shape: Default::default(),
+            first_point: None,
+            tool_icons: drawer_core::assets::BrushTip::ALL
+                .into_iter()
+                .map(|tip| {
+                    ctx.load_texture(
+                        format!("{} cursor", tip.name()),
+                        egui::ColorImage::new(
+                            [16, 16],
+                            drawer_core::assets::tool_icon(tip, 16)
+                                .into_iter()
+                                .map(|p| {
+                                    egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3])
+                                })
+                                .collect(),
+                        ),
+                        egui::TextureOptions::NEAREST,
+                    )
+                })
+                .collect(),
+            #[cfg(test)]
+            brush_outline: Vec::new(),
             #[cfg(test)]
             cursor_rect: None,
             #[cfg(test)]
@@ -240,6 +270,24 @@ impl CanvasView {
             }
         }
         self.paint_aids(ui, document, rect, aids, ppp);
+        self.first_point = None;
+        if !self.area_zoom
+            && !ui.input(|i| i.key_down(egui::Key::Space))
+            && response.is_pointer_button_down_on()
+            && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            self.first_point = Some((
+                document.id,
+                document
+                    .view
+                    .screen_to_document([pos.x as f64, pos.y as f64], size, center, ppp),
+            ));
+        }
+        #[cfg(test)]
+        {
+            self.brush_outline.clear();
+        }
         #[cfg(test)]
         {
             self.cursor_rect = None;
@@ -250,6 +298,38 @@ impl CanvasView {
                 .or_else(|| response.interact_pointer_pos())
         {
             ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            let point =
+                document
+                    .view
+                    .screen_to_document([pos.x as f64, pos.y as f64], size, center, ppp);
+            let outline: Vec<_> = self
+                .brush_shape
+                .outline(document.view, point, size, center, ppp)
+                .into_iter()
+                .map(|p| egui::pos2(p[0] as f32, p[1] as f32))
+                .collect();
+            painter.add(egui::Shape::closed_line(
+                outline.clone(),
+                egui::Stroke::new(3.0, egui::Color32::BLACK),
+            ));
+            painter.add(egui::Shape::closed_line(
+                outline.clone(),
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+            ));
+            let icon = drawer_core::assets::BrushTip::ALL
+                .iter()
+                .position(|tip| *tip == document.tool)
+                .unwrap();
+            painter.image(
+                self.tool_icons[icon].id(),
+                egui::Rect::from_min_size(pos + egui::vec2(10.0, 10.0), egui::vec2(16.0, 16.0)),
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+            #[cfg(test)]
+            {
+                self.brush_outline = outline;
+            }
             for delta in [egui::vec2(7.0, 0.0), egui::vec2(0.0, 7.0)] {
                 let line = [pos - delta, pos + delta];
                 painter.line_segment(line, egui::Stroke::new(3.0, egui::Color32::BLACK));

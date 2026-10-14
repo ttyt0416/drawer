@@ -363,6 +363,24 @@ impl Drawer {
                             .suffix(" px"),
                     );
                 });
+                ui.horizontal(|ui| {
+                    ui.label("Aspect");
+                    ui.add(
+                        egui::DragValue::new(&mut self.panels.settings.brush_aspect)
+                            .range(0.05..=1.0)
+                            .speed(0.01),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tip angle");
+                    ui.add(
+                        egui::DragValue::new(&mut self.panels.settings.brush_angle)
+                            .speed(1.0)
+                            .suffix("°"),
+                    );
+                });
+                self.panels.settings.brush_angle =
+                    self.panels.settings.brush_angle.rem_euclid(360.0);
             }
             Kind::Color => {
                 let [r, g, b, a] = self.references.session.workspace.color;

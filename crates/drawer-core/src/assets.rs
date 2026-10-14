@@ -62,6 +62,35 @@ pub fn application_icon(size: usize) -> Vec<u8> {
     }
     rgba
 }
+pub fn tool_icon(tip: BrushTip, size: usize) -> Vec<[u8; 4]> {
+    assert!((8..=64).contains(&size));
+    (0..size * size)
+        .map(|n| {
+            let x = (n % size) as f64 / size as f64;
+            let y = (n / size) as f64 / size as f64;
+            let (inside, color) = match tip {
+                BrushTip::Pen => (
+                    (x + y - 1.0).abs() < 0.15 && (0.2..0.85).contains(&x),
+                    [100, 230, 170, 255],
+                ),
+                BrushTip::Pencil => (
+                    (x + y - 1.0).abs() < 0.09 && (0.12..0.88).contains(&x),
+                    [245, 205, 90, 255],
+                ),
+                BrushTip::Eraser => (
+                    (0.2..0.8).contains(&x) && (0.3..0.7).contains(&y),
+                    [250, 120, 165, 255],
+                ),
+                BrushTip::Wash => (
+                    (x - 0.5).hypot(y - 0.65) < 0.23
+                        || ((0.18..0.6).contains(&y) && (x - 0.5).abs() < (y - 0.15) * 0.5),
+                    [100, 185, 255, 255],
+                ),
+            };
+            if inside { color } else { [0; 4] }
+        })
+        .collect()
+}
 
 #[cfg(test)]
 mod tests {

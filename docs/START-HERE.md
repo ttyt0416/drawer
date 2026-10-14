@@ -47,3 +47,5 @@ Windows 64비트에서 `Drawer.exe`를 실행한다. 기본 도구와 글꼴을 
 `Panels`에서 Brushes/Color/Layers/Timeline 표시를 선택하고 썸네일 없음·크기·전체 그림/내용 범위·체커, 도구 아이콘/이름/획 미리보기, 속성/명령막대 위치를 바꾼다. `Animation tracks only`는 타임라인 목록만 줄이며 숨겨진 선택과 그림을 유지한다. `Restore all panels`, 설정 Undo/Redo와 직전본 복원을 제공한다. 저장 Ctrl+S, 다른 이름 저장 Ctrl+Shift+S, 취소 Ctrl+Z, 다시 실행 Ctrl+Y 또는 Ctrl+Shift+Z, Pen/Pencil/Eraser/Wash는 B/N/E/W다. 문자 입력 중에는 도구 키가 실행되지 않는다.
 
 화면 배율은 모니터에 맞춰 자동 조절한다. `Interface size`는 추가로 50–200% 크기를 선택하며 설정 되돌리기·초기화·직전본 복원을 제공한다. 모니터/인터페이스 배율을 바꿔도 그림의 픽셀 배율과 보기 중심을 유지한다.
+
+캔버스 커서는 브러시 외곽과 현재 도구 아이콘을 표시한다. Brushes 속성의 Size/Aspect/Tip angle으로 크기·타원 비율·팁 각도를 지정하며 보기 회전/반전/배율과 화면 배율을 따른다. 작은 브러시에서도 십자 중심을 표시한다.

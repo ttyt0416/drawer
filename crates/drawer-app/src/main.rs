@@ -328,6 +328,11 @@ impl Drawer {
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
+        self.canvas_view.brush_shape = drawer_core::brush_cursor::Shape {
+            size: self.panels.settings.brush_size,
+            aspect: self.panels.settings.brush_aspect,
+            angle: self.panels.settings.brush_angle,
+        };
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -774,8 +779,13 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if self.canvas_view.cursor_tool_count() != 4
+                    || !self.canvas_view.brush_shape.valid()
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3229,5 +3239,89 @@ mod tests {
                 .unwrap(),
             "bad"
         );
+    }
+    #[test]
+    fn brush_outline_tools_and_first_mouse_point_match_at_minimum_large_and_rotated_sizes() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 400,
+            height: 300,
+            ..tiny_spec()
+        })
+        .unwrap();
+        app.documents[0].view.angle = 37.0;
+        app.documents[0].view.flipped = true;
+        app.documents[0].dirty = false;
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        for size in [1.0, 4096.0] {
+            for native in [1.0, 1.5, 2.0] {
+                for tool in BrushTip::ALL {
+                    app.set_tool(tool);
+                    app.panels.settings.brush_size = size;
+                    app.panels.settings.brush_aspect = 0.3;
+                    app.panels.settings.brush_angle = 29.0;
+                    dpi_frame(&ctx, &mut app, native, vec![]);
+                    let viewport = app.canvas_view.viewport.unwrap();
+                    let pos = viewport.center();
+                    dpi_frame(&ctx, &mut app, native, vec![egui::Event::PointerMoved(pos)]);
+                    dpi_frame(
+                        &ctx,
+                        &mut app,
+                        native,
+                        vec![egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: true,
+                            modifiers: Default::default(),
+                        }],
+                    );
+                    let (id, point) = app.canvas_view.first_point.unwrap();
+                    assert_eq!(id, app.documents[0].id);
+                    let mapped = app.documents[0].view.document_to_screen(
+                        point,
+                        [400.0, 300.0],
+                        [viewport.center().x as f64, viewport.center().y as f64],
+                        native as f64,
+                    );
+                    assert!(
+                        (mapped[0] - pos.x as f64).abs() < 1e-6
+                            && (mapped[1] - pos.y as f64).abs() < 1e-6
+                    );
+                    let outline = &app.canvas_view.brush_outline;
+                    assert_eq!(outline.len(), 64);
+                    for n in 0..32 {
+                        let midpoint = outline[n] + (outline[n + 32] - outline[n]) * 0.5;
+                        assert!(
+                            (midpoint.x - pos.x).abs() < 0.02 && (midpoint.y - pos.y).abs() < 0.02
+                        );
+                    }
+                    dpi_frame(
+                        &ctx,
+                        &mut app,
+                        native,
+                        vec![egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: false,
+                            modifiers: Default::default(),
+                        }],
+                    );
+                    assert_eq!(app.documents[0].snapshot(), before);
+                    assert_eq!(app.documents[0].history_counts(), history);
+                    assert!(!app.documents[0].dirty);
+                }
+            }
+        }
+        let icons: Vec<_> = BrushTip::ALL
+            .into_iter()
+            .map(|tip| drawer_core::assets::tool_icon(tip, 16))
+            .collect();
+        for n in 0..4 {
+            for other in n + 1..4 {
+                assert_ne!(icons[n], icons[other]);
+            }
+        }
     }
 }
