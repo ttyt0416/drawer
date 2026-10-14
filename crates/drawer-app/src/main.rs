@@ -274,11 +274,13 @@ impl Drawer {
                                 document.title, document.width, document.height, document.dpi
                             ));
                             let overlay = self.sizing_overlay();
+                            let (left, right) = columns.split_at_mut(1);
                             let changed = self.canvas_view.show(
-                                &mut columns[1],
+                                &mut right[0],
                                 active,
                                 &mut self.documents[active],
                                 overlay,
+                                &mut left[0],
                             );
                             if changed
                                 && let Some(storage) = &self.storage
@@ -906,5 +908,70 @@ mod tests {
         assert_eq!(app.documents[0].view, view);
         assert!(app.documents[0].undo());
         assert_eq!(app.documents[0].snapshot(), original);
+    }
+    #[test]
+    fn navigator_mouse_click_and_drag_move_only_view_in_rotated_mirrored_canvas() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 32,
+            height: 16,
+            dpi: 300.0,
+            background: Background::Color([20, 40, 60]),
+        })
+        .unwrap();
+        app.documents[0].mark_saved("saved.drawer".into());
+        let original = app.documents[0].snapshot();
+        app.documents[0].view.angle = 37.0;
+        app.documents[0].view.flipped = true;
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.canvas_view.navigator_rect.unwrap();
+        let pos = rect.center() + egui::vec2(40.0, -20.0);
+        let target = egui::Rect::from_center_size(pos, egui::vec2(1.0, 1.0));
+        click(&ctx, &mut app, target);
+        let viewport = app.canvas_view.viewport.unwrap();
+        let center = [viewport.center().x as f64, viewport.center().y as f64];
+        let docpoint = app.documents[0].view.screen_to_document(
+            center,
+            [32.0, 16.0],
+            center,
+            ctx.pixels_per_point() as f64,
+        );
+        assert!((docpoint[0] - 24.0).abs() < 1e-4 && (docpoint[1] - 4.0).abs() < 1e-4);
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        let moved = pos + egui::vec2(-30.0, 20.0);
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(moved)]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: moved,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        let docpoint = app.documents[0].view.screen_to_document(
+            center,
+            [32.0, 16.0],
+            center,
+            ctx.pixels_per_point() as f64,
+        );
+        assert!((docpoint[0] - 18.0).abs() < 1e-4 && (docpoint[1] - 8.0).abs() < 1e-4);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
 }

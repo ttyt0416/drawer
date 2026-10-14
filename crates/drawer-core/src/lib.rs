@@ -2,6 +2,7 @@ pub mod assets;
 pub mod document;
 pub mod files;
 mod history;
+pub mod navigator;
 pub mod png_export;
 pub mod render;
 pub mod scene;

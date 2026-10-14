@@ -6,6 +6,8 @@ pub struct CanvasView {
     checker: egui::TextureHandle,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
+    #[cfg(test)]
+    pub navigator_rect: Option<egui::Rect>,
 }
 impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
@@ -22,6 +24,8 @@ impl CanvasView {
             ),
             #[cfg(test)]
             viewport: None,
+            #[cfg(test)]
+            navigator_rect: None,
         }
     }
     pub fn show(
@@ -30,6 +34,7 @@ impl CanvasView {
         _index: usize,
         document: &mut Document,
         overlay: Option<drawer_core::scene::Rect>,
+        navigator_ui: &mut egui::Ui,
     ) -> bool {
         let before = document.view;
         ui.horizontal(|ui| {
@@ -115,6 +120,7 @@ impl CanvasView {
             );
             self.image = Some(((document.id, document.revision), texture));
         }
+        self.show_navigator(navigator_ui, document, rect, ppp);
         let corners = [
             [0.0, 0.0],
             [size[0], 0.0],
@@ -170,5 +176,82 @@ impl CanvasView {
             }
         }
         document.view != before
+    }
+    fn show_navigator(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &mut Document,
+        viewport: egui::Rect,
+        ppp: f64,
+    ) {
+        ui.heading("Navigator");
+        let (rect, response) =
+            ui.allocate_exact_size(egui::vec2(160.0, 160.0), egui::Sense::click_and_drag());
+        #[cfg(test)]
+        {
+            self.navigator_rect = Some(rect);
+        }
+        let size = [document.width as f64, document.height as f64];
+        let scale = (rect.width() as f64 / size[0]).min(rect.height() as f64 / size[1]);
+        let paper = egui::Rect::from_center_size(
+            rect.center(),
+            egui::vec2((size[0] * scale) as f32, (size[1] * scale) as f32),
+        );
+        if (response.clicked() || response.dragged())
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let point = [
+                ((pos.x - paper.min.x) as f64 / scale).clamp(0.0, size[0]),
+                ((pos.y - paper.min.y) as f64 / scale).clamp(0.0, size[1]),
+            ];
+            document.view.center_on(
+                point,
+                size,
+                [viewport.center().x as f64, viewport.center().y as f64],
+                ppp,
+            );
+            ui.ctx().request_repaint();
+        }
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 0.0, egui::Color32::from_gray(32));
+        painter.rect_filled(paper, 0.0, egui::Color32::from_gray(196));
+        painter.image(
+            self.image.as_ref().unwrap().1.id(),
+            paper,
+            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+        let polygon = drawer_core::navigator::visible_polygon(
+            document.view,
+            size,
+            [
+                [viewport.min.x as f64, viewport.min.y as f64],
+                [viewport.max.x as f64, viewport.max.y as f64],
+            ],
+            ppp,
+        );
+        let points: Vec<_> = drawer_core::navigator::clipped_polygon(polygon, size)
+            .into_iter()
+            .map(|point| {
+                egui::pos2(
+                    paper.min.x + (point[0] * scale) as f32,
+                    paper.min.y + (point[1] * scale) as f32,
+                )
+            })
+            .collect();
+        if points.len() >= 3 {
+            painter.add(egui::Shape::convex_polygon(
+                points.clone(),
+                egui::Color32::from_rgba_unmultiplied(40, 180, 155, 28),
+                egui::Stroke::NONE,
+            ));
+            painter.add(egui::Shape::closed_line(
+                points,
+                egui::Stroke::new(1.5, egui::Color32::from_rgb(40, 230, 185)),
+            ));
+        } else {
+            ui.label("The view is outside the image");
+        }
+        ui.label("Click or drag to move the view");
     }
 }
