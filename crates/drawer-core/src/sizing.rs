@@ -64,6 +64,11 @@ pub enum Change {
         width: u32,
         height: u32,
     },
+    FlipHorizontal,
+    FlipVertical,
+    Rotate90 {
+        clockwise: bool,
+    },
 }
 #[derive(Clone, Debug)]
 pub struct Plan {
@@ -89,6 +94,10 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             width, height, dpi, ..
         } => (width, height, dpi, [0, 0]),
         Change::Dpi(dpi) => (source.width, source.height, dpi, [0, 0]),
+        Change::FlipHorizontal | Change::FlipVertical => {
+            (source.width, source.height, source.dpi, [0, 0])
+        }
+        Change::Rotate90 { .. } => (source.height, source.width, source.dpi, [0, 0]),
         Change::Canvas {
             width,
             height,
@@ -223,8 +232,21 @@ pub fn prepare(
                         filter,
                     )
                 } else {
-                    let sx = x as i64 - plan.offset[0];
-                    let sy = y as i64 - plan.offset[1];
+                    let (sx, sy) = match change {
+                        Change::FlipHorizontal => {
+                            (i64::from(source.width) - 1 - i64::from(x), i64::from(y))
+                        }
+                        Change::FlipVertical => {
+                            (i64::from(x), i64::from(source.height) - 1 - i64::from(y))
+                        }
+                        Change::Rotate90 { clockwise: true } => {
+                            (i64::from(y), i64::from(source.height) - 1 - i64::from(x))
+                        }
+                        Change::Rotate90 { clockwise: false } => {
+                            (i64::from(source.width) - 1 - i64::from(y), i64::from(x))
+                        }
+                        _ => (x as i64 - plan.offset[0], y as i64 - plan.offset[1]),
+                    };
                     if sx >= 0
                         && sy >= 0
                         && sx < i64::from(source.width)
@@ -243,17 +265,24 @@ pub fn prepare(
             pixels,
         });
     }
-    let transform = if resampling {
-        Affine([scale[0], 0.0, 0.0, scale[1], 0.0, 0.0])
-    } else {
-        Affine([
+    let transform = match change {
+        Change::Resample { .. } => Affine([scale[0], 0.0, 0.0, scale[1], 0.0, 0.0]),
+        Change::FlipHorizontal => Affine([-1.0, 0.0, 0.0, 1.0, source.width as f64, 0.0]),
+        Change::FlipVertical => Affine([1.0, 0.0, 0.0, -1.0, 0.0, source.height as f64]),
+        Change::Rotate90 { clockwise: true } => {
+            Affine([0.0, 1.0, -1.0, 0.0, source.height as f64, 0.0])
+        }
+        Change::Rotate90 { clockwise: false } => {
+            Affine([0.0, -1.0, 1.0, 0.0, 0.0, source.width as f64])
+        }
+        _ => Affine([
             1.0,
             0.0,
             0.0,
             1.0,
             plan.offset[0] as f64,
             plan.offset[1] as f64,
-        ])
+        ]),
     };
     if matches!(change, Change::Crop { .. }) {
         let inverse = source.scene.transform.inverse();
@@ -658,5 +687,43 @@ mod tests {
             assert!(!doc.dirty);
             assert_eq!(doc.snapshot(), reopened.snapshot());
         }
+    }
+    #[test]
+    fn document_flip_and_quarter_turn_transform_mixed_geometry_and_undo_as_one_command() {
+        for change in [
+            Change::FlipHorizontal,
+            Change::FlipVertical,
+            Change::Rotate90 { clockwise: true },
+            Change::Rotate90 { clockwise: false },
+        ] {
+            let mut doc = fixture();
+            let original = doc.snapshot();
+            let renderer = Renderer::new(&doc);
+            let expected: Vec<_> = (0..80)
+                .flat_map(|y| (0..120).map(move |x| [x as f64 + 0.5, y as f64 + 0.5]))
+                .map(|p| renderer.pixel(p))
+                .collect();
+            doc.commit_state(prepared(&doc, change)).unwrap();
+            let renderer = Renderer::new(&doc);
+            for y in 0..80 {
+                for x in 0..120 {
+                    let point = doc.scene.transform.map([x as f64 + 0.5, y as f64 + 0.5]);
+                    assert_eq!(renderer.pixel(point), expected[y * 120 + x]);
+                }
+            }
+            assert_eq!(doc.scene.objects, original.scene.objects);
+            assert_eq!(doc.scene.worlds, original.scene.worlds);
+            assert_eq!(doc.history_counts(), (1, 0));
+            assert!(doc.undo());
+            assert_eq!(doc.snapshot(), original);
+            assert!(doc.redo());
+        }
+        let mut doc = fixture();
+        let original = doc.snapshot();
+        for _ in 0..4 {
+            doc.commit_state(prepared(&doc, Change::Rotate90 { clockwise: true }))
+                .unwrap();
+        }
+        assert_eq!(doc.snapshot(), original);
     }
 }

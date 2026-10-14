@@ -17,6 +17,7 @@ pub(super) enum Mode {
     Dpi,
     Canvas,
     Crop,
+    Transform,
 }
 impl Mode {
     fn title(self) -> &'static str {
@@ -25,6 +26,7 @@ impl Mode {
             Self::Dpi => "Change DPI only",
             Self::Canvas => "Canvas size",
             Self::Crop => "Crop image",
+            Self::Transform => "Transform image",
         }
     }
 }
@@ -37,6 +39,7 @@ pub(super) struct SizingDialog {
     revision: u64,
     original: Arc<DocumentState>,
     mode: Mode,
+    preset: Option<Change>,
     pub(super) width: String,
     pub(super) height: String,
     pub(super) dpi: String,
@@ -86,6 +89,7 @@ impl SizingDialog {
             revision: document.revision,
             original: Arc::new(document.snapshot()),
             mode,
+            preset: None,
             width: document.width.to_string(),
             height: document.height.to_string(),
             dpi: document.dpi.to_string(),
@@ -103,6 +107,9 @@ impl SizingDialog {
         }
     }
     fn change(&self) -> Result<Change, String> {
+        if let Some(change) = self.preset {
+            return Ok(change);
+        }
         let number = |text: &str| {
             text.trim()
                 .parse::<u32>()
@@ -133,6 +140,7 @@ impl SizingDialog {
                 width: number(&self.width)?,
                 height: number(&self.height)?,
             }),
+            Mode::Transform => Err("Choose an image transform.".into()),
         }
     }
     fn plan(&self, budget: usize) -> Result<sizing::Plan, String> {
@@ -140,6 +148,16 @@ impl SizingDialog {
     }
 }
 impl Drawer {
+    pub(super) fn begin_transform(&mut self, ctx: &egui::Context, change: Change) {
+        self.begin_sizing(Mode::Transform);
+        let budget = self.sizing_budget();
+        if let Some(dialog) = &mut self.sizing_dialog {
+            dialog.preset = Some(change);
+            if let Err(error) = dialog.start_job(ctx, budget) {
+                dialog.error = Some(error);
+            }
+        }
+    }
     pub(super) fn smoke_start_sizing(&mut self, ctx: &egui::Context) {
         let budget = self.sizing_budget();
         self.sizing_dialog
@@ -253,7 +271,7 @@ impl Drawer {
             ui.label("Finish or cancel this change before saving the drawing.");
             ui.add_enabled_ui(dialog.job.is_none(), |ui| {
                 egui::Grid::new("sizing-fields").show(ui, |ui| {
-                    if dialog.mode != Mode::Dpi {
+                    if matches!(dialog.mode, Mode::Resample | Mode::Canvas | Mode::Crop) {
                         for (label, value) in [("Width (pixels)", &mut dialog.width), ("Height (pixels)", &mut dialog.height)] {
                             ui.label(label);
                             changed |= ui.text_edit_singleline(value).changed();

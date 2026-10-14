@@ -31,6 +31,8 @@ struct Drawer {
     #[cfg(test)]
     close_buttons: std::collections::HashMap<u64, egui::Rect>,
     #[cfg(test)]
+    transform_buttons: std::collections::HashMap<&'static str, egui::Rect>,
+    #[cfg(test)]
     cancel_close_button: Option<egui::Rect>,
     #[cfg(test)]
     discard_close_button: Option<egui::Rect>,
@@ -90,6 +92,8 @@ impl Drawer {
             quit_approved: workspace::empty_approvals(),
             #[cfg(test)]
             close_buttons: Default::default(),
+            #[cfg(test)]
+            transform_buttons: Default::default(),
             #[cfg(test)]
             cancel_close_button: None,
             #[cfg(test)]
@@ -874,5 +878,33 @@ mod tests {
         assert!(app.documents[0].undo());
         assert_eq!(app.documents[0].snapshot(), original);
         assert!(!app.documents[0].dirty);
+    }
+    #[test]
+    fn mouse_image_transform_uses_document_history_and_preserves_view() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 2,
+            height: 1,
+            dpi: 300.0,
+            background: Background::Transparent,
+        })
+        .unwrap();
+        app.documents[0].layers[0].pixels = vec![[255, 0, 0, 255], [0, 255, 0, 255]];
+        app.documents[0].view.flipped = true;
+        let view = app.documents[0].view;
+        let original = app.documents[0].snapshot();
+        frame(&ctx, &mut app, vec![]);
+        let button = app.transform_buttons["Flip left/right"];
+        click(&ctx, &mut app, button);
+        finish_sizing(&ctx, &mut app);
+        assert_eq!(
+            app.documents[0].layers[0].pixels,
+            [[0, 255, 0, 255], [255, 0, 0, 255]]
+        );
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.documents[0].view, view);
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
     }
 }

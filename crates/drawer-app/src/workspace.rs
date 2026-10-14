@@ -133,6 +133,28 @@ impl Drawer {
         self.save_to(index, &path)?;
         Ok(true)
     }
+    fn export_png_to(&self, index: usize, path: &Path) -> Result<(), String> {
+        let target = if path.exists() {
+            path.canonicalize()
+        } else {
+            path.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."))
+                .canonicalize()
+                .map(|p| p.join(path.file_name().unwrap_or_default()))
+        }
+        .map_err(|e| e.to_string())?;
+        if self.documents.iter().enumerate().any(|(other, doc)| {
+            other != index
+                && (doc.path.as_ref() == Some(&target) || doc.source_path.as_ref() == Some(&target))
+        }) {
+            return Err("That source is open in another drawing. Choose another filename.".into());
+        }
+        let available = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
+        drawer_core::png_export::export(&self.documents[index], &target, available)
+            .map_err(|e| e.to_string())
+    }
     pub(super) fn request_close(&mut self, tab: usize) {
         if self.pending_close.is_some() || tab >= self.tabs.len() {
             return;
@@ -284,6 +306,36 @@ impl Drawer {
         }
         if let Some(index) = close {
             self.request_close(index);
+        }
+        if self.active.is_some() {
+            ui.horizontal_wrapped(|ui| {
+                use drawer_core::sizing::Change;
+                ui.label("Image:");
+                for (label, change) in [
+                    ("Flip left/right", Change::FlipHorizontal),
+                    ("Flip up/down", Change::FlipVertical),
+                    ("Rotate 90° right", Change::Rotate90 { clockwise: true }),
+                    ("Rotate 90° left", Change::Rotate90 { clockwise: false }),
+                ] {
+                    let button = ui.button(label);
+                    #[cfg(test)]
+                    {
+                        self.transform_buttons.insert(label, button.rect);
+                    }
+                    if button.clicked() {
+                        self.begin_transform(ui.ctx(), change);
+                    }
+                }
+                if ui.button("Export PNG…").clicked()
+                    && let Some(path) = rfd::FileDialog::new()
+                        .add_filter("PNG", &["png"])
+                        .set_file_name("drawing.png")
+                        .save_file()
+                    && let Err(error) = self.export_png_to(self.active.unwrap(), &path)
+                {
+                    self.status = Some(error);
+                }
+            });
         }
     }
     pub(super) fn close_dialog(&mut self, ctx: &egui::Context) {
