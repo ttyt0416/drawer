@@ -11,6 +11,10 @@ enum EditKind {
         before: Box<DocumentState>,
         after: Box<DocumentState>,
     },
+    Scene {
+        before: Box<crate::scene::Scene>,
+        after: Box<crate::scene::Scene>,
+    },
 }
 struct Edit {
     kind: EditKind,
@@ -22,6 +26,9 @@ impl Edit {
         match &self.kind {
             EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
             EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
+            EditKind::Scene { before, after } => {
+                before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
+            }
         }
     }
 }
@@ -56,6 +63,24 @@ impl History {
     }
 }
 impl Document {
+    pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
+        if !after.valid()
+            || self.scene.size_bytes().saturating_add(after.size_bytes())
+                > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+        {
+            return Err("Invalid or oversized page geometry.".into());
+        }
+        if self.scene == after {
+            return Ok(false);
+        }
+        let before = std::mem::replace(&mut self.scene, after.clone());
+        self.history.push(EditKind::Scene {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+        self.history_changed();
+        Ok(true)
+    }
     fn history_changed(&mut self) {
         self.dirty = self.history.saved != Some(self.history.current);
         self.revision += 1;
@@ -138,6 +163,7 @@ impl Document {
                 ..
             } => self.layers[*layer].pixels[*offset] = *before,
             EditKind::State { before, .. } => before.restore(self),
+            EditKind::Scene { before, .. } => self.scene = before.as_ref().clone(),
         }
         self.history.current = edit.from;
         self.history.redo.push(edit);
@@ -156,6 +182,7 @@ impl Document {
                 ..
             } => self.layers[*layer].pixels[*offset] = *after,
             EditKind::State { after, .. } => after.restore(self),
+            EditKind::Scene { after, .. } => self.scene = after.as_ref().clone(),
         }
         self.history.current = edit.to;
         self.history.undo.push(edit);

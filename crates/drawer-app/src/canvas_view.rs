@@ -35,6 +35,7 @@ impl CanvasView {
         document: &mut Document,
         overlay: Option<drawer_core::scene::Rect>,
         navigator_ui: &mut egui::Ui,
+        aids: drawer_core::aids::AidPreferences,
     ) -> bool {
         let before = document.view;
         ui.horizontal(|ui| {
@@ -175,6 +176,7 @@ impl CanvasView {
                 );
             }
         }
+        self.paint_aids(ui, document, rect, aids, ppp);
         document.view != before
     }
     fn show_navigator(
@@ -253,5 +255,120 @@ impl CanvasView {
             ui.label("The view is outside the image");
         }
         ui.label("Click or drag to move the view");
+    }
+    fn paint_aids(
+        &self,
+        ui: &egui::Ui,
+        document: &Document,
+        rect: egui::Rect,
+        preferences: drawer_core::aids::AidPreferences,
+        ppp: f64,
+    ) {
+        use drawer_core::aids;
+        let painter = ui.painter_at(rect);
+        let size = [document.width as f64, document.height as f64];
+        let viewport = [
+            [rect.min.x as f64, rect.min.y as f64],
+            [rect.max.x as f64, rect.max.y as f64],
+        ];
+        let center = [rect.center().x as f64, rect.center().y as f64];
+        let segment = |line: [[f64; 2]; 2], color: egui::Color32| {
+            if let Some(line) = aids::clip_line(line, viewport) {
+                painter.line_segment(
+                    line.map(|p| egui::pos2(p[0] as f32, p[1] as f32)),
+                    egui::Stroke::new(1.0, color),
+                );
+            }
+        };
+        if preferences.grid {
+            for line in aids::grid_lines(
+                document.view,
+                document.scene.transform,
+                document.scene.grid,
+                size,
+                viewport,
+                ppp,
+            ) {
+                segment(line, egui::Color32::from_white_alpha(48));
+            }
+        }
+        if preferences.guides {
+            for line in &document.scene.guides {
+                segment(
+                    line.map(|point| {
+                        document.view.document_to_screen(
+                            document.scene.transform.map(point),
+                            size,
+                            center,
+                            ppp,
+                        )
+                    }),
+                    egui::Color32::from_rgb(90, 180, 255),
+                );
+            }
+        }
+        if preferences.rulers {
+            let background = egui::Color32::from_gray(45);
+            painter.rect_filled(
+                egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.min.y + 20.0)),
+                0.0,
+                background,
+            );
+            painter.rect_filled(
+                egui::Rect::from_min_max(rect.min, egui::pos2(rect.min.x + 38.0, rect.max.y)),
+                0.0,
+                background,
+            );
+            for horizontal in [true, false] {
+                let ruler = aids::ruler(
+                    document.view,
+                    size,
+                    viewport,
+                    ppp,
+                    document.dpi,
+                    preferences.unit,
+                    horizontal,
+                );
+                for tick in ruler.ticks {
+                    let pos = if horizontal {
+                        egui::pos2(tick.screen as f32, rect.min.y + 4.0)
+                    } else {
+                        egui::pos2(rect.min.x + 3.0, tick.screen as f32)
+                    };
+                    painter.text(
+                        pos,
+                        egui::Align2::LEFT_TOP,
+                        format!("{:.3}", tick.value),
+                        egui::FontId::proportional(9.0),
+                        egui::Color32::LIGHT_GRAY,
+                    );
+                    let line = if horizontal {
+                        [
+                            egui::pos2(tick.screen as f32, rect.min.y + 16.0),
+                            egui::pos2(tick.screen as f32, rect.min.y + 20.0),
+                        ]
+                    } else {
+                        [
+                            egui::pos2(rect.min.x + 32.0, tick.screen as f32),
+                            egui::pos2(rect.min.x + 38.0, tick.screen as f32),
+                        ]
+                    };
+                    painter.line_segment(line, egui::Stroke::new(1.0, egui::Color32::LIGHT_GRAY));
+                }
+                let label = format!("{} {}", ["X", "Y"][ruler.axis], preferences.unit.label());
+                let pos = if horizontal {
+                    egui::pos2(rect.max.x - 48.0, rect.min.y + 3.0)
+                } else {
+                    egui::pos2(rect.min.x + 2.0, rect.max.y - 14.0)
+                };
+                painter.text(
+                    pos,
+                    egui::Align2::LEFT_TOP,
+                    label,
+                    egui::FontId::proportional(10.0),
+                    egui::Color32::WHITE,
+                );
+            }
+        }
     }
 }

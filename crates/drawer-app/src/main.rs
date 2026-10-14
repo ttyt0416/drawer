@@ -7,6 +7,7 @@ use drawer_core::document::{
 use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
+mod aid_panel;
 mod canvas_view;
 mod new_canvas;
 mod reference_pane;
@@ -46,6 +47,7 @@ struct Drawer {
     canvas_view: canvas_view::CanvasView,
     default_view: drawer_core::view::View,
     references: reference_pane::ReferencePane,
+    aids: aid_panel::AidPanel,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -109,6 +111,7 @@ impl Drawer {
             canvas_view: canvas_view::CanvasView::new(ctx),
             default_view: Default::default(),
             references: Default::default(),
+            aids: Default::default(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -207,6 +210,7 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        self.aids.load(&storage);
         match drawer_core::references::ReferenceSession::load(&storage) {
             Ok(session) => self.references.session = session,
             Err(error) => self.references.error = Some(error.to_string()),
@@ -250,6 +254,9 @@ impl Drawer {
                         }
                         if ui.button("References").clicked() {
                             self.references.session.workspace.visible = true;
+                        }
+                        if ui.button("Canvas aids").clicked() {
+                            self.aids.visible = true;
                         }
                     });
                     self.document_controls(ui);
@@ -298,6 +305,7 @@ impl Drawer {
                                 &mut self.documents[active],
                                 overlay,
                                 &mut left[0],
+                                self.aids.preferences,
                             );
                             if changed
                                 && let Some(storage) = &self.storage
@@ -316,6 +324,7 @@ impl Drawer {
         self.close_dialog(ui.ctx());
         self.show_sizing(ui.ctx());
         self.show_references(ui.ctx());
+        self.show_aids(ui.ctx());
     }
 }
 
@@ -364,6 +373,9 @@ impl eframe::App for Drawer {
                 )
                 .unwrap();
                 self.references.session.workspace.visible = true;
+                self.aids.visible = true;
+                self.aids.preferences.monitor_ppi = Some(96.0);
+                self.aids.preferences.grid = true;
             }
             if self.frames == 3 {
                 self.cancel_close();
@@ -388,6 +400,20 @@ impl eframe::App for Drawer {
                 if !self.documents[0].undo() || self.documents[0].dpi != 300.0 {
                     std::process::exit(1);
                 }
+                let original = self.documents[0].snapshot();
+                self.aids.spacing = ["3".into(), "4".into()];
+                self.apply_grid().unwrap();
+                self.aids.guide_position = "1".into();
+                self.add_guide(true).unwrap();
+                self.print_size().unwrap();
+                if self.documents[0].scene.guides.len() != 1
+                    || self.documents[0].view.zoom != 0.32
+                    || !self.documents[0].undo()
+                    || !self.documents[0].undo()
+                    || self.documents[0].snapshot() != original
+                {
+                    std::process::exit(1);
+                }
                 self.open_reference_document().unwrap();
                 if self.documents[2].layers[0].pixels != [[240, 30, 80, 128], [20, 40, 60, 0]]
                     || self.documents[2].path.is_some()
@@ -396,7 +422,7 @@ impl eframe::App for Drawer {
                     std::process::exit(1);
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1117,5 +1143,54 @@ mod tests {
         click(&ctx, &mut app, button);
         assert!(app.references.session.workspace.entries.is_empty());
         assert_eq!(app.documents.len(), 2);
+    }
+    #[test]
+    fn mouse_grid_and_guide_editing_use_document_undo_but_print_size_only_changes_view() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 600,
+            height: 300,
+            dpi: 300.0,
+            background: Background::Color([10, 20, 30]),
+        })
+        .unwrap();
+        app.documents[0].mark_saved("main.drawer".into());
+        let original = app.documents[0].snapshot();
+        app.aids.visible = true;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        app.aids.preferences.unit = drawer_core::aids::Unit::Millimeters;
+        app.aids.spacing = ["5".into(), "10".into()];
+        let button = app.aids.apply_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!((app.documents[0].scene.grid.spacing[0] - 5.0 * 300.0 / 25.4).abs() < 1e-9);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.documents[0].layers, original.layers);
+        frame(&ctx, &mut app, vec![]);
+        app.aids.guide_position = "25.4".into();
+        let button = app.aids.guide_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert_eq!(
+            app.documents[0].scene.guides[0],
+            [[0.0, 300.0], [600.0, 300.0]]
+        );
+        assert_eq!(app.documents[0].history_counts(), (2, 0));
+        assert!(app.documents[0].undo());
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        app.aids.preferences.monitor_ppi = Some(96.0);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.aids.print_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert_eq!(app.documents[0].view.zoom, 0.32);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        assert_eq!(app.documents[0].history_counts(), (0, 2));
+        app.aids.spacing[0] = "0".into();
+        assert!(app.apply_grid().is_err());
+        assert_eq!(app.documents[0].snapshot(), original);
     }
 }

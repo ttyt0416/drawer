@@ -1,3 +1,4 @@
+pub mod aids;
 pub mod assets;
 pub mod document;
 pub mod files;

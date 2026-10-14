@@ -181,6 +181,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default)]
+    pub grid: crate::aids::Grid,
     pub transform: Affine,
     /// Crop mask in the preserved original coordinate system.
     pub clips: Vec<[Point; 4]>,
@@ -193,6 +195,7 @@ pub struct Scene {
 impl Scene {
     pub fn valid(&self) -> bool {
         self.transform.valid()
+            && self.grid.valid()
             && self.clips.len() <= 4096
             && self.clips.iter().flatten().flatten().all(|v| v.is_finite())
             && self.selection.is_none_or(Rect::valid)

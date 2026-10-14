@@ -55,3 +55,6 @@ crates/drawer-core/src/navigator.rs
 crates/drawer-core/src/references.rs
 crates/drawer-app/src/reference_pane.rs
 docs/process/references.md
+crates/drawer-core/src/aids.rs
+crates/drawer-app/src/aid_panel.rs
+docs/process/canvas-aids.md

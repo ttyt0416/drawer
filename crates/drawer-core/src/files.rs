@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -324,6 +324,24 @@ mod tests {
         doc.scene.transform.0[0] = f64::NAN;
         assert!(save(&mut doc, &path).is_err());
         assert_eq!(fs::read(&path).unwrap(), bytes);
+    }
+    #[test]
+    fn version_two_geometry_without_grid_loads_with_default_grid() {
+        let root = TempDir::new();
+        let path = root.0.join("legacy2.drawer");
+        let mut doc = sample();
+        save(&mut doc, &path).unwrap();
+        let mut bytes = fs::read(&path).unwrap();
+        let offset = 32 + 4 + doc.layers[0].name.len() + 8 + doc.layers[0].pixels.len() * 4;
+        let mut scene = serde_json::to_value(&doc.scene).unwrap();
+        scene.as_object_mut().unwrap().remove("grid");
+        let json = serde_json::to_vec(&scene).unwrap();
+        bytes.truncate(offset);
+        bytes[8..12].copy_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&(json.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&json);
+        fs::write(&path, bytes).unwrap();
+        assert_eq!(open(&path, 16).unwrap().snapshot(), doc.snapshot());
     }
     #[test]
     fn png_import_preserves_original_and_starts_as_an_unsaved_document() {
