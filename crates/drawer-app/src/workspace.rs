@@ -8,6 +8,73 @@ pub(super) struct DocumentTab {
 }
 
 impl Drawer {
+    pub(super) fn remember_file(&mut self, path: &Path) {
+        if let Err(error) = self.recent.record(path, self.storage.as_ref()) {
+            self.status = Some(format!(
+                "Drawing is ready, but the recent list could not be saved: {error}"
+            ));
+        }
+    }
+    fn recent_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Recent files", |ui| {
+            let paths = self.recent.paths().to_vec();
+            if paths.is_empty() {
+                ui.label("No recent files");
+            }
+            for path in paths {
+                let missing = !path.is_file();
+                if ui
+                    .button(format!(
+                        "{}{}",
+                        path.display(),
+                        if missing { " (missing)" } else { "" }
+                    ))
+                    .clicked()
+                {
+                    if path
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("drawer"))
+                    {
+                        if let Err(error) = self.open_path(&path) {
+                            self.status =
+                                Some(format!("Cannot reopen {}: {error}", path.display()));
+                        }
+                    } else {
+                        self.begin_import(ui.ctx(), &path);
+                    }
+                    ui.close();
+                }
+            }
+            ui.separator();
+            let (undo, redo) = self.recent.counts();
+            let result = if ui
+                .add_enabled(undo > 0, egui::Button::new("Undo list change"))
+                .clicked()
+            {
+                self.recent.undo(self.storage.as_ref())
+            } else if ui
+                .add_enabled(redo > 0, egui::Button::new("Redo list change"))
+                .clicked()
+            {
+                self.recent.redo(self.storage.as_ref())
+            } else if ui.button("Clear list").clicked() {
+                self.recent.reset(self.storage.as_ref())
+            } else if ui
+                .add_enabled(
+                    self.storage.is_some(),
+                    egui::Button::new("Restore previous list"),
+                )
+                .clicked()
+            {
+                self.recent.restore(self.storage.as_ref().unwrap())
+            } else {
+                Ok(())
+            };
+            if let Err(error) = result {
+                self.status = Some(error.to_string());
+            }
+        });
+    }
     pub(super) fn add_document(&mut self, mut document: Document) {
         document.tool = self.selected;
         let id = document.id;
@@ -76,6 +143,7 @@ impl Drawer {
             if let Some(tab) = self.tabs.iter().position(|tab| tab.document_id == id) {
                 self.select_tab(tab);
             }
+            self.remember_file(&path);
             return Ok(());
         }
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
@@ -86,6 +154,7 @@ impl Drawer {
         self.documents.try_reserve(1).map_err(|e| e.to_string())?;
         self.tabs.try_reserve(1).map_err(|e| e.to_string())?;
         self.add_document(document);
+        self.remember_file(&path);
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
@@ -107,33 +176,49 @@ impl Drawer {
         {
             return Err("That file is open in another document. Choose another name.".into());
         }
-        drawer_core::files::save(&mut self.documents[index], &target).map_err(|e| e.to_string())
+        if self.protected_sources.contains(&target) {
+            return Err("Choose another path to keep the imported source unchanged.".into());
+        }
+        drawer_core::files::save(&mut self.documents[index], &target).map_err(|e| e.to_string())?;
+        self.remember_file(&target);
+        Ok(())
     }
-    fn save_document(&mut self, index: usize) -> Result<bool, String> {
-        let path = match self.documents[index].path.clone() {
-            Some(path) => path,
-            None => {
-                let filename = Path::new(&self.documents[index].title)
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string()
-                    + ".drawer";
-                let Some(path) = rfd::FileDialog::new()
-                    .set_title("Save Drawer document")
-                    .add_filter("Drawer document", &["drawer"])
-                    .set_file_name(filename)
-                    .save_file()
-                else {
-                    return Ok(false);
-                };
-                path
-            }
+    // Native save dialogs confirm replacement; their cancellation is represented by None.
+    pub(super) fn save_as_from(
+        &mut self,
+        index: usize,
+        choose: impl FnOnce() -> Option<PathBuf>,
+    ) -> Result<bool, String> {
+        let Some(path) = choose() else {
+            return Ok(false);
         };
         self.save_to(index, &path)?;
         Ok(true)
     }
-    fn export_png_to(&self, index: usize, path: &Path) -> Result<(), String> {
+    fn save_as(&mut self, index: usize) -> Result<bool, String> {
+        let filename = Path::new(&self.documents[index].title)
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string()
+            + ".drawer";
+        self.save_as_from(index, || {
+            rfd::FileDialog::new()
+                .set_title("Save Drawer document as")
+                .add_filter("Drawer document", &["drawer"])
+                .set_file_name(filename)
+                .save_file()
+        })
+    }
+    fn save_document(&mut self, index: usize) -> Result<bool, String> {
+        if let Some(path) = self.documents[index].path.clone() {
+            self.save_to(index, &path)?;
+            Ok(true)
+        } else {
+            self.save_as(index)
+        }
+    }
+    pub(super) fn export_png_to(&self, index: usize, path: &Path) -> Result<(), String> {
         let target = if path.exists() {
             path.canonicalize()
         } else {
@@ -144,6 +229,9 @@ impl Drawer {
                 .map(|p| p.join(path.file_name().unwrap_or_default()))
         }
         .map_err(|e| e.to_string())?;
+        if self.protected_sources.contains(&target) {
+            return Err("Choose another filename to keep the imported source unchanged.".into());
+        }
         if self.documents.iter().enumerate().any(|(other, doc)| {
             other != index
                 && (doc.path.as_ref() == Some(&target) || doc.source_path.as_ref() == Some(&target))
@@ -154,6 +242,17 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         drawer_core::png_export::export(&self.documents[index], &target, available)
             .map_err(|e| e.to_string())
+    }
+    pub(super) fn export_from(
+        &self,
+        index: usize,
+        choose: impl FnOnce() -> Option<PathBuf>,
+    ) -> Result<bool, String> {
+        let Some(path) = choose() else {
+            return Ok(false);
+        };
+        self.export_png_to(index, &path)?;
+        Ok(true)
     }
     pub(super) fn request_close(&mut self, tab: usize) {
         if self.pending_close.is_some() || tab >= self.tabs.len() {
@@ -231,11 +330,11 @@ impl Drawer {
         self.quit_approved.clear();
     }
     pub(super) fn document_controls(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("Open…").clicked()
                 && let Some(paths) = rfd::FileDialog::new()
                     .set_title("Open local drawings")
-                    .add_filter("Drawer / PNG", &["drawer", "png"])
+                    .add_filter("Drawer document", &["drawer"])
                     .pick_files()
             {
                 for path in paths {
@@ -244,9 +343,29 @@ impl Drawer {
                     }
                 }
             }
+            if ui.button("Image as new document…").clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .add_filter("PNG / JPEG / TIFF", &["png", "jpg", "jpeg", "tif", "tiff"])
+                    .pick_file()
+            {
+                self.begin_import(ui.ctx(), &path);
+            }
+            if ui.button("New from clipboard").clicked()
+                && let Err(error) = self.document_from_clipboard(|| {
+                    reference_pane::clipboard_image_with_budget(DEFAULT_DOCUMENT_BUDGET)
+                })
+            {
+                self.status = Some(error);
+            }
+            self.recent_menu(ui);
             if let Some(active) = self.active {
                 if ui.button("Save").clicked()
                     && let Err(error) = self.save_document(active)
+                {
+                    self.status = Some(error);
+                }
+                if ui.button("Save as…").clicked()
+                    && let Err(error) = self.save_as(active)
                 {
                     self.status = Some(error);
                 }
@@ -327,11 +446,12 @@ impl Drawer {
                     }
                 }
                 if ui.button("Export PNG…").clicked()
-                    && let Some(path) = rfd::FileDialog::new()
-                        .add_filter("PNG", &["png"])
-                        .set_file_name("drawing.png")
-                        .save_file()
-                    && let Err(error) = self.export_png_to(self.active.unwrap(), &path)
+                    && let Err(error) = self.export_from(self.active.unwrap(), || {
+                        rfd::FileDialog::new()
+                            .add_filter("PNG", &["png"])
+                            .set_file_name("drawing.png")
+                            .save_file()
+                    })
                 {
                     self.status = Some(error);
                 }

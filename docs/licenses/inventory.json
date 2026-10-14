@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "f5363a42439ce6a61c6789a3baefa6cd4a6828c42254b270b11cd0100b52edec",
+  "cargo_lock_sha256": "a96b4dc0253fcd9447f6be7af1b0494acdd5cc677fc0830c0752b6900c66d06b",
   "libraries": [
     {
       "name": "accesskit",

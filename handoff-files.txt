@@ -58,3 +58,7 @@ docs/process/references.md
 crates/drawer-core/src/aids.rs
 crates/drawer-app/src/aid_panel.rs
 docs/process/canvas-aids.md
+crates/drawer-core/src/image_import.rs
+crates/drawer-core/src/recent.rs
+crates/drawer-app/src/image_import_dialog.rs
+docs/process/image-import.md

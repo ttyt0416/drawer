@@ -100,6 +100,9 @@ impl LocalImage {
         Some(self.pixels[(point[1] as u32 * self.width + point[0] as u32) as usize])
     }
     pub fn document(&self, budget: usize) -> io::Result<Document> {
+        if self.pixels.len() != self.width as usize * self.height as usize {
+            return Err(invalid("Image pixel count does not match its dimensions"));
+        }
         let mut doc = Document::create(
             CanvasSpec {
                 width: self.width,

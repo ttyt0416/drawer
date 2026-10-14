@@ -392,6 +392,7 @@ dependencies = [
  "drawer-core",
  "eframe",
  "rfd",
+ "tiff",
 ]
 
 [[package]]
@@ -400,8 +401,10 @@ version = "0.1.0"
 dependencies = [
  "epaint_default_fonts",
  "image",
+ "moxcms",
  "serde",
  "serde_json",
+ "tiff",
  "ttf-parser",
 ]
 
@@ -854,6 +857,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

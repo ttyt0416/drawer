@@ -9,6 +9,7 @@ use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod aid_panel;
 mod canvas_view;
+mod image_import_dialog;
 mod new_canvas;
 mod reference_pane;
 mod sizing_dialog;
@@ -48,6 +49,9 @@ struct Drawer {
     default_view: drawer_core::view::View,
     references: reference_pane::ReferencePane,
     aids: aid_panel::AidPanel,
+    recent: drawer_core::recent::RecentFiles,
+    import_dialog: Option<image_import_dialog::ImportDialog>,
+    protected_sources: std::collections::HashSet<PathBuf>,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -112,6 +116,9 @@ impl Drawer {
             default_view: Default::default(),
             references: Default::default(),
             aids: Default::default(),
+            recent: Default::default(),
+            import_dialog: None,
+            protected_sources: Default::default(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -210,6 +217,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::recent::RecentFiles::load(&storage) {
+            Ok(recent) => self.recent = recent,
+            Err(error) => self.status = Some(format!("Recent files reset: {error}")),
+        }
         self.aids.load(&storage);
         match drawer_core::references::ReferenceSession::load(&storage) {
             Ok(session) => self.references.session = session,
@@ -238,7 +249,9 @@ impl Drawer {
     fn show(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_enabled_ui(
-                self.pending_close.is_none() && self.sizing_dialog.is_none(),
+                self.pending_close.is_none()
+                    && self.sizing_dialog.is_none()
+                    && self.import_dialog.is_none(),
                 |ui| {
                     ui.horizontal(|ui| {
                         ui.heading(APP_NAME);
@@ -325,6 +338,7 @@ impl Drawer {
         self.show_sizing(ui.ctx());
         self.show_references(ui.ctx());
         self.show_aids(ui.ctx());
+        self.show_import(ui.ctx());
     }
 }
 
@@ -333,11 +347,13 @@ impl eframe::App for Drawer {
         if self.smoke_output.is_none()
             && !self.quit_ready
             && ui.ctx().input(|input| input.viewport().close_requested())
-            && (self.documents.iter().any(|doc| doc.dirty) || self.sizing_dialog.is_some())
+            && (self.documents.iter().any(|doc| doc.dirty)
+                || self.sizing_dialog.is_some()
+                || self.import_dialog.is_some())
         {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            if self.sizing_dialog.is_none() {
+            if self.sizing_dialog.is_none() && self.import_dialog.is_none() {
                 self.begin_quit();
             }
         }
@@ -421,8 +437,56 @@ impl eframe::App for Drawer {
                 {
                     std::process::exit(1);
                 }
+                self.document_from_clipboard(|| {
+                    drawer_core::references::LocalImage::from_rgba(
+                        2,
+                        1,
+                        &[10, 20, 30, 128, 40, 50, 60, 255],
+                        8,
+                    )
+                    .map_err(|e| e.to_string())
+                })
+                .unwrap();
+                let root = self.storage.as_ref().unwrap().root().to_owned();
+                let first = root.join("smoke-first.drawer");
+                let second = root.join("smoke-second.drawer");
+                let output = root.join("smoke-export.png");
+                if self.save_as_from(3, || None).unwrap() || self.documents[3].path.is_some() {
+                    std::process::exit(1);
+                }
+                self.save_as_from(3, || Some(first.clone())).unwrap();
+                let first_bytes = std::fs::read(&first).unwrap();
+                self.save_as_from(3, || Some(second.clone())).unwrap();
+                self.documents[3].edit_pixel(0, 1, 0, [80, 90, 100, 255]);
+                let snapshot = self.documents[3].snapshot();
+                self.export_from(3, || Some(output.clone())).unwrap();
+                if self.documents[3].path != Some(second.canonicalize().unwrap())
+                    || !self.documents[3].dirty
+                    || self.documents[3].snapshot() != snapshot
+                    || std::fs::read(&first).unwrap() != first_bytes
+                {
+                    std::process::exit(1);
+                }
+                let cancel = std::sync::atomic::AtomicBool::new(false);
+                let source = drawer_core::image_import::ImageSource::read(
+                    &output,
+                    DEFAULT_DOCUMENT_BUDGET,
+                    &cancel,
+                )
+                .unwrap();
+                let page = source
+                    .decode(0, true, DEFAULT_DOCUMENT_BUDGET, &cancel)
+                    .unwrap();
+                if page.image.pixels != [[10, 20, 30, 128], [80, 90, 100, 255]] {
+                    std::process::exit(1);
+                }
+                let recent =
+                    drawer_core::recent::RecentFiles::load(self.storage.as_ref().unwrap()).unwrap();
+                if recent.paths() != self.recent.paths() || recent.paths().len() != 2 {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1191,6 +1255,252 @@ mod tests {
         assert_eq!(app.documents[0].history_counts(), (0, 2));
         app.aids.spacing[0] = "0".into();
         assert!(app.apply_grid().is_err());
+        assert_eq!(app.documents[0].snapshot(), original);
+    }
+
+    fn wait_import(ctx: &egui::Context, app: &mut Drawer) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            frame(ctx, app, vec![]);
+            let dialog = app.import_dialog.as_ref().unwrap();
+            if dialog.ready() || dialog.failed() {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "import worker timeout"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        frame(ctx, app, vec![]);
+        frame(ctx, app, vec![]);
+    }
+    #[test]
+    fn clipboard_errors_add_nothing_and_new_document_has_independent_pixels_and_history() {
+        use drawer_core::references::LocalImage;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [90, 80, 70, 255]);
+        let original = app.documents[0].snapshot();
+        for error in ["Empty clipboard", "Clipboard contains text, not an image"] {
+            assert!(app.document_from_clipboard(|| Err(error.into())).is_err());
+            assert_eq!(app.documents.len(), 1);
+        }
+        assert!(
+            app.document_from_clipboard(|| Ok(LocalImage {
+                width: 2,
+                height: 1,
+                pixels: vec![[0; 4]]
+            }))
+            .is_err()
+        );
+        app.document_from_clipboard(|| {
+            LocalImage::from_rgba(2, 1, &[1, 2, 3, 0, 4, 5, 6, 128], 8).map_err(|e| e.to_string())
+        })
+        .unwrap();
+        assert_eq!(app.documents.len(), 2);
+        let doc = &app.documents[1];
+        assert_eq!((doc.width, doc.height), (2, 1));
+        assert_eq!(doc.layers[0].pixels, [[1, 2, 3, 0], [4, 5, 6, 128]]);
+        assert!(doc.path.is_none() && doc.source_path.is_none() && doc.dirty);
+        assert_eq!(doc.history_counts(), (0, 0));
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+    }
+    #[test]
+    fn save_as_export_and_overwrite_cancel_keep_the_correct_paths_and_files() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None).with_storage(storage);
+        app.create_canvas(tiny_spec()).unwrap();
+        let a = root.0.join("a.drawer");
+        let b = root.0.join("b.drawer");
+        let output = root.0.join("export.png");
+        assert!(!app.save_as_from(0, || None).unwrap());
+        assert!(app.documents[0].path.is_none());
+        assert!(app.save_as_from(0, || Some(a.clone())).unwrap());
+        let original_file = std::fs::read(&a).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [20, 40, 60, 128]);
+        let snapshot = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        std::fs::write(&b, "keep prior file").unwrap();
+        std::fs::write(&output, "keep prior export").unwrap();
+        // None also covers the native dialog's refusal to overwrite an existing destination.
+        assert!(!app.save_as_from(0, || None).unwrap());
+        assert!(!app.export_from(0, || None).unwrap());
+        assert_eq!(std::fs::read_to_string(&b).unwrap(), "keep prior file");
+        assert_eq!(
+            std::fs::read_to_string(&output).unwrap(),
+            "keep prior export"
+        );
+        assert_eq!(app.documents[0].path, Some(a.canonicalize().unwrap()));
+        assert!(app.documents[0].dirty);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert_eq!(app.documents[0].snapshot(), snapshot);
+        assert!(app.save_as_from(0, || Some(b.clone())).unwrap());
+        assert_eq!(app.documents[0].path, Some(b.canonicalize().unwrap()));
+        assert!(!app.documents[0].dirty);
+        assert_eq!(std::fs::read(&a).unwrap(), original_file);
+        app.documents[0].edit_pixel(0, 0, 0, [70, 80, 90, 255]);
+        let state = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        assert!(app.export_from(0, || Some(output.clone())).unwrap());
+        assert_eq!(app.documents[0].path, Some(b.canonicalize().unwrap()));
+        assert!(app.documents[0].dirty);
+        assert_eq!(app.documents[0].snapshot(), state);
+        assert_eq!(app.documents[0].history_counts(), history);
+        assert_eq!(image_import_pixels(&output), vec![[70, 80, 90, 255]]);
+        let list = app.recent.paths().to_vec();
+        assert_eq!(list.len(), 2);
+        assert!(!list.contains(&output));
+        let c = root.0.join("c.drawer");
+        std::fs::write(root.0.join("c.drawer.drawer-write.tmp"), "foreign").unwrap();
+        assert!(app.save_as_from(0, || Some(c)).is_err());
+        assert_eq!(app.documents[0].path, Some(b.canonicalize().unwrap()));
+        assert!(app.documents[0].dirty);
+        let mut reopened =
+            Drawer::new(&ctx, None).with_storage(UserStorage::at(root.0.join("userdata")).unwrap());
+        assert_eq!(reopened.recent.paths(), list);
+        reopened.open_path(&list[0]).unwrap();
+        std::fs::remove_file(&a).unwrap();
+        let before = reopened.documents[0].snapshot();
+        assert!(reopened.open_path(&a).is_err());
+        assert_eq!(reopened.documents.len(), 1);
+        assert_eq!(reopened.documents[0].snapshot(), before);
+        assert_eq!(reopened.recent.paths(), list);
+    }
+    fn image_import_pixels(path: &std::path::Path) -> Vec<[u8; 4]> {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        drawer_core::image_import::ImageSource::read(path, DEFAULT_DOCUMENT_BUDGET, &cancel)
+            .unwrap()
+            .decode(0, true, DEFAULT_DOCUMENT_BUDGET, &cancel)
+            .unwrap()
+            .image
+            .pixels
+    }
+    #[test]
+    fn mouse_import_cancel_confirm_and_repeat_create_independent_documents_keep_source() {
+        let root = TestDirectory::new();
+        let path = root.0.join("input.png");
+        let image =
+            drawer_core::references::LocalImage::from_rgba(2, 1, &[1, 2, 3, 0, 4, 5, 6, 128], 8)
+                .unwrap();
+        // Write a local reference copy, then use it as a read-only input fixture.
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let mut session = drawer_core::references::ReferenceSession::default();
+        session
+            .add(&storage, image.clone(), "fixture".into(), None)
+            .unwrap();
+        std::fs::copy(
+            storage.root().join("materials/references/reference-1.png"),
+            &path,
+        )
+        .unwrap();
+        let source_bytes = std::fs::read(&path).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None).with_storage(storage);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].edit_pixel(0, 0, 0, [200, 50, 10, 255]);
+        let original = app.documents[0].snapshot();
+        app.begin_import(&ctx, &path);
+        wait_import(&ctx, &mut app);
+        assert_eq!(app.import_dialog.as_ref().unwrap().preview_image(), &image);
+        let cancel = app.import_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(app.import_dialog.is_none());
+        assert_eq!(app.documents.len(), 1);
+        assert!(app.recent.paths().is_empty());
+        app.begin_import(&ctx, &path);
+        wait_import(&ctx, &mut app);
+        let confirm = app.import_dialog.as_ref().unwrap().import_button.unwrap();
+        click(&ctx, &mut app, confirm);
+        assert!(app.import_dialog.is_none());
+        assert_eq!(app.documents.len(), 2);
+        assert_eq!(app.documents[1].layers[0].pixels, image.pixels);
+        assert_eq!(app.documents[1].history_counts(), (0, 0));
+        assert!(app.documents[1].path.is_none() && app.documents[1].source_path.is_none());
+        let id = app.documents[1].id;
+        assert!(app.export_png_to(1, &path).is_err());
+        app.save_to(1, &root.0.join("saved.drawer")).unwrap();
+        assert!(app.export_png_to(1, &path).is_err());
+        app.begin_import(&ctx, &path);
+        wait_import(&ctx, &mut app);
+        app.accept_import().unwrap();
+        assert_eq!(app.documents.len(), 3);
+        assert_ne!(app.documents[2].id, id);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(std::fs::read(&path).unwrap(), source_bytes);
+    }
+    #[test]
+    fn tiff_preview_option_changes_and_failed_canceled_jobs_never_add_empty_documents() {
+        use drawer_core::image_import::ImageSource;
+        let root = TestDirectory::new();
+        let path = root.0.join("pages.tif");
+        let mut file = std::fs::File::create(&path).unwrap();
+        let mut encoder = tiff::encoder::TiffEncoder::new(&mut file).unwrap();
+        encoder
+            .write_image::<tiff::encoder::colortype::RGB8>(2, 1, &[255, 0, 0, 0, 255, 0])
+            .unwrap();
+        let mut page = encoder
+            .new_image::<tiff::encoder::colortype::RGB8>(1, 2)
+            .unwrap();
+        page.encoder()
+            .write_tag(tiff::tags::Tag::Orientation, 6u16)
+            .unwrap();
+        page.write_data(&[0, 0, 255, 255, 255, 0]).unwrap();
+        drop(file);
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let original = app.documents[0].snapshot();
+        app.begin_import(&ctx, &path);
+        wait_import(&ctx, &mut app);
+        {
+            let dialog = app.import_dialog.as_mut().unwrap();
+            dialog.page = 1;
+            dialog.start_page(&ctx, DEFAULT_DOCUMENT_BUDGET);
+        }
+        wait_import(&ctx, &mut app);
+        let preview = app.import_dialog.as_ref().unwrap().preview_image();
+        assert_eq!((preview.width, preview.height), (2, 1));
+        let orientation = app
+            .import_dialog
+            .as_ref()
+            .unwrap()
+            .orientation_button
+            .unwrap();
+        click(&ctx, &mut app, orientation);
+        wait_import(&ctx, &mut app);
+        let preview = app.import_dialog.as_ref().unwrap().preview_image().clone();
+        assert_eq!((preview.width, preview.height), (1, 2));
+        let expected = ImageSource::read(
+            &path,
+            DEFAULT_DOCUMENT_BUDGET,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap()
+        .decode(
+            1,
+            false,
+            DEFAULT_DOCUMENT_BUDGET,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap()
+        .image;
+        assert_eq!(preview, expected);
+        app.accept_import().unwrap();
+        assert_eq!(app.documents[1].layers[0].pixels, preview.pixels);
+        app.begin_import(&ctx, &path);
+        app.import_dialog = None;
+        app.begin_import(&ctx, &root.0.join("missing.png"));
+        wait_import(&ctx, &mut app);
+        assert!(app.import_dialog.as_ref().unwrap().failed());
+        assert_eq!(app.documents.len(), 2);
+        assert!(app.accept_import().is_err());
+        app.import_dialog = None;
         assert_eq!(app.documents[0].snapshot(), original);
     }
 }

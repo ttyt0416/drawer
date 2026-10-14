@@ -15,4 +15,4 @@ cargo run -p xtask --offline --target-dir target/latest -- prepare-handoff
 
 앱 실행: `cargo run -p drawer-app --offline --target-dir target/latest`.
 
-여러 로컬 `.drawer`/PNG 문서와 문서별 도구·이력, 같은 그림의 여러 보기를 지원한다. 실행 방법은 [사용 안내](docs/START-HERE.md), 파일 보존 범위는 [문서 형식](docs/process/native-format.md)에 있다.
+여러 로컬 `.drawer` 문서, PNG/JPEG/TIFF에서 독립 새 그림 만들기, 이미지 클립보드와 최근 파일을 지원한다. 문서별 도구·이력과 같은 그림의 여러 보기를 유지한다. 실행 방법은 [사용 안내](docs/START-HERE.md), 파일 보존 범위는 [문서 형식](docs/process/native-format.md)에 있다.
