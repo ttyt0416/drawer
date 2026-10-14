@@ -11,11 +11,13 @@ mod aid_panel;
 mod canvas_view;
 mod display_pane;
 mod image_import_dialog;
+mod movie_dialog;
 mod navigator_panel;
 mod new_canvas;
 mod paste_dialog;
 mod quality;
 mod reference_pane;
+mod revert;
 mod size_fields;
 mod sizing_dialog;
 mod view_commands;
@@ -72,6 +74,8 @@ struct Drawer {
     navigator_undo: Vec<drawer_core::navigator_preferences::Preferences>,
     navigator_redo: Vec<drawer_core::navigator_preferences::Preferences>,
     show_navigator_settings: bool,
+    movie_dialog: Option<movie_dialog::MovieDialog>,
+    revert_pending: Option<u64>,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -152,6 +156,8 @@ impl Drawer {
             navigator_undo: Vec::new(),
             navigator_redo: Vec::new(),
             show_navigator_settings: false,
+            movie_dialog: None,
+            revert_pending: None,
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -304,7 +310,9 @@ impl Drawer {
                 self.pending_close.is_none()
                     && self.sizing_dialog.is_none()
                     && self.import_dialog.is_none()
-                    && self.paste_dialog.is_none(),
+                    && self.paste_dialog.is_none()
+                    && self.movie_dialog.is_none()
+                    && self.revert_pending.is_none(),
                 |ui| {
                     ui.horizontal_wrapped(|ui| {
                         ui.heading(APP_NAME);
@@ -337,6 +345,7 @@ impl Drawer {
                     self.document_controls(ui);
                     self.sizing_controls(ui);
                     self.paste_controls(ui);
+                    self.movie_controls(ui);
                     ui.separator();
                     if let Some(status) = &self.status {
                         ui.colored_label(egui::Color32::LIGHT_RED, status);
@@ -404,6 +413,8 @@ impl Drawer {
         self.show_import(ui.ctx());
         self.show_display(ui.ctx());
         self.show_paste(ui.ctx());
+        self.show_movie(ui.ctx());
+        self.revert_dialog(ui.ctx());
         self.interpolation_settings(ui.ctx());
         self.persist_views(ui.ctx().pixels_per_point() as f64);
         self.navigator_settings(ui.ctx());
@@ -420,13 +431,17 @@ impl eframe::App for Drawer {
             && (self.documents.iter().any(|doc| doc.dirty)
                 || self.sizing_dialog.is_some()
                 || self.import_dialog.is_some()
-                || self.paste_dialog.is_some())
+                || self.paste_dialog.is_some()
+                || self.movie_dialog.is_some()
+                || self.revert_pending.is_some())
         {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);
             if self.sizing_dialog.is_none()
                 && self.import_dialog.is_none()
                 && self.paste_dialog.is_none()
+                && self.movie_dialog.is_none()
+                && self.revert_pending.is_none()
             {
                 self.begin_quit();
             }
@@ -487,7 +502,7 @@ impl eframe::App for Drawer {
                 self.smoke_start_sizing(ui.ctx());
             }
             if self.frames > 120 {
-                std::process::exit(1);
+                fail_smoke();
             }
             if self.frames >= 6 && self.sizing_dialog.is_none() {
                 let validated = self.documents.len() == 2
@@ -495,10 +510,10 @@ impl eframe::App for Drawer {
                     && self.pending_close.is_none()
                     && self.documents[0].dpi == 600.0;
                 if !validated {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 if !self.documents[0].undo() || self.documents[0].dpi != 300.0 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let original = self.documents[0].snapshot();
                 self.aids.spacing = ["3".into(), "4".into()];
@@ -512,14 +527,14 @@ impl eframe::App for Drawer {
                     || !self.documents[0].undo()
                     || self.documents[0].snapshot() != original
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.open_reference_document().unwrap();
                 if self.documents[2].layers[0].pixels != [[240, 30, 80, 128], [20, 40, 60, 0]]
                     || self.documents[2].path.is_some()
                     || self.documents[2].history_counts() != (0, 0)
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.document_from_clipboard(|| {
                     drawer_core::references::LocalImage::from_rgba(
@@ -536,7 +551,7 @@ impl eframe::App for Drawer {
                 let second = root.join("smoke-second.drawer");
                 let output = root.join("smoke-export.png");
                 if self.save_as_from(3, || None).unwrap() || self.documents[3].path.is_some() {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.save_as_from(3, || Some(first.clone())).unwrap();
                 let first_bytes = std::fs::read(&first).unwrap();
@@ -549,7 +564,7 @@ impl eframe::App for Drawer {
                     || self.documents[3].snapshot() != snapshot
                     || std::fs::read(&first).unwrap() != first_bytes
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let cancel = std::sync::atomic::AtomicBool::new(false);
                 let source = drawer_core::image_import::ImageSource::read(
@@ -562,19 +577,19 @@ impl eframe::App for Drawer {
                     .decode(0, true, DEFAULT_DOCUMENT_BUDGET, &cancel)
                     .unwrap();
                 if page.image.pixels != [[10, 20, 30, 128], [80, 90, 100, 255]] {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let recent =
                     drawer_core::recent::RecentFiles::load(self.storage.as_ref().unwrap()).unwrap();
                 if recent.paths() != self.recent.paths() || recent.paths().len() != 2 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 if self.display.monitors.is_empty()
                     || !self.display.rendered_native
                     || self.display.rendered_frames < 2
                     || !self.display.native_windowed
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.size_presets
                     .add(
@@ -587,7 +602,7 @@ impl eframe::App for Drawer {
                     .unwrap()
                     != self.size_presets.book
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let original = self.documents[0].snapshot();
                 let sized = drawer_core::sizing::prepare(
@@ -608,14 +623,14 @@ impl eframe::App for Drawer {
                     || !self.documents[0].undo()
                     || self.documents[0].snapshot() != original
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.display.preferences.visible = false;
                 if drawer_core::interpolation::Settings::load(self.storage.as_ref().unwrap())
                     .unwrap()
                     != self.interpolation
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.select_tab(0);
                 let original = self.documents[0].snapshot();
@@ -637,7 +652,7 @@ impl eframe::App for Drawer {
                 if self.documents[0].layers.len() != 2
                     || self.documents[0].composite_pixel(1, 1) != [100, 20, 30, 128]
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let saved = root.join("smoke-paste.drawer");
                 self.save_to(0, &saved).unwrap();
@@ -646,7 +661,7 @@ impl eframe::App for Drawer {
                     .snapshot()
                     != self.documents[0].snapshot()
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.copy_top_layer_from(|packet, budget| {
                     assert_eq!(packet.origin, Some([1, 1]));
@@ -655,12 +670,57 @@ impl eframe::App for Drawer {
                 })
                 .unwrap();
                 if !self.documents[0].undo() || self.documents[0].snapshot() != original {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.display
                     .preferences
                     .save(self.storage.as_ref().unwrap())
                     .unwrap();
+                let before_revert = self.documents[0].snapshot();
+                if self.revert_from(0, false).unwrap()
+                    || self.documents[0].snapshot() != before_revert
+                {
+                    fail_smoke();
+                }
+                if !self.revert_from(0, true).unwrap()
+                    || self.documents[0].snapshot()
+                        != drawer_core::files::open(&saved, DEFAULT_DOCUMENT_BUDGET)
+                            .unwrap()
+                            .snapshot()
+                {
+                    fail_smoke();
+                }
+                let provider = root.join("smoke-movie.avi");
+                std::fs::write(&provider, [0u8; 128]).unwrap();
+                self.begin_movie_from(ui.ctx(), &provider, false, None)
+                    .unwrap();
+                if !self.movie_dialog.as_ref().unwrap().decoder_missing() {
+                    fail_smoke();
+                }
+                self.movie_dialog = None;
+                let clip = drawer_core::animation::Clip {
+                    fps: Default::default(),
+                    cells: vec![drawer_core::animation::Cell {
+                        name: "Smoke cell".into(),
+                        width: 2,
+                        height: 1,
+                        offset: [0; 2],
+                        pixels: Arc::new(vec![[120, 30, 40, 128], [9, 8, 7, 0]]),
+                    }],
+                    source_times: vec![0.0],
+                    audio: None,
+                };
+                let mut animation = clip.document(DEFAULT_DOCUMENT_BUDGET).unwrap();
+                let expected = animation.snapshot();
+                let animation_path = root.join("smoke-animation.drawer");
+                drawer_core::files::save(&mut animation, &animation_path).unwrap();
+                if drawer_core::files::open(&animation_path, DEFAULT_DOCUMENT_BUDGET)
+                    .unwrap()
+                    .snapshot()
+                    != expected
+                {
+                    fail_smoke();
+                }
                 self.persist_views(ui.ctx().pixels_per_point() as f64);
                 let layout =
                     drawer_core::view_layout::Layout::load(self.storage.as_ref().unwrap()).unwrap();
@@ -672,7 +732,7 @@ impl eframe::App for Drawer {
                     .len()
                     != layout.rows.len()
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.persist_navigator();
                 if drawer_core::navigator_preferences::Preferences::load(
@@ -681,10 +741,10 @@ impl eframe::App for Drawer {
                 .unwrap()
                     != self.canvas_view.navigator
                 {
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -693,7 +753,7 @@ impl eframe::App for Drawer {
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
-                    std::process::exit(1);
+                    fail_smoke();
                 }
                 self.quit_ready = true;
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -704,16 +764,40 @@ impl eframe::App for Drawer {
     }
 }
 
+#[track_caller]
+fn fail_smoke() -> ! {
+    let location = std::panic::Location::caller();
+    let message = format!(
+        "Smoke assertion failed at {}:{}",
+        location.file(),
+        location.line()
+    );
+    eprintln!("{message}");
+    if let Some(root) = std::env::var_os("DRAWER_SMOKE_DIAGNOSTICS") {
+        let _ = std::fs::write(PathBuf::from(root).join("smoke-failure.txt"), message);
+    }
+    std::process::exit(1)
+}
+
 fn main() -> eframe::Result {
-    let mut args = std::env::args().skip(1);
-    let smoke_output = match args.next().as_deref() {
-        Some("--smoke-test") => Some(PathBuf::from(args.next().expect("smoke receipt path"))),
-        None => None,
-        Some(other) => {
-            eprintln!("Unknown argument: {other}");
-            std::process::exit(2);
-        }
-    };
+    let mut args = std::env::args_os().skip(1);
+    let first = args.next();
+    let (smoke_output, startup_paths) =
+        if first.as_deref() == Some(std::ffi::OsStr::new("--smoke-test")) {
+            (
+                Some(PathBuf::from(args.next().expect("smoke receipt path"))),
+                Vec::new(),
+            )
+        } else {
+            (
+                None,
+                first
+                    .into_iter()
+                    .chain(args)
+                    .map(PathBuf::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(APP_NAME)
@@ -731,10 +815,14 @@ fn main() -> eframe::Result {
         APP_NAME,
         options,
         Box::new(move |cc| {
-            Ok(Box::new(
-                Drawer::new(&cc.egui_ctx, smoke_output)
-                    .with_storage(UserStorage::from_environment()?),
-            ))
+            let mut app = Drawer::new(&cc.egui_ctx, smoke_output)
+                .with_storage(UserStorage::from_environment()?);
+            for path in startup_paths {
+                if let Err(e) = app.open_path(&path) {
+                    app.status = Some(format!("Cannot open {}: {e}", path.display()));
+                }
+            }
+            Ok(Box::new(app))
         }),
     )
 }
@@ -2593,5 +2681,163 @@ mod tests {
             }
             .outline_visible(false, true)
         );
+    }
+    fn movie_clip() -> drawer_core::animation::Clip {
+        use drawer_core::animation::{Cell, Clip, Fps};
+        Clip {
+            fps: Fps {
+                numerator: 2,
+                denominator: 1,
+            },
+            cells: vec![
+                Cell {
+                    name: "Red".into(),
+                    width: 2,
+                    height: 1,
+                    offset: [0; 2],
+                    pixels: Arc::new(vec![[255, 0, 0, 255]; 2]),
+                },
+                Cell {
+                    name: "Blue".into(),
+                    width: 2,
+                    height: 1,
+                    offset: [0; 2],
+                    pixels: Arc::new(vec![[0, 0, 255, 255]; 2]),
+                },
+            ],
+            source_times: vec![0.0, 0.5],
+            audio: None,
+        }
+    }
+    #[test]
+    fn revert_cancel_failure_success_and_denied_association_preserve_current_data() {
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        assert!(app.revert_from(0, true).is_err());
+        let path = root.0.join("saved.drawer");
+        app.save_to(0, &path).unwrap();
+        let saved = app.documents[0].snapshot();
+        app.documents[0].edit_pixel(0, 0, 0, [1, 2, 3, 255]);
+        app.documents[0].view.angle = 37.0;
+        app.duplicate_view();
+        let before = app.documents[0].snapshot();
+        let view = app.documents[0].view;
+        let id = app.documents[0].id;
+        let history = app.documents[0].history_counts();
+        let original = std::fs::read(&path).unwrap();
+        assert!(!app.revert_from(0, false).unwrap());
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
+        std::fs::write(&path, "damaged").unwrap();
+        assert!(app.revert_from(0, true).is_err());
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert!(app.documents[0].dirty);
+        std::fs::remove_file(&path).unwrap();
+        assert!(app.revert_from(0, true).is_err());
+        assert_eq!(app.documents[0].snapshot(), before);
+        std::fs::write(&path, &original).unwrap();
+        assert!(app.revert_from(0, true).unwrap());
+        assert_eq!(app.documents[0].snapshot(), saved);
+        assert_eq!(app.documents[0].id, id);
+        assert_eq!(app.documents[0].view, view);
+        assert_eq!(app.tabs.len(), 2);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        assert!(!app.documents[0].dirty);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        app.file_association_from(|| Err("denied".into()));
+        assert!(app.status.as_ref().unwrap().contains("denied"));
+        assert_eq!(app.documents[0].snapshot(), saved);
+        assert_eq!(std::fs::read(path).unwrap(), original);
+    }
+    #[test]
+    fn movie_mouse_confirm_cancel_insert_limits_stale_target_and_frame_preview_are_atomic() {
+        let root = TestDirectory::new();
+        let source = root.0.join("provider.avi");
+        std::fs::write(&source, "provider fixture").unwrap();
+        let original = std::fs::read(&source).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let before = app.documents[0].snapshot();
+        app.begin_movie_from(&ctx, &source, false, None).unwrap();
+        assert!(app.movie_dialog.as_ref().unwrap().decoder_missing());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.movie_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.movie_dialog.is_none());
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents.len(), 1);
+        app.movie_dialog = Some(movie_dialog::MovieDialog::injected(
+            &source,
+            movie_clip(),
+            false,
+            None,
+        ));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.movie_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.movie_dialog.is_none());
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents.len(), 1);
+        app.movie_dialog = Some(movie_dialog::MovieDialog::injected(
+            &source,
+            movie_clip(),
+            false,
+            None,
+        ));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.movie_dialog.as_ref().unwrap().accept_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.movie_dialog.is_none());
+        assert_eq!(app.documents.len(), 2);
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert!(app.documents[1].path.is_none() && app.documents[1].dirty);
+        let path = root.0.join("movie.drawer");
+        app.save_to(1, &path).unwrap();
+        let saved = app.documents[1].snapshot();
+        let history = app.documents[1].history_counts();
+        app.documents[1].current_frame = 1;
+        frame(&ctx, &mut app, vec![]);
+        assert_eq!(app.documents[1].composite_pixel(0, 0), [0, 0, 255, 255]);
+        assert_eq!(app.documents[1].snapshot(), saved);
+        assert_eq!(app.documents[1].history_counts(), history);
+        assert!(!app.documents[1].dirty);
+        let key = Some((app.documents[1].id, app.documents[1].revision));
+        app.movie_dialog = Some(movie_dialog::MovieDialog::injected(
+            &source,
+            movie_clip(),
+            true,
+            key,
+        ));
+        app.movie_dialog.as_mut().unwrap().start_frame = "3".into();
+        assert!(app.accept_movie().is_err());
+        assert_eq!(app.documents[1].snapshot(), saved);
+        app.movie_dialog.as_mut().unwrap().start_frame = "1".into();
+        app.documents[1].edit_pixel(0, 0, 0, [20, 30, 40, 255]);
+        let changed = app.documents[1].snapshot();
+        assert!(app.accept_movie().is_err());
+        assert_eq!(app.documents[1].snapshot(), changed);
+        app.movie_dialog = None;
+        let key = Some((app.documents[1].id, app.documents[1].revision));
+        app.movie_dialog = Some(movie_dialog::MovieDialog::injected(
+            &source,
+            movie_clip(),
+            true,
+            key,
+        ));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.movie_dialog.as_ref().unwrap().accept_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.movie_dialog.is_none());
+        assert_eq!(app.documents[1].animation.as_ref().unwrap().tracks.len(), 2);
+        assert!(app.documents[1].undo());
+        assert_eq!(app.documents[1].snapshot(), changed);
+        assert_eq!(std::fs::read(source).unwrap(), original);
     }
 }

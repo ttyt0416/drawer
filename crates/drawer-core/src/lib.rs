@@ -1,4 +1,5 @@
 pub mod aids;
+pub mod animation;
 pub mod assets;
 pub mod canvas_size;
 pub mod display_view;
@@ -7,6 +8,7 @@ pub mod files;
 mod history;
 pub mod image_import;
 pub mod interpolation;
+pub mod movie;
 pub mod navigator;
 pub mod navigator_preferences;
 pub mod paste;

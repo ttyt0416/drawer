@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 5;
+const VERSION: u32 = 6;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -171,6 +171,21 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
             return Err(invalid("Invalid or oversized page geometry"));
         }
     }
+    if version >= 6 {
+        match read_u32(&mut reader)? {
+            0 => {}
+            1 => {
+                document.animation = Some(crate::animation::Timeline::read(
+                    &mut reader,
+                    budget.saturating_sub(document.memory_bytes()),
+                )?)
+            }
+            _ => return Err(invalid("Invalid animation tag")),
+        }
+        if document.memory_bytes() > budget {
+            return Err(invalid("Animation exceeds document memory budget"));
+        }
+    }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
@@ -214,6 +229,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         if !layer.valid(document.width, document.height) {
             return Err(invalid("Invalid raster layer"));
         }
+    }
+    if document.animation.as_ref().is_some_and(|a| !a.valid()) {
+        return Err(invalid("Invalid animation"));
     }
     if !document.scene.valid() || document.scene.size_bytes() > MAX_SCENE_BYTES {
         return Err(invalid("Invalid or oversized page geometry"));
@@ -260,6 +278,12 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         }
         writer.write_all(&(scene.len() as u32).to_le_bytes())?;
         writer.write_all(&scene)?;
+        if let Some(animation) = &document.animation {
+            writer.write_all(&1u32.to_le_bytes())?;
+            animation.write(&mut writer)?;
+        } else {
+            writer.write_all(&0u32.to_le_bytes())?;
+        }
         writer.flush()?;
         writer.get_ref().sync_all()
     })();

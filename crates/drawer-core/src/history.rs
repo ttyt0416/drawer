@@ -117,6 +117,7 @@ impl Document {
             || after.dpi <= 0.0
             || !(1..=256).contains(&after.layers.len())
             || !after.scene.valid()
+            || after.animation.as_ref().is_some_and(|a| !a.valid())
             || after
                 .layers
                 .iter()

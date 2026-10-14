@@ -2,7 +2,7 @@ use drawer_core::document::Document;
 use eframe::egui;
 
 pub struct CanvasView {
-    image: Option<((u64, u64), egui::TextureHandle)>,
+    image: Option<((u64, u64, u32), egui::TextureHandle)>,
     checker: egui::TextureHandle,
     pub move_delta: Option<[f64; 2]>,
     pub filter: drawer_core::interpolation::Filter,
@@ -23,6 +23,7 @@ pub struct CanvasView {
 struct ScreenKey {
     id: u64,
     revision: u64,
+    frame: u32,
     view: drawer_core::view::View,
     size: [usize; 2],
     ppp: f64,
@@ -238,7 +239,8 @@ impl CanvasView {
         document.view != before
     }
     fn update_image(&mut self, ui: &egui::Ui, document: &Document) {
-        if self.image.as_ref().map(|(active, _)| *active) != Some((document.id, document.revision))
+        if self.image.as_ref().map(|(active, _)| *active)
+            != Some((document.id, document.revision, document.current_frame))
         {
             let reduction = document.width.max(document.height).div_ceil(2048).max(1);
             let width = document.width.div_ceil(reduction);
@@ -259,7 +261,10 @@ impl CanvasView {
                 egui::ColorImage::new([width as usize, height as usize], pixels),
                 egui::TextureOptions::NEAREST,
             );
-            self.image = Some(((document.id, document.revision), texture));
+            self.image = Some((
+                (document.id, document.revision, document.current_frame),
+                texture,
+            ));
         }
     }
     fn paint_paper(
@@ -310,6 +315,7 @@ impl CanvasView {
             let key = ScreenKey {
                 id: document.id,
                 revision: document.revision,
+                frame: document.current_frame,
                 view,
                 size: dimensions,
                 ppp,
@@ -476,7 +482,7 @@ impl CanvasView {
     }
     #[cfg(test)]
     pub fn rendered_revision(&self) -> Option<(u64, u64)> {
-        self.image.as_ref().map(|(key, _)| *key)
+        self.image.as_ref().map(|(key, _)| (key.0, key.1))
     }
     fn show_navigator(
         &mut self,

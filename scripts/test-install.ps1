@@ -8,15 +8,17 @@ $packageRoot = Join-Path $projectRoot 'dist/Drawer-windows-x64'
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $oldData = $env:DRAWER_DATA_DIR
 $oldPath = $env:PATH
+$oldDiagnostics = $env:DRAWER_SMOKE_DIAGNOSTICS
 try {
     & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot
     $env:DRAWER_DATA_DIR = $dataRoot
+    $env:DRAWER_SMOKE_DIAGNOSTICS = $testRoot
     $env:PATH = Join-Path $env:SystemRoot 'System32'
     $receipt = Join-Path $testRoot 'receipt.txt'
     $errors = Join-Path $testRoot 'errors.txt'
     $process = Start-Process -FilePath (Join-Path $installRoot 'Drawer.exe') -ArgumentList @('--smoke-test', ('"' + $receipt + '"')) -WorkingDirectory $testRoot -WindowStyle Hidden -RedirectStandardError $errors -PassThru
     if (-not $process.WaitForExit(30000)) { $process.Kill(); throw '설치 앱 시작 시간 초과' }
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $receipt)) { Get-Content -LiteralPath $errors; throw '설치 앱 실행 실패' }
+    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $receipt)) { Get-Content -LiteralPath $errors; if (Test-Path -LiteralPath (Join-Path $testRoot 'smoke-failure.txt')) { Get-Content -LiteralPath (Join-Path $testRoot 'smoke-failure.txt') }; throw '설치 앱 실행 실패' }
     $preferences = Join-Path $dataRoot 'settings/preferences.txt'
     if (-not (Test-Path -LiteralPath $preferences)) { throw '사용자 설정 저장 실패' }
     $before = (Get-FileHash -LiteralPath $preferences).Hash
@@ -59,11 +61,13 @@ try {
     if ($smokeResult -notmatch 'interpolation_view=true' -or $smokeResult -notmatch 'interpolation_settings=true') { throw '보기 보간/설정 저장 시작 시험 실패' }
     if ($smokeResult -notmatch 'view_layout=true') { throw '보기 순서/복원 시작 시험 실패' }
     if ($smokeResult -notmatch 'navigator_settings=true') { throw '내비게이터 설정 저장 시작 시험 실패' }
+    if ($smokeResult -notmatch 'revert_saved=true' -or $smokeResult -notmatch 'movie_decoder_missing=true' -or $smokeResult -notmatch 'animation_native=true') { throw '되돌리기/로컬 디코더 누락/애니메이션 재열기 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 14개 보존.'
 } finally {
     $env:DRAWER_DATA_DIR = $oldData
     $env:PATH = $oldPath
+    $env:DRAWER_SMOKE_DIAGNOSTICS = $oldDiagnostics
     $resolvedTest = [IO.Path]::GetFullPath($testRoot)
     if ($resolvedTest -ne (Join-Path $projectRoot '.installation-test')) { throw '시험 정리 경로 불일치' }
     if ((Get-Item -LiteralPath $resolvedTest).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '시험 정리 대상은 링크일 수 없습니다.' }

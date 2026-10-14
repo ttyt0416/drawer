@@ -11,6 +11,7 @@ pub struct DocumentState {
     pub dpi: f64,
     pub layers: Vec<RasterLayer>,
     pub scene: Scene,
+    pub animation: Option<crate::animation::Timeline>,
 }
 impl DocumentState {
     pub fn memory_bytes(&self) -> usize {
@@ -19,6 +20,7 @@ impl DocumentState {
             .map(|l| l.pixels.len() * 4)
             .sum::<usize>()
             + self.scene.size_bytes()
+            + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
     pub(crate) fn restore(&self, document: &mut Document) {
         document.width = self.width;
@@ -26,6 +28,11 @@ impl DocumentState {
         document.dpi = self.dpi;
         document.layers = self.layers.clone();
         document.scene = self.scene.clone();
+        document.animation = self.animation.clone();
+        document.current_frame = document
+            .animation
+            .as_ref()
+            .map_or(0, |a| document.current_frame.min(a.frames - 1));
     }
 }
 impl Document {
@@ -36,6 +43,7 @@ impl Document {
             dpi: self.dpi,
             layers: self.layers.clone(),
             scene: self.scene.clone(),
+            animation: self.animation.clone(),
         }
     }
 }
@@ -218,7 +226,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
     if !dpi.is_finite() || dpi <= 0.0 {
         return Err("DPI must be positive and finite.".into());
     }
-    if !source.scene.valid() {
+    if !source.scene.valid() || source.animation.as_ref().is_some_and(|a| !a.valid()) {
         return Err("Invalid page geometry.".into());
     }
     let mut result_bytes = source.scene.size_bytes();
@@ -234,6 +242,37 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
         result_bytes = result_bytes
             .checked_add(extent.width as usize * extent.height as usize * 4)
             .ok_or("Image size overflow.")?;
+    }
+    if let Some(animation) = &source.animation {
+        result_bytes = result_bytes.saturating_add(
+            animation.memory_bytes()
+                - animation
+                    .tracks
+                    .iter()
+                    .flat_map(|t| &t.cells)
+                    .map(|c| c.pixels.len() * 4)
+                    .sum::<usize>(),
+        );
+        for cell in animation.tracks.iter().flat_map(|t| &t.cells) {
+            let layer = RasterLayer {
+                name: cell.name.clone(),
+                pixels: Vec::new(),
+                placement: Some(PlacedRaster {
+                    width: cell.width,
+                    height: cell.height,
+                    offset: cell.offset,
+                }),
+            };
+            let extent =
+                projected(source, &layer, change, width, height)?.unwrap_or(PlacedRaster {
+                    width,
+                    height,
+                    offset: [0; 2],
+                });
+            result_bytes = result_bytes
+                .checked_add(extent.width as usize * extent.height as usize * 4)
+                .ok_or("Animation size overflow")?;
+        }
     }
     let history_bytes = source
         .memory_bytes()
@@ -255,7 +294,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             max: [source.width as f64, source.height as f64],
         },
     };
-    let removed_pixels = source
+    let mut removed_pixels = source
         .layers
         .iter()
         .map(|layer| {
@@ -279,7 +318,25 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             u64::from(p.width) * u64::from(p.height)
                 - ((kept.max[0] - kept.min[0]) * (kept.max[1] - kept.min[1])) as u64
         })
-        .sum();
+        .sum::<u64>();
+    if matches!(
+        change,
+        Change::Canvas { .. } | Change::CanvasEdges { .. } | Change::Crop { .. }
+    ) && let Some(animation) = &source.animation
+    {
+        for cell in animation.tracks.iter().flat_map(|track| &track.cells) {
+            let bounds = Rect {
+                min: [cell.offset[0] as f64, cell.offset[1] as f64],
+                max: [
+                    cell.offset[0] as f64 + cell.width as f64,
+                    cell.offset[1] as f64 + cell.height as f64,
+                ],
+            };
+            let kept = source_boundary.intersection(bounds);
+            removed_pixels += u64::from(cell.width) * u64::from(cell.height)
+                - ((kept.max[0] - kept.min[0]) * (kept.max[1] - kept.min[1])) as u64;
+        }
+    }
     Ok(Plan {
         width,
         height,
@@ -306,6 +363,7 @@ pub fn prepare(
         dpi: plan.dpi,
         layers: Vec::new(),
         scene: source.scene.clone(),
+        animation: source.animation.clone(),
     };
     let resampling = matches!(change, Change::Resample { .. });
     let scale = [
@@ -324,6 +382,7 @@ pub fn prepare(
                     ..layer.clone()
                 }],
                 scene: Default::default(),
+                animation: None,
             };
             let local_change = if let Change::Resample { dpi, filter, .. } = change {
                 Change::Resample {
@@ -423,6 +482,35 @@ pub fn prepare(
             plan.offset[1] as f64,
         ]),
     };
+    if !matches!(change, Change::Dpi(_))
+        && let Some(animation) = &mut result.animation
+    {
+        for cell in animation.tracks.iter_mut().flat_map(|t| &mut t.cells) {
+            let cell_source = DocumentState {
+                width: source.width,
+                height: source.height,
+                dpi: source.dpi,
+                layers: vec![RasterLayer {
+                    name: cell.name.clone(),
+                    pixels: cell.pixels.as_ref().clone(),
+                    placement: Some(PlacedRaster {
+                        width: cell.width,
+                        height: cell.height,
+                        offset: cell.offset,
+                    }),
+                }],
+                scene: Default::default(),
+                animation: None,
+            };
+            let mut prepared = prepare(&cell_source, change, budget, cancel)?;
+            let output = prepared.layers.remove(0);
+            let extent = output.extent(plan.width, plan.height);
+            cell.width = extent.width;
+            cell.height = extent.height;
+            cell.offset = extent.offset;
+            cell.pixels = std::sync::Arc::new(output.pixels);
+        }
+    }
     if matches!(change, Change::Crop { .. }) {
         let inverse = source.scene.transform.inverse();
         let boundary = plan.source_boundary;

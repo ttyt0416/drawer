@@ -366,6 +366,7 @@ impl Drawer {
             }
             self.recent_menu(ui);
             self.view_menu(ui);
+            self.local_file_menu(ui);
             if let Some(active) = self.active {
                 if ui.button("Save").clicked()
                     && let Err(error) = self.save_document(active)

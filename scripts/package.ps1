@@ -15,11 +15,15 @@ try {
         'Cargo.lock' = 'Cargo.lock'
         'docs/process/own-assets.md' = 'OWN-ASSETS.md'
         'docs/START-HERE.md' = 'START-HERE.md'
+        'docs/process/movie-import.md' = 'MOVIE-IMPORT.md'
         'scripts/Install.ps1' = 'Install.ps1'
         'scripts/Uninstall.ps1' = 'Uninstall.ps1'
     }.GetEnumerator()) {
         Copy-Item -LiteralPath (Join-Path $projectRoot $entry.Key) -Destination (Join-Path $packageRoot $entry.Value)
     }
+    $guidePath = Join-Path $packageRoot 'START-HERE.md'
+    $guide = [IO.File]::ReadAllText($guidePath).Replace('](process/movie-import.md)', '](MOVIE-IMPORT.md)')
+    [IO.File]::WriteAllText($guidePath, $guide, [Text.UTF8Encoding]::new($false))
     foreach ($required in 'Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md') {
         if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $required) -PathType Leaf)) { throw "배포 파일 누락: $required" }
     }

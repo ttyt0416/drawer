@@ -2,7 +2,7 @@ param([string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs/Drawer'))
 $ErrorActionPreference = 'Stop'
 $installationRoot = [IO.Path]::GetFullPath($InstallDir)
 if ($installationRoot -eq [IO.Path]::GetPathRoot($installationRoot)) { throw '드라이브 루트에는 설치할 수 없습니다.' }
-$files = @('Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md', 'START-HERE.md', 'Install.ps1', 'Uninstall.ps1')
+$files = @('Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md', 'START-HERE.md', 'MOVIE-IMPORT.md', 'Install.ps1', 'Uninstall.ps1')
 foreach ($name in $files) { if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name) -PathType Leaf)) { throw "설치 파일 누락: $name" } }
 if (Test-Path -LiteralPath $installationRoot) {
     if ((Get-Item -LiteralPath $installationRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '설치 폴더는 링크일 수 없습니다.' }

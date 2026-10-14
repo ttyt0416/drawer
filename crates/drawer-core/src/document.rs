@@ -106,6 +106,8 @@ pub struct Document {
     pub tool: crate::assets::BrushTip,
     pub revision: u64,
     pub scene: crate::scene::Scene,
+    pub animation: Option<crate::animation::Timeline>,
+    pub current_frame: u32,
     pub(crate) history: crate::history::History,
 }
 
@@ -154,6 +156,8 @@ impl Document {
             tool: crate::assets::BrushTip::Pen,
             revision: 0,
             scene: Default::default(),
+            animation: None,
+            current_frame: 0,
             history: Default::default(),
         })
     }
@@ -163,6 +167,7 @@ impl Document {
             .map(|layer| layer.pixels.len() * 4)
             .sum::<usize>()
             + self.scene.size_bytes()
+            + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
     pub fn mark_saved(&mut self, path: PathBuf) {
         self.title = path
@@ -178,8 +183,17 @@ impl Document {
     pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
         let mut color = [0.0f32; 3];
         let mut alpha = 0.0;
-        for layer in &self.layers {
-            let pixel = layer.pixel(self.width, self.height, x as i64, y as i64);
+        let pixels = self
+            .layers
+            .iter()
+            .map(|layer| layer.pixel(self.width, self.height, x as i64, y as i64))
+            .chain(
+                self.animation
+                    .iter()
+                    .flat_map(|a| a.visible_cells(self.current_frame))
+                    .map(|cell| cell.pixel(x as i64, y as i64)),
+            );
+        for pixel in pixels {
             let source_alpha = pixel[3] as f32 / 255.0;
             for channel in 0..3 {
                 color[channel] =
