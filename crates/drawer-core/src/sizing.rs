@@ -58,6 +58,12 @@ pub enum Change {
         height: u32,
         anchor: [f64; 2],
     },
+    CanvasEdges {
+        left: i64,
+        top: i64,
+        right: i64,
+        bottom: i64,
+    },
     Crop {
         x: u32,
         y: u32,
@@ -129,6 +135,30 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             }
             (width, height, source.dpi, [-i64::from(x), -i64::from(y)])
         }
+        Change::CanvasEdges {
+            left,
+            top,
+            right,
+            bottom,
+        } => {
+            if [left, top, right, bottom]
+                .iter()
+                .any(|n| n.unsigned_abs() > u64::from(MAX_DIMENSION) * 2)
+            {
+                return Err("Edge increment exceeds the supported size.".into());
+            }
+            let width = i64::from(source.width)
+                .checked_add(left)
+                .and_then(|n| n.checked_add(right))
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or("Invalid width after edge increments.")?;
+            let height = i64::from(source.height)
+                .checked_add(top)
+                .and_then(|n| n.checked_add(bottom))
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or("Invalid height after edge increments.")?;
+            (width, height, source.dpi, [left, top])
+        }
     };
     if !(1..=MAX_DIMENSION).contains(&width) || !(1..=MAX_DIMENSION).contains(&height) {
         return Err("Image dimensions must be from 1 to 32768 pixels.".into());
@@ -153,7 +183,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
         return Err("This change exceeds the available memory / undo budget. Reduce the dimensions or close other drawings.".into());
     }
     let source_boundary = match change {
-        Change::Canvas { .. } | Change::Crop { .. } => Rect {
+        Change::Canvas { .. } | Change::CanvasEdges { .. } | Change::Crop { .. } => Rect {
             min: [-offset[0] as f64, -offset[1] as f64],
             max: [
                 width as f64 - offset[0] as f64,
@@ -429,6 +459,98 @@ mod tests {
             &AtomicBool::new(false),
         )
         .unwrap()
+    }
+    #[test]
+    fn all_nine_anchors_signed_edges_save_and_undo_keep_expected_corner_pixels() {
+        let root = TempDir::new();
+        let mut doc = Document::create(
+            CanvasSpec {
+                width: 4,
+                height: 3,
+                dpi: 300.0,
+                background: Background::Transparent,
+            },
+            1000,
+        )
+        .unwrap();
+        for (n, p) in doc.layers[0].pixels.iter_mut().enumerate() {
+            *p = [n as u8, 0, 0, 255];
+        }
+        let source = doc.snapshot();
+        for w in [2, 6] {
+            for h in [1, 5] {
+                for ax in [0.0, 0.5, 1.0] {
+                    for ay in [0.0, 0.5, 1.0] {
+                        let change = Change::Canvas {
+                            width: w,
+                            height: h,
+                            anchor: [ax, ay],
+                        };
+                        let output = prepared(&doc, change);
+                        let ox = ((w as f64 - 4.0) * ax).round() as i64;
+                        let oy = ((h as f64 - 3.0) * ay).round() as i64;
+                        for y in 0..h {
+                            for x in 0..w {
+                                let sx = x as i64 - ox;
+                                let sy = y as i64 - oy;
+                                let expected = if (0..4).contains(&sx) && (0..3).contains(&sy) {
+                                    source.layers[0].pixels[(sy * 4 + sx) as usize]
+                                } else {
+                                    [0; 4]
+                                };
+                                assert_eq!(output.layers[0].pixels[(y * w + x) as usize], expected);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let edges = Change::CanvasEdges {
+            left: -1,
+            top: -1,
+            right: 2,
+            bottom: 1,
+        };
+        let output = prepared(&doc, edges);
+        assert_eq!((output.width, output.height), (5, 3));
+        assert_eq!(output.layers[0].pixels[0], source.layers[0].pixels[5]);
+        assert_eq!(output.layers[0].pixels[4], [0; 4]);
+        doc.commit_state(output).unwrap();
+        assert_eq!(doc.history_counts(), (1, 0));
+        let path = root.0.join("edges.drawer");
+        files::save(&mut doc, &path).unwrap();
+        assert_eq!(
+            files::open(&path, 10000).unwrap().snapshot(),
+            doc.snapshot()
+        );
+        assert!(doc.undo());
+        assert_eq!(doc.snapshot(), source);
+        assert!(
+            plan(
+                &source,
+                Change::CanvasEdges {
+                    left: -4,
+                    top: 0,
+                    right: 0,
+                    bottom: 0
+                },
+                10000
+            )
+            .is_err()
+        );
+        assert!(
+            plan(
+                &source,
+                Change::CanvasEdges {
+                    left: i64::MIN,
+                    top: 0,
+                    right: i64::MAX,
+                    bottom: 0
+                },
+                10000
+            )
+            .is_err()
+        );
     }
     #[test]
     fn mixed_geometry_resamples_without_rewriting_original_properties_and_round_trips() {

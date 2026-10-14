@@ -1,5 +1,6 @@
 pub mod aids;
 pub mod assets;
+pub mod canvas_size;
 pub mod display_view;
 pub mod document;
 pub mod files;

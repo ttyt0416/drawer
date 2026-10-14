@@ -40,9 +40,10 @@ pub(super) struct SizingDialog {
     original: Arc<DocumentState>,
     mode: Mode,
     preset: Option<Change>,
-    pub(super) width: String,
-    pub(super) height: String,
-    pub(super) dpi: String,
+    pub(super) size: drawer_core::canvas_size::Dimensions,
+    pub(super) keep_pixels: bool,
+    pub(super) use_edges: bool,
+    pub(super) edges: [String; 4],
     pub(super) x: String,
     pub(super) y: String,
     anchor: [f64; 2],
@@ -90,9 +91,14 @@ impl SizingDialog {
             original: Arc::new(document.snapshot()),
             mode,
             preset: None,
-            width: document.width.to_string(),
-            height: document.height.to_string(),
-            dpi: document.dpi.to_string(),
+            size: drawer_core::canvas_size::Dimensions::new(
+                document.width,
+                document.height,
+                document.dpi,
+            ),
+            keep_pixels: false,
+            use_edges: false,
+            edges: std::array::from_fn(|_| "0".to_string()),
             x: "0".into(),
             y: "0".into(),
             anchor: [0.5; 2],
@@ -123,17 +129,30 @@ impl SizingDialog {
         };
         match self.mode {
             Mode::Dpi => Ok(Change::Dpi(dpi()?)),
-            Mode::Resample => Ok(Change::Resample {
-                width: number(&self.width)?,
-                height: number(&self.height)?,
-                dpi: dpi()?,
-                filter: self.filter,
+            Mode::Resample if self.keep_pixels => Ok(Change::Dpi(dpi()?)),
+            Mode::Resample => {
+                let [width, height] = self.size.pixels()?;
+                Ok(Change::Resample {
+                    width,
+                    height,
+                    dpi: dpi()?,
+                    filter: self.filter,
+                })
+            }
+            Mode::Canvas if self.use_edges => Ok(Change::CanvasEdges {
+                left: self.size.edge_pixels(&self.edges[0])?,
+                top: self.size.edge_pixels(&self.edges[1])?,
+                right: self.size.edge_pixels(&self.edges[2])?,
+                bottom: self.size.edge_pixels(&self.edges[3])?,
             }),
-            Mode::Canvas => Ok(Change::Canvas {
-                width: number(&self.width)?,
-                height: number(&self.height)?,
-                anchor: self.anchor,
-            }),
+            Mode::Canvas => {
+                let [width, height] = self.size.pixels()?;
+                Ok(Change::Canvas {
+                    width,
+                    height,
+                    anchor: self.anchor,
+                })
+            }
             Mode::Crop => Ok(Change::Crop {
                 x: number(&self.x)?,
                 y: number(&self.y)?,
@@ -145,6 +164,17 @@ impl SizingDialog {
     }
     fn plan(&self, budget: usize) -> Result<sizing::Plan, String> {
         sizing::plan(&self.original, self.change()?, budget)
+    }
+}
+impl std::ops::Deref for SizingDialog {
+    type Target = drawer_core::canvas_size::Dimensions;
+    fn deref(&self) -> &Self::Target {
+        &self.size
+    }
+}
+impl std::ops::DerefMut for SizingDialog {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.size
     }
 }
 impl Drawer {
@@ -271,14 +301,14 @@ impl Drawer {
             ui.label("Finish or cancel this change before saving the drawing.");
             ui.add_enabled_ui(dialog.job.is_none(), |ui| {
                 egui::Grid::new("sizing-fields").show(ui, |ui| {
-                    if matches!(dialog.mode, Mode::Resample | Mode::Canvas | Mode::Crop) {
-                        for (label, value) in [("Width (pixels)", &mut dialog.width), ("Height (pixels)", &mut dialog.height)] {
+                    if dialog.mode==Mode::Crop {
+                        for (label, value) in [("Width (pixels)", &mut dialog.size.width), ("Height (pixels)", &mut dialog.size.height)] {
                             ui.label(label);
                             changed |= ui.text_edit_singleline(value).changed();
                             ui.end_row();
                         }
                     }
-                    if matches!(dialog.mode, Mode::Dpi | Mode::Resample) {
+                    if dialog.mode==Mode::Dpi {
                         ui.label("DPI");
                         changed |= ui.text_edit_singleline(&mut dialog.dpi).changed();
                         ui.end_row();
@@ -291,7 +321,44 @@ impl Drawer {
                         }
                     }
                 });
-                if dialog.mode == Mode::Canvas {
+                if dialog.mode==Mode::Resample {
+                    if ui.checkbox(&mut dialog.keep_pixels,"Keep pixel count when changing DPI").changed() {
+                        if let Ok(dpi)=drawer_core::canvas_size::dpi(&dialog.size.dpi) {dialog.size.set_pixels([dialog.original.width,dialog.original.height],dpi);}
+                        changed=true;
+                    }
+                    if dialog.keep_pixels {
+                        ui.label("DPI only: no resampling; existing pixels stay unchanged.");
+                        ui.label("DPI");changed|=ui.text_edit_singleline(&mut dialog.size.dpi).changed();
+                    }else {changed|=size_fields::fields(ui,&mut dialog.size,true,Some(false));ui.label("DPI changes preserve physical size by resampling.");}
+                }
+                if dialog.mode==Mode::Canvas {
+                    changed|=ui.checkbox(&mut dialog.use_edges,"Adjust each edge").changed();
+                    if dialog.use_edges {
+                        let mut unit=dialog.size.unit;
+                        egui::ComboBox::from_id_salt("edge-unit").selected_text(unit.label()).show_ui(ui,|ui| {
+                            for u in [drawer_core::aids::Unit::Pixels,drawer_core::aids::Unit::Millimeters,drawer_core::aids::Unit::Inches] {ui.selectable_value(&mut unit,u,u.label());}
+                        });
+                        if unit!=dialog.size.unit {
+                            let previous=dialog.size.unit;
+                            if let Ok(dpi)=drawer_core::canvas_size::dpi(&dialog.size.dpi) {
+                                for edge in &mut dialog.edges {if let Ok(n)=edge.parse::<f64>() {*edge=unit.from_pixels(previous.to_pixels(n,dpi),dpi).to_string();}}
+                            }
+                            dialog.size.unit=unit;changed=true;
+                        }
+                        ui.label("Positive adds transparent space; negative removes pixels.");
+                        egui::Grid::new("edge-increments").show(ui,|ui| {
+                            for (label,value) in ["Left","Top","Right","Bottom"].into_iter().zip(&mut dialog.edges) {ui.label(label);changed|=ui.text_edit_singleline(value).changed();ui.end_row();}
+                        });
+                    }else {changed|=size_fields::fields(ui,&mut dialog.size,false,None);}
+                }
+                if matches!(dialog.mode,Mode::Canvas|Mode::Resample) && !dialog.use_edges && !dialog.keep_pixels {
+                    if self.size_presets.show(ui,&mut dialog.size,self.storage.as_ref()) {
+                        if dialog.mode==Mode::Canvas && let Ok(pixels)=dialog.size.pixels() {dialog.size.set_pixels(pixels,dialog.original.dpi);}
+                        changed=true;
+                    }
+                    if dialog.mode==Mode::Canvas {ui.label("Canvas presets apply pixel dimensions; the document DPI stays unchanged.");}
+                }
+                if dialog.mode == Mode::Canvas && !dialog.use_edges {
                     ui.label("Anchor");
                     egui::Grid::new("canvas-anchor").show(ui, |ui| {
                         for (row, y) in [0.0, 0.5, 1.0].into_iter().enumerate() {
@@ -306,7 +373,7 @@ impl Drawer {
                         }
                     });
                 }
-                if dialog.mode == Mode::Resample {
+                if dialog.mode == Mode::Resample && !dialog.keep_pixels {
                     ui.horizontal(|ui| {
                         changed |= ui.selectable_value(&mut dialog.filter, Interpolation::Nearest, "Nearest (pixel art)").changed();
                         changed |= ui.selectable_value(&mut dialog.filter, Interpolation::Bilinear, "Bilinear").changed();
@@ -370,7 +437,7 @@ impl Drawer {
 }
 fn object_sizes(ui: &mut egui::Ui, dialog: &SizingDialog, plan: &sizing::Plan) {
     use drawer_core::scene::{Affine, PageObject, Scene};
-    let delta = if dialog.mode == Mode::Resample {
+    let delta = if dialog.mode == Mode::Resample && !dialog.keep_pixels {
         Affine([
             plan.width as f64 / dialog.original.width as f64,
             0.0,

@@ -13,6 +13,7 @@ mod display_pane;
 mod image_import_dialog;
 mod new_canvas;
 mod reference_pane;
+mod size_fields;
 mod sizing_dialog;
 mod workspace;
 use new_canvas::NewCanvas;
@@ -54,6 +55,7 @@ struct Drawer {
     import_dialog: Option<image_import_dialog::ImportDialog>,
     protected_sources: std::collections::HashSet<PathBuf>,
     display: display_pane::DisplayPane,
+    size_presets: size_fields::Presets,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -122,6 +124,7 @@ impl Drawer {
             import_dialog: None,
             protected_sources: Default::default(),
             display: display_pane::DisplayPane::new(ctx),
+            size_presets: Default::default(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -167,17 +170,9 @@ impl Drawer {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                egui::Grid::new("canvas-fields").show(ui, |ui| {
-                    ui.label("Width (pixels)");
-                    ui.text_edit_singleline(&mut self.new_canvas.width);
-                    ui.end_row();
-                    ui.label("Height (pixels)");
-                    ui.text_edit_singleline(&mut self.new_canvas.height);
-                    ui.end_row();
-                    ui.label("DPI");
-                    ui.text_edit_singleline(&mut self.new_canvas.dpi);
-                    ui.end_row();
-                });
+                size_fields::fields(ui, &mut self.new_canvas.size, true, None);
+                self.size_presets
+                    .show(ui, &mut self.new_canvas.size, self.storage.as_ref());
                 ui.checkbox(&mut self.new_canvas.transparent, "Transparent background");
                 ui.add_enabled_ui(!self.new_canvas.transparent, |ui| {
                     ui.horizontal(|ui| {
@@ -220,6 +215,7 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        self.size_presets.load(&storage);
         match drawer_core::display_view::Preferences::load(&storage) {
             Ok(prefs) => self.display.preferences = prefs,
             Err(error) => self.display.error = Some(format!("Display settings reset: {error}")),
@@ -510,13 +506,47 @@ impl eframe::App for Drawer {
                 {
                     std::process::exit(1);
                 }
+                self.size_presets
+                    .add(
+                        &drawer_core::canvas_size::Dimensions::new(3, 2, 144.0),
+                        "Smoke size".into(),
+                        self.storage.as_ref(),
+                    )
+                    .unwrap();
+                if drawer_core::canvas_size::PresetBook::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    != self.size_presets.book
+                {
+                    std::process::exit(1);
+                }
+                let original = self.documents[0].snapshot();
+                let sized = drawer_core::sizing::prepare(
+                    &original,
+                    drawer_core::sizing::Change::CanvasEdges {
+                        left: -1,
+                        top: 0,
+                        right: 2,
+                        bottom: 1,
+                    },
+                    DEFAULT_DOCUMENT_BUDGET,
+                    &cancel,
+                )
+                .unwrap();
+                self.documents[0].commit_state(sized).unwrap();
+                if self.documents[0].width != 8
+                    || self.documents[0].height != 6
+                    || !self.documents[0].undo()
+                    || self.documents[0].snapshot() != original
+                {
+                    std::process::exit(1);
+                }
                 self.display.preferences.visible = false;
                 self.display
                     .preferences
                     .save(self.storage.as_ref().unwrap())
                     .unwrap();
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1782,5 +1812,103 @@ mod tests {
         );
         assert_eq!(app.documents[0].snapshot(), before);
         assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+    fn wait_sizing(ctx: &egui::Context, app: &mut Drawer) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.sizing_dialog.is_some() {
+            frame(ctx, app, vec![]);
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+    #[test]
+    fn physical_creation_dpi_policies_signed_edge_mouse_apply_and_presets_restart() {
+        use drawer_core::{aids::Unit, canvas_size::Dimensions};
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let mut app =
+            Drawer::new(&ctx, None).with_storage(UserStorage::at(root.0.join("userdata")).unwrap());
+        app.show_new_canvas = true;
+        app.new_canvas.size = Dimensions::new(300, 150, 300.0);
+        app.new_canvas.size.switch_unit(Unit::Millimeters).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let create = app.create_button.unwrap();
+        click(&ctx, &mut app, create);
+        assert_eq!(
+            (app.documents[0].width, app.documents[0].height),
+            (300, 150)
+        );
+        let original = app.documents[0].snapshot();
+        app.begin_sizing(sizing_dialog::Mode::Resample);
+        let dialog = app.sizing_dialog.as_mut().unwrap();
+        dialog.keep_pixels = true;
+        dialog.dpi = "600".into();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, apply);
+        wait_sizing(&ctx, &mut app);
+        assert_eq!(app.documents[0].dpi, 600.0);
+        assert_eq!(app.documents[0].layers, original.layers);
+        assert!(app.documents[0].undo());
+        app.begin_sizing(sizing_dialog::Mode::Resample);
+        let dialog = app.sizing_dialog.as_mut().unwrap();
+        dialog.dpi = "600".into();
+        dialog.size.edited_dpi("300", false).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, apply);
+        wait_sizing(&ctx, &mut app);
+        assert_eq!(
+            (app.documents[0].width, app.documents[0].height),
+            (600, 300)
+        );
+        assert!(app.documents[0].undo());
+        app.begin_sizing(sizing_dialog::Mode::Canvas);
+        let dialog = app.sizing_dialog.as_mut().unwrap();
+        dialog.use_edges = true;
+        dialog.edges = ["-1".into(), "0".into(), "2".into(), "1".into()];
+        dialog.confirmed = true;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.sizing_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, apply);
+        wait_sizing(&ctx, &mut app);
+        assert_eq!(
+            (app.documents[0].width, app.documents[0].height),
+            (301, 151)
+        );
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        app.size_presets
+            .add(
+                &Dimensions::new(3, 2, 144.0),
+                "User size".into(),
+                app.storage.as_ref(),
+            )
+            .unwrap();
+        assert!(
+            app.size_presets
+                .add(
+                    &Dimensions::new(9, 9, 300.0),
+                    "User size".into(),
+                    app.storage.as_ref()
+                )
+                .is_err()
+        );
+        let restored =
+            Drawer::new(&ctx, None).with_storage(UserStorage::at(root.0.join("userdata")).unwrap());
+        assert_eq!(restored.size_presets.book, app.size_presets.book);
+        app.size_presets
+            .history(false, app.storage.as_ref())
+            .unwrap();
+        assert_eq!(app.size_presets.book.entries.len(), 3);
+        app.size_presets
+            .history(true, app.storage.as_ref())
+            .unwrap();
+        assert_eq!(app.size_presets.book, restored.size_presets.book);
+        assert_eq!(app.documents[0].snapshot(), original);
     }
 }
