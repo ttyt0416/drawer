@@ -4,6 +4,7 @@ pub mod files;
 mod history;
 pub mod navigator;
 pub mod png_export;
+pub mod references;
 pub mod render;
 pub mod scene;
 pub mod sizing;

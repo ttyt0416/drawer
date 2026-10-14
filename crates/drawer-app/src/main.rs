@@ -9,6 +9,7 @@ use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod canvas_view;
 mod new_canvas;
+mod reference_pane;
 mod sizing_dialog;
 mod workspace;
 use new_canvas::NewCanvas;
@@ -44,6 +45,7 @@ struct Drawer {
     sizing_dialog: Option<sizing_dialog::SizingDialog>,
     canvas_view: canvas_view::CanvasView,
     default_view: drawer_core::view::View,
+    references: reference_pane::ReferencePane,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -106,6 +108,7 @@ impl Drawer {
             sizing_dialog: None,
             canvas_view: canvas_view::CanvasView::new(ctx),
             default_view: Default::default(),
+            references: Default::default(),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -204,6 +207,10 @@ impl Drawer {
     }
 
     fn with_storage(mut self, storage: UserStorage) -> Self {
+        match drawer_core::references::ReferenceSession::load(&storage) {
+            Ok(session) => self.references.session = session,
+            Err(error) => self.references.error = Some(error.to_string()),
+        }
         match storage.load_brush() {
             Ok(brush) => {
                 self.selected = brush;
@@ -241,6 +248,9 @@ impl Drawer {
                             self.new_canvas = NewCanvas::default();
                             self.show_new_canvas = true;
                         }
+                        if ui.button("References").clicked() {
+                            self.references.session.workspace.visible = true;
+                        }
                     });
                     self.document_controls(ui);
                     self.sizing_controls(ui);
@@ -251,6 +261,13 @@ impl Drawer {
                     ui.columns(2, |columns| {
                         columns[0].set_width(170.0);
                         columns[0].heading("Tools");
+                        let mut color = self.references.session.workspace.color;
+                        if columns[0]
+                            .color_edit_button_srgba_unmultiplied(&mut color)
+                            .changed()
+                        {
+                            self.references.session.workspace.color = color;
+                        }
                         for tip in BrushTip::ALL {
                             let response =
                                 columns[0].selectable_label(self.selected == tip, tip.name());
@@ -298,6 +315,7 @@ impl Drawer {
         self.new_canvas_dialog(ui.ctx());
         self.close_dialog(ui.ctx());
         self.show_sizing(ui.ctx());
+        self.show_references(ui.ctx());
     }
 }
 
@@ -333,6 +351,19 @@ impl eframe::App for Drawer {
                 self.duplicate_view();
                 self.request_close(self.tabs.len() - 1);
                 self.request_close(self.tabs.len() - 1);
+                self.add_reference_image(
+                    drawer_core::references::LocalImage::from_rgba(
+                        2,
+                        1,
+                        &[240, 30, 80, 128, 20, 40, 60, 0],
+                        8,
+                    )
+                    .unwrap(),
+                    "Smoke reference".into(),
+                    None,
+                )
+                .unwrap();
+                self.references.session.workspace.visible = true;
             }
             if self.frames == 3 {
                 self.cancel_close();
@@ -357,8 +388,15 @@ impl eframe::App for Drawer {
                 if !self.documents[0].undo() || self.documents[0].dpi != 300.0 {
                     std::process::exit(1);
                 }
+                self.open_reference_document().unwrap();
+                if self.documents[2].layers[0].pixels != [[240, 30, 80, 128], [20, 40, 60, 0]]
+                    || self.documents[2].path.is_some()
+                    || self.documents[2].history_counts() != (0, 0)
+                {
+                    std::process::exit(1);
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -973,5 +1011,111 @@ mod tests {
         assert_eq!(app.documents[0].snapshot(), original);
         assert!(!app.documents[0].dirty);
         assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+    #[test]
+    fn reference_mouse_and_virtual_pen_pick_raw_alpha_without_changing_the_main_drawing() {
+        use drawer_core::references::LocalImage;
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("userdata")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None).with_storage(storage);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].mark_saved("main.drawer".into());
+        let original = app.documents[0].snapshot();
+        app.paste_reference_from(|| {
+            LocalImage::from_rgba(2, 1, &[240, 30, 80, 128, 20, 40, 60, 0], 8)
+                .map_err(|e| e.to_string())
+        })
+        .unwrap();
+        let workspace = app.references.session.workspace.clone();
+        assert!(
+            app.paste_reference_from(|| Err("No clipboard image".into()))
+                .is_err()
+        );
+        assert_eq!(app.references.session.workspace, workspace);
+        app.references.session.workspace.visible = true;
+        app.references.session.workspace.auto_pick = true;
+        app.references
+            .session
+            .workspace
+            .active_record_mut()
+            .unwrap()
+            .view = drawer_core::view::View {
+            zoom: 32.0,
+            angle: 37.0,
+            pan: [0.0; 2],
+            flipped: false,
+        };
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.references.viewport.unwrap();
+        let center = [rect.center().x as f64, rect.center().y as f64];
+        let view = app
+            .references
+            .session
+            .workspace
+            .active_record()
+            .unwrap()
+            .view;
+        let point = view.document_to_screen(
+            [0.5, 0.5],
+            [2.0, 1.0],
+            center,
+            ctx.pixels_per_point() as f64,
+        );
+        let point = egui::pos2(point[0] as f32, point[1] as f32);
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(point)]);
+        assert_eq!(app.references.session.workspace.color, [240, 30, 80, 128]);
+        assert_eq!(app.references.ring.unwrap().1, [240, 30, 80, 128]);
+        let rect = app.references.viewport.unwrap();
+        let center = [rect.center().x as f64, rect.center().y as f64];
+        let point = view.document_to_screen(
+            [1.5, 0.5],
+            [2.0, 1.0],
+            center,
+            ctx.pixels_per_point() as f64,
+        );
+        let point = egui::pos2(point[0] as f32, point[1] as f32);
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerGone,
+                egui::Event::Touch {
+                    device_id: egui::TouchDeviceId(42),
+                    id: egui::TouchId(1),
+                    phase: egui::TouchPhase::Move,
+                    pos: point,
+                    force: Some(0.6),
+                },
+            ],
+        );
+        assert_eq!(app.references.session.workspace.color, [20, 40, 60, 0]);
+        assert_eq!(app.references.ring.unwrap().1, [20, 40, 60, 0]);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(egui::pos2(1080.0, 10.0))],
+        );
+        assert_eq!(app.references.session.workspace.color, [20, 40, 60, 0]);
+        assert!(app.references.ring.is_none());
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        frame(&ctx, &mut app, vec![]);
+        let button = app.references.open_document_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert_eq!(app.documents.len(), 2);
+        assert!(app.documents[1].path.is_none() && app.documents[1].source_path.is_none());
+        assert_eq!(
+            app.documents[1].layers[0].pixels,
+            [[240, 30, 80, 128], [20, 40, 60, 0]]
+        );
+        assert_eq!(app.documents[0].snapshot(), original);
+        frame(&ctx, &mut app, vec![]);
+        let button = app.references.remove_button.unwrap();
+        click(&ctx, &mut app, button);
+        assert!(app.references.session.workspace.entries.is_empty());
+        assert_eq!(app.documents.len(), 2);
     }
 }

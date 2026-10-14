@@ -20,22 +20,31 @@ try {
     $preferences = Join-Path $dataRoot 'settings/preferences.txt'
     if (-not (Test-Path -LiteralPath $preferences)) { throw '사용자 설정 저장 실패' }
     $before = (Get-FileHash -LiteralPath $preferences).Hash
+    $referenceSettings = Join-Path $dataRoot 'settings/references.json'
+    $referenceCopy = Join-Path $dataRoot 'materials/references/reference-1.png'
+    $referenceHashes = @{}
+    foreach ($referenceFile in $referenceSettings,$referenceCopy) {
+        if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
+        $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
+    }
     New-Item -ItemType Directory -Path (Join-Path $dataRoot 'documents') | Out-Null
     Set-Content -LiteralPath (Join-Path $dataRoot 'documents/user-picture.txt') -Value 'keep document'
     Set-Content -LiteralPath (Join-Path $dataRoot 'materials/user-brush.txt') -Value 'keep material'
     Set-Content -LiteralPath (Join-Path $installRoot 'user-note.txt') -Value 'keep extra file'
     & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
+    foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt')) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
-    if ($smokeResult -notmatch 'canvases=2' -or $smokeResult -notmatch 'views=2' -or $smokeResult -notmatch 'close_cancel=true') { throw '문서 전환/닫기 취소 시작 시험 실패' }
+    if ($smokeResult -notmatch 'canvases=3' -or $smokeResult -notmatch 'views=3' -or $smokeResult -notmatch 'close_cancel=true') { throw '문서 전환/닫기 취소 시작 시험 실패' }
     if ($smokeResult -notmatch 'sizing_dpi=true' -or $smokeResult -notmatch 'sizing_undo=true') { throw 'DPI 변경/취소 시작 시험 실패' }
+    if ($smokeResult -notmatch 'reference_copy=true' -or $smokeResult -notmatch 'reference_document=true') { throw '참고 복사본/독립 문서 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 4개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 6개 보존.'
 } finally {
     $env:DRAWER_DATA_DIR = $oldData
     $env:PATH = $oldPath

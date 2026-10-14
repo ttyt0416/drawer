@@ -52,3 +52,6 @@ crates/drawer-core/src/render.rs
 docs/process/image-sizing.md
 crates/drawer-core/src/png_export.rs
 crates/drawer-core/src/navigator.rs
+crates/drawer-core/src/references.rs
+crates/drawer-app/src/reference_pane.rs
+docs/process/references.md
