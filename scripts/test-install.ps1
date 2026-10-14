@@ -52,6 +52,7 @@ try {
     if ($smokeResult -notmatch 'clipboard_document=true' -or $smokeResult -notmatch 'save_as_export=true' -or $smokeResult -notmatch 'recent_restart=true' -or $smokeResult -notmatch 'image_decode=true') { throw '클립보드/다른 이름 저장/최근 파일/이미지 가져오기 시작 시험 실패' }
     if ($smokeResult -notmatch 'native_display_view=true' -or $smokeResult -notmatch 'monitor_inventory=true') { throw '별도 보기 창/모니터 목록 시작 시험 실패' }
     if ($smokeResult -notmatch 'canvas_presets=true' -or $smokeResult -notmatch 'signed_edges_undo=true') { throw '크기 프리셋/각 변 증감 시작 시험 실패' }
+    if ($smokeResult -notmatch 'paste_layer_undo=true' -or $smokeResult -notmatch 'paste_native_reopen=true') { throw '붙여넣기 레이어/실행 취소/재열기 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 11개 보존.'
 } finally {

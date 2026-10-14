@@ -1,4 +1,4 @@
-use crate::document::{Background, CanvasSpec, Document, MAX_DIMENSION, RasterLayer};
+use crate::document::{Background, CanvasSpec, Document, MAX_DIMENSION, PlacedRaster, RasterLayer};
 use std::{
     fs,
     io::{self, BufReader, BufWriter, Read, Write},
@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -87,25 +87,24 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     if !(1..=256).contains(&layers) {
         return Err(invalid("Invalid layer count"));
     }
-    let total = (width as usize)
-        .checked_mul(height as usize)
-        .and_then(|pixels| pixels.checked_mul(4))
-        .and_then(|bytes| bytes.checked_mul(layers))
-        .ok_or_else(|| invalid("Document size overflow"))?;
-    if total > budget {
-        return Err(invalid("Document exceeds memory budget"));
+    if !(1..=MAX_DIMENSION).contains(&width) || !(1..=MAX_DIMENSION).contains(&height) {
+        return Err(invalid("Invalid document dimensions"));
     }
     let mut document = Document::create(
         CanvasSpec {
-            width,
-            height,
+            width: 1,
+            height: 1,
             dpi,
             background: Background::Transparent,
         },
         budget,
     )
     .map_err(|e| invalid(e.to_string()))?;
-    for index in 0..layers {
+    document.width = width;
+    document.height = height;
+    document.layers.clear();
+    let mut used = 0usize;
+    for _ in 0..layers {
         let name_len = read_u32(&mut reader)? as usize;
         if !(1..=4096).contains(&name_len) {
             return Err(invalid("Invalid layer name"));
@@ -113,22 +112,40 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut name = vec![0; name_len];
         reader.read_exact(&mut name)?;
         let name = String::from_utf8(name).map_err(|_| invalid("Layer name must be UTF-8"))?;
-        if read_u64(&mut reader)? != (width as u64 * height as u64 * 4) {
-            return Err(invalid("Invalid pixel payload length"));
+        let placement = if version >= 4 {
+            match read_u32(&mut reader)? {
+                0 => None,
+                1 => Some(PlacedRaster {
+                    width: read_u32(&mut reader)?,
+                    height: read_u32(&mut reader)?,
+                    offset: [read_u64(&mut reader)? as i64, read_u64(&mut reader)? as i64],
+                }),
+                _ => return Err(invalid("Invalid raster placement tag")),
+            }
+        } else {
+            None
+        };
+        let extent = placement.unwrap_or(PlacedRaster {
+            width,
+            height,
+            offset: [0; 2],
+        });
+        if !extent.valid() {
+            return Err(invalid("Invalid raster placement"));
         }
-        if index != 0 {
-            let mut pixels = Vec::new();
-            pixels
-                .try_reserve_exact((width * height) as usize)
-                .map_err(|_| invalid("Not enough document memory"))?;
-            pixels.resize((width * height) as usize, [0; 4]);
-            document.layers.push(RasterLayer {
-                name: String::new(),
-                pixels,
-            });
+        let count = extent.width as usize * extent.height as usize;
+        used = used
+            .checked_add(count * 4)
+            .ok_or_else(|| invalid("Document size overflow"))?;
+        if used > budget || read_u64(&mut reader)? != count as u64 * 4 {
+            return Err(invalid("Invalid or oversized raster payload"));
         }
-        document.layers[index].name = name;
-        for chunk in document.layers[index].pixels.chunks_mut(4096) {
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(count)
+            .map_err(|_| invalid("Not enough document memory"))?;
+        pixels.resize(count, [0; 4]);
+        for chunk in pixels.chunks_mut(4096) {
             let mut buffer = [0u8; 16384];
             let count = chunk.len() * 4;
             reader.read_exact(&mut buffer[..count])?;
@@ -136,6 +153,11 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
                 pixel.copy_from_slice(bytes);
             }
         }
+        document.layers.push(RasterLayer {
+            name,
+            pixels,
+            placement,
+        });
     }
     if version >= 2 {
         let length = read_u32(&mut reader)? as usize;
@@ -189,9 +211,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         return Err(invalid("Invalid document"));
     }
     for layer in &document.layers {
-        if !(1..=4096).contains(&layer.name.len())
-            || layer.pixels.len() != document.width as usize * document.height as usize
-        {
+        if !layer.valid(document.width, document.height) {
             return Err(invalid("Invalid raster layer"));
         }
     }
@@ -220,6 +240,15 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         for layer in &document.layers {
             writer.write_all(&(layer.name.len() as u32).to_le_bytes())?;
             writer.write_all(layer.name.as_bytes())?;
+            if let Some(p) = layer.placement {
+                writer.write_all(&1u32.to_le_bytes())?;
+                writer.write_all(&p.width.to_le_bytes())?;
+                writer.write_all(&p.height.to_le_bytes())?;
+                writer.write_all(&p.offset[0].to_le_bytes())?;
+                writer.write_all(&p.offset[1].to_le_bytes())?;
+            } else {
+                writer.write_all(&0u32.to_le_bytes())?;
+            }
             writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
             for chunk in layer.pixels.chunks(4096) {
                 let mut buffer = [0u8; 16384];
@@ -270,6 +299,7 @@ mod tests {
         document.layers.push(RasterLayer {
             name: "Second".into(),
             pixels: vec![[0; 4]; 2],
+            placement: None,
         });
         save(&mut document, &path).unwrap();
         let before = fs::read(&path).unwrap();
@@ -316,6 +346,8 @@ mod tests {
         let mut doc = sample();
         save(&mut doc, &path).unwrap();
         let mut bytes = fs::read(&path).unwrap();
+        let placement = 32 + 4 + doc.layers[0].name.len();
+        bytes.drain(placement..placement + 4);
         bytes[8..12].copy_from_slice(&1u32.to_le_bytes());
         bytes.truncate(32 + 4 + "Layer 1".len() + 8 + 8);
         fs::write(&path, &bytes).unwrap();
@@ -332,6 +364,8 @@ mod tests {
         let mut doc = sample();
         save(&mut doc, &path).unwrap();
         let mut bytes = fs::read(&path).unwrap();
+        let placement = 32 + 4 + doc.layers[0].name.len();
+        bytes.drain(placement..placement + 4);
         let offset = 32 + 4 + doc.layers[0].name.len() + 8 + doc.layers[0].pixels.len() * 4;
         let mut scene = serde_json::to_value(&doc.scene).unwrap();
         scene.as_object_mut().unwrap().remove("grid");

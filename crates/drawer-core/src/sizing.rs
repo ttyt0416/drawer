@@ -1,5 +1,5 @@
 use crate::{
-    document::{DEFAULT_DOCUMENT_BUDGET, Document, MAX_DIMENSION, RasterLayer},
+    document::{DEFAULT_DOCUMENT_BUDGET, Document, MAX_DIMENSION, PlacedRaster, RasterLayer},
     scene::{Affine, Rect, Scene},
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,6 +86,62 @@ pub struct Plan {
     pub clipped_objects: Vec<usize>,
     pub source_boundary: Rect,
 }
+fn projected(
+    source: &DocumentState,
+    layer: &RasterLayer,
+    change: Change,
+    width: u32,
+    height: u32,
+) -> Result<Option<PlacedRaster>, String> {
+    let Some(mut p) = layer.placement else {
+        return Ok(None);
+    };
+    match change {
+        Change::Canvas { .. } | Change::CanvasEdges { .. } | Change::Crop { .. } => {
+            return Ok(None);
+        }
+        Change::Dpi(_) => {}
+        Change::Resample { .. } => {
+            let scale = [
+                width as f64 / source.width as f64,
+                height as f64 / source.height as f64,
+            ];
+            let w = (p.width as f64 * scale[0]).round().max(1.0);
+            let h = (p.height as f64 * scale[1]).round().max(1.0);
+            if w > MAX_DIMENSION as f64 || h > MAX_DIMENSION as f64 {
+                return Err(
+                    "A placed raster exceeds the supported dimensions after resampling.".into(),
+                );
+            }
+            p.width = w as u32;
+            p.height = h as u32;
+            p.offset = [
+                (p.offset[0] as f64 * scale[0]).round() as i64,
+                (p.offset[1] as f64 * scale[1]).round() as i64,
+            ];
+        }
+        Change::FlipHorizontal => p.offset[0] = source.width as i64 - p.offset[0] - p.width as i64,
+        Change::FlipVertical => p.offset[1] = source.height as i64 - p.offset[1] - p.height as i64,
+        Change::Rotate90 { clockwise: true } => {
+            p.offset = [
+                source.height as i64 - p.offset[1] - p.height as i64,
+                p.offset[0],
+            ];
+            std::mem::swap(&mut p.width, &mut p.height);
+        }
+        Change::Rotate90 { clockwise: false } => {
+            p.offset = [
+                p.offset[1],
+                source.width as i64 - p.offset[0] - p.width as i64,
+            ];
+            std::mem::swap(&mut p.width, &mut p.height);
+        }
+    }
+    if !p.valid() {
+        return Err("Placed raster coordinates exceed the supported range.".into());
+    }
+    Ok(Some(p))
+}
 pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Plan, String> {
     if !(1..=MAX_DIMENSION).contains(&source.width)
         || !(1..=MAX_DIMENSION).contains(&source.height)
@@ -169,12 +225,20 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
     if !source.scene.valid() {
         return Err("Invalid page geometry.".into());
     }
-    let result_bytes = (width as usize)
-        .checked_mul(height as usize)
-        .and_then(|n| n.checked_mul(4))
-        .and_then(|n| n.checked_mul(source.layers.len()))
-        .and_then(|n| n.checked_add(source.scene.size_bytes()))
-        .ok_or("Image size overflow.")?;
+    let mut result_bytes = source.scene.size_bytes();
+    for layer in &source.layers {
+        if !layer.valid(source.width, source.height) {
+            return Err("Invalid raster data.".into());
+        }
+        let extent = projected(source, layer, change, width, height)?.unwrap_or(PlacedRaster {
+            width,
+            height,
+            offset: [0; 2],
+        });
+        result_bytes = result_bytes
+            .checked_add(extent.width as usize * extent.height as usize * 4)
+            .ok_or("Image size overflow.")?;
+    }
     let history_bytes = source
         .memory_bytes()
         .checked_add(result_bytes)
@@ -195,18 +259,37 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             max: [source.width as f64, source.height as f64],
         },
     };
-    let overlap = source_boundary.intersection(Rect {
-        min: [0.0, 0.0],
-        max: [source.width as f64, source.height as f64],
-    });
-    let removed_pixels = u64::from(source.width) * u64::from(source.height)
-        - ((overlap.max[0] - overlap.min[0]) * (overlap.max[1] - overlap.min[1])) as u64;
+    let removed_pixels = source
+        .layers
+        .iter()
+        .map(|layer| {
+            if layer.placement.is_some()
+                && !matches!(
+                    change,
+                    Change::Canvas { .. } | Change::CanvasEdges { .. } | Change::Crop { .. }
+                )
+            {
+                return 0;
+            }
+            let p = layer.extent(source.width, source.height);
+            let bounds = Rect {
+                min: [p.offset[0] as f64, p.offset[1] as f64],
+                max: [
+                    p.offset[0] as f64 + p.width as f64,
+                    p.offset[1] as f64 + p.height as f64,
+                ],
+            };
+            let kept = source_boundary.intersection(bounds);
+            u64::from(p.width) * u64::from(p.height)
+                - ((kept.max[0] - kept.min[0]) * (kept.max[1] - kept.min[1])) as u64
+        })
+        .sum();
     Ok(Plan {
         width,
         height,
         dpi,
         offset,
-        removed_pixels: removed_pixels * source.layers.len() as u64,
+        removed_pixels,
         clipped_objects: source.scene.clipped_objects(source_boundary),
         source_boundary,
     })
@@ -234,7 +317,35 @@ pub fn prepare(
         plan.height as f64 / source.height as f64,
     ];
     for layer in &source.layers {
-        if layer.pixels.len() != source.width as usize * source.height as usize {
+        if let Some(placement) = projected(source, layer, change, plan.width, plan.height)? {
+            let extent = layer.placement.unwrap();
+            let local = DocumentState {
+                width: extent.width,
+                height: extent.height,
+                dpi: source.dpi,
+                layers: vec![RasterLayer {
+                    placement: None,
+                    ..layer.clone()
+                }],
+                scene: Default::default(),
+            };
+            let local_change = if let Change::Resample { dpi, filter, .. } = change {
+                Change::Resample {
+                    width: placement.width,
+                    height: placement.height,
+                    dpi,
+                    filter,
+                }
+            } else {
+                change
+            };
+            let mut local_result = prepare(&local, local_change, budget, cancel)?;
+            let mut output = local_result.layers.remove(0);
+            output.placement = Some(placement);
+            result.layers.push(output);
+            continue;
+        }
+        if !layer.valid(source.width, source.height) {
             return Err("Invalid raster data.".into());
         }
         let mut pixels = Vec::new();
@@ -282,7 +393,7 @@ pub fn prepare(
                         && sx < i64::from(source.width)
                         && sy < i64::from(source.height)
                     {
-                        layer.pixels[(sy * i64::from(source.width) + sx) as usize]
+                        layer.pixel(source.width, source.height, sx, sy)
                     } else {
                         [0; 4]
                     }
@@ -293,6 +404,7 @@ pub fn prepare(
         result.layers.push(RasterLayer {
             name: layer.name.clone(),
             pixels,
+            placement: None,
         });
     }
     let transform = match change {
@@ -341,8 +453,12 @@ fn sample(
     filter: Interpolation,
 ) -> [u8; 4] {
     let at = |x: i64, y: i64| {
-        layer.pixels[(y.clamp(0, i64::from(height) - 1) as u32 * width
-            + x.clamp(0, i64::from(width) - 1) as u32) as usize]
+        layer.pixel(
+            width,
+            height,
+            x.clamp(0, i64::from(width) - 1),
+            y.clamp(0, i64::from(height) - 1),
+        )
     };
     if filter == Interpolation::Nearest {
         return at(point[0].round() as i64, point[1].round() as i64);

@@ -42,6 +42,53 @@ impl std::error::Error for CreateError {}
 pub struct RasterLayer {
     pub name: String,
     pub pixels: Vec<[u8; 4]>,
+    pub placement: Option<PlacedRaster>,
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlacedRaster {
+    pub width: u32,
+    pub height: u32,
+    pub offset: [i64; 2],
+}
+impl PlacedRaster {
+    pub fn valid(self) -> bool {
+        (1..=MAX_DIMENSION).contains(&self.width)
+            && (1..=MAX_DIMENSION).contains(&self.height)
+            && self
+                .offset
+                .iter()
+                .all(|n| n.unsigned_abs() <= 1_000_000_000)
+    }
+}
+impl RasterLayer {
+    pub fn extent(&self, width: u32, height: u32) -> PlacedRaster {
+        self.placement.unwrap_or(PlacedRaster {
+            width,
+            height,
+            offset: [0; 2],
+        })
+    }
+    pub fn valid(&self, width: u32, height: u32) -> bool {
+        let p = self.extent(width, height);
+        p.valid()
+            && (1..=4096).contains(&self.name.len())
+            && self.pixels.len() == p.width as usize * p.height as usize
+    }
+    pub fn pixel_index(&self, width: u32, height: u32, x: i64, y: i64) -> Option<usize> {
+        let p = self.extent(width, height);
+        let x = x.checked_sub(p.offset[0])?;
+        let y = y.checked_sub(p.offset[1])?;
+        if x < 0 || y < 0 || x >= p.width as i64 || y >= p.height as i64 {
+            return None;
+        }
+        Some((y * p.width as i64 + x) as usize)
+    }
+    pub fn pixel(&self, width: u32, height: u32, x: i64, y: i64) -> [u8; 4] {
+        self.pixel_index(width, height, x, y)
+            .and_then(|i| self.pixels.get(i))
+            .copied()
+            .unwrap_or([0; 4])
+    }
 }
 pub struct Document {
     pub id: u64,
@@ -97,6 +144,7 @@ impl Document {
             layers: vec![RasterLayer {
                 name: "Layer 1".into(),
                 pixels,
+                placement: None,
             }],
             path: None,
             dirty: true,
@@ -126,11 +174,10 @@ impl Document {
         self.dirty = false;
     }
     pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
-        let offset = (y * self.width + x) as usize;
         let mut color = [0.0f32; 3];
         let mut alpha = 0.0;
         for layer in &self.layers {
-            let pixel = layer.pixels[offset];
+            let pixel = layer.pixel(self.width, self.height, x as i64, y as i64);
             let source_alpha = pixel[3] as f32 / 255.0;
             for channel in 0..3 {
                 color[channel] =
@@ -182,6 +229,7 @@ mod tests {
         document.layers.push(RasterLayer {
             name: "Top".into(),
             pixels: vec![[0, 0, 255, 128]],
+            placement: None,
         });
         assert_eq!(document.composite_pixel(0, 0), [85, 0, 170, 192]);
         document.layers[1].pixels[0] = [9, 10, 11, 255];

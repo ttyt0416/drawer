@@ -389,6 +389,7 @@ name = "drawer-app"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "clipboard-win",
  "drawer-core",
  "eframe",
  "rfd",

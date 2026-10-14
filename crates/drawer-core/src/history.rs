@@ -92,7 +92,10 @@ impl Document {
         let Some(layer_data) = self.layers.get_mut(layer) else {
             return false;
         };
-        let offset = (y * self.width + x) as usize;
+        let Some(offset) = layer_data.pixel_index(self.width, self.height, x as i64, y as i64)
+        else {
+            return false;
+        };
         let before = layer_data.pixels[offset];
         if before == after {
             return false;
@@ -117,7 +120,7 @@ impl Document {
             || after
                 .layers
                 .iter()
-                .any(|l| l.pixels.len() != after.width as usize * after.height as usize)
+                .any(|l| !l.valid(after.width, after.height))
         {
             return Err("Invalid image state.".into());
         }

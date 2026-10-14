@@ -12,6 +12,7 @@ mod canvas_view;
 mod display_pane;
 mod image_import_dialog;
 mod new_canvas;
+mod paste_dialog;
 mod reference_pane;
 mod size_fields;
 mod sizing_dialog;
@@ -56,6 +57,7 @@ struct Drawer {
     protected_sources: std::collections::HashSet<PathBuf>,
     display: display_pane::DisplayPane,
     size_presets: size_fields::Presets,
+    paste_dialog: Option<paste_dialog::PasteDialog>,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -125,6 +127,7 @@ impl Drawer {
             protected_sources: Default::default(),
             display: display_pane::DisplayPane::new(ctx),
             size_presets: Default::default(),
+            paste_dialog: None,
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]
@@ -254,7 +257,8 @@ impl Drawer {
             ui.add_enabled_ui(
                 self.pending_close.is_none()
                     && self.sizing_dialog.is_none()
-                    && self.import_dialog.is_none(),
+                    && self.import_dialog.is_none()
+                    && self.paste_dialog.is_none(),
                 |ui| {
                     ui.horizontal_wrapped(|ui| {
                         ui.heading(APP_NAME);
@@ -280,6 +284,7 @@ impl Drawer {
                     });
                     self.document_controls(ui);
                     self.sizing_controls(ui);
+                    self.paste_controls(ui);
                     ui.separator();
                     if let Some(status) = &self.status {
                         ui.colored_label(egui::Color32::LIGHT_RED, status);
@@ -346,6 +351,7 @@ impl Drawer {
         self.show_aids(ui.ctx());
         self.show_import(ui.ctx());
         self.show_display(ui.ctx());
+        self.show_paste(ui.ctx());
     }
 }
 
@@ -357,11 +363,15 @@ impl eframe::App for Drawer {
             && ui.ctx().input(|input| input.viewport().close_requested())
             && (self.documents.iter().any(|doc| doc.dirty)
                 || self.sizing_dialog.is_some()
-                || self.import_dialog.is_some())
+                || self.import_dialog.is_some()
+                || self.paste_dialog.is_some())
         {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            if self.sizing_dialog.is_none() && self.import_dialog.is_none() {
+            if self.sizing_dialog.is_none()
+                && self.import_dialog.is_none()
+                && self.paste_dialog.is_none()
+            {
                 self.begin_quit();
             }
         }
@@ -541,12 +551,52 @@ impl eframe::App for Drawer {
                     std::process::exit(1);
                 }
                 self.display.preferences.visible = false;
+                self.select_tab(0);
+                let original = self.documents[0].snapshot();
+                self.begin_paste(ui.ctx(), || {
+                    Ok(drawer_core::paste::ClipboardImage {
+                        image: drawer_core::references::LocalImage::from_rgba(
+                            2,
+                            1,
+                            &[100, 20, 30, 128, 40, 50, 60, 0],
+                            8,
+                        )
+                        .unwrap(),
+                        origin: Some([-100, 1000]),
+                    })
+                })
+                .unwrap();
+                self.paste_dialog.as_mut().unwrap().move_to([1, 1]).unwrap();
+                self.accept_paste().unwrap();
+                if self.documents[0].layers.len() != 2
+                    || self.documents[0].composite_pixel(1, 1) != [100, 20, 30, 128]
+                {
+                    std::process::exit(1);
+                }
+                let saved = root.join("smoke-paste.drawer");
+                self.save_to(0, &saved).unwrap();
+                if drawer_core::files::open(&saved, DEFAULT_DOCUMENT_BUDGET)
+                    .unwrap()
+                    .snapshot()
+                    != self.documents[0].snapshot()
+                {
+                    std::process::exit(1);
+                }
+                self.copy_top_layer_from(|packet, budget| {
+                    assert_eq!(packet.origin, Some([1, 1]));
+                    assert!(packet.encode(budget).is_ok());
+                    Ok(())
+                })
+                .unwrap();
+                if !self.documents[0].undo() || self.documents[0].snapshot() != original {
+                    std::process::exit(1);
+                }
                 self.display
                     .preferences
                     .save(self.storage.as_ref().unwrap())
                     .unwrap();
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1910,5 +1960,123 @@ mod tests {
             .unwrap();
         assert_eq!(app.size_presets.book, restored.size_presets.book);
         assert_eq!(app.documents[0].snapshot(), original);
+    }
+    #[test]
+    fn paste_preview_center_origin_mouse_move_cancel_commit_copy_and_undo() {
+        use drawer_core::{paste::ClipboardImage, references::LocalImage};
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 4,
+            height: 3,
+            ..tiny_spec()
+        })
+        .unwrap();
+        app.save_to(0, &root.0.join("saved.drawer")).unwrap();
+        let original = app.documents[0].snapshot();
+        let pixels = vec![[120, 30, 80, 128]; 8];
+        let make = || {
+            Ok(ClipboardImage {
+                image: LocalImage {
+                    width: 4,
+                    height: 2,
+                    pixels: pixels.clone(),
+                },
+                origin: Some([-20, 30]),
+            })
+        };
+        assert!(
+            app.begin_paste(&ctx, || Err("Clipboard contains text".into()))
+                .is_err()
+        );
+        assert!(app.paste_dialog.is_none());
+        app.begin_paste(&ctx, make).unwrap();
+        assert_eq!(app.paste_dialog.as_ref().unwrap().offset, [0, 0]);
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert!(!app.documents[0].dirty);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let origin = app.paste_dialog.as_ref().unwrap().origin_button.unwrap();
+        click(&ctx, &mut app, origin);
+        assert_eq!(app.paste_dialog.as_ref().unwrap().offset, [-20, 30]);
+        let rect = app.paste_dialog.as_ref().unwrap().viewport();
+        let pos = rect.center();
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(pos + egui::vec2(64.0, 0.0))],
+        );
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: pos + egui::vec2(64.0, 0.0),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_ne!(app.paste_dialog.as_ref().unwrap().offset, [-20, 30]);
+        let cancel = app.paste_dialog.as_ref().unwrap().cancel_button.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(app.paste_dialog.is_none());
+        assert_eq!(app.documents[0].snapshot(), original);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        assert!(!app.documents[0].dirty);
+        app.begin_paste(&ctx, make).unwrap();
+        app.paste_dialog.as_mut().unwrap().move_to([1, 1]).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let place = app.paste_dialog.as_ref().unwrap().apply_button.unwrap();
+        click(&ctx, &mut app, place);
+        assert!(app.paste_dialog.is_none());
+        assert_eq!(app.documents[0].layers.len(), 2);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.documents[0].composite_pixel(1, 1), [120, 30, 80, 128]);
+        app.copy_top_layer_from(|packet, budget| {
+            assert_eq!(packet.origin, Some([1, 1]));
+            assert_eq!(packet.image.pixels, pixels);
+            assert!(packet.encode(budget).is_ok());
+            Ok(())
+        })
+        .unwrap();
+        app.save_to(0, &root.0.join("pasted.drawer")).unwrap();
+        assert_eq!(
+            drawer_core::files::open(&root.0.join("pasted.drawer"), 10000)
+                .unwrap()
+                .snapshot(),
+            app.documents[0].snapshot()
+        );
+        assert!(app.documents[0].undo());
+        assert_eq!(app.documents[0].snapshot(), original);
+        app.begin_paste(&ctx, || {
+            Ok(ClipboardImage {
+                image: LocalImage {
+                    width: 8,
+                    height: 6,
+                    pixels: vec![[255, 0, 0, 0]; 48],
+                },
+                origin: None,
+            })
+        })
+        .unwrap();
+        assert_eq!(app.paste_dialog.as_ref().unwrap().offset, [-2, -2]);
+        app.accept_paste().unwrap();
+        assert_eq!(app.documents[0].layers[1].pixels.len(), 48);
+        assert_eq!(app.documents[0].layers[1].pixels[0], [255, 0, 0, 0]);
     }
 }

@@ -67,3 +67,5 @@ crates/drawer-app/src/display_pane.rs
 docs/process/display-view.md
 crates/drawer-core/src/canvas_size.rs
 crates/drawer-app/src/size_fields.rs
+crates/drawer-core/src/paste.rs
+crates/drawer-app/src/paste_dialog.rs

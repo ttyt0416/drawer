@@ -13,7 +13,7 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
         || document
             .layers
             .iter()
-            .any(|l| l.pixels.len() != document.width as usize * document.height as usize)
+            .any(|l| !l.valid(document.width, document.height))
     {
         return Err(invalid("Invalid document."));
     }

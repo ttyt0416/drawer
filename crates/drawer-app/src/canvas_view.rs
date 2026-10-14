@@ -4,6 +4,7 @@ use eframe::egui;
 pub struct CanvasView {
     image: Option<((u64, u64), egui::TextureHandle)>,
     checker: egui::TextureHandle,
+    pub move_delta: Option<[f64; 2]>,
     #[cfg(test)]
     pub viewport: Option<egui::Rect>,
     #[cfg(test)]
@@ -14,6 +15,7 @@ impl CanvasView {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
             image: None,
+            move_delta: None,
             checker: ctx.load_texture(
                 "transparency-grid",
                 egui::ColorImage::new([2, 2], vec![gray(196), gray(224), gray(224), gray(196)]),
@@ -213,6 +215,20 @@ impl CanvasView {
         let size = [document.width as f64, document.height as f64];
         let center = [rect.center().x as f64, rect.center().y as f64];
         let ppp = ui.ctx().pixels_per_point() as f64;
+        self.move_delta = None;
+        if response.dragged_by(egui::PointerButton::Primary)
+            && !ui.input(|i| i.key_down(egui::Key::Space))
+        {
+            let delta = response.drag_delta();
+            let a = view.screen_to_document(center, size, center, ppp);
+            let b = view.screen_to_document(
+                [center[0] + delta.x as f64, center[1] + delta.y as f64],
+                size,
+                center,
+                ppp,
+            );
+            self.move_delta = Some([b[0] - a[0], b[1] - a[1]]);
+        }
         if interactive {
             if response.dragged_by(egui::PointerButton::Middle)
                 || (response.dragged_by(egui::PointerButton::Primary)

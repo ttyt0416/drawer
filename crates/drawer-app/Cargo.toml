@@ -9,6 +9,7 @@ drawer-core = { path = "../drawer-core" }
 eframe = { version = "=0.36.2", default-features = false, features = ["default_fonts", "glow"] }
 rfd = { version = "=0.17.2", default-features = false }
 arboard = { version = "=3.6.1", default-features = false, features = ["image-data"] }
+clipboard-win = "=5.4.1"
 
 [lints]
 workspace = true
