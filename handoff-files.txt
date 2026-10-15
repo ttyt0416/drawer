@@ -93,3 +93,6 @@ crates/drawer-core/src/actions.rs
 crates/drawer-app/src/action_controls.rs
 crates/drawer-core/src/tool_input.rs
 crates/drawer-app/src/tool_input.rs
+docs/HELP.md
+crates/drawer-core/src/help.rs
+crates/drawer-app/src/help.rs

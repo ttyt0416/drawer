@@ -6,7 +6,13 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 4] = ["view-center", "view-reset", "new-canvas", "test-painting"];
+pub const EXTRA_COMMANDS: [&str; 5] = [
+    "view-center",
+    "view-reset",
+    "new-canvas",
+    "test-painting",
+    "help",
+];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Item {
     Command(String),
@@ -299,6 +305,7 @@ impl Settings {
             "view-reset" => "Reset view",
             "new-canvas" => "New canvas",
             "test-painting" => "Popup test painting",
+            "help" => "Local help",
             other => other,
         }
         .into()

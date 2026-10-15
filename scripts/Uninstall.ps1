@@ -6,7 +6,7 @@ if ((Get-Item -LiteralPath $installationRoot).Attributes -band [IO.FileAttribute
 $markerPath = Join-Path $installationRoot '.drawer-install.json'
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
 if ($marker.product -ne 'Drawer' -or $marker.installRoot -ne $installationRoot) { throw 'Drawer 설치 기록과 경로가 다릅니다.' }
-$allowed = @('Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md', 'START-HERE.md', 'MOVIE-IMPORT.md', 'Install.ps1', 'Uninstall.ps1')
+$allowed = @('Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md', 'START-HERE.md', 'MOVIE-IMPORT.md', 'IMAGE-IMPORT.md', 'HELP.md', 'Install.ps1', 'Uninstall.ps1')
 foreach ($name in $marker.files) { if ($name -notin $allowed) { throw '설치 기록에 허용하지 않는 제거 경로가 있습니다.' } }
 foreach ($name in $marker.files) {
     $filePath = [IO.Path]::GetFullPath((Join-Path $installationRoot $name))

@@ -122,6 +122,7 @@ pub fn default_bindings() -> Vec<Binding> {
         ("T", false, true, "cycle-prev:1"),
         ("Q", false, false, "quick:2"),
         ("R", false, false, "radial:4"),
+        ("F1", false, false, "help"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {
@@ -244,6 +245,8 @@ pub struct Snapshot {
     pub actions: crate::actions::Settings,
     #[serde(default)]
     pub input: crate::tool_input::Settings,
+    #[serde(default)]
+    pub help: crate::help::Preferences,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -263,6 +266,7 @@ impl Default for Snapshot {
             bindings: default_bindings(),
             actions: Default::default(),
             input: Default::default(),
+            help: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -302,6 +306,7 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.help.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -363,6 +368,7 @@ impl Snapshot {
         }
         if scope.other {
             next.input = incoming.input;
+            next.help = incoming.help.clone();
             next.interface = incoming.interface;
             next.interpolation = incoming.interpolation;
             next.aids = incoming.aids;

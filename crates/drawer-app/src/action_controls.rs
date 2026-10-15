@@ -113,6 +113,7 @@ impl Drawer {
                     self.new_canvas = Default::default();
                     self.show_new_canvas = true;
                 }
+                "help" => self.open_help("welcome"),
                 "test-painting" => self.workspaces.store.current.scratchpad.visible = true,
                 _ => {
                     if let Some(tip) = BrushTip::ALL.iter().find(|t| t.name() == command) {

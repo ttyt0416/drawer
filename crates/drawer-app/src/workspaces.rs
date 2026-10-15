@@ -637,9 +637,10 @@ pub(super) fn shortcut(
         };
         bindings.iter().find_map(|b| {
             if *repeat
-                && ["cycle-next:", "cycle-prev:", "quick:", "radial:"]
-                    .iter()
-                    .any(|prefix| b.command.starts_with(prefix))
+                && (b.command == "help"
+                    || ["cycle-next:", "cycle-prev:", "quick:", "radial:"]
+                        .iter()
+                        .any(|prefix| b.command.starts_with(prefix)))
             {
                 return None;
             }

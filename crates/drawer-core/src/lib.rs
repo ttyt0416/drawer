@@ -7,6 +7,7 @@ pub mod canvas_size;
 pub mod display_view;
 pub mod document;
 pub mod files;
+pub mod help;
 mod history;
 pub mod image_import;
 pub mod interpolation;
