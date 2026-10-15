@@ -124,6 +124,9 @@ impl Drawer {
             if crate::help::button(ui, "Test painting", "screen-mode").clicked() {
                 self.workspaces.store.current.scratchpad.visible = true;
             }
+            if crate::help::button(ui, "Tool properties", "tool-properties").clicked() {
+                self.properties.open = true;
+            }
             if crate::help::button(ui, "Panels", "screen-mode").clicked() {
                 self.panels.open = true;
             }

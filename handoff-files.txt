@@ -109,3 +109,6 @@ crates/drawer-app/src/edit.rs
 
 crates/drawer-core/src/layout.rs
 crates/drawer-app/src/layout.rs
+
+crates/drawer-core/src/tool_properties.rs
+crates/drawer-app/src/tool_properties.rs

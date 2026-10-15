@@ -101,6 +101,7 @@ impl Drawer {
         if index >= self.tabs.len() {
             return;
         }
+        self.sync_tool_properties();
         self.sync_active_view();
         self.active_tab = Some(index);
         self.active = self
@@ -111,6 +112,7 @@ impl Drawer {
             self.documents[document].view = self.tabs[index].view;
             self.selected = self.documents[document].tool;
         }
+        self.sync_tool_properties();
     }
     pub(super) fn duplicate_view(&mut self) {
         if self.tabs.len() >= 256 {
@@ -130,11 +132,13 @@ impl Drawer {
         self.select_tab(self.tabs.len() - 1);
     }
     pub(super) fn set_tool(&mut self, tip: BrushTip) {
+        self.sync_tool_properties();
         self.tool_input.controller.cancel();
         self.selected = tip;
         if let Some(index) = self.active {
             self.documents[index].tool = tip;
         }
+        self.sync_tool_properties();
         if let Some(storage) = &self.storage
             && let Err(error) = storage.save_brush(tip)
         {

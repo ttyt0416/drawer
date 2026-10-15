@@ -166,6 +166,7 @@ impl Drawer {
             || self.cursors.open
             || self.ui_behavior.open
             || self.tool_input.open
+            || self.properties.open
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
@@ -387,43 +388,7 @@ impl Drawer {
     }
     fn panel_properties(&mut self, ui: &mut egui::Ui, kind: Kind) {
         match kind {
-            Kind::Brush => {
-                ui.horizontal(|ui| {
-                    ui.label("Size");
-                    super::edit::number(
-                        ui,
-                        &mut self.panels.settings.brush_size,
-                        0.1_f64..=4096.0_f64,
-                        1.0,
-                        " px",
-                        "tools",
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Aspect");
-                    super::edit::number(
-                        ui,
-                        &mut self.panels.settings.brush_aspect,
-                        0.05_f64..=1.0_f64,
-                        0.01,
-                        "",
-                        "tools",
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Tip angle");
-                    super::edit::number(
-                        ui,
-                        &mut self.panels.settings.brush_angle,
-                        -1e9_f64..=1e9_f64,
-                        1.0,
-                        "°",
-                        "tools",
-                    );
-                });
-                self.panels.settings.brush_angle =
-                    self.panels.settings.brush_angle.rem_euclid(360.0);
-            }
+            Kind::Brush => self.tool_property_controls(ui),
             Kind::Color => {
                 let [r, g, b, a] = self.references.session.workspace.color;
                 ui.label(format!("#{r:02X}{g:02X}{b:02X}{a:02X}"));

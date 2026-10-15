@@ -256,6 +256,8 @@ pub struct Snapshot {
     pub information: crate::information::Settings,
     #[serde(default)]
     pub layout: crate::layout::Settings,
+    #[serde(default)]
+    pub properties: Option<crate::tool_properties::Settings>,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -280,6 +282,7 @@ impl Default for Snapshot {
             cursors: Default::default(),
             information: Default::default(),
             layout: Default::default(),
+            properties: None,
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -324,6 +327,7 @@ impl Snapshot {
             && self.cursors.valid()
             && self.information.valid()
             && self.layout.valid()
+            && self.properties.as_ref().is_none_or(|s| s.valid())
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -385,6 +389,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.properties = incoming.properties.clone();
             next.input = incoming.input;
             next.help = incoming.help.clone();
             next.behavior = incoming.behavior;
@@ -585,7 +590,7 @@ fn read_bytes(path: &Path) -> io::Result<Vec<u8>> {
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> io::Result<T> {
     serde_json::from_slice(&read_bytes(path)?).map_err(io::Error::other)
 }
-fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     write_bytes(path, &serde_json::to_vec(value).map_err(io::Error::other)?)
 }
 fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {

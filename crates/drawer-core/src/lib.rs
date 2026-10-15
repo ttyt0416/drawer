@@ -36,3 +36,5 @@ pub mod view_layout;
 pub mod workspaces;
 
 pub mod layout;
+
+pub mod tool_properties;

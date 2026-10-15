@@ -24,6 +24,7 @@ impl Drawer {
             || self.cursors.open
             || self.ui_behavior.open
             || self.tool_input.open
+            || self.properties.open
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()

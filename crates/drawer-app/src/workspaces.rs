@@ -150,6 +150,7 @@ impl Drawer {
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
         self.layout.generation += 1;
+        self.reset_property_runtime();
         self.tool_input.controller.cancel();
         self.panels.settings = s.panels;
         self.canvas_view.navigator = s.navigator;
@@ -695,6 +696,7 @@ impl Drawer {
             && self.revert_pending.is_none()
             && !self.controls.open
             && !self.tool_input.open
+            && !self.properties.open
             && !self.ui_behavior.open;
         let mut visible = true;
         egui::Window::new("Popup test painting")

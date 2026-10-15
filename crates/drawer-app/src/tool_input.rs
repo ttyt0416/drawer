@@ -10,6 +10,7 @@ pub(super) struct ToolInput {
 }
 impl Drawer {
     fn runtime_tool(&mut self, tool: BrushTip, document: Option<u64>) {
+        self.sync_tool_properties();
         if let Some(id) = document {
             if let Some(n) = self.documents.iter().position(|d| d.id == id) {
                 self.documents[n].tool = tool;
@@ -23,6 +24,7 @@ impl Drawer {
                 self.documents[n].tool = tool;
             }
         }
+        self.sync_tool_properties();
     }
     pub(super) fn held_tool_inputs(&mut self, ctx: &egui::Context) {
         let document = self.active.map(|n| self.documents[n].id);
@@ -182,6 +184,17 @@ impl Drawer {
         } else if apply {
             let mut s = self.capture_workspace();
             s.input = draft;
+            if let Some(properties) = &mut s.properties {
+                for (tip, value) in BrushTip::ALL.into_iter().zip(draft.smoothing) {
+                    properties
+                        .tools
+                        .get_mut(&drawer_core::tool_properties::Tool::brush(tip))
+                        .unwrap()
+                        .get_mut(&drawer_core::tool_properties::Property::Stabilization)
+                        .unwrap()
+                        .value = value;
+                }
+            }
             self.stage_workspace(s, self.workspaces.store.active.clone());
             match self.apply_workspace(
                 drawer_core::workspaces::Scope {
