@@ -73,13 +73,13 @@ pub(super) struct Drawing {
     pub settings: drawer_core::pointer_input::Settings,
     pub mode: super::precision::Mode,
     pub connect_line: bool,
-    pub opacity: Option<[f64; 4]>,
-    pub hardness: Option<[f64; 4]>,
-    pub spacing: Option<[f64; 4]>,
-    pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
-    pub ends: [drawer_core::stroke_ends::Settings; 4],
-    pub materials: [drawer_core::brush_material::Settings; 4],
-    pub textures: [drawer_core::texture::Pattern; 4],
+    pub opacity: Option<[f64; 7]>,
+    pub hardness: Option<[f64; 7]>,
+    pub spacing: Option<[f64; 7]>,
+    pub mouse_settings: [drawer_core::mouse_pressure::Settings; 7],
+    pub ends: [drawer_core::stroke_ends::Settings; 7],
+    pub materials: [drawer_core::brush_material::Settings; 7],
+    pub textures: [drawer_core::texture::Pattern; 7],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -589,10 +589,11 @@ impl Drawing {
                 .position(|tip| *tip == style.tip)
                 .unwrap();
             style.material = self.materials[index];
+            style = style.resolved();
             style.texture = self.textures[index];
-            style.opacity = self.opacity.unwrap_or([1.0; 4])[index];
-            style.hardness = self.hardness.unwrap_or([1.0; 4])[index];
-            style.spacing = self.spacing.unwrap_or([0.15; 4])[index];
+            style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
+            style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
+            style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
             if self.connect_line {
                 self.ownership.clear();
                 self.connect_line = false;
@@ -1077,6 +1078,9 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 4096,
             )
             .map_err(|e| e.to_string())?;
+            if tip == BrushTip::Smudge {
+                d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
+            }
             let style = Style {
                 texture: Default::default(),
                 material: Default::default(),
@@ -1314,7 +1318,7 @@ mod tests {
         for mouse in [false, true] {
             let (ctx, mut app) = setup(1.0);
             app.panels.settings.brush_size = 8.0;
-            app.workspaces.store.current.input.smoothing = [0.0; 4];
+            app.workspaces.store.current.input.smoothing = [0.0; 7];
             app.workspaces.store.current.pressure.tools[0].size = false;
             app.workspaces.store.current.pressure.tools[0].opacity = false;
             let pattern = Pattern {
@@ -2045,6 +2049,14 @@ mod tests {
                 app.workspaces.store.current.pointer.features.tilt_angle = true;
                 if tip == BrushTip::Eraser {
                     app.documents[0].layers[0].pixels.fill([80, 90, 100, 255]);
+                }
+                if tip == BrushTip::Smudge {
+                    app.workspaces.store.current.input.materials[n].keep_density = true;
+                    for y in 0..48 {
+                        for x in 0..11 {
+                            app.documents[0].layers[0].pixels[y * 64 + x] = [80, 90, 100, 255];
+                        }
+                    }
                 }
                 frame(&ctx, &mut app, 1.0, vec![]);
                 let before = app.documents[0].snapshot();

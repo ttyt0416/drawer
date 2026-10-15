@@ -215,6 +215,22 @@ pub(super) fn tool_hint(language: Language, tip: BrushTip) -> &'static str {
         (Language::Korean, BrushTip::Wash) => {
             "에어브러시: 부드럽게 누적되는 반투명 팁. W는 기본 선택 키입니다."
         }
+        (Language::Korean, BrushTip::Marker) => "마커: 같은 획에서 다시 지나가면 농도가 쌓입니다.",
+        (Language::Korean, BrushTip::Smudge) => {
+            "번짐: 현재 층의 색을 운반하며 선택색은 공급하지 않습니다."
+        }
+        (Language::Korean, BrushTip::PixelPen) => {
+            "픽셀 펜: 격자에 맞춘 단단한 경계. 크기1은 한 픽셀입니다."
+        }
+        (Language::English, BrushTip::Marker) => {
+            "Marker: revisiting the same path builds pigment density."
+        }
+        (Language::English, BrushTip::Smudge) => {
+            "Smudge: carries current-layer pigment without foreground supply."
+        }
+        (Language::English, BrushTip::PixelPen) => {
+            "Pixel pen: grid-aligned binary footprint; size1 is one pixel."
+        }
         (Language::English, BrushTip::Pen) => "Pen: crisp edge. Default tool key B.",
         (Language::English, BrushTip::Pencil) => "Pencil: grainy tip. Default tool key N.",
         (Language::English, BrushTip::Eraser) => "Eraser: removes opacity. Default tool key E.",

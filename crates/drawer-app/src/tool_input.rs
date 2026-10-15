@@ -180,7 +180,7 @@ impl Drawer {
             });
             ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::pattern_ui(ui,&mut draft.textures[n]));});}});
             ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
-                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n]));});}
+                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n],tip==BrushTip::Smudge));});}
             });
             ui.collapsing("Mouse virtual pressure",|ui| {
                 for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.label(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}

@@ -184,7 +184,7 @@ pub(super) struct Properties {
 }
 fn migrated(app: &Drawer) -> Settings {
     let mut settings = Settings::default();
-    for tip in BrushTip::ALL {
+    for tip in BrushTip::ALL.into_iter().take(4) {
         let values = [
             app.panels.settings.brush_size,
             app.panels.settings.brush_aspect,
@@ -292,7 +292,11 @@ impl Drawer {
                 continue;
             }
             let mut value = state.value;
-            property_value(ui, &mut value, p, state.control, unit, dpi);
+            if tool == Tool::PixelPen && p == Property::Hardness {
+                ui.label("Pixel pen uses a binary edge; hardness does not soften it.");
+            } else {
+                property_value(ui, &mut value, p, state.control, unit, dpi);
+            }
             match p {
                 Property::Size => self.panels.settings.brush_size = value,
                 Property::Aspect => self.panels.settings.brush_aspect = value,

@@ -203,6 +203,7 @@ impl Default for Settings {
                 directions: 4,
                 slots: BrushTip::ALL
                     .iter()
+                    .take(4)
                     .map(|t| Some(t.name().into()))
                     .collect(),
             }],
@@ -326,6 +327,7 @@ impl Settings {
         }
         match command {
             "Wash" => "Airbrush",
+            "PixelPen" => "Pixel pen",
             "save" => "Save",
             "save-as" => "Save as",
             "undo" => "Undo",
@@ -434,8 +436,8 @@ mod tests {
     fn cycles_stable_ids_duplicates_deleted_tools_endpoints_and_empty() {
         let mut settings = Settings::default();
         let c = &mut settings.cycles[0];
-        assert_eq!(c.next("Wash", false).unwrap(), BrushTip::Pen);
-        assert_eq!(c.next("Pen", true).unwrap(), BrushTip::Wash);
+        assert_eq!(c.next("Wash", false).unwrap(), BrushTip::Marker);
+        assert_eq!(c.next("Pen", true).unwrap(), BrushTip::PixelPen);
         c.tools = vec!["missing-preset".into(), "Pen".into()];
         assert_eq!(c.next("Pen", false).unwrap(), BrushTip::Pen);
         assert!(settings.valid());

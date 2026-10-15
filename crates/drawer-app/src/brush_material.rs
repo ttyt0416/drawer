@@ -1,13 +1,20 @@
 use super::*;
 use drawer_core::brush_material::{Mode, Settings};
-pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
-    egui::ComboBox::from_id_salt("pigment-mode")
-        .selected_text(s.mode.label())
-        .show_ui(ui, |ui| {
-            for mode in Mode::ALL {
-                ui.selectable_value(&mut s.mode, mode, mode.label());
-            }
-        });
+pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, smudge: bool) {
+    if smudge {
+        s.mode = Mode::Smudge;
+        s.supply = 0.0;
+        s.colorless = true;
+    }
+    ui.add_enabled_ui(!smudge, |ui| {
+        egui::ComboBox::from_id_salt("pigment-mode")
+            .selected_text(s.mode.label())
+            .show_ui(ui, |ui| {
+                for mode in Mode::ALL {
+                    ui.selectable_value(&mut s.mode, mode, mode.label());
+                }
+            });
+    });
     ui.add_enabled_ui(s.mode != Mode::Smudge && !s.colorless, |ui| {
         super::edit::slider(
             ui,
@@ -67,14 +74,22 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
         "Keep the layer's original alpha",
         "brush-material",
     );
-    crate::help::checkbox(
-        ui,
-        &mut s.colorless,
-        "Colorless smudge (no foreground supply)",
-        "brush-material",
-    );
+    ui.add_enabled_ui(!smudge, |ui| {
+        crate::help::checkbox(
+            ui,
+            &mut s.colorless,
+            "Colorless smudge (no foreground supply)",
+            "brush-material",
+        )
+    });
     ui.label("Smudge always carries existing pigment. Density retention can paint into empty pixels; alpha lock prevents that.");
-    if ui.button("Load watercolor values into draft").clicked() {
+    if ui
+        .add_enabled(
+            !smudge,
+            egui::Button::new("Load watercolor values into draft"),
+        )
+        .clicked()
+    {
         *s = Settings {
             mode: Mode::Water,
             supply: 0.2,

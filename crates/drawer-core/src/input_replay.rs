@@ -23,20 +23,28 @@ pub struct Sequence {
     pub aspect: f64,
     pub angle: f64,
     #[serde(default = "full")]
-    pub opacity: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_opacity")]
+    pub opacity: [f64; 7],
     #[serde(default = "full")]
-    pub hardness: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_hardness")]
+    pub hardness: [f64; 7],
     #[serde(default = "spacing")]
-    pub spacing: [f64; 4],
-    pub smoothing: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_spacing")]
+    pub spacing: [f64; 7],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub smoothing: [f64; 7],
     #[serde(default)]
-    pub ends: [crate::stroke_ends::Settings; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub ends: [crate::stroke_ends::Settings; 7],
+    #[serde(default = "crate::brush_slots::materials")]
+    #[serde(deserialize_with = "crate::brush_slots::read_materials")]
+    pub materials: [crate::brush_material::Settings; 7],
     #[serde(default)]
-    pub materials: [crate::brush_material::Settings; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub textures: [crate::texture::Pattern; 7],
     #[serde(default)]
-    pub textures: [crate::texture::Pattern; 4],
-    #[serde(default)]
-    pub mouse_pressure: [crate::mouse_pressure::Settings; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub mouse_pressure: [crate::mouse_pressure::Settings; 7],
     #[serde(default)]
     pub cursors: crate::brush_cursor::Settings,
     pub color: [u8; 4],
@@ -48,11 +56,11 @@ pub struct Sequence {
     pub pen_backend_available: bool,
     pub samples: Vec<Sample>,
 }
-fn full() -> [f64; 4] {
-    [1.0; 4]
+fn full() -> [f64; 7] {
+    [1.0; 7]
 }
-fn spacing() -> [f64; 4] {
-    [0.15; 4]
+fn spacing() -> [f64; 7] {
+    [0.15; 7]
 }
 impl Default for Sequence {
     fn default() -> Self {
@@ -74,11 +82,11 @@ impl Default for Sequence {
             opacity: full(),
             hardness: full(),
             spacing: spacing(),
-            smoothing: [0.0; 4],
-            ends: [Default::default(); 4],
-            materials: [Default::default(); 4],
-            textures: [Default::default(); 4],
-            mouse_pressure: [Default::default(); 4],
+            smoothing: [0.0; 7],
+            ends: [Default::default(); 7],
+            materials: crate::brush_slots::materials(),
+            textures: [Default::default(); 7],
+            mouse_pressure: [Default::default(); 7],
             cursors: Default::default(),
             color: [30, 80, 160, 255],
             background: [0; 4],

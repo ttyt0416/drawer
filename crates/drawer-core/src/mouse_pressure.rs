@@ -162,6 +162,7 @@ impl Replay {
         style: Style,
         settings: Settings,
     ) -> Result<Self, String> {
+        let style = style.resolved();
         if !settings.valid() || !style.valid() {
             return Err("Invalid mouse stroke settings".into());
         }

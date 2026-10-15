@@ -17,6 +17,7 @@ mod cursor_settings;
 mod display_pane;
 mod drawing;
 mod edit;
+mod extended_brushes;
 mod help;
 mod image_import_dialog;
 mod information;
@@ -977,7 +978,7 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
-                if self.canvas_view.cursor_tool_count() != 4
+                if self.canvas_view.cursor_tool_count() != BrushTip::ALL.len()
                     || !self.canvas_view.brush_shape.valid()
                 {
                     fail_smoke();
@@ -1221,6 +1222,10 @@ impl eframe::App for Drawer {
                     eprintln!("Textures/PSD: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = extended_brushes::smoke() {
+                    eprintln!("Extended brushes: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = brush_presets::smoke() {
                     eprintln!("Local brush presets: {e}");
                     fail_smoke();
@@ -1288,7 +1293,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Airbrush\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nmouse_origin_backend=true\nsynthetic_pen_dedup=true\nmissing_pen_properties=true\nvirtual_input_replay=true\nnative_pen={native_pen}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Airbrush,Marker,Smudge,PixelPen\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nmouse_origin_backend=true\nsynthetic_pen_dedup=true\nmissing_pen_properties=true\nvirtual_input_replay=true\nnative_pen={native_pen}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1296,7 +1301,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

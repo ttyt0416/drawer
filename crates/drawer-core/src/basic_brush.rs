@@ -7,6 +7,9 @@ use crate::{
 /// Size px, aspect, angle degrees, stabilization, stroke opacity, hardness, diameter spacing.
 pub fn values(tip: BrushTip) -> [f64; 7] {
     match tip {
+        BrushTip::PixelPen => [1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.25],
+        BrushTip::Marker => [12.0, 1.0, 0.0, 0.0, 0.65, 1.0, 0.3],
+        BrushTip::Smudge => [12.0, 1.0, 0.0, 0.0, 1.0, 0.5, 0.15],
         BrushTip::Wash => [12.0, 1.0, 0.0, 0.0, 0.6, 0.0, 0.1],
         _ => [12.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.15],
     }
@@ -17,6 +20,9 @@ pub fn value(tool: Tool, property: Property) -> f64 {
         Tool::Pencil => BrushTip::Pencil,
         Tool::Eraser => BrushTip::Eraser,
         Tool::Wash => BrushTip::Wash,
+        Tool::Marker => BrushTip::Marker,
+        Tool::Smudge => BrushTip::Smudge,
+        Tool::PixelPen => BrushTip::PixelPen,
         _ => BrushTip::Pen,
     };
     values(tip)[Property::ALL.iter().position(|p| *p == property).unwrap()]
@@ -31,12 +37,26 @@ pub fn restore_values(settings: &mut Settings, tip: BrushTip) -> Result<(), Stri
     }
     Ok(())
 }
+pub fn material(tip: BrushTip) -> crate::brush_material::Settings {
+    use crate::brush_material::{Mode, Settings};
+    if tip == BrushTip::Smudge {
+        Settings {
+            mode: Mode::Smudge,
+            colorless: true,
+            supply: 0.0,
+            water: 0.0,
+            ..Default::default()
+        }
+    } else {
+        Default::default()
+    }
+}
 /// Reset only the chosen brush's input dynamics, keeping device/UI/other brushes intact.
 pub fn restore_input(snapshot: &mut Snapshot, tip: BrushTip) {
     let n = BrushTip::ALL.iter().position(|t| *t == tip).unwrap();
     snapshot.input.smoothing[n] = 0.0;
     snapshot.input.ends[n] = Default::default();
-    snapshot.input.materials[n] = Default::default();
+    snapshot.input.materials[n] = material(tip);
     snapshot.input.textures[n] = Default::default();
     snapshot.input.mouse_pressure[n] = Default::default();
     snapshot.pressure.tools[n] = Default::default();
@@ -66,6 +86,13 @@ pub fn verify_pixels() -> Result<(), String> {
         let mut d = doc()?;
         if tip == BrushTip::Eraser {
             d.layers[0].pixels.fill([80, 90, 100, 255]);
+        }
+        if tip == BrushTip::Smudge {
+            for y in 0..32 {
+                for x in 0..16 {
+                    d.layers[0].pixels[y * 48 + x] = [210, 70, 20, 180];
+                }
+            }
         }
         let before = d.snapshot();
         let v = values(tip);
@@ -97,7 +124,7 @@ pub fn verify_pixels() -> Result<(), String> {
         for x in [10.5, 30.5] {
             stroke.sample(&d, [x, 16.5])?;
         }
-        stroke.commit(&mut d)?;
+        let twice = stroke.commit(&mut d)?;
         if tip == BrushTip::Wash && d.composite_pixel(20, 16)[3] <= once[16 * 48 + 20][3] {
             return Err("Airbrush did not build up across strokes".into());
         }
@@ -105,7 +132,7 @@ pub fn verify_pixels() -> Result<(), String> {
         {
             return Err("Factory eraser damaged pixels outside its tip".into());
         }
-        if !d.undo() || !d.undo() || d.snapshot() != before {
+        if (twice && !d.undo()) || !d.undo() || d.snapshot() != before {
             return Err("Factory brush undo failed".into());
         }
         if !d.redo() || d.layers[0].pixels != once {

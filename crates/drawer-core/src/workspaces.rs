@@ -9,8 +9,9 @@ use std::{
 };
 
 const LIMIT: u64 = 16 * 1024 * 1024;
-pub const COMMANDS: [&str; 8] = [
-    "save", "save-as", "undo", "redo", "Pen", "Pencil", "Eraser", "Wash",
+pub const COMMANDS: [&str; 11] = [
+    "save", "save-as", "undo", "redo", "Pen", "Pencil", "Eraser", "Wash", "Marker", "Smudge",
+    "PixelPen",
 ];
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Dock {
@@ -118,6 +119,9 @@ pub fn default_bindings() -> Vec<Binding> {
         ("N", false, false, "Pencil"),
         ("E", false, false, "Eraser"),
         ("W", false, false, "Wash"),
+        ("Y", false, false, "Marker"),
+        ("U", false, false, "Smudge"),
+        ("P", false, false, "PixelPen"),
         ("T", false, false, "cycle-next:1"),
         ("T", false, true, "cycle-prev:1"),
         ("Q", false, false, "quick:2"),
@@ -205,47 +209,48 @@ impl Scratchpad {
         {
             return;
         }
-        let size = size.clamp(1.0, 64.0);
-        let distance = (to[0] - from[0]).hypot(to[1] - from[1]);
-        let steps = (distance / (size * 0.2).max(0.5)).ceil().clamp(1.0, 2048.0) as usize;
-        let mask = tip.mask(32);
-        for step in 0..=steps {
-            let t = step as f64 / steps as f64;
-            let center = [
-                from[0] + (to[0] - from[0]) * t,
-                from[1] + (to[1] - from[1]) * t,
-            ];
-            let r = size / 2.0;
-            for y in ((center[1] - r).floor() as i64).max(0)
-                ..=((center[1] + r).ceil() as i64).min(PAD_SIZE[1] as i64 - 1)
-            {
-                for x in ((center[0] - r).floor() as i64).max(0)
-                    ..=((center[0] + r).ceil() as i64).min(PAD_SIZE[0] as i64 - 1)
-                {
-                    let mx = ((x as f64 + 0.5 - center[0] + r) / size * 32.0).floor() as i64;
-                    let my = ((y as f64 + 0.5 - center[1] + r) / size * 32.0).floor() as i64;
-                    if !(0..32).contains(&mx) || !(0..32).contains(&my) {
-                        continue;
-                    }
-                    let a = mask[(my * 32 + mx) as usize] as f64 / 255.0 * color[3] as f64 / 255.0;
-                    let dst = &mut self.pixels[y as usize * PAD_SIZE[0] + x as usize];
-                    if tip == BrushTip::Eraser {
-                        dst[3] = (dst[3] as f64 * (1.0 - a)).round() as u8;
-                    } else {
-                        let da = dst[3] as f64 / 255.0;
-                        let out = a + da * (1.0 - a);
-                        if out > 0.0 {
-                            for channel in 0..3 {
-                                dst[channel] = ((color[channel] as f64 * a
-                                    + dst[channel] as f64 * da * (1.0 - a))
-                                    / out)
-                                    .round() as u8;
-                            }
-                        }
-                        dst[3] = (out * 255.0).round() as u8;
-                    }
-                }
-            }
+        if self.pixels.len() != PAD_SIZE[0] * PAD_SIZE[1] {
+            return;
+        }
+        let Ok(mut d) = crate::document::Document::create(
+            crate::document::CanvasSpec {
+                width: PAD_SIZE[0] as u32,
+                height: PAD_SIZE[1] as u32,
+                dpi: 300.0,
+                background: crate::document::Background::Transparent,
+            },
+            4 * PAD_SIZE[0] * PAD_SIZE[1],
+        ) else {
+            return;
+        };
+        d.layers[0].pixels.clone_from(&self.pixels);
+        let v = crate::basic_brush::values(tip);
+        let style = crate::painting::Style {
+            texture: Default::default(),
+            material: crate::basic_brush::material(tip),
+            shape: crate::brush_cursor::Shape {
+                size: size.clamp(1.0, 64.0),
+                aspect: 1.0,
+                angle: 0.0,
+            },
+            tip,
+            color,
+            smoothing: 0.0,
+            opacity: v[4],
+            hardness: v[5],
+            spacing: v[6],
+            pressure: crate::pressure::Mapping {
+                size: false,
+                opacity: false,
+                ..Default::default()
+            },
+        };
+        if let Ok(mut stroke) = crate::painting::Stroke::begin(&d, 0, style)
+            && stroke.sample(&d, from).is_ok()
+            && stroke.sample(&d, to).is_ok()
+            && stroke.commit(&mut d).is_ok()
+        {
+            self.pixels = d.layers.remove(0).pixels;
         }
     }
 }

@@ -66,3 +66,7 @@ pub mod paper;
 pub mod texture;
 
 pub mod psd;
+
+pub mod brush_slots;
+
+pub mod extended_brushes;

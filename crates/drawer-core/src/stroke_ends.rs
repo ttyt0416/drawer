@@ -161,7 +161,7 @@ mod tests {
             serde_json::from_value::<crate::tool_input::Settings>(old)
                 .unwrap()
                 .ends,
-            [Settings::default(); 4]
+            [Settings::default(); 7]
         );
     }
 }

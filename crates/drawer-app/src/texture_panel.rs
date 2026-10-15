@@ -262,7 +262,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         if !a.record.passed || a.pixels != b.pixels || a.pixels.iter().all(|p| p[3] == 0) {
             return Err("Texture mouse/pen replay failed".into());
         }
-        s.textures = [Default::default(); 4];
+        s.textures = [Default::default(); 7];
         let plain = super::input_replay::run(&s, &cancel, &progress)?;
         if plain.pixels == a.pixels {
             return Err("Brush texture had no effect".into());

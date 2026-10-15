@@ -7,18 +7,23 @@ pub struct Settings {
     pub hold_millis: u32,
     pub drag_pixels: f64,
     #[serde(default)]
-    pub smoothing: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub smoothing: [f64; 7],
     #[serde(default)]
-    pub ends: [crate::stroke_ends::Settings; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub ends: [crate::stroke_ends::Settings; 7],
+    #[serde(default = "crate::brush_slots::materials")]
+    #[serde(deserialize_with = "crate::brush_slots::read_materials")]
+    pub materials: [crate::brush_material::Settings; 7],
     #[serde(default)]
-    pub materials: [crate::brush_material::Settings; 4],
-    #[serde(default)]
-    pub textures: [crate::texture::Pattern; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub textures: [crate::texture::Pattern; 7],
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
     #[serde(default)]
-    pub mouse_pressure: [crate::mouse_pressure::Settings; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub mouse_pressure: [crate::mouse_pressure::Settings; 7],
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -26,12 +31,12 @@ impl Default for Settings {
             version: 1,
             hold_millis: 300,
             drag_pixels: 4.0,
-            smoothing: [0.0; 4],
-            ends: [Default::default(); 4],
-            materials: [Default::default(); 4],
-            textures: [Default::default(); 4],
+            smoothing: [0.0; 7],
+            ends: [Default::default(); 7],
+            materials: crate::brush_slots::materials(),
+            textures: [Default::default(); 7],
             modifiers: [None; 3],
-            mouse_pressure: [Default::default(); 4],
+            mouse_pressure: [Default::default(); 7],
         }
     }
 }

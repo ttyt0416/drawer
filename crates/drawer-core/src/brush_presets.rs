@@ -26,6 +26,9 @@ fn dependencies(tip: BrushTip) -> (&'static str, &'static str) {
         BrushTip::Pencil => ("drawer.pencil.1", "drawer.grain.1"),
         BrushTip::Eraser => ("drawer.eraser.1", "none"),
         BrushTip::Wash => ("drawer.airbrush.1", "none"),
+        BrushTip::Marker => ("drawer.marker.1", "none"),
+        BrushTip::Smudge => ("drawer.smudge.1", "none"),
+        BrushTip::PixelPen => ("drawer.pixel.1", "none"),
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

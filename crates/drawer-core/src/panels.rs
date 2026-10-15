@@ -1,9 +1,9 @@
 use crate::storage::UserStorage;
-fn default_opacity() -> [f64; 4] {
-    [1.0; 4]
+fn default_opacity() -> [f64; 7] {
+    [1.0; 7]
 }
-fn default_spacing() -> [f64; 4] {
-    [0.15; 4]
+fn default_spacing() -> [f64; 7] {
+    [0.15; 7]
 }
 use serde::{Deserialize, Serialize};
 use std::{
@@ -116,11 +116,14 @@ pub struct Settings {
     pub panels: [Panel; 4],
     pub brush_size: f64,
     #[serde(default = "default_opacity")]
-    pub brush_opacity: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_opacity")]
+    pub brush_opacity: [f64; 7],
     #[serde(default = "default_opacity")]
-    pub brush_hardness: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_hardness")]
+    pub brush_hardness: [f64; 7],
     #[serde(default = "default_spacing")]
-    pub brush_spacing: [f64; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read_spacing")]
+    pub brush_spacing: [f64; 7],
     #[serde(default = "default_aspect")]
     pub brush_aspect: f64,
     #[serde(default)]
@@ -132,9 +135,9 @@ impl Default for Settings {
             version: 1,
             panels: [Panel::default(); 4],
             brush_size: 12.0,
-            brush_opacity: [1.0, 1.0, 1.0, 0.6],
-            brush_hardness: [1.0, 1.0, 1.0, 0.0],
-            brush_spacing: [0.15, 0.15, 0.15, 0.1],
+            brush_opacity: crate::brush_slots::opacity(),
+            brush_hardness: crate::brush_slots::hardness(),
+            brush_spacing: crate::brush_slots::spacing(),
             brush_aspect: 1.0,
             brush_angle: 0.0,
         }

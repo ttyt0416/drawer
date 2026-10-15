@@ -41,13 +41,14 @@ impl Default for Appearance {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     pub version: u32,
-    pub tools: [Appearance; 4],
+    #[serde(deserialize_with = "crate::brush_slots::read")]
+    pub tools: [Appearance; 7],
 }
 impl Default for Settings {
     fn default() -> Self {
         Self {
             version: 1,
-            tools: [Appearance::default(); 4],
+            tools: [Appearance::default(); 7],
         }
     }
 }

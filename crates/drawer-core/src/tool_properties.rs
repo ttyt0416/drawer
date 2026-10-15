@@ -12,15 +12,21 @@ pub enum Tool {
     Pencil,
     Eraser,
     Wash,
+    Marker,
+    Smudge,
+    PixelPen,
     Eyedropper,
     Move,
 }
 impl Tool {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 9] = [
         Self::Pen,
         Self::Pencil,
         Self::Eraser,
         Self::Wash,
+        Self::Marker,
+        Self::Smudge,
+        Self::PixelPen,
         Self::Eyedropper,
         Self::Move,
     ];
@@ -30,6 +36,9 @@ impl Tool {
             Self::Pencil => "Pencil",
             Self::Eraser => "Eraser",
             Self::Wash => "Airbrush",
+            Self::Marker => "Marker",
+            Self::Smudge => "Smudge",
+            Self::PixelPen => "Pixel pen",
             Self::Eyedropper => "Eyedropper",
             Self::Move => "Move",
         }
@@ -40,13 +49,16 @@ impl Tool {
             BrushTip::Pencil => Self::Pencil,
             BrushTip::Eraser => Self::Eraser,
             BrushTip::Wash => Self::Wash,
+            BrushTip::Marker => Self::Marker,
+            BrushTip::Smudge => Self::Smudge,
+            BrushTip::PixelPen => Self::PixelPen,
         }
     }
     pub fn group(self) -> u8 {
         match self {
-            Self::Pen | Self::Pencil => 0,
+            Self::Pen | Self::Pencil | Self::Marker | Self::PixelPen => 0,
             Self::Eraser => 1,
-            Self::Wash => 2,
+            Self::Wash | Self::Smudge => 2,
             Self::Eyedropper => 3,
             Self::Move => 4,
         }
@@ -120,7 +132,27 @@ pub struct Settings {
     pub version: u32,
     #[serde(default)]
     pub size_unit: crate::numeric::Unit,
+    #[serde(deserialize_with = "read_tools")]
     pub tools: BTreeMap<Tool, BTreeMap<Property, State>>,
+}
+fn read_tools<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<Tool, BTreeMap<Property, State>>, D::Error> {
+    let mut tools = BTreeMap::<Tool, BTreeMap<Property, State>>::deserialize(d)?;
+    let legacy = tools
+        .get(&Tool::Pen)
+        .is_some_and(|p| p.len() == 4 && p.keys().all(|p| Property::LEGACY.contains(p)));
+    let defaults = Settings::default();
+    for tool in [Tool::Marker, Tool::Smudge, Tool::PixelPen] {
+        tools.entry(tool).or_insert_with(|| {
+            defaults.tools[&tool]
+                .iter()
+                .filter(|(p, _)| !legacy || Property::LEGACY.contains(p))
+                .map(|(p, s)| (*p, *s))
+                .collect()
+        });
+    }
+    Ok(tools)
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -206,10 +238,10 @@ impl Settings {
         if !settings.valid() {
             return Err(io::Error::other("Invalid tool property preset"));
         }
-        settings.upgrade([1.0; 4], [1.0; 4], [0.15; 4]);
+        settings.upgrade([1.0; 7], [1.0; 7], [0.15; 7]);
         Ok(settings)
     }
-    pub fn upgrade(&mut self, opacity: [f64; 4], hardness: [f64; 4], spacing: [f64; 4]) {
+    pub fn upgrade(&mut self, opacity: [f64; 7], hardness: [f64; 7], spacing: [f64; 7]) {
         if self.version != 1 {
             return;
         }
@@ -356,13 +388,13 @@ mod tests {
             .unwrap()
             .value = 35.0;
         assert!(settings.valid());
-        settings.upgrade([0.2, 0.3, 0.4, 0.5], [0.5; 4], [0.4; 4]);
+        settings.upgrade([0.2, 0.3, 0.4, 0.5, 0.65, 1.0, 1.0], [0.5; 7], [0.4; 7]);
         assert!(settings.valid());
         assert_eq!(settings.tools[&Tool::Pen][&Property::Size].value, 35.0);
         for (n, tip) in BrushTip::ALL.into_iter().enumerate() {
             assert_eq!(
                 settings.tools[&Tool::brush(tip)][&Property::Opacity].value,
-                [0.2, 0.3, 0.4, 0.5][n]
+                [0.2, 0.3, 0.4, 0.5, 0.65, 1.0, 1.0][n]
             );
         }
         let next = settings

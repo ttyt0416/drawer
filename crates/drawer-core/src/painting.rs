@@ -40,6 +40,14 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn resolved(mut self) -> Self {
+        if self.tip == BrushTip::Smudge && self.material.valid() {
+            self.material.mode = crate::brush_material::Mode::Smudge;
+            self.material.supply = 0.0;
+            self.material.colorless = true;
+        }
+        self
+    }
     /// Conservative minor-axis spacing also covers a thin tip across its narrow direction.
     pub(crate) fn step(self, pressure_scale: f64) -> f64 {
         (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
@@ -383,6 +391,7 @@ impl Stroke {
         self.last.map(|point| (self.layer, self.style.tip, point))
     }
     pub fn begin(doc: &Document, layer: usize, style: Style) -> Result<Self, String> {
+        let style = style.resolved();
         Self::with_budget(doc, layer, style, DEFAULT_DOCUMENT_BUDGET / 4)
     }
     pub fn with_budget(
@@ -391,6 +400,7 @@ impl Stroke {
         style: Style,
         budget: usize,
     ) -> Result<Self, String> {
+        let style = style.resolved();
         if doc.layers.get(layer).is_some_and(|l| l.locked) {
             return Err("The raster layer is locked".into());
         }
@@ -656,13 +666,45 @@ impl Stroke {
         if shape.size == 0.0 || opacity == 0.0 || self.style.opacity == 0.0 {
             return Ok(());
         }
-        let radius = shape.size * 0.5;
-        let minor = radius * shape.aspect;
+        let (center, radius, minor) = if self.style.tip == BrushTip::PixelPen {
+            let width = shape.size.round().max(1.0);
+            let height = (width * shape.aspect).round().max(1.0);
+            let offset = |n: f64| {
+                if (n as u64).is_multiple_of(2) {
+                    1.0
+                } else {
+                    0.5
+                }
+            };
+            let (sin, cos) = shape.angle.to_radians().sin_cos();
+            let dimensions = if sin.abs() > cos.abs() {
+                [height, width]
+            } else {
+                [width, height]
+            };
+            (
+                [
+                    center[0].floor() + offset(dimensions[0]),
+                    center[1].floor() + offset(dimensions[1]),
+                ],
+                width / 2.0,
+                height / 2.0,
+            )
+        } else {
+            (center, shape.size * 0.5, shape.size * 0.5 * shape.aspect)
+        };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
-        let extent = [
-            radius * (cos * cos + shape.aspect * shape.aspect * sin * sin).sqrt() + 1.0,
-            radius * (sin * sin + shape.aspect * shape.aspect * cos * cos).sqrt() + 1.0,
-        ];
+        let extent = if self.style.tip == BrushTip::PixelPen {
+            [
+                radius * cos.abs() + minor * sin.abs() + 1.0,
+                radius * sin.abs() + minor * cos.abs() + 1.0,
+            ]
+        } else {
+            [
+                (radius * cos).hypot(minor * sin) + 1.0,
+                (radius * sin).hypot(minor * cos) + 1.0,
+            ]
+        };
         let layer = &doc.layers[self.layer];
         let storage = layer.extent(doc.width, doc.height);
         let low = [
@@ -706,20 +748,34 @@ impl Stroke {
                 }
                 let dx = point[0] - center[0];
                 let dy = point[1] - center[1];
-                let distance =
-                    ((dx * cos + dy * sin) / radius).hypot((-dx * sin + dy * cos) / minor);
+                let q = [
+                    (dx * cos + dy * sin) / radius,
+                    (-dx * sin + dy * cos) / minor,
+                ];
+                let distance = if self.style.tip == BrushTip::PixelPen {
+                    q[0].abs().max(q[1].abs())
+                } else {
+                    q[0].hypot(q[1])
+                };
                 let edge = ((1.0 - distance) * minor + 0.5).clamp(0.0, 1.0);
                 let softness = if self.style.hardness == 1.0 {
                     1.0
                 } else {
                     ((1.0 - distance) / (1.0 - self.style.hardness)).clamp(0.0, 1.0)
                 };
-                let coverage = edge * softness;
+                let coverage = if self.style.tip == BrushTip::PixelPen {
+                    if distance < 1.0 { 1.0 } else { 0.0 }
+                } else {
+                    edge * softness
+                };
                 if coverage <= 0.0 {
                     continue;
                 }
                 let amount = match self.style.tip {
-                    BrushTip::Pen | BrushTip::Eraser => coverage,
+                    BrushTip::Pen | BrushTip::Eraser | BrushTip::Smudge | BrushTip::PixelPen => {
+                        coverage
+                    }
+                    BrushTip::Marker => coverage * 0.22,
                     BrushTip::Pencil => {
                         let grain = if self.seed == 0 {
                             ((x.rem_euclid(23) * 17
@@ -752,16 +808,22 @@ impl Stroke {
                     continue;
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
-                let amount = if self.style.pressure.opacity {
-                    (amount * opacity).max(old.map_or(0.0, |n| self.amounts[n]))
+                let limited = self.style.tip == BrushTip::PixelPen
+                    || (self.style.pressure.opacity
+                        && self.style.tip != BrushTip::Marker
+                        && self.style.tip != BrushTip::Smudge);
+                let amount = amount
+                    * if self.style.pressure.opacity {
+                        opacity
+                    } else {
+                        1.0
+                    };
+                let amount = if limited {
+                    amount.max(old.map_or(0.0, |n| self.amounts[n]))
                 } else {
                     amount
                 };
-                let base = if self.style.pressure.opacity {
-                    original
-                } else {
-                    unmasked
-                };
+                let base = if limited { original } else { unmasked };
                 let next = if self.style.tip == BrushTip::Eraser {
                     [
                         base[0],
@@ -895,10 +957,20 @@ pub fn verify_spacing() -> Result<(), String> {
             if tip == BrushTip::Eraser {
                 d.layers[0].pixels.fill([80, 90, 100, 255]);
             }
+            if tip == BrushTip::Smudge {
+                for y in 0..64 {
+                    for x in 0..5 {
+                        d.layers[0].pixels[y * 128 + x] = [210, 70, 20, 255];
+                    }
+                }
+            }
             let before = d.snapshot();
             let style = Style {
                 texture: Default::default(),
-                material: Default::default(),
+                material: crate::brush_material::Settings {
+                    keep_density: tip == BrushTip::Smudge,
+                    ..crate::basic_brush::material(tip)
+                },
                 shape: Shape {
                     size: 20.0,
                     aspect: 0.05,

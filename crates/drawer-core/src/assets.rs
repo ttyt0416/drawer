@@ -6,22 +6,37 @@ pub enum BrushTip {
     Pencil,
     Eraser,
     Wash,
+    Marker,
+    Smudge,
+    PixelPen,
 }
 
 impl BrushTip {
-    pub const ALL: [Self; 4] = [Self::Pen, Self::Pencil, Self::Eraser, Self::Wash];
+    pub const ALL: [Self; 7] = [
+        Self::Pen,
+        Self::Pencil,
+        Self::Eraser,
+        Self::Wash,
+        Self::Marker,
+        Self::Smudge,
+        Self::PixelPen,
+    ];
     pub const fn name(self) -> &'static str {
         match self {
             Self::Pen => "Pen",
             Self::Pencil => "Pencil",
             Self::Eraser => "Eraser",
             Self::Wash => "Wash",
+            Self::Marker => "Marker",
+            Self::Smudge => "Smudge",
+            Self::PixelPen => "PixelPen",
         }
     }
     /// Display names can evolve without changing saved command/preset IDs.
     pub const fn label(self) -> &'static str {
         match self {
             Self::Wash => "Airbrush",
+            Self::PixelPen => "Pixel pen",
             _ => self.name(),
         }
     }
@@ -33,11 +48,17 @@ impl BrushTip {
                 let nx = (x as f32 + 0.5) * 2.0 / size as f32 - 1.0;
                 let ny = (y as f32 + 0.5) * 2.0 / size as f32 - 1.0;
                 let radius = (nx * nx + ny * ny).sqrt();
-                let value = if radius >= 1.0 {
+                let value = if self == Self::PixelPen {
+                    1.0
+                } else if radius >= 1.0 {
                     0.0
                 } else {
                     match self {
-                        Self::Pen | Self::Eraser => ((1.0 - radius) * 8.0).clamp(0.0, 1.0),
+                        Self::Pen | Self::Eraser | Self::Smudge => {
+                            ((1.0 - radius) * 8.0).clamp(0.0, 1.0)
+                        }
+                        Self::PixelPen => 1.0,
+                        Self::Marker => 0.22 * ((1.0 - radius) * 8.0).clamp(0.0, 1.0),
                         Self::Pencil => {
                             let grain = ((x * 17 + y * 31 + x * y * 7) % 23) as f32 / 22.0;
                             (1.0 - radius).sqrt() * (0.4 + 0.6 * grain)
@@ -88,6 +109,21 @@ pub fn tool_icon(tip: BrushTip, size: usize) -> Vec<[u8; 4]> {
                     (0.2..0.8).contains(&x) && (0.3..0.7).contains(&y),
                     [250, 120, 165, 255],
                 ),
+                BrushTip::Marker => (
+                    (0.2..0.8).contains(&x) && (0.22..0.78).contains(&y),
+                    [220, 160, 255, 255],
+                ),
+                BrushTip::Smudge => (
+                    (x - 0.5).hypot(y - 0.5) < 0.3
+                        || ((0.2..0.5).contains(&y) && (x - 0.5).abs() < 0.1),
+                    [250, 180, 90, 255],
+                ),
+                BrushTip::PixelPen => (
+                    (0.2..0.4).contains(&x) && (0.2..0.4).contains(&y)
+                        || (0.4..0.6).contains(&x) && (0.4..0.6).contains(&y)
+                        || (0.6..0.8).contains(&x) && (0.6..0.8).contains(&y),
+                    [150, 210, 250, 255],
+                ),
                 BrushTip::Wash => (
                     (x - 0.5).hypot(y - 0.65) < 0.23
                         || ((0.18..0.6).contains(&y) && (x - 0.5).abs() < (y - 0.15) * 0.5),
@@ -105,9 +141,9 @@ mod tests {
     #[test]
     fn built_in_tips_are_self_contained_and_distinct() {
         let masks: Vec<_> = BrushTip::ALL.into_iter().map(|tip| tip.mask(32)).collect();
-        for mask in &masks {
+        for (tip, mask) in BrushTip::ALL.into_iter().zip(&masks) {
             assert_eq!(mask.len(), 1024);
-            assert_eq!(mask[0], 0);
+            assert_eq!(mask[0], if tip == BrushTip::PixelPen { 255 } else { 0 });
             assert!(mask.iter().any(|&alpha| alpha > 0));
         }
         assert_ne!(masks[0], masks[1]);

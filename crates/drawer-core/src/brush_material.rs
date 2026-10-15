@@ -399,6 +399,7 @@ mod tests {
         let mut old = serde_json::to_value(crate::input_replay::Sequence::default()).unwrap();
         old.as_object_mut().unwrap().remove("materials");
         let sequence: crate::input_replay::Sequence = serde_json::from_value(old).unwrap();
-        assert!(sequence.materials.iter().all(Settings::is_default));
+        assert!(sequence.materials[..4].iter().all(Settings::is_default));
+        assert_eq!(sequence.materials[5].mode, Mode::Smudge);
     }
 }
