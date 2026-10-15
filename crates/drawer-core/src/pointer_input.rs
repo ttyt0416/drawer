@@ -117,6 +117,21 @@ pub struct Event {
     pub origin: Origin,
 }
 impl Event {
+    /// Absence is distinct from a reported zero. Mouse pressure is always one.
+    pub fn pressure_value(self) -> f64 {
+        if self.source.kind == Kind::Mouse {
+            1.0
+        } else {
+            self.pressure.unwrap_or(1.0)
+        }
+    }
+    pub fn pen_attributes(self) -> Attributes {
+        if self.source.kind == Kind::Pen {
+            self.attributes.normalized()
+        } else {
+            Attributes::default()
+        }
+    }
     pub fn valid(self) -> bool {
         self.position
             .iter()
@@ -219,6 +234,33 @@ impl Ownership {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_pressure_defaults_one_reported_zero_is_kept_and_nonpen_tilt_is_zero() {
+        let mut e = event(
+            Source {
+                kind: Kind::Pen,
+                device: 3,
+                contact: 8,
+            },
+            Phase::Down,
+        );
+        assert_eq!(e.pressure_value(), 1.0);
+        assert_eq!(e.pen_attributes(), Attributes::default());
+        e.pressure = Some(0.0);
+        assert_eq!(e.pressure_value(), 0.0);
+        e.pressure = Some(0.5);
+        assert_eq!(e.pressure_value(), 0.5);
+        e.attributes = Attributes {
+            tilt: Some([0.5, 0.3]),
+            eraser: Some(true),
+            button: Some(true),
+        };
+        e.source = Source::MOUSE;
+        assert_eq!(e.pressure_value(), 1.0);
+        assert_eq!(e.pen_attributes(), Attributes::default());
+        e.pressure = None;
+        assert_eq!(e.pressure_value(), 1.0);
+    }
     #[test]
     fn os_origin_only_suppresses_pen_promotions_when_native_pen_is_available() {
         for id in 0..128 {

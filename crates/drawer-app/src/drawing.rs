@@ -157,25 +157,21 @@ impl Drawing {
     fn receive(&mut self, index: usize, doc: &mut Document) {
         use drawer_core::pointer_input::Decision;
         let event = self.events[index].0;
-        let pressure = if event.source.kind == drawer_core::pointer_input::Kind::Mouse {
-            1.0
-        } else {
-            event.pressure.unwrap_or(1.0)
-        };
+        let pressure = event.pressure_value();
         self.events[index].1 = true;
         match self.ownership.receive(event, self.settings) {
             Decision::Sample => self.sample(
                 doc,
                 egui::pos2(event.position[0] as f32, event.position[1] as f32),
                 pressure,
-                event.attributes,
+                event.pen_attributes(),
             ),
             Decision::Finish => {
                 self.sample(
                     doc,
                     egui::pos2(event.position[0] as f32, event.position[1] as f32),
                     pressure,
-                    event.attributes,
+                    event.pen_attributes(),
                 );
                 self.finish_document(doc);
             }
@@ -290,10 +286,10 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
-            style.tip = self
-                .settings
-                .features
-                .tip(event.source.kind, event.attributes, style.tip);
+            style.tip =
+                self.settings
+                    .features
+                    .tip(event.source.kind, event.pen_attributes(), style.tip);
             if let Some(value) = self
                 .settings
                 .for_kind(event.source.kind)
@@ -317,12 +313,8 @@ impl Drawing {
                         tilt_angle: event.source.kind == drawer_core::pointer_input::Kind::Pen
                             && self.settings.features.tilt_angle,
                     });
-                    let pressure = if event.source.kind == drawer_core::pointer_input::Kind::Mouse {
-                        1.0
-                    } else {
-                        event.pressure.unwrap_or(1.0)
-                    };
-                    self.sample(doc, pos, pressure, event.attributes);
+                    let pressure = event.pressure_value();
+                    self.sample(doc, pos, pressure, event.pen_attributes());
                 }
                 Err(e) => {
                     self.error = Some(e);
@@ -370,6 +362,70 @@ impl Drawer {
     }
 }
 
+pub(super) fn smoke_defaults() -> Result<(), String> {
+    use drawer_core::{
+        brush_cursor::Shape,
+        pointer_input::{Event, Kind, Phase, Source},
+        pressure::Mapping,
+    };
+    for kind in [Kind::Mouse, Kind::Pen] {
+        for tip in BrushTip::ALL {
+            let e = Event {
+                source: Source {
+                    kind,
+                    device: 0,
+                    contact: 0,
+                },
+                phase: Phase::Down,
+                position: [8.5, 8.5],
+                pressure: None,
+                attributes: Default::default(),
+                origin: Default::default(),
+            };
+            if e.pressure_value() != 1.0 || e.pen_attributes().tilt.is_some() {
+                return Err("Missing input defaults mismatch".into());
+            }
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 16,
+                    height: 16,
+                    dpi: 300.0,
+                    background: if tip == BrushTip::Eraser {
+                        Background::Color([80, 90, 100])
+                    } else {
+                        Background::Transparent
+                    },
+                },
+                4096,
+            )
+            .map_err(|e| e.to_string())?;
+            let style = Style {
+                shape: Shape {
+                    size: 4.0,
+                    aspect: 1.0,
+                    angle: 0.0,
+                },
+                tip,
+                color: [20, 40, 80, 255],
+                smoothing: 0.0,
+                pressure: Mapping {
+                    size: true,
+                    opacity: true,
+                    ..Default::default()
+                },
+            };
+            let mut s = Stroke::begin(&d, 0, style)?;
+            s.sample_pressure(&d, e.position, e.pressure_value())?;
+            s.commit(&mut d)?;
+            let alpha = d.composite_pixel(8, 8)[3];
+            if (tip == BrushTip::Eraser && alpha == 255) || (tip != BrushTip::Eraser && alpha == 0)
+            {
+                return Err("Missing input properties produced an empty stroke".into());
+            }
+        }
+    }
+    Ok(())
+}
 pub(super) fn smoke_dedup() -> Result<(), String> {
     use drawer_core::pointer_input::{Event, Origin, Phase, Source, drawing_event_allowed};
     let make = |phase, origin| Event {
@@ -884,6 +940,75 @@ mod tests {
             ]);
             frame(&ctx, &mut app, 1.0, vec![]);
             assert_eq!(app.documents[0].history_counts(), (3, 0));
+        }
+    }
+    #[test]
+    fn mouse_and_pen_without_pressure_tilt_match_full_pressure_for_every_tip() {
+        use drawer_core::pointer_input::{Attributes, Event, Kind, Phase, Source};
+        for tip in BrushTip::ALL {
+            let mut expected = None;
+            for (kind, pressure, tilt) in [
+                (Kind::Pen, Some(1.0), Some([0.0; 2])),
+                (Kind::Mouse, None, None),
+                (Kind::Pen, None, None),
+            ] {
+                let (ctx, mut app) = setup(1.0);
+                app.set_tool(tip);
+                app.panels.settings.brush_size = 8.0;
+                let n = BrushTip::ALL.iter().position(|t| *t == tip).unwrap();
+                app.workspaces.store.current.pressure.tools[n].size = true;
+                app.workspaces.store.current.pressure.tools[n].opacity = true;
+                app.workspaces.store.current.pointer.features.tilt_angle = true;
+                if tip == BrushTip::Eraser {
+                    app.documents[0].layers[0].pixels.fill([80, 90, 100, 255]);
+                }
+                frame(&ctx, &mut app, 1.0, vec![]);
+                let before = app.documents[0].snapshot();
+                let p = point(&ctx, &app, [10.5, 20.5]);
+                let q = point(&ctx, &app, [45.5, 20.5]);
+                let source = if kind == Kind::Mouse {
+                    Source::MOUSE
+                } else {
+                    Source {
+                        kind,
+                        device: 711,
+                        contact: 32,
+                    }
+                };
+                let event = |phase, pos: egui::Pos2| Event {
+                    source,
+                    phase,
+                    position: [pos.x as f64, pos.y as f64],
+                    pressure,
+                    attributes: Attributes {
+                        tilt,
+                        ..Default::default()
+                    },
+                    origin: Default::default(),
+                };
+                app.drawing.incoming = vec![
+                    event(Phase::Down, p),
+                    event(Phase::Move, q),
+                    event(Phase::Up, q),
+                ];
+                frame(&ctx, &mut app, 1.0, vec![]);
+                assert_eq!(app.documents[0].history_counts(), (1, 0));
+                assert!((10..=45).all(|x| if tip == BrushTip::Eraser {
+                    app.documents[0].composite_pixel(x, 20)[3] < 255
+                } else {
+                    app.documents[0].composite_pixel(x, 20)[3] > 0
+                }));
+                if let Some(expected) = &expected {
+                    assert!(&app.documents[0].layers[0].pixels == expected);
+                } else {
+                    expected = Some(app.documents[0].layers[0].pixels.clone());
+                }
+                let after = app.documents[0].snapshot();
+                assert!(app.documents[0].undo());
+                assert!(app.documents[0].snapshot() == before);
+                assert!(app.documents[0].redo());
+                assert!(app.documents[0].snapshot() == after);
+            }
         }
     }
     #[test]
