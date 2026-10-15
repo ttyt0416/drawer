@@ -162,26 +162,26 @@ impl Drawer {
             let panel = &mut self.aids;
             egui::Window::new("Canvas aids").open(&mut open).default_size(egui::vec2(430.0,450.0)).show(ctx,|ui| {
                 ui.add_enabled_ui(enabled,|ui| {
-                    ui.horizontal(|ui| {ui.checkbox(&mut panel.preferences.rulers,"Rulers");ui.checkbox(&mut panel.preferences.grid,"Grid");ui.checkbox(&mut panel.preferences.guides,"Guides");});
+                    ui.horizontal(|ui| {crate::help::checkbox(ui,&mut panel.preferences.rulers,"Rulers","aids");crate::help::checkbox(ui,&mut panel.preferences.grid,"Grid","aids");crate::help::checkbox(ui,&mut panel.preferences.guides,"Guides","aids");});
                     let old_unit=panel.preferences.unit;
                     ui.horizontal(|ui| {for unit in [Unit::Pixels,Unit::Millimeters,Unit::Inches] {ui.selectable_value(&mut panel.preferences.unit,unit,unit.label());}});
                     if let Some(index)=self.active {
                         let dpi=self.documents[index].dpi;
                         if old_unit!=panel.preferences.unit {for text in panel.spacing.iter_mut().chain(&mut panel.origin).chain(std::iter::once(&mut panel.guide_position)) {if let Ok(value)=text.parse::<f64>() {*text=panel.preferences.unit.from_pixels(old_unit.to_pixels(value,dpi),dpi).to_string();}}}
                         ui.label("Grid spacing and origin are saved in the drawing.");
-                        egui::Grid::new("grid-aid-fields").show(ui,|ui| {for (index,value) in panel.spacing.iter_mut().enumerate() {ui.label(["Horizontal spacing","Vertical spacing"][index]);ui.text_edit_singleline(value);ui.end_row();}});
-                        ui.horizontal(|ui| {ui.label("Origin");for text in &mut panel.origin {ui.add(egui::TextEdit::singleline(text).desired_width(90.0));}});
-                        let button=ui.button("Apply grid");apply=button.clicked();#[cfg(test)] {panel.apply_button=Some(button.rect);}
-                        ui.horizontal_wrapped(|ui| {ui.label("Guide position");ui.add(egui::TextEdit::singleline(&mut panel.guide_position).desired_width(80.0));let button=ui.button("Add horizontal guide");if button.clicked() {guide=Some(true);}#[cfg(test)] {panel.guide_button=Some(button.rect);}if ui.button("Add vertical guide").clicked() {guide=Some(false);}clear=ui.button("Remove all guides").clicked();});
+                        egui::Grid::new("grid-aid-fields").show(ui,|ui| {for (index,value) in panel.spacing.iter_mut().enumerate() {ui.label(["Horizontal spacing","Vertical spacing"][index]);super::edit::finite(ui,value,f64::MIN_POSITIVE,1e9,false,"aids");ui.end_row();}});
+                        ui.horizontal(|ui| {ui.label("Origin");for text in &mut panel.origin {super::edit::finite(ui,text,-1e9,1e9,false,"aids");}});
+                        let button=crate::help::button(ui,"Apply grid","aids");apply=button.clicked();#[cfg(test)] {panel.apply_button=Some(button.rect);}
+                        ui.horizontal_wrapped(|ui| {ui.label("Guide position");super::edit::finite(ui,&mut panel.guide_position,-1e9,1e9,false,"aids");let button=crate::help::button(ui,"Add horizontal guide","aids");if button.clicked() {guide=Some(true);}#[cfg(test)] {panel.guide_button=Some(button.rect);}if crate::help::button(ui,"Add vertical guide","aids").clicked() {guide=Some(false);}clear=crate::help::button(ui,"Remove all guides","aids").clicked();});
                     } else {ui.label("Open a drawing to edit grid and guides.");}
                     ui.separator();ui.label("Measure the line below on this display, then enter its length in mm.");
                     let (rect,_)=ui.allocate_exact_size(egui::vec2(200.0,20.0),egui::Sense::hover());ui.painter().line_segment([rect.left_center(),rect.right_center()],egui::Stroke::new(2.0,egui::Color32::WHITE));
-                    ui.horizontal(|ui| {ui.label("Measured mm");ui.add(egui::TextEdit::singleline(&mut panel.measured_mm).desired_width(80.0));calibrate=ui.button("Calibrate display").clicked();});
+                    ui.horizontal(|ui| {ui.label("Measured mm");super::edit::finite(ui,&mut panel.measured_mm,f64::MIN_POSITIVE,1e9,false,"aids");calibrate=crate::help::button(ui,"Calibrate display","aids").clicked();});
                     ui.label("Physical screen size depends on your measurement. Calibrate again on a different display.");
                     if let Some(ppi)=panel.preferences.monitor_ppi {ui.label(format!("Display calibration: {ppi:.2} pixels per inch"));}
                     let button=ui.add_enabled(self.active.is_some() && panel.preferences.monitor_ppi.is_some(),egui::Button::new("Show print size"));print=button.clicked();#[cfg(test)] {panel.print_button=Some(button.rect);}
-                    if ui.button("Reset display settings").clicked() {panel.preferences=AidPreferences::default();panel.target=None;reset=true;}
-                    restore=ui.button("Restore previous display settings").clicked();
+                    if crate::help::button(ui,"Reset display settings","aids").clicked() {panel.preferences=AidPreferences::default();panel.target=None;reset=true;}
+                    restore=crate::help::button(ui,"Restore previous display settings","aids").clicked();
                     if let Some(error)=&panel.error {ui.colored_label(egui::Color32::LIGHT_RED,error);}
                 });
             });

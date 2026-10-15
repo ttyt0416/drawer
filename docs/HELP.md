@@ -150,3 +150,11 @@ Shared shortcuts appear in the editor. Key chords, input fields, menus and dialo
 The screen button switches between all panels and a simple drawing screen. F12 is the default shortcut on a new profile; assign Simple/full screen in Input and commands for an existing profile. Simple mode keeps document tabs, tools and canvas controls, and provides All tools and commands for the remaining controls. Floating tool panels and the navigator return to their previous layout when switching back.
 
 Screen mode is session-only. It preserves document contents, selections, tool choices, view values and pending previews. The screen button remains available while a preview disables drawing commands. Independently opened information, reference and test-painting windows remain usable.
+
+## input-editing | 입력란 편집과 상황 도움말 | 잘라내기 복사 붙여넣기 실행취소 다시실행 삭제 전체선택 숫자 Enter Esc 한글 IME F1
+
+도움말 키는 현재 포커스가 있는 제어기의 주제를 우선합니다. 포커스가 없으면 포인터 아래 제어기/캔버스 주제를 열고, 해당 주제가 없으면 시작 안내를 엽니다. 모든 내용은 프로그램 안에 포함되어 있습니다.
+
+이름·숫자 입력란은 오른쪽 메뉴에서 실행취소/다시실행·잘라내기·복사·붙여넣기·선택 삭제·전체선택을 제공합니다. Ctrl+Z/Y와 Ctrl+X/C/V/A도 입력란에서 사용할 수 있습니다. 잘라내기는 클립보드에 쓰기가 성공해야 선택 문자를 지웁니다. 선택이 없으면 잘라내기/복사/선택 삭제는 아무것도 바꾸지 않습니다.
+
+문자와 숫자는 Enter 또는 포커스 이동으로 확정합니다. 잘못된 숫자는 이유를 표시하고 이전 값을 유지합니다. Esc는 편집 시작값으로 복구하며 그림의 이력을 바꾸지 않습니다. 숫자 버튼을 끌면 범위 안에서 직접 조절하며 클릭/Tab으로 문자 편집을 시작합니다. 슬라이더 옆에도 같은 숫자 입력란이 있습니다. 한글 조합 중에는 조합을 마친 뒤 확정합니다. 입력한 값의 최종 문서 적용은 각 미리보기의 확정 버튼을 사용합니다.

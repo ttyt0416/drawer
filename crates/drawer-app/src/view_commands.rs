@@ -196,11 +196,11 @@ impl Drawer {
     }
     pub(super) fn view_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Views", |ui| {
-            if ui.button("Previous view  Ctrl+PageUp").clicked() {
+            if crate::help::button(ui, "Previous view  Ctrl+PageUp", "view").clicked() {
                 self.step_view(-1);
                 ui.close();
             }
-            if ui.button("Next view  Ctrl+PageDown").clicked() {
+            if crate::help::button(ui, "Next view  Ctrl+PageDown", "view").clicked() {
                 self.step_view(1);
                 ui.close();
             }

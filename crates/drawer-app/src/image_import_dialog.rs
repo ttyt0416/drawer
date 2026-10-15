@@ -252,7 +252,12 @@ impl Drawer {
                                 }
                             });
                     }
-                    let orientation = ui.checkbox(&mut dialog.orient, "Apply orientation metadata");
+                    let orientation = crate::help::checkbox(
+                        ui,
+                        &mut dialog.orient,
+                        "Apply orientation metadata",
+                        "files",
+                    );
                     changed |= orientation.changed();
                     #[cfg(test)]
                     {
@@ -314,7 +319,7 @@ impl Drawer {
                     egui::Button::new("Create document"),
                 );
                 import = accept.clicked();
-                let dismiss = ui.button("Cancel");
+                let dismiss = crate::help::button(ui, "Cancel", "files");
                 cancel = dismiss.clicked();
                 #[cfg(test)]
                 {

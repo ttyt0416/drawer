@@ -197,19 +197,19 @@ impl Drawer {
         let all_right = !docked.is_empty() && docked.iter().all(|p| p.dock == Dock::Right);
         self.information.shown = true;
         egui::Window::new("Information").open(&mut visible).default_pos(egui::pos2(20.0,50.0)).default_width(390.0).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx,|ui|{
-            ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut settings.theme,Theme::Dark,"Dark theme");ui.selectable_value(&mut settings.theme,Theme::Light,"Light theme");if ui.selectable_label(all_left,"Docked tools left").clicked(){settings.side=Side::Left;force_side=true;}
-if ui.selectable_label(all_right,"Docked tools right").clicked(){settings.side=Side::Right;force_side=true;}
-if ui.button("Interface size").clicked(){self.interface.open=true;}});
+            ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut settings.theme,Theme::Dark,"Dark theme");ui.selectable_value(&mut settings.theme,Theme::Light,"Light theme");if crate::help::selectable(ui,all_left,"Docked tools left","information").clicked(){settings.side=Side::Left;force_side=true;}
+if crate::help::selectable(ui,all_right,"Docked tools right","information").clicked(){settings.side=Side::Right;force_side=true;}
+if crate::help::button(ui,"Interface size","information").clicked(){self.interface.open=true;}});
             egui::ComboBox::from_id_salt("information-unit").selected_text(format!("{:?}",settings.unit)).show_ui(ui,|ui|{for unit in Unit::ALL{ui.selectable_value(&mut settings.unit,unit,format!("{unit:?}"));}});ui.label("Document uses the current ruler unit. Measurements stay in document coordinates.");
             let session=self.information.sessions.entry(id).or_default();
-            ui.horizontal_wrapped(|ui|{let start=ui.button("Pick start on canvas");let end=ui.button("Pick end on canvas");if start.clicked(){session.waiting=1;}
+            ui.horizontal_wrapped(|ui|{let start=crate::help::button(ui,"Pick start on canvas","information");let end=crate::help::button(ui,"Pick end on canvas","information");if start.clicked(){session.waiting=1;}
 if end.clicked(){session.waiting=2;}#[cfg(test)]{self.information.start_button=Some(start.rect);self.information.end_button=Some(end.rect);}
-if ui.button("Clear measurement").clicked(){session.start=None;session.end=None;session.waiting=0;}});
+if crate::help::button(ui,"Clear measurement","information").clicked(){session.start=None;session.end=None;session.waiting=0;}});
             if session.waiting!=0{ui.label("Click the canvas to set the measurement point.");}
-            for(label,point)in[("Start",&mut session.start),("End",&mut session.end)]{if let Some(p)=point{ui.horizontal(|ui|{ui.label(label);for v in p{ui.add(egui::DragValue::new(v).range(-1e12..=1e12).speed(0.1));}});}}
+            for(label,point)in[("Start",&mut session.start),("End",&mut session.end)]{if let Some(p)=point{ui.horizontal(|ui|{ui.label(label);for v in p{super::edit::number(ui,v,-1e12_f64..=1e12_f64,0.1,"","information");}});}}
             if let Some(point)=position{let f=settings.unit.factor(dpi,self.aids.preferences.unit);ui.label(format!("Position: X {:.4}, Y {:.4}",point[0]*f,point[1]*f));}else{ui.label("Position: no pointer or measurement point");}
             if let(Some(a),Some(b))=(session.start,session.end)&&let Some(m)=information::measure(a,b,dpi,settings.unit,self.aids.preferences.unit){ui.label(format!("ΔX {:.4} · ΔY {:.4} · length {:.4}",m.delta[0],m.delta[1],m.length));}
-            ui.horizontal_wrapped(|ui|{ui.checkbox(&mut settings.rgb,"RGB");ui.checkbox(&mut settings.hsv,"HSV");ui.checkbox(&mut settings.hsl,"HSL");ui.checkbox(&mut settings.cmyk,"CMYK (output profile)");});
+            ui.horizontal_wrapped(|ui|{crate::help::checkbox(ui,&mut settings.rgb,"RGB","information");crate::help::checkbox(ui,&mut settings.hsv,"HSV","information");crate::help::checkbox(ui,&mut settings.hsl,"HSL","information");crate::help::checkbox(ui,&mut settings.cmyk,"CMYK (output profile)","information");});
             if let Some(c)=self.information.color{
                 ui.label(format!("Alpha {} / 255{}",c.rgba[3],if c.rgba[3]==0{" · transparent"}else{""}));if settings.rgb{ui.label(format!("RGB {} {} {}",c.rgba[0],c.rgba[1],c.rgba[2]));}
 if settings.hsv{ui.label(format!("HSV {:.2}° {:.2}% {:.2}%",c.hsv[0],c.hsv[1]*100.0,c.hsv[2]*100.0));}
@@ -217,7 +217,7 @@ if settings.hsl{ui.label(format!("HSL {:.2}° {:.2}% {:.2}%",c.hsl[0],c.hsl[1]*1
                 if settings.cmyk&&let Some(result)=&cmyk{match result{Ok(v)=>{ui.label(format!("CMYK {:.2}% {:.2}% {:.2}% {:.2}%",v[0],v[1],v[2],v[3]));},Err(e)=>{ui.label(format!("CMYK unavailable: {e}"));}}}
             }else{ui.label("Color unavailable outside the canvas or without a point");}
             if settings.cmyk{if let Some(e)=&self.information.profile_error{ui.label(format!("CMYK unavailable: {e}"));}
-if let Some(path)=&settings.output_profile{ui.label(format!("Output profile: {}",path.display()));}ui.horizontal_wrapped(|ui|{choose=ui.button("Choose local CMYK output profile…").clicked();reload=ui.button("Reload profile").clicked();if ui.button("Clear output profile").clicked(){settings.output_profile=None;}});}
+if let Some(path)=&settings.output_profile{ui.label(format!("Output profile: {}",path.display()));}ui.horizontal_wrapped(|ui|{choose=crate::help::button(ui,"Choose local CMYK output profile…","information").clicked();reload=crate::help::button(ui,"Reload profile","information").clicked();if crate::help::button(ui,"Clear output profile","information").clicked(){settings.output_profile=None;}});}
         });
         settings.visible = visible;
         if !visible {

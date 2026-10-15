@@ -225,7 +225,7 @@ impl Drawer {
                 ("Canvas size…", Mode::Canvas),
                 ("Crop…", Mode::Crop),
             ] {
-                if ui.button(label).clicked() {
+                if crate::help::button(ui, label, "size").clicked() {
                     self.begin_sizing(mode);
                 }
             }
@@ -309,35 +309,35 @@ impl Drawer {
                     if dialog.mode==Mode::Crop {
                         for (label, value) in [("Width (pixels)", &mut dialog.size.width), ("Height (pixels)", &mut dialog.size.height)] {
                             ui.label(label);
-                            changed |= ui.text_edit_singleline(value).changed();
+                            changed |= super::edit::finite(ui,value,1.0,32768.0,true,"size").changed();
                             ui.end_row();
                         }
                     }
                     if dialog.mode==Mode::Dpi {
                         ui.label("DPI");
-                        changed |= ui.text_edit_singleline(&mut dialog.dpi).changed();
+                        changed |= super::edit::finite(ui,&mut dialog.dpi,f64::MIN_POSITIVE,1e9,false,"size").changed();
                         ui.end_row();
                     }
                     if dialog.mode == Mode::Crop {
                         for (label, value) in [("Left (pixels)", &mut dialog.x), ("Top (pixels)", &mut dialog.y)] {
                             ui.label(label);
-                            changed |= ui.text_edit_singleline(value).changed();
+                            changed |= super::edit::finite(ui,value,-1e9,1e9,true,"size").changed();
                             ui.end_row();
                         }
                     }
                 });
                 if dialog.mode==Mode::Resample {
-                    if ui.checkbox(&mut dialog.keep_pixels,"Keep pixel count when changing DPI").changed() {
+                    if crate::help::checkbox(ui,&mut dialog.keep_pixels,"Keep pixel count when changing DPI","size").changed() {
                         if let Ok(dpi)=drawer_core::canvas_size::dpi(&dialog.size.dpi) {dialog.size.set_pixels([dialog.original.width,dialog.original.height],dpi);}
                         changed=true;
                     }
                     if dialog.keep_pixels {
                         ui.label("DPI only: no resampling; existing pixels stay unchanged.");
-                        ui.label("DPI");changed|=ui.text_edit_singleline(&mut dialog.size.dpi).changed();
+                        ui.label("DPI");changed|=super::edit::finite(ui,&mut dialog.size.dpi,f64::MIN_POSITIVE,1e9,false,"size").changed();
                     }else {changed|=size_fields::fields(ui,&mut dialog.size,true,Some(false));ui.label("DPI changes preserve physical size by resampling.");}
                 }
                 if dialog.mode==Mode::Canvas {
-                    changed|=ui.checkbox(&mut dialog.use_edges,"Adjust each edge").changed();
+                    changed|=crate::help::checkbox(ui,&mut dialog.use_edges,"Adjust each edge","size").changed();
                     if dialog.use_edges {
                         let mut unit=dialog.size.unit;
                         egui::ComboBox::from_id_salt("edge-unit").selected_text(unit.label()).show_ui(ui,|ui| {
@@ -352,7 +352,7 @@ impl Drawer {
                         }
                         ui.label("Positive adds transparent space; negative removes pixels.");
                         egui::Grid::new("edge-increments").show(ui,|ui| {
-                            for (label,value) in ["Left","Top","Right","Bottom"].into_iter().zip(&mut dialog.edges) {ui.label(label);changed|=ui.text_edit_singleline(value).changed();ui.end_row();}
+                            for (label,value) in ["Left","Top","Right","Bottom"].into_iter().zip(&mut dialog.edges) {ui.label(label);changed|=super::edit::finite(ui,value,-1e9,1e9,false,"size").changed();ui.end_row();}
                         });
                     }else {changed|=size_fields::fields(ui,&mut dialog.size,false,None);}
                 }
@@ -369,7 +369,7 @@ impl Drawer {
                         for (row, y) in [0.0, 0.5, 1.0].into_iter().enumerate() {
                             for (column, x) in [0.0, 0.5, 1.0].into_iter().enumerate() {
                                 let label = format!("{} {}", ["Top", "Middle", "Bottom"][row], ["Left", "Center", "Right"][column]);
-                                if ui.selectable_label(dialog.anchor == [x, y], label).clicked() {
+                                if crate::help::selectable(ui,dialog.anchor == [x, y], label,"size").clicked() {
                                     dialog.anchor = [x, y];
                                     changed = true;
                                 }
@@ -396,7 +396,7 @@ impl Drawer {
                             if !plan.clipped_objects.is_empty() {
                                 ui.label(format!("Objects partly outside the boundary: {:?}. Geometry is retained.", plan.clipped_objects.iter().map(|i|i+1).collect::<Vec<_>>()));
                             }
-                            ui.checkbox(&mut dialog.confirmed, "Confirm removal of pixels outside this boundary");
+                            crate::help::checkbox(ui,&mut dialog.confirmed, "Confirm removal of pixels outside this boundary","size");
                         }
                         if !dialog.original.scene.objects.is_empty() {
                             ui.collapsing("Object sizes after this change", |ui| object_sizes(ui, &dialog, &plan));
@@ -420,7 +420,7 @@ impl Drawer {
                 ui.spinner();
                 ui.label("Calculating image…");
             }
-            let cancel_response = ui.button("Cancel");
+            let cancel_response = crate::help::button(ui,"Cancel","size");
             cancel = cancel_response.clicked();
             #[cfg(test)] { dialog.cancel_button = Some(cancel_response.rect); }
         });

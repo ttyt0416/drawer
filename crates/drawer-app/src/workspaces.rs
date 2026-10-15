@@ -298,19 +298,19 @@ impl Drawer {
                     });
                 }
                 ui.separator();
-                ui.horizontal(|ui| { ui.label("New name"); ui.text_edit_singleline(&mut self.workspaces.name); if ui.button("Save new workspace").clicked() { action = Some(0); } });
+                ui.horizontal(|ui| { ui.label("New name"); super::edit::text(ui,&mut self.workspaces.name,"workspace"); if crate::help::button(ui,"Save new workspace","workspace").clicked() { action = Some(0); } });
                 egui::ComboBox::from_id_salt("named-workspace").selected_text(&self.workspaces.selection).show_ui(ui, |ui| {
                     for n in &self.workspaces.store.named { ui.selectable_value(&mut self.workspaces.selection, n.name.clone(), &n.name); }
                 });
                 ui.horizontal_wrapped(|ui| {
-                    for (id, label) in [(1, "Switch / preview"), (2, "Update selected saved workspace"), (3, "Delete selected")] { if ui.button(label).clicked() { action = Some(id); } }
+                    for (id, label) in [(1, "Switch / preview"), (2, "Update selected saved workspace"), (3, "Delete selected")] { if crate::help::button(ui,label,"workspace").clicked() { action = Some(id); } }
                     if ui.add_enabled(self.workspaces.store.active.is_some(), egui::Button::new("Reapply current saved workspace")).clicked() { action = Some(4); }
-                    if ui.button("Reset workspace").clicked() { action = Some(5); }
-                    if ui.button("Import local workspace").clicked() { action = Some(6); }
-                    if ui.button("Export current workspace").clicked() { action = Some(7); }
+                    if crate::help::button(ui,"Reset workspace","workspace").clicked() { action = Some(5); }
+                    if crate::help::button(ui,"Import local workspace","workspace").clicked() { action = Some(6); }
+                    if crate::help::button(ui,"Export current workspace","workspace").clicked() { action = Some(7); }
                     if ui.add_enabled(self.storage.is_some(), egui::Button::new("Restore before-apply backup")).clicked() { action = Some(8); }
                 });
-                if ui.button("Popup test painting").clicked() { self.workspaces.store.current.scratchpad.visible = true; }
+                if crate::help::button(ui,"Popup test painting","workspace").clicked() { self.workspaces.store.current.scratchpad.visible = true; }
                 for report in &self.workspaces.reports { ui.colored_label(egui::Color32::YELLOW, report); }
             });
             self.workspaces.open = open;
@@ -418,19 +418,28 @@ impl Drawer {
                         "Choose groups to apply. Current settings are backed up before applying.",
                     );
                     let s = &mut self.workspaces.scope;
-                    ui.checkbox(&mut s.layout, "Panel layout and appearance");
-                    ui.checkbox(&mut s.keys, "Shortcuts");
-                    ui.checkbox(&mut s.bars, "Panel command bars");
-                    ui.checkbox(
+                    crate::help::checkbox(
+                        ui,
+                        &mut s.layout,
+                        "Panel layout and appearance",
+                        "workspace",
+                    );
+                    crate::help::checkbox(ui, &mut s.keys, "Shortcuts", "workspace");
+                    crate::help::checkbox(ui, &mut s.bars, "Panel command bars", "workspace");
+                    crate::help::checkbox(
+                        ui,
                         &mut s.other,
                         "Tool, color, test painting, interface, aids and image quality",
+                        "workspace",
                     );
-                    ui.checkbox(
+                    crate::help::checkbox(
+                        ui,
                         &mut self.workspaces.save_before,
                         "Also save the current unsaved layout as a named workspace",
+                        "workspace",
                     );
                     if self.workspaces.save_before {
-                        ui.text_edit_singleline(&mut self.workspaces.before_name);
+                        super::edit::text(ui, &mut self.workspaces.before_name, "workspace");
                     }
                     match self.capture_workspace().merge(
                         &incoming,
@@ -447,8 +456,8 @@ impl Drawer {
                         }
                     }
                     ui.horizontal(|ui| {
-                        let a = ui.button("Apply selected groups");
-                        let c = ui.button("Cancel workspace apply");
+                        let a = crate::help::button(ui, "Apply selected groups", "workspace");
+                        let c = crate::help::button(ui, "Cancel workspace apply", "workspace");
                         apply = a.clicked();
                         cancel = c.clicked();
                         #[cfg(test)]
@@ -753,7 +762,7 @@ impl Drawer {
                         self.canvas_view.icon(n),
                     );
                 }
-                if ui.button("Clear test area").clicked() {
+                if crate::help::button(ui, "Clear test area", "workspace").clicked() {
                     self.workspaces.store.current.scratchpad.pixels.fill([0; 4]);
                 }
                 let image = egui::ColorImage::new(

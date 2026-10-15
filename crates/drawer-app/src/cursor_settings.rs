@@ -118,10 +118,10 @@ impl Drawer {
         egui::Window::new("Cursor styles").open(&mut open).show(ctx,|ui|{
             egui::ComboBox::from_id_salt("cursor-tip").selected_text(BrushTip::ALL[self.cursors.tip].name()).show_ui(ui,|ui|{for(n,t)in BrushTip::ALL.iter().enumerate(){ui.selectable_value(&mut self.cursors.tip,n,t.name());}});
             let a=&mut s.tools[self.cursors.tip];ui.horizontal_wrapped(|ui|{for style in Style::ALL{ui.selectable_value(&mut a.style,style,format!("{style:?}"));}});
-            ui.add_enabled_ui(a.style!=Style::System,|ui|{ui.horizontal(|ui|{for mode in Mode::ALL{ui.selectable_value(&mut a.mode,mode,format!("{mode:?}"));}});ui.add(egui::Slider::new(&mut a.minimum_pixels,0.0..=32.0).text("Minimum outline (screen pixels)"));ui.checkbox(&mut a.prediction,"Show prediction preview (orange; never committed)");});
+            ui.add_enabled_ui(a.style!=Style::System,|ui|{ui.horizontal(|ui|{for mode in Mode::ALL{ui.selectable_value(&mut a.mode,mode,format!("{mode:?}"));}});super::edit::slider(ui,&mut a.minimum_pixels,0.0..=32.0,"Minimum outline (screen pixels)","cursors");crate::help::checkbox(ui,&mut a.prediction,"Show prediction preview (orange; never committed)","cursors");});
             if a.style==Style::System{a.mode=Mode::Raw;a.prediction=false;}
             ui.label("Raw: current input, white. Corrected: committed filter position, cyan. Both keeps the raw cross and corrected outline separate. Stabilization is set in Tool input behavior; these display choices never change the stroke.");
-            ui.horizontal(|ui|{apply=ui.button("Apply cursor styles").clicked();cancel=ui.button("Cancel cursor styles").clicked();if ui.button("Reset draft").clicked(){s=Default::default();}});
+            ui.horizontal(|ui|{apply=crate::help::button(ui,"Apply cursor styles","cursors").clicked();cancel=crate::help::button(ui,"Cancel cursor styles","cursors").clicked();if crate::help::button(ui,"Reset draft","cursors").clicked(){s=Default::default();}});
             if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(p)=>s=p.cursors,Err(e)=>self.status=Some(e.to_string())}}
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

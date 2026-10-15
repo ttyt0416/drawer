@@ -33,8 +33,8 @@ impl Drawer {
             ui.heading("Reload the last saved document?");
             ui.label("Unsaved edits will be discarded. The saved file stays unchanged.");
             ui.horizontal(|ui| {
-                confirm = ui.button("Discard edits and reload").clicked();
-                cancel = ui.button("Cancel").clicked();
+                confirm = crate::help::button(ui, "Discard edits and reload", "files").clicked();
+                cancel = crate::help::button(ui, "Cancel", "files").clicked();
             });
         });
         if confirm {
@@ -67,7 +67,7 @@ impl Drawer {
         ui.menu_button("Local file actions",|ui| {
             if ui.add_enabled(self.active.is_some_and(|n|self.documents[n].path.is_some()),egui::Button::new("Revert to saved document…")).clicked() {self.revert_pending=self.active.map(|n|self.documents[n].id);ui.close();}
             ui.separator();ui.label("To associate .drawer files, choose Drawer.exe in Windows Settings → Apps → Default apps. Windows controls whether an association is allowed.");
-            if ui.button("Open Windows default-app settings").clicked() {self.file_association_from(|| {
+            if crate::help::button(ui,"Open Windows default-app settings","files").clicked() {self.file_association_from(|| {
                 let mut command=std::process::Command::new("explorer.exe");command.arg("ms-settings:defaultapps");
                 #[cfg(windows)] {use std::os::windows::process::CommandExt;command.creation_flags(0x08000000);}
                 command.spawn().map(|_|()).map_err(|e|e.to_string())

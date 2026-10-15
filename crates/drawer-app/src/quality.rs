@@ -32,7 +32,7 @@ impl Drawer {
             });
             ui.label("Average colors integrates the source pixel footprint. Oversampling takes a 4×4 grid of bilinear samples.");
             ui.label("Object transforms and animation keep separate interpolation choices.");
-            if ui.button("Reset interpolation").clicked() {next=Default::default();}
+            if crate::help::button(ui,"Reset interpolation","view").clicked() {next=Default::default();}
             if ui.add_enabled(!self.quality_undo.is_empty(),egui::Button::new("Undo interpolation setting")).clicked() {history=Some(false);}
             if ui.add_enabled(!self.quality_redo.is_empty(),egui::Button::new("Redo interpolation setting")).clicked() {history=Some(true);}
             if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore previous interpolation")).clicked() {

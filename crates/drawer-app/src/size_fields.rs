@@ -23,14 +23,25 @@ pub(super) fn fields(
         let _ = size.switch_unit(unit);
         changed = true;
     }
+    let maximum = size.unit.from_pixels(
+        drawer_core::document::MAX_DIMENSION as f64,
+        drawer_core::canvas_size::dpi(&size.dpi).unwrap_or(300.0),
+    );
     egui::Grid::new("size-values").show(ui, |ui| {
         for axis in 0..2 {
             ui.label(if axis == 0 { "Width" } else { "Height" });
-            let response = ui.text_edit_singleline(if axis == 0 {
-                &mut size.width
-            } else {
-                &mut size.height
-            });
+            let response = super::edit::finite(
+                ui,
+                if axis == 0 {
+                    &mut size.width
+                } else {
+                    &mut size.height
+                },
+                f64::MIN_POSITIVE,
+                maximum,
+                size.unit == Unit::Pixels,
+                "size",
+            );
             if response.changed() {
                 let _ = size.edited_axis(axis);
                 changed = true;
@@ -40,7 +51,9 @@ pub(super) fn fields(
         if edit_dpi {
             ui.label("DPI");
             let previous = size.dpi.clone();
-            if ui.text_edit_singleline(&mut size.dpi).changed() {
+            if super::edit::finite(ui, &mut size.dpi, f64::MIN_POSITIVE, 1e9, false, "size")
+                .changed()
+            {
                 if let Some(keep) = dpi_keep_pixels {
                     let _ = size.edited_dpi(&previous, keep);
                 }
@@ -50,7 +63,7 @@ pub(super) fn fields(
         }
     });
     let mut locked = size.locked;
-    if ui.checkbox(&mut locked, "Lock aspect ratio").changed() {
+    if crate::help::checkbox(ui, &mut locked, "Lock aspect ratio", "size").changed() {
         let _ = size.lock(locked);
         changed = true;
     }
@@ -170,8 +183,8 @@ impl Presets {
                 });
             ui.horizontal(|ui| {
                 ui.label("Name");
-                ui.text_edit_singleline(&mut self.name);
-                if ui.button("Save current size").clicked() {
+                super::edit::text(ui, &mut self.name, "size");
+                if crate::help::button(ui, "Save current size", "size").clicked() {
                     action = Some(0);
                 }
             });
@@ -197,7 +210,7 @@ impl Presets {
                 {
                     action = Some(3);
                 }
-                if ui.button("Reset presets").clicked() {
+                if crate::help::button(ui, "Reset presets", "size").clicked() {
                     action = Some(4);
                 }
                 if ui
@@ -209,10 +222,10 @@ impl Presets {
                 {
                     action = Some(5);
                 }
-                if ui.button("Load presets…").clicked() {
+                if crate::help::button(ui, "Load presets…", "size").clicked() {
                     action = Some(6);
                 }
-                if ui.button("Save presets…").clicked() {
+                if crate::help::button(ui, "Save presets…", "size").clicked() {
                     action = Some(7);
                 }
             });

@@ -342,21 +342,21 @@ impl Drawer {
             ui.set_max_width(650.0);ui.heading(if dialog.insert {"Insert local movie into timeline"}else {"New animation from local movie"});
             ui.label(dialog.source.path.display().to_string());
             if let Some(decoder)=&dialog.decoder {ui.label(format!("Local codec: {}",decoder.ffmpeg.display()));}
-            if ui.button("Choose local FFmpeg…").clicked() {choose=true;}
+            if crate::help::button(ui,"Choose local FFmpeg…","movie").clicked() {choose=true;}
             if let Some(info)=&dialog.info {
                 ui.label(format!("{} × {} · source FPS {} · {} decoded source frames · last time {:.6}s",info.width,info.height,info.fps,info.times.len(),info.last_time()));
                 egui::Grid::new("movie-options").show(ui,|ui| {
-                    for (name,value) in [("Start seconds",&mut dialog.start),("End seconds (inclusive)",&mut dialog.end),("Output width",&mut dialog.width),("Output height",&mut dialog.height),("Sampling FPS numerator",&mut dialog.fps),("FPS denominator",&mut dialog.denominator)] {ui.label(name);ui.text_edit_singleline(value);ui.end_row();}
-                    if dialog.insert {ui.label("Insertion frame");ui.text_edit_singleline(&mut dialog.start_frame);ui.end_row();}
+                    for (name,value) in [("Start seconds",&mut dialog.start),("End seconds (inclusive)",&mut dialog.end),("Output width",&mut dialog.width),("Output height",&mut dialog.height),("Sampling FPS numerator",&mut dialog.fps),("FPS denominator",&mut dialog.denominator)] {ui.label(name);let seconds=name.contains("seconds");let max=if name.contains("width")||name.contains("height"){32768.0}else if seconds{1e9}else{100000.0};super::edit::finite(ui,value,if seconds{0.0}else{1.0},max,!seconds,"movie");ui.end_row();}
+                    if dialog.insert {ui.label("Insertion frame");super::edit::finite(ui,&mut dialog.start_frame,1.0,u32::MAX as f64,true,"movie");ui.end_row();}
                 });
 
                 egui::ComboBox::from_id_salt("movie-interpolation").selected_text(dialog.filter.label()).show_ui(ui,|ui|{for filter in drawer_core::interpolation::Filter::ALL {ui.selectable_value(&mut dialog.filter,filter,filter.label());}});
-                ui.add_enabled_ui(info.has_audio,|ui|{ui.checkbox(&mut dialog.audio,"Import audio separately (48 kHz PCM)");});
+                ui.add_enabled_ui(info.has_audio,|ui|{crate::help::checkbox(ui,&mut dialog.audio,"Import audio separately (48 kHz PCM)","movie");});
                 if !info.has_audio {ui.label("This movie has no audio stream.");}
                 if ui.add_enabled(dialog.job.is_none(),egui::Button::new("Decode range and preview")).clicked() {decode=true;}
             }
             if let Some(clip)=&dialog.clip {
-                let previous=dialog.preview_frame;let mut shown=dialog.preview_frame+1;ui.add(egui::Slider::new(&mut shown,1..=clip.cells.len()).text("Preview cell"));dialog.preview_frame=shown-1;
+                let previous=dialog.preview_frame;let mut shown=dialog.preview_frame+1;super::edit::slider(ui,&mut shown,1..=clip.cells.len(),"Preview cell","movie");dialog.preview_frame=shown-1;
                 if previous!=dialog.preview_frame {dialog.preview=None;}
                 let cell=&clip.cells[dialog.preview_frame];
                 if dialog.preview.is_none() {
@@ -379,7 +379,7 @@ impl Drawer {
             }
             if dialog.job.is_some() {ui.spinner();ui.label("Reading local movie… Cancel stops decoding.");ctx.request_repaint();}
             if let Some(error)=&dialog.error {ui.colored_label(egui::Color32::LIGHT_RED,error);}
-            ui.horizontal(|ui| {let a=ui.add_enabled(dialog.clip.is_some()&&dialog.job.is_none(),egui::Button::new(if dialog.insert {"Insert track"}else {"Create animation"}));accept=a.clicked();let c=ui.button("Cancel");cancel=c.clicked();#[cfg(test)] {dialog.accept_button=Some(a.rect);dialog.cancel_button=Some(c.rect);}});
+            ui.horizontal(|ui| {let a=ui.add_enabled(dialog.clip.is_some()&&dialog.job.is_none(),egui::Button::new(if dialog.insert {"Insert track"}else {"Create animation"}));accept=a.clicked();let c=crate::help::button(ui,"Cancel","movie");cancel=c.clicked();#[cfg(test)] {dialog.accept_button=Some(a.rect);dialog.cancel_button=Some(c.rect);}});
         });
         if switch_screen {
             self.simple_view = !self.simple_view;
@@ -454,10 +454,7 @@ impl Drawer {
                     "Animation · {}/{} FPS · {tracks} cell tracks · {audio} audio tracks",
                     fps.numerator, fps.denominator
                 ));
-                if ui
-                    .add(egui::Slider::new(&mut frame, 1..=total).text("Frame"))
-                    .changed()
-                {
+                if super::edit::slider(ui, &mut frame, 1..=total, "Frame", "movie").changed() {
                     self.documents[n].current_frame = frame - 1;
                 }
             });

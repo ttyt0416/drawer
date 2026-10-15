@@ -155,9 +155,9 @@ impl Drawer {
         let mut apply = false;
         let mut cancel = false;
         egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).show(ctx,|ui|{
-            ui.add(egui::Slider::new(&mut draft.hold_millis,0..=5000).text("Temporary tool threshold (ms)"));
-            ui.add(egui::Slider::new(&mut draft.drag_pixels,0.0..=64.0).text("Drag threshold (screen pixels)"));
-            for (n,tip) in BrushTip::ALL.iter().enumerate(){ui.add(egui::Slider::new(&mut draft.smoothing[n],0.0..=0.95).text(format!("{} stabilization",tip.name())));}
+            super::edit::slider(ui,&mut draft.hold_millis,0..=5000,"Temporary tool threshold (ms)","modifier-tools");
+            super::edit::slider(ui,&mut draft.drag_pixels,0.0..=64.0,"Drag threshold (screen pixels)","modifier-tools");
+            for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.name()),"modifier-tools");}
             ui.separator();
             ui.label("Hold a modifier to use its tool; release always restores the previous tool.");
             for (n, label) in ["Ctrl", "Shift", "Alt"].into_iter().enumerate() {
@@ -172,7 +172,7 @@ impl Drawer {
             }
             ui.label("Input fields, menus and dialogs take priority. After suspension, release the modifier before using it again.");
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
-            ui.horizontal_wrapped(|ui|{apply=ui.button("Apply input behavior").clicked();cancel=ui.button("Cancel input behavior").clicked();if ui.button("Reset draft").clicked(){draft=Default::default();}
+            ui.horizontal_wrapped(|ui|{apply=crate::help::button(ui,"Apply input behavior","modifier-tools").clicked();cancel=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,"Reset draft","modifier-tools").clicked(){draft=Default::default();}
                 if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>draft=s.input,Err(e)=>self.status=Some(e.to_string())}}
             });
         });

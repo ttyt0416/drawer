@@ -112,9 +112,9 @@ impl Drawer {
         let mut history = None;
         egui::Window::new("Interface size").open(&mut open).show(ctx,|ui| {
             ui.label("Monitor scaling is automatic. This setting adds your preferred interface size.");
-            ui.add(egui::Slider::new(&mut zoom,0.5..=2.0).text("Interface scale"));
+            super::edit::slider(ui,&mut zoom,0.5..=2.0,"Interface scale","view");
             ui.label(format!("Current screen scale: {:.0}%",ctx.pixels_per_point()*100.0));
-            if ui.button("Reset interface size").clicked() {zoom=1.0;}
+            if crate::help::button(ui,"Reset interface size","view").clicked() {zoom=1.0;}
             if ui.add_enabled(!self.interface.undo.is_empty(),egui::Button::new("Undo interface setting")).clicked() {history=Some(false);}
             if ui.add_enabled(!self.interface.redo.is_empty(),egui::Button::new("Redo interface setting")).clicked() {history=Some(true);}
             if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore previous interface size")).clicked() {match Settings::read(&self.storage.as_ref().unwrap().root().join("settings/interface.previous.json")) {Ok(s)=>zoom=s.zoom,Err(e)=>self.status=Some(e.to_string())}}

@@ -231,7 +231,7 @@ impl Drawer {
                 });
             });
             if !shown {
-                let reveal = ui.button("Show panel contents");
+                let reveal = crate::help::button(ui, "Show panel contents", "tools");
                 if reveal.clicked() || reveal.has_focus() {
                     self.ui_behavior.hidden[kind.index()].reveal();
                 } else {
@@ -258,7 +258,8 @@ impl Drawer {
                             } else {
                                 String::new()
                             };
-                            let response = ui.selectable_label(self.selected == tip, label);
+                            let response =
+                                crate::help::selectable(ui, self.selected == tip, label, "tools");
                             response.widget_info(|| {
                                 egui::WidgetInfo::selected(
                                     egui::WidgetType::SelectableLabel,
@@ -370,7 +371,8 @@ impl Drawer {
                             )
                             .clicked()
                         });
-                        let response = ui.selectable_label(selected == *target, label);
+                        let response =
+                            crate::help::selectable(ui, selected == *target, label, "tools");
                         #[cfg(test)]
                         {
                             self.panels.targets_buttons.insert(*target, response.rect);
@@ -390,26 +392,35 @@ impl Drawer {
             Kind::Brush => {
                 ui.horizontal(|ui| {
                     ui.label("Size");
-                    ui.add(
-                        egui::DragValue::new(&mut self.panels.settings.brush_size)
-                            .range(0.1..=4096.0)
-                            .suffix(" px"),
+                    super::edit::number(
+                        ui,
+                        &mut self.panels.settings.brush_size,
+                        0.1_f64..=4096.0_f64,
+                        1.0,
+                        " px",
+                        "tools",
                     );
                 });
                 ui.horizontal(|ui| {
                     ui.label("Aspect");
-                    ui.add(
-                        egui::DragValue::new(&mut self.panels.settings.brush_aspect)
-                            .range(0.05..=1.0)
-                            .speed(0.01),
+                    super::edit::number(
+                        ui,
+                        &mut self.panels.settings.brush_aspect,
+                        0.05_f64..=1.0_f64,
+                        0.01,
+                        "",
+                        "tools",
                     );
                 });
                 ui.horizontal(|ui| {
                     ui.label("Tip angle");
-                    ui.add(
-                        egui::DragValue::new(&mut self.panels.settings.brush_angle)
-                            .speed(1.0)
-                            .suffix("°"),
+                    super::edit::number(
+                        ui,
+                        &mut self.panels.settings.brush_angle,
+                        -1e9_f64..=1e9_f64,
+                        1.0,
+                        "°",
+                        "tools",
                     );
                 });
                 self.panels.settings.brush_angle =
@@ -525,11 +536,11 @@ impl Drawer {
                         }
                     });
                 let cfg = &mut self.panels.settings.panels[self.panels.kind.index()];
-                ui.checkbox(&mut cfg.visible, "Show panel");
+                crate::help::checkbox(ui, &mut cfg.visible, "Show panel", "tools");
                 if self.panels.kind == Kind::Brush {
-                    ui.checkbox(&mut cfg.icons, "Tool icons");
-                    ui.checkbox(&mut cfg.names, "Tool names");
-                    ui.checkbox(&mut cfg.strokes, "Stroke previews");
+                    crate::help::checkbox(ui, &mut cfg.icons, "Tool icons", "tools");
+                    crate::help::checkbox(ui, &mut cfg.names, "Tool names", "tools");
+                    crate::help::checkbox(ui, &mut cfg.strokes, "Stroke previews", "tools");
                 }
                 if matches!(self.panels.kind, Kind::Layers | Kind::Timeline) {
                     egui::ComboBox::from_id_salt("panel-thumb")
@@ -539,13 +550,20 @@ impl Drawer {
                                 ui.selectable_value(&mut cfg.thumbnail, size, size.label());
                             }
                         });
-                    ui.checkbox(
+                    crate::help::checkbox(
+                        ui,
                         &mut cfg.content,
                         "Show content bounds instead of whole canvas",
+                        "tools",
                     );
-                    ui.checkbox(&mut cfg.checker, "Transparency checker");
+                    crate::help::checkbox(ui, &mut cfg.checker, "Transparency checker", "tools");
                     if self.panels.kind == Kind::Timeline {
-                        ui.checkbox(&mut cfg.animation_only, "Animation tracks only");
+                        crate::help::checkbox(
+                            ui,
+                            &mut cfg.animation_only,
+                            "Animation tracks only",
+                            "tools",
+                        );
                     }
                 }
                 for (label, bar) in [
@@ -571,7 +589,7 @@ impl Drawer {
                         .collect::<Vec<_>>()
                         .join(" · "),
                 );
-                if ui.button("Restore all panels").clicked() {
+                if crate::help::button(ui, "Restore all panels", "tools").clicked() {
                     self.panels.settings = Settings::default();
                 }
                 if ui

@@ -55,27 +55,46 @@ impl Drawer {
         egui::Window::new("Navigator settings")
             .open(&mut open)
             .show(ctx, |ui| {
-                ui.checkbox(&mut next.visible, "Show navigator");
-                ui.checkbox(&mut next.floating, "Floating movable panel");
-                ui.checkbox(
+                crate::help::checkbox(ui, &mut next.visible, "Show navigator", "view");
+                crate::help::checkbox(ui, &mut next.floating, "Floating movable panel", "view");
+                crate::help::checkbox(
+                    ui,
                     &mut next.hover_outline,
                     "Show view boundary on hover or keyboard focus",
+                    "view",
                 );
-                ui.checkbox(&mut next.selection_outline, "Show dashed selection outline");
-                ui.add(egui::Slider::new(&mut next.min_width, 80.0..=640.0).text("Minimum width"));
+                crate::help::checkbox(
+                    ui,
+                    &mut next.selection_outline,
+                    "Show dashed selection outline",
+                    "view",
+                );
+                super::edit::slider(
+                    ui,
+                    &mut next.min_width,
+                    80.0..=640.0,
+                    "Minimum width",
+                    "view",
+                );
                 next.max_width = next.max_width.max(next.min_width);
-                ui.add(
-                    egui::Slider::new(&mut next.max_width, next.min_width..=640.0)
-                        .text("Maximum width"),
+                super::edit::slider(
+                    ui,
+                    &mut next.max_width,
+                    next.min_width..=640.0,
+                    "Maximum width",
+                    "view",
                 );
                 next.size[0] = next.size[0].clamp(next.min_width, next.max_width);
-                ui.add(
-                    egui::Slider::new(&mut next.size[0], next.min_width..=next.max_width)
-                        .text("Width"),
+                super::edit::slider(
+                    ui,
+                    &mut next.size[0],
+                    next.min_width..=next.max_width,
+                    "Width",
+                    "view",
                 );
-                ui.add(egui::Slider::new(&mut next.size[1], 80.0..=640.0).text("Height"));
+                super::edit::slider(ui, &mut next.size[1], 80.0..=640.0, "Height", "view");
                 ui.label("Drag a floating panel by its title. Drag its bottom corner to resize.");
-                if ui.button("Reset navigator").clicked() {
+                if crate::help::button(ui, "Reset navigator", "view").clicked() {
                     next = Default::default();
                 }
                 if ui

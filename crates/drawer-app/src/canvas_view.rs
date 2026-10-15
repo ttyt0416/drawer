@@ -160,12 +160,7 @@ impl CanvasView {
         ui.horizontal_wrapped(|ui| {
             ui.label("Zoom");
             let mut percent = document.view.zoom * 100.0;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut percent)
-                        .range(1.0..=6400.0)
-                        .suffix("%"),
-                )
+            if super::edit::number(ui, &mut percent, 1.0_f64..=6400.0_f64, 1.0, "%", "view")
                 .changed()
                 && percent.is_finite()
             {
@@ -173,26 +168,24 @@ impl CanvasView {
             }
             ui.label("Angle");
             let mut angle = document.view.angle;
-            if ui
-                .add(egui::DragValue::new(&mut angle).speed(0.5).suffix("°"))
-                .changed()
+            if super::edit::number(ui, &mut angle, -1e9_f64..=1e9_f64, 0.5, "°", "view").changed()
             {
                 document.view.rotate(angle);
             }
-            ui.checkbox(&mut document.view.flipped, "Mirror");
-            if ui.button("100%").clicked() {
+            crate::help::checkbox(ui, &mut document.view.flipped, "Mirror", "view");
+            if crate::help::button(ui, "100%", "view").clicked() {
                 document.view.reset_zoom(size, ppp);
             }
-            if ui.button("0°").clicked() {
+            if crate::help::button(ui, "0°", "view").clicked() {
                 document.view.reset_angle(size, ppp);
             }
-            if ui.button("Center").clicked() {
+            if crate::help::button(ui, "Center", "view").clicked() {
                 document.view.pan = [0.0; 2];
             }
-            if ui.button("Reset view").clicked() {
+            if crate::help::button(ui, "Reset view", "view").clicked() {
                 document.view = Default::default();
             }
-            if ui.checkbox(&mut self.area_zoom, "Zoom region").changed() {
+            if crate::help::checkbox(ui, &mut self.area_zoom, "Zoom region", "view").changed() {
                 self.area_start = None;
                 self.view_notice = None;
             }
@@ -205,6 +198,7 @@ impl CanvasView {
             ui.available_size().max(egui::vec2(1.0, 1.0)),
             egui::Sense::drag(),
         );
+        crate::help::tag(ui.ctx(), &response, "tools");
         #[cfg(test)]
         {
             self.viewport = Some(rect);

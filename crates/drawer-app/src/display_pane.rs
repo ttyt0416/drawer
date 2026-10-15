@@ -160,27 +160,27 @@ impl DisplayPane {
                 if next.preferred.as_ref().is_some_and(|key| !self.monitors.iter().any(|monitor| &monitor.key == key)) {
                     ui.label("Preferred screen is unavailable; the view returns to an available screen. Reconnecting restores the preference.");
                 }
-                let sync = ui.checkbox(&mut next.synced, "Sync zoom and center with editor");
+                let sync = crate::help::checkbox(ui,&mut next.synced, "Sync zoom and center with editor","view");
                 #[cfg(test)] { self.sync_button = Some(sync.rect); }
                 #[cfg(not(test))] let _ = sync;
-                ui.checkbox(&mut next.fullscreen, "Fullscreen on selected screen");
+                crate::help::checkbox(ui,&mut next.fullscreen, "Fullscreen on selected screen","view");
                 ui.add_enabled_ui(!next.synced, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Zoom");
                         let mut zoom = next.framing.zoom * 100.0;
-                        if ui.add(egui::DragValue::new(&mut zoom).range(1.0..=6400.0).suffix("%")).changed() {
+                        if super::edit::number(ui,&mut zoom,1.0_f64..=6400.0_f64,1.0,"%","view").changed() {
                             next.framing.zoom = zoom / 100.0;
                         }
                         ui.label("Angle");
-                        ui.add(egui::DragValue::new(&mut next.framing.angle).speed(0.5).suffix("°"));
+                        super::edit::number(ui,&mut next.framing.angle,-1e9_f64..=1e9_f64,0.5,"°","view");
                         next.framing.angle = next.framing.angle.rem_euclid(360.0);
                     });
-                    ui.checkbox(&mut next.framing.flipped, "Mirror view");
-                    if ui.button("Reset independent view").clicked() {
+                    crate::help::checkbox(ui,&mut next.framing.flipped, "Mirror view","view");
+                    if crate::help::button(ui,"Reset independent view","view").clicked() {
                         next.framing = Default::default();
                     }
                 });
-                let visibility = ui.button(if next.visible { "Close display view" } else { "Show display view" });
+                let visibility = crate::help::button(ui,if next.visible { "Close display view" } else { "Show display view" },"view");
                 #[cfg(test)] { self.close_button = Some(visibility.rect); }
                 if visibility.clicked() { next.visible = !next.visible; }
                 ui.label("Independent view: wheel to zoom, middle/Space drag to pan. F11 toggles fullscreen; Escape returns to a window.");
@@ -190,7 +190,7 @@ impl DisplayPane {
                     #[cfg(test)] { self.undo_button = Some(undo.rect); self.redo_button = Some(redo.rect); }
                     if undo.clicked() { history = Some(false); }
                     if redo.clicked() { history = Some(true); }
-                    if ui.button("Reset display settings").clicked() { next = Default::default(); }
+                    if crate::help::button(ui,"Reset display settings","view").clicked() { next = Default::default(); }
                     if ui.add_enabled(storage.is_some(), egui::Button::new("Restore previous settings")).clicked() {
                         match Preferences::previous(storage.unwrap()) {
                             Ok(preferences) => next = preferences,

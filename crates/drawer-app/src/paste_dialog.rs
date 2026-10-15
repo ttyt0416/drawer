@@ -186,12 +186,12 @@ impl Drawer {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Paste image layer…").clicked()
+            if crate::help::button(ui, "Paste image layer…", "files").clicked()
                 && let Err(error) = self.begin_paste(ui.ctx(), read_clipboard)
             {
                 self.status = Some(error);
             }
-            if ui.button("Copy top raster layer").clicked()
+            if crate::help::button(ui, "Copy top raster layer", "files").clicked()
                 && let Err(error) = self.copy_top_layer_from(write_clipboard)
             {
                 self.status = Some(error);
@@ -219,13 +219,27 @@ impl Drawer {
             let mut offset = dialog.offset;
             ui.horizontal(|ui| {
                 ui.label("Left");
-                ui.add(egui::DragValue::new(&mut offset[0]).range(-1_000_000_000..=1_000_000_000));
+                super::edit::number(
+                    ui,
+                    &mut offset[0],
+                    -1_000_000_000_f64..=1_000_000_000_f64,
+                    1.0,
+                    "",
+                    "files",
+                );
                 ui.label("Top");
-                ui.add(egui::DragValue::new(&mut offset[1]).range(-1_000_000_000..=1_000_000_000));
+                super::edit::number(
+                    ui,
+                    &mut offset[1],
+                    -1_000_000_000_f64..=1_000_000_000_f64,
+                    1.0,
+                    "",
+                    "files",
+                );
             });
 
             ui.horizontal(|ui| {
-                if ui.button("Center").clicked() {
+                if crate::help::button(ui, "Center", "files").clicked() {
                     let layer = dialog.preview.layers.last().unwrap().placement.unwrap();
                     offset = [
                         (dialog.preview.width as i64 - layer.width as i64).div_euclid(2),
@@ -275,9 +289,9 @@ impl Drawer {
                 ui.colored_label(egui::Color32::LIGHT_RED, error);
             }
             ui.horizontal(|ui| {
-                let apply = ui.button("Place layer");
+                let apply = crate::help::button(ui, "Place layer", "files");
                 accept = apply.clicked();
-                let dismiss = ui.button("Cancel");
+                let dismiss = crate::help::button(ui, "Cancel", "files");
                 cancel = dismiss.clicked();
                 #[cfg(test)]
                 {

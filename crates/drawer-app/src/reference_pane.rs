@@ -120,7 +120,7 @@ impl Drawer {
                             ("Save set…", Action::Export),
                             ("Load set…", Action::Import),
                         ] {
-                            if ui.button(label).clicked() {
+                            if crate::help::button(ui, label, "reference").clicked() {
                                 action = Some(event);
                             }
                         }
@@ -132,7 +132,7 @@ impl Drawer {
                             ("Restore previous", Action::Restore),
                             ("Reset references", Action::Reset),
                         ] {
-                            if ui.button(label).clicked() {
+                            if crate::help::button(ui, label, "reference").clicked() {
                                 action = Some(event);
                             }
                         }
@@ -141,7 +141,7 @@ impl Drawer {
                         ui.label("No reference images. Add a local PNG or clipboard image.");
                     } else {
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button("Previous").clicked() {
+                            if crate::help::button(ui, "Previous", "reference").clicked() {
                                 pane.session.workspace.step(-1);
                             }
                             egui::ComboBox::from_id_salt("reference-list")
@@ -160,10 +160,10 @@ impl Drawer {
                                         );
                                     }
                                 });
-                            if ui.button("Next").clicked() {
+                            if crate::help::button(ui, "Next", "reference").clicked() {
                                 pane.session.workspace.step(1);
                             }
-                            let remove = ui.button("Remove reference");
+                            let remove = crate::help::button(ui, "Remove reference", "reference");
                             if remove.clicked() {
                                 action = Some(Action::Remove);
                             }
@@ -295,30 +295,41 @@ impl ReferencePane {
         ui.horizontal_wrapped(|ui| {
             let view = &mut self.session.workspace.active_record_mut().unwrap().view;
             let mut percent = view.zoom * 100.0;
-            if ui
-                .add(
-                    egui::DragValue::new(&mut percent)
-                        .range(1.0..=6400.0)
-                        .suffix("%"),
-                )
-                .changed()
+            if super::edit::number(
+                ui,
+                &mut percent,
+                1.0_f64..=6400.0_f64,
+                1.0,
+                "%",
+                "reference",
+            )
+            .changed()
                 && percent.is_finite()
             {
                 view.zoom = (percent / 100.0).clamp(0.01, 64.0);
             }
             let mut angle = view.angle;
-            if ui
-                .add(egui::DragValue::new(&mut angle).suffix("°"))
+            if super::edit::number(ui, &mut angle, -1e9_f64..=1e9_f64, 1.0, "°", "reference")
                 .changed()
             {
                 view.rotate(angle);
             }
-            if ui.button("Reset view").clicked() {
+            if crate::help::button(ui, "Reset view", "reference").clicked() {
                 *view = View::default();
             }
-            ui.checkbox(&mut self.pick_mode, "Pick color");
-            ui.checkbox(&mut self.session.workspace.auto_pick, "Auto pick");
-            ui.checkbox(&mut self.session.workspace.show_ring, "Color ring");
+            crate::help::checkbox(ui, &mut self.pick_mode, "Pick color", "reference");
+            crate::help::checkbox(
+                ui,
+                &mut self.session.workspace.auto_pick,
+                "Auto pick",
+                "reference",
+            );
+            crate::help::checkbox(
+                ui,
+                &mut self.session.workspace.show_ring,
+                "Color ring",
+                "reference",
+            );
         });
         ui.label(format!("Selected RGBA: {:?}", self.session.workspace.color));
         if let Some(path) = &self.session.workspace.active_record().unwrap().source {

@@ -57,7 +57,7 @@ impl Drawer {
                 .clicked()
             {
                 self.recent.redo(self.storage.as_ref())
-            } else if ui.button("Clear list").clicked() {
+            } else if crate::help::button(ui, "Clear list", "files").clicked() {
                 self.recent.reset(self.storage.as_ref())
             } else if ui
                 .add_enabled(
@@ -345,7 +345,7 @@ impl Drawer {
     }
     pub(super) fn document_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Open…").clicked()
+            if crate::help::button(ui, "Open…", "files").clicked()
                 && let Some(paths) = rfd::FileDialog::new()
                     .set_title("Open local drawings")
                     .add_filter("Drawer document", &["drawer"])
@@ -357,14 +357,14 @@ impl Drawer {
                     }
                 }
             }
-            if ui.button("Image as new document…").clicked()
+            if crate::help::button(ui, "Image as new document…", "files").clicked()
                 && let Some(path) = rfd::FileDialog::new()
                     .add_filter("PNG / JPEG / TIFF", &["png", "jpg", "jpeg", "tif", "tiff"])
                     .pick_file()
             {
                 self.begin_import(ui.ctx(), &path);
             }
-            if ui.button("New from clipboard").clicked()
+            if crate::help::button(ui, "New from clipboard", "files").clicked()
                 && let Err(error) = self.document_from_clipboard(|| {
                     reference_pane::clipboard_image_with_budget(DEFAULT_DOCUMENT_BUDGET)
                 })
@@ -417,7 +417,7 @@ impl Drawer {
                 {
                     self.documents[active].redo();
                 }
-                if ui.button("Duplicate view").clicked() {
+                if crate::help::button(ui, "Duplicate view", "files").clicked() {
                     self.duplicate_view();
                 }
             }
@@ -433,7 +433,7 @@ impl Drawer {
                     ("Rotate 90° right", Change::Rotate90 { clockwise: true }),
                     ("Rotate 90° left", Change::Rotate90 { clockwise: false }),
                 ] {
-                    let button = ui.button(label);
+                    let button = crate::help::button(ui, label, "files");
                     #[cfg(test)]
                     {
                         self.transform_buttons.insert(label, button.rect);
@@ -442,7 +442,7 @@ impl Drawer {
                         self.begin_transform(ui.ctx(), change);
                     }
                 }
-                if ui.button("Export PNG…").clicked()
+                if crate::help::button(ui, "Export PNG…", "files").clicked()
                     && let Err(error) = self.export_from(self.active.unwrap(), || {
                         rfd::FileDialog::new()
                             .add_filter("PNG", &["png"])
@@ -471,7 +471,8 @@ impl Drawer {
                         document.title,
                         if document.dirty { " *" } else { "" }
                     );
-                    let title = ui.selectable_label(self.active_tab == Some(index), label);
+                    let title =
+                        crate::help::selectable(ui, self.active_tab == Some(index), label, "files");
                     if let Some(path) = document.path.as_ref().or(document.source_path.as_ref()) {
                         title.clone().on_hover_text(path.display().to_string());
                     }
@@ -518,15 +519,19 @@ impl Drawer {
             ui.heading(format!("Save changes to {title}?"));
             ui.label("Your drawing will stay open until you choose.");
             ui.horizontal(|ui| {
-                let save = ui.button(format!("Save  {}", self.workspaces.command_label("save")));
+                let save = crate::help::button(
+                    ui,
+                    format!("Save  {}", self.workspaces.command_label("save")),
+                    "files",
+                );
                 if save.clicked() {
                     action = Some(0);
                 }
-                let discard = ui.button("Discard");
+                let discard = crate::help::button(ui, "Discard", "files");
                 if discard.clicked() {
                     action = Some(1);
                 }
-                let cancel = ui.button("Cancel");
+                let cancel = crate::help::button(ui, "Cancel", "files");
                 if cancel.clicked() {
                     action = Some(2);
                 }

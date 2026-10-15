@@ -218,8 +218,12 @@ impl Drawer {
         ui.push_id(set.id, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(&set.name);
-                ui.text_edit_singleline(self.controls.query.entry(set.id).or_default())
-                    .on_hover_text("Search this set");
+                super::edit::text(
+                    ui,
+                    self.controls.query.entry(set.id).or_default(),
+                    "shortcuts",
+                )
+                .on_hover_text("Search this set");
             });
             let query = self
                 .controls
@@ -314,7 +318,7 @@ impl Drawer {
         let sets = self.workspaces.store.current.actions.access.clone();
         for set in sets {
             if set.display == Display::Popup {
-                if ui.button(format!("{}…", set.name)).clicked() {
+                if crate::help::button(ui, format!("{}…", set.name), "shortcuts").clicked() {
                     self.controls.quick = Some(set.id);
                 }
             } else {
@@ -541,19 +545,20 @@ impl Drawer {
                             egui::Button::new("Apply command settings"),
                         )
                         .clicked();
-                    let c = ui.button("Cancel command settings");
+                    let c = crate::help::button(ui, "Cancel command settings", "shortcuts");
                     cancel = c.clicked();
                     #[cfg(test)]
                     {
                         self.controls.cancel_button = Some(c.rect);
                     }
-                    if ui.button("Reset draft to defaults").clicked() {
+                    if crate::help::button(ui, "Reset draft to defaults", "shortcuts").clicked() {
                         editor.draft.actions = Default::default();
                         editor.draft.bindings = drawer_core::workspaces::default_bindings();
                         editor.selected = 0;
                     }
-                    import = ui.button("Import local settings…").clicked();
-                    export = ui.button("Export draft…").clicked();
+                    import =
+                        crate::help::button(ui, "Import local settings…", "shortcuts").clicked();
+                    export = crate::help::button(ui, "Export draft…", "shortcuts").clicked();
                     if ui
                         .add_enabled(
                             self.storage.is_some(),
@@ -650,14 +655,14 @@ fn edit_bindings(ui: &mut egui::Ui, e: &mut Editor) {
     let mut pick = None;
     for (n, b) in e.draft.bindings.iter_mut().enumerate() {
         ui.push_id(n,|ui|ui.horizontal_wrapped(|ui|{
-        ui.text_edit_singleline(&mut b.key).on_hover_text("Key name: A–Z, 0–9, F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");ui.checkbox(&mut b.ctrl,"Ctrl");ui.checkbox(&mut b.shift,"Shift");ui.checkbox(&mut b.alt,"Alt");if ui.button(e.draft.actions.label(&b.command)).clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
+        super::edit::text(ui,&mut b.key,"shortcuts").on_hover_text("Key name: A–Z, 0–9, F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");crate::help::checkbox(ui,&mut b.ctrl,"Ctrl","shortcuts");crate::help::checkbox(ui,&mut b.shift,"Shift","shortcuts");crate::help::checkbox(ui,&mut b.alt,"Alt","shortcuts");if crate::help::button(ui,e.draft.actions.label(&b.command),"shortcuts").clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
 if ui.small_button("Remove").clicked(){remove=Some(n);}
     }));
     }
     if let Some(n) = remove {
         e.draft.bindings.remove(n);
     }
-    if ui.button("Add shortcut").clicked() {
+    if crate::help::button(ui, "Add shortcut", "shortcuts").clicked() {
         e.draft.bindings.push(Binding {
             key: "F2".into(),
             ctrl: false,
@@ -679,7 +684,7 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
     let mut duplicate = false;
     let mut delete = false;
     if let Some(c) = s.cycles.get_mut(e.selected) {
-        ui.text_edit_singleline(&mut c.name);
+        super::edit::text(ui, &mut c.name, "shortcuts");
         let mut remove = None;
         let mut move_to = None;
         for (n, t) in c.tools.iter().enumerate() {
@@ -694,7 +699,7 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
                 {
                     move_to = Some((n, n + 1));
                 }
-                if ui.button("Remove").clicked() {
+                if crate::help::button(ui, "Remove", "shortcuts").clicked() {
                     remove = Some(n);
                 }
             });
@@ -718,7 +723,7 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
                 }
             }
         });
-        if ui.button("Reverse order").clicked() {
+        if crate::help::button(ui, "Reverse order", "shortcuts").clicked() {
             c.tools.reverse();
         }
         ui.label("Assign Next tool / Previous tool for this list in Shortcuts or Device actions");
@@ -726,9 +731,9 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
         ui.label("No tool cycles. Create a list to assign next/previous.");
     }
     ui.horizontal(|ui| {
-        add = ui.button("New cycle").clicked();
-        duplicate = ui.button("Duplicate cycle").clicked();
-        delete = ui.button("Delete cycle").clicked();
+        add = crate::help::button(ui, "New cycle", "shortcuts").clicked();
+        duplicate = crate::help::button(ui, "Duplicate cycle", "shortcuts").clicked();
+        delete = crate::help::button(ui, "Delete cycle", "shortcuts").clicked();
     });
     if delete && e.selected < s.cycles.len() {
         s.cycles.remove(e.selected);
@@ -759,7 +764,7 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
     }
     let mut pick = None;
     if let Some(set) = s.access.get_mut(e.selected) {
-        ui.text_edit_singleline(&mut set.name);
+        super::edit::text(ui, &mut set.name, "shortcuts");
         ui.horizontal(|ui| {
             ui.selectable_value(&mut set.kind, SetKind::QuickAccess, "Quick access");
             ui.selectable_value(&mut set.kind, SetKind::CommandBar, "Command bar");
@@ -769,7 +774,12 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
                 ui.selectable_value(&mut set.display, d, format!("{d:?}"));
             }
         });
-        ui.checkbox(&mut set.ctrl_drag, "Require Ctrl while dragging to reorder");
+        crate::help::checkbox(
+            ui,
+            &mut set.ctrl_drag,
+            "Require Ctrl while dragging to reorder",
+            "shortcuts",
+        );
         let mut remove = None;
         let mut swap = None;
         for (n, item) in set.items.iter_mut().enumerate() {
@@ -777,7 +787,7 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
                 ui.label(item.label());
                 match item {
                     Item::Command(c) | Item::Tool(c) => {
-                        if ui.button("Choose command / tool").clicked() {
+                        if crate::help::button(ui, "Choose command / tool", "shortcuts").clicked() {
                             pick = Some(Picker {
                                 target: Target::Item(set.id, n),
                                 selected: c.clone(),
@@ -792,7 +802,7 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
                 if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
                     swap = Some((n, n - 1));
                 }
-                if ui.button("Remove").clicked() {
+                if crate::help::button(ui, "Remove", "shortcuts").clicked() {
                     remove = Some(n);
                 }
             });
@@ -804,16 +814,16 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
             set.items.remove(n);
         }
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Add command").clicked() {
+            if crate::help::button(ui, "Add command", "shortcuts").clicked() {
                 set.items.push(Item::Command("undo".into()));
             }
-            if ui.button("Add tool").clicked() {
+            if crate::help::button(ui, "Add tool", "shortcuts").clicked() {
                 set.items.push(Item::Tool("Pen".into()));
             }
-            if ui.button("Register current fixed color").clicked() {
+            if crate::help::button(ui, "Register current fixed color", "shortcuts").clicked() {
                 set.items.push(Item::Color(color));
             }
-            if ui.button("Add separator").clicked() {
+            if crate::help::button(ui, "Add separator", "shortcuts").clicked() {
                 set.items.push(Item::Separator);
             }
         });
@@ -824,9 +834,9 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
     let mut copy = false;
     let mut delete = false;
     ui.horizontal(|ui| {
-        new = ui.button("New set").clicked();
-        copy = ui.button("Duplicate set").clicked();
-        delete = ui.button("Delete set").clicked();
+        new = crate::help::button(ui, "New set", "shortcuts").clicked();
+        copy = crate::help::button(ui, "Duplicate set", "shortcuts").clicked();
+        delete = crate::help::button(ui, "Delete set", "shortcuts").clicked();
     });
     if delete && e.selected < s.access.len() {
         s.access.remove(e.selected);
@@ -864,7 +874,7 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
     }
     let mut pick = None;
     if let Some(r) = s.radials.get_mut(e.selected) {
-        ui.text_edit_singleline(&mut r.name);
+        super::edit::text(ui, &mut r.name, "shortcuts");
         ui.horizontal(|ui| {
             for n in [4, 8] {
                 if ui
@@ -891,7 +901,7 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
                         selected: slot.clone().unwrap_or_default(),
                     });
                 }
-                if ui.button("Clear").clicked() {
+                if crate::help::button(ui, "Clear", "shortcuts").clicked() {
                     *slot = None;
                 }
             });
@@ -901,8 +911,8 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
     let mut new = false;
     let mut delete = false;
     ui.horizontal(|ui| {
-        new = ui.button("New radial menu").clicked();
-        delete = ui.button("Delete radial menu").clicked();
+        new = crate::help::button(ui, "New radial menu", "shortcuts").clicked();
+        delete = crate::help::button(ui, "Delete radial menu", "shortcuts").clicked();
     });
     if delete && e.selected < s.radials.len() {
         s.radials.remove(e.selected);
@@ -928,15 +938,15 @@ fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
     let mut remove = None;
     for (n, d) in e.draft.actions.devices.iter_mut().enumerate() {
         ui.horizontal_wrapped(|ui| {
-            ui.text_edit_singleline(&mut d.device);
-            ui.text_edit_singleline(&mut d.action);
-            if ui.button(labels.label(&d.command)).clicked() {
+            super::edit::text(ui, &mut d.device, "shortcuts");
+            super::edit::text(ui, &mut d.action, "shortcuts");
+            if crate::help::button(ui, labels.label(&d.command), "shortcuts").clicked() {
                 pick = Some(Picker {
                     target: Target::Device(n),
                     selected: d.command.clone(),
                 });
             }
-            if ui.button("Remove").clicked() {
+            if crate::help::button(ui, "Remove", "shortcuts").clicked() {
                 remove = Some(n);
             }
         });
@@ -944,7 +954,7 @@ fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
     if let Some(n) = remove {
         e.draft.actions.devices.remove(n);
     }
-    if ui.button("Assign pointer action").clicked() {
+    if crate::help::button(ui, "Assign pointer action", "shortcuts").clicked() {
         e.draft.actions.devices.push(actions::DeviceBinding {
             device: "pointer".into(),
             action: "extra-1".into(),
@@ -970,13 +980,13 @@ fn picker(ctx: &egui::Context, e: &mut Editor) {
             ui.label("Current assignment is selected. Only Confirm changes it.");
             ui.label(format!("Selected: {}", e.draft.actions.label(&p.selected)));
             ui.horizontal(|ui| {
-                let confirm = ui.button("Confirm command");
+                let confirm = crate::help::button(ui, "Confirm command", "shortcuts");
                 apply = confirm.clicked();
                 #[cfg(test)]
                 {
                     e.picker_confirm = Some(confirm.rect);
                 }
-                cancel = ui.button("Cancel command choice").clicked();
+                cancel = crate::help::button(ui, "Cancel command choice", "shortcuts").clicked();
             });
             egui::ScrollArea::vertical()
                 .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
