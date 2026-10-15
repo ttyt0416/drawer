@@ -78,6 +78,7 @@ pub(super) struct Drawing {
     pub spacing: Option<[f64; 4]>,
     pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
     pub ends: [drawer_core::stroke_ends::Settings; 4],
+    pub materials: [drawer_core::brush_material::Settings; 4],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -583,6 +584,7 @@ impl Drawing {
                 .iter()
                 .position(|tip| *tip == style.tip)
                 .unwrap();
+            style.material = self.materials[index];
             style.opacity = self.opacity.unwrap_or([1.0; 4])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 4])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 4])[index];
@@ -601,7 +603,7 @@ impl Drawing {
                     let virtual_mouse = event.source.kind
                         == drawer_core::pointer_input::Kind::Mouse
                         && config.active();
-                    if virtual_mouse || self.ends[index].active() {
+                    if virtual_mouse || self.ends[index].active() || style.material.active() {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
                         {
@@ -660,30 +662,33 @@ impl Drawing {
                     let virtual_mouse = event.source.kind
                         == drawer_core::pointer_input::Kind::Mouse
                         && config.active();
-                    let mouse =
-                        if virtual_mouse || style.smoothing > 0.0 || self.ends[index].active() {
-                            match drawer_core::mouse_pressure::Replay::begin(
-                                doc,
-                                layer.unwrap(),
-                                style,
-                                if virtual_mouse {
-                                    config
-                                } else {
-                                    Default::default()
-                                },
-                            )
-                            .and_then(|r| r.configure_input(self.ends[index], !virtual_mouse))
-                            {
-                                Ok(mouse) => Some(mouse),
-                                Err(e) => {
-                                    self.error = Some(e);
-                                    self.cancel();
-                                    continue;
-                                }
+                    let mouse = if virtual_mouse
+                        || style.smoothing > 0.0
+                        || self.ends[index].active()
+                        || style.material.active()
+                    {
+                        match drawer_core::mouse_pressure::Replay::begin(
+                            doc,
+                            layer.unwrap(),
+                            style,
+                            if virtual_mouse {
+                                config
+                            } else {
+                                Default::default()
+                            },
+                        )
+                        .and_then(|r| r.configure_input(self.ends[index], !virtual_mouse))
+                        {
+                            Ok(mouse) => Some(mouse),
+                            Err(e) => {
+                                self.error = Some(e);
+                                self.cancel();
+                                continue;
                             }
-                        } else {
-                            None
-                        };
+                        }
+                    } else {
+                        None
+                    };
                     self.last_source = Some(event.source);
                     self.active = Some(Session {
                         stroke,
@@ -723,6 +728,7 @@ impl Drawer {
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
         self.drawing.ends = self.workspaces.store.current.input.ends;
+        self.drawing.materials = self.workspaces.store.current.input.materials;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1061,6 +1067,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let style = Style {
+                material: Default::default(),
                 opacity: 1.0,
                 hardness: 1.0,
                 spacing: 0.15,
@@ -1143,6 +1150,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        material: Default::default(),
         opacity: 1.0,
         hardness: 1.0,
         spacing: 0.15,
@@ -1187,6 +1195,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        material: Default::default(),
         opacity: 1.0,
         hardness: 1.0,
         spacing: 0.15,
@@ -1279,6 +1288,76 @@ mod tests {
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: Default::default(),
+        }
+    }
+    #[test]
+    fn transparent_foreground_smudge_carries_layer_pigment_with_frozen_mouse_and_pen_settings() {
+        use drawer_core::pointer_input::{Event, Kind, Phase, Source};
+        for mouse in [false, true] {
+            let (ctx, mut app) = setup(1.0);
+            app.panels.settings.brush_size = 8.0;
+            app.references.session.workspace.color = [0, 255, 0, 0];
+            app.workspaces.store.current.pressure.tools[0].size = false;
+            app.workspaces.store.current.pressure.tools[0].opacity = true;
+            let material = drawer_core::brush_material::Settings {
+                mode: drawer_core::brush_material::Mode::Smudge,
+                colorless: true,
+                retention: 1.0,
+                mixing: 0.0,
+                water: 0.0,
+                keep_density: true,
+                ..Default::default()
+            };
+            app.workspaces.store.current.input.materials[0] = material;
+            for y in 0..48 {
+                for x in 5..20 {
+                    app.documents[0].layers[0].pixels[y * 64 + x] = [255, 0, 0, 255];
+                }
+            }
+            app.documents[0].mark_saved("pigment.drawer".into());
+            let before = app.documents[0].snapshot();
+            let p = point(&ctx, &app, [10.5, 20.5]);
+            let q = point(&ctx, &app, [40.5, 20.5]);
+            let source = if mouse {
+                Source::MOUSE
+            } else {
+                Source {
+                    kind: Kind::Pen,
+                    device: 9,
+                    contact: 1,
+                }
+            };
+            let event = |phase, pos: egui::Pos2| Event {
+                source,
+                phase,
+                position: [pos.x as f64, pos.y as f64],
+                pressure: if mouse { None } else { Some(0.5) },
+                attributes: Default::default(),
+                origin: Default::default(),
+            };
+            app.drawing
+                .virtual_events(vec![event(Phase::Down, p), event(Phase::Move, q)], true);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert!(app.documents[0].snapshot() == before);
+            app.workspaces.store.current.input.materials[0] = Default::default();
+            app.drawing.virtual_events(vec![event(Phase::Up, q)], true);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert!(app.documents[0].composite_pixel(35, 20)[3] > 0);
+            assert_eq!(app.documents[0].composite_pixel(35, 20)[1], 0);
+            assert_eq!(
+                app.documents[0].scene.mouse_strokes[0].style.material,
+                material
+            );
+            assert_eq!(app.documents[0].history_counts(), (1, 0));
+            assert_eq!(
+                app.documents[0].composite_pixel(35, 20)[3],
+                if mouse { 255 } else { 128 }
+            );
+            let after = app.documents[0].snapshot();
+            assert!(app.documents[0].undo());
+            assert!(app.documents[0].snapshot() == before);
+            assert!(app.documents[0].redo());
+            assert!(app.documents[0].snapshot() == after);
         }
     }
     #[test]

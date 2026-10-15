@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 10;
+const VERSION: u32 = 11;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -325,6 +325,56 @@ mod tests {
         .unwrap()
     }
     #[test]
+    fn pigment_style_roundtrip_and_legacy_version_ten_defaults() {
+        let root = TempDir::new();
+        let path = root.0.join("pigment.drawer");
+        let mut d = sample();
+        d.scene.mouse_strokes.push(crate::mouse_pressure::Metadata {
+            layer: 0,
+            settings: Default::default(),
+            style: crate::painting::Style {
+                material: crate::brush_material::Settings {
+                    mode: crate::brush_material::Mode::Water,
+                    supply: 0.2,
+                    keep_density: true,
+                    alpha_lock: true,
+                    ..Default::default()
+                },
+                shape: Default::default(),
+                tip: crate::assets::BrushTip::Pen,
+                color: [40, 80, 120, 255],
+                opacity: 0.5,
+                hardness: 0.3,
+                spacing: 0.2,
+                smoothing: 0.8,
+                pressure: Default::default(),
+            },
+            count: 1,
+            ends: Default::default(),
+            native_pressure: true,
+        });
+        save(&mut d, &path).unwrap();
+        assert!(open(&path, 4096).unwrap().snapshot() == d.snapshot());
+        let bytes = fs::read(&path).unwrap();
+        let offset = 32 + 4 + d.layers[0].name.len() + 4 + 4 + 8 + d.layers[0].pixels.len() * 4;
+        let length = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes[offset + 4..offset + 4 + length]).unwrap();
+        for record in value["mouse_strokes"].as_array_mut().unwrap() {
+            record["style"].as_object_mut().unwrap().remove("material");
+        }
+        let json = serde_json::to_vec(&value).unwrap();
+        let mut legacy = bytes[..offset].to_vec();
+        legacy.extend_from_slice(&(json.len() as u32).to_le_bytes());
+        legacy.extend_from_slice(&json);
+        legacy.extend_from_slice(&bytes[offset + 4 + length..]);
+        legacy[8..12].copy_from_slice(&10u32.to_le_bytes());
+        fs::write(&path, legacy).unwrap();
+        let mut expected = d.snapshot();
+        expected.scene.mouse_strokes[0].style.material = Default::default();
+        assert!(open(&path, 4096).unwrap().snapshot() == expected);
+    }
+    #[test]
     fn frozen_geometry_native_pressure_roundtrip_and_version_nine_defaults() {
         let root = TempDir::new();
         let path = root.0.join("geometry.drawer");
@@ -333,6 +383,7 @@ mod tests {
             layer: 0,
             settings: Default::default(),
             style: crate::painting::Style {
+                material: Default::default(),
                 shape: Default::default(),
                 tip: crate::assets::BrushTip::Pen,
                 color: [40, 80, 120, 255],

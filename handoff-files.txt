@@ -176,3 +176,7 @@ docs/process/stroke-ends.md
 crates/drawer-core/src/brush_presets.rs
 crates/drawer-app/src/brush_presets.rs
 docs/process/brush-presets.md
+
+crates/drawer-core/src/brush_material.rs
+crates/drawer-app/src/brush_material.rs
+docs/process/brush-material.md

@@ -14,6 +14,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::brush_material::Settings::is_default"
+    )]
+    pub material: crate::brush_material::Settings,
     #[serde(default = "full_opacity")]
     pub opacity: f64,
     #[serde(default = "full_opacity")]
@@ -39,6 +44,7 @@ impl Style {
     }
     pub fn valid(self) -> bool {
         self.shape.valid()
+            && self.material.valid()
             && (0.0..=1.0).contains(&self.opacity)
             && (0.0..=1.0).contains(&self.hardness)
             && (0.01..=10.0).contains(&self.spacing)
@@ -57,6 +63,7 @@ pub struct Stroke {
     effect: crate::mouse_pressure::Effect,
     strength: f64,
     carried: Option<[u8; 4]>,
+    material_last: Option<Point>,
     direct: bool,
     diffused: bool,
     dabs: u32,
@@ -91,6 +98,9 @@ impl Stroke {
         self.dabs
     }
     fn candidate(&self, doc: &Document, x: i64, y: i64) -> [u8; 4] {
+        self.candidate_value(doc, x, y, false)
+    }
+    fn candidate_value(&self, doc: &Document, x: i64, y: i64, raw: bool) -> [u8; 4] {
         if x < 0 || y < 0 || x >= doc.width as i64 || y >= doc.height as i64 {
             return [0; 4];
         }
@@ -98,9 +108,13 @@ impl Stroke {
         layer
             .pixel_index(doc.width, doc.height, x, y)
             .map_or([0; 4], |offset| {
-                self.lookup
-                    .get(&offset)
-                    .map_or(layer.pixels[offset], |n| self.changes[*n].after)
+                self.lookup.get(&offset).map_or(layer.pixels[offset], |n| {
+                    if raw {
+                        self.unmasked[*n]
+                    } else {
+                        self.changes[*n].after
+                    }
+                })
             })
     }
     pub fn material(
@@ -118,6 +132,87 @@ impl Stroke {
         self.strength = strength;
         self.carried = Some(self.candidate(doc, point[0].floor() as i64, point[1].floor() as i64));
         Ok(())
+    }
+    fn pigment_color(&mut self, picked: [u8; 4], center: Point) -> [u8; 4] {
+        use crate::brush_material::Mode;
+        use crate::mouse_pressure::Effect;
+        let m = self.style.material;
+        let mut color = if !m.pigment() {
+            match self.effect {
+                Effect::Blend => mix(self.style.color, picked, self.strength),
+                Effect::Smudge => {
+                    let carried = self.carried.unwrap_or(picked);
+                    self.carried = Some(mix(carried, picked, self.strength));
+                    carried
+                }
+                _ => self.style.color,
+            }
+        } else if m.mode == Mode::Paint && !m.colorless {
+            let mut color = self.style.color;
+            color[3] = (color[3] as f64 * m.supply).round() as u8;
+            color
+        } else {
+            let previous = self.carried.unwrap_or(picked);
+            let distance = self
+                .material_last
+                .map_or(0.0, |last| (center[0] - last[0]).hypot(center[1] - last[1]));
+            let mut sampled = picked;
+            if m.keep_density && sampled[3] < previous[3] {
+                if sampled[3] == 0 {
+                    sampled[..3].copy_from_slice(&previous[..3]);
+                }
+                sampled[3] = previous[3];
+            }
+            let mut pigment = if m.smudge_distance == 0.0 {
+                sampled
+            } else {
+                let pickup = m.mixing * (1.0 - m.retention.powf(distance / m.smudge_distance));
+                mix(previous, sampled, pickup)
+            };
+            let supply = if m.colorless || m.mode == Mode::Smudge {
+                0.0
+            } else {
+                m.supply
+            };
+            let replenish = if self.material_last.is_none() {
+                supply
+            } else {
+                1.0 - (1.0 - supply).powf(distance / self.style.shape.size.max(0.1))
+            };
+            pigment = mix(pigment, self.style.color, replenish);
+            if m.keep_density {
+                if pigment[3] == 0 && previous[3] > 0 {
+                    pigment[..3].copy_from_slice(&previous[..3]);
+                }
+                pigment[3] = pigment[3].max(previous[3]);
+            }
+            self.carried = Some(pigment);
+            pigment
+        };
+        self.material_last = Some(center);
+        color[3] = (color[3] as f64 * (1.0 - m.dilution * m.water)).round() as u8;
+        color
+    }
+    pub fn finish_material(
+        &mut self,
+        doc: &Document,
+        cancel: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        use crate::brush_material::Mode;
+        let strength = if self.style.material.mode == Mode::Water {
+            self.style.material.water
+        } else if self.style.material.mode == Mode::Paint
+            && self.effect == crate::mouse_pressure::Effect::Wet
+        {
+            self.strength
+        } else {
+            0.0
+        };
+        if strength > 0.0 {
+            self.diffuse(doc, strength, cancel)
+        } else {
+            Ok(())
+        }
     }
     pub fn direct_dab(
         &mut self,
@@ -186,6 +281,12 @@ impl Stroke {
         }
         let mut positions: Vec<_> = positions.into_iter().collect();
         positions.sort_unstable();
+        self.pixel_work = self.pixel_work.saturating_add(positions.len() as u64 * 9);
+        if self.pixel_work > 64 * 1024 * 1024 {
+            return Err(
+                "Final diffusion pixel-work budget exceeded; pending stroke cancelled".into(),
+            );
+        }
         let mut changes = Vec::new();
         changes
             .try_reserve_exact(positions.len())
@@ -200,7 +301,7 @@ impl Stroke {
             let mut alpha = 0.0;
             for dy in -1..=1 {
                 for dx in -1..=1 {
-                    let p = self.candidate(doc, x + dx, y + dy);
+                    let p = self.candidate_value(doc, x + dx, y + dy, true);
                     let a = p[3] as f64 / 255.0;
                     alpha += a;
                     for channel in 0..3 {
@@ -219,17 +320,27 @@ impl Stroke {
                 [0; 4]
             };
             let original = layer.pixels[offset];
-            let current = self.candidate(doc, x, y);
-            let after = mix(
-                current,
-                average,
-                strength
+            let current = self.candidate_value(doc, x, y, true);
+            if self.style.material.alpha_lock && original[3] == 0 {
+                continue;
+            }
+            let mut desired = mix(current, average, strength);
+            if self.style.material.keep_density {
+                desired[3] = desired[3].max(current[3]);
+            }
+            let mut after = mix(
+                original,
+                desired,
+                self.style.opacity
                     * doc
                         .scene
                         .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
                         as f64
                     / 255.0,
             );
+            if self.style.material.alpha_lock {
+                after[3] = original[3];
+            }
             if original != after {
                 changes.push(PixelChange {
                     offset,
@@ -304,6 +415,7 @@ impl Stroke {
             effect: crate::mouse_pressure::Effect::Normal,
             strength: 0.5,
             carried: None,
+            material_last: None,
             direct: false,
             diffused: false,
             dabs: 0,
@@ -448,6 +560,7 @@ impl Stroke {
     pub fn commit(mut self, doc: &mut Document) -> Result<bool, String> {
         self.check(doc)?;
         self.finish_sample(doc)?;
+        self.finish_material(doc, || false)?;
         let Self { layer, changes, .. } = self;
         doc.commit_pixel_changes(layer, changes)
     }
@@ -458,6 +571,7 @@ impl Stroke {
     ) -> Result<bool, String> {
         self.check(doc)?;
         self.finish_sample(doc)?;
+        self.finish_material(doc, || false)?;
         let Self { layer, changes, .. } = self;
         doc.commit_mouse_changes(layer, changes, metadata)
     }
@@ -577,17 +691,8 @@ impl Stroke {
             return Err("Stroke pixel-work budget exceeded; pending stroke cancelled".into());
         }
         let mut changed = false;
-        use crate::mouse_pressure::Effect;
         let picked = self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64);
-        let paint_color = match self.effect {
-            Effect::Blend => mix(self.style.color, picked, self.strength),
-            Effect::Smudge => {
-                let carried = self.carried.unwrap_or(picked);
-                self.carried = Some(mix(carried, picked, self.strength));
-                carried
-            }
-            _ => self.style.color,
-        };
+        let paint_color = self.pigment_color(picked, center);
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
                 let point = [x as f64 + 0.5, y as f64 + 0.5];
@@ -639,6 +744,9 @@ impl Stroke {
                 let offset = layer.pixel_index(doc.width, doc.height, x, y).unwrap();
                 let old = self.lookup.get(&offset).copied();
                 let original = old.map_or(layer.pixels[offset], |n| self.changes[n].before);
+                if self.style.material.alpha_lock && original[3] == 0 {
+                    continue;
+                }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
                 let amount = if self.style.pressure.opacity {
                     (amount * opacity).max(old.map_or(0.0, |n| self.amounts[n]))
@@ -657,10 +765,17 @@ impl Stroke {
                         base[2],
                         (base[3] as f64 * (1.0 - amount)).round() as u8,
                     ]
+                } else if self.style.material.mode == crate::brush_material::Mode::Smudge
+                    || self.style.material.colorless
+                {
+                    mix(base, paint_color, amount)
                 } else {
                     over(base, paint_color, amount)
                 };
-                let result = mix(original, next, mask as f64 / 255.0 * self.style.opacity);
+                let mut result = mix(original, next, mask as f64 / 255.0 * self.style.opacity);
+                if self.style.material.alpha_lock {
+                    result[3] = original[3];
+                }
                 if old.is_none() && result == original {
                     continue;
                 }
@@ -774,6 +889,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                material: Default::default(),
                 shape: Shape {
                     size: 20.0,
                     aspect: 0.05,
@@ -835,6 +951,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            material: Default::default(),
             opacity: 1.0,
             hardness: 1.0,
             spacing: 0.15,

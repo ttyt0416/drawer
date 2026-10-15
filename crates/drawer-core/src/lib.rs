@@ -59,3 +59,5 @@ pub mod basic_brush;
 pub mod stroke_ends;
 
 pub mod brush_presets;
+
+pub mod brush_material;

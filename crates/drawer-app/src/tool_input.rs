@@ -178,6 +178,9 @@ impl Drawer {
                     ui.label(tip.label());super::edit::number(ui,&mut draft.ends[n].start,0.0..=1e6,1.0," px start","modifier-tools");super::edit::number(ui,&mut draft.ends[n].end,0.0..=1e6,1.0," px end","modifier-tools");
                 });}
             });
+            ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
+                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n]));});}
+            });
             ui.collapsing("Mouse virtual pressure",|ui| {
                 for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.label(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}
             });
@@ -420,6 +423,14 @@ mod tests {
         draft.ends[0] = drawer_core::stroke_ends::Settings {
             start: 9.0,
             end: 17.0,
+        };
+        draft.materials[0] = drawer_core::brush_material::Settings {
+            mode: drawer_core::brush_material::Mode::Water,
+            supply: 0.2,
+            retention: 0.8,
+            keep_density: true,
+            alpha_lock: true,
+            ..Default::default()
         };
         app.tool_input.open = true;
         app.tool_input.draft = Some(draft);

@@ -36,6 +36,7 @@ pub fn restore_input(snapshot: &mut Snapshot, tip: BrushTip) {
     let n = BrushTip::ALL.iter().position(|t| *t == tip).unwrap();
     snapshot.input.smoothing[n] = 0.0;
     snapshot.input.ends[n] = Default::default();
+    snapshot.input.materials[n] = Default::default();
     snapshot.input.mouse_pressure[n] = Default::default();
     snapshot.pressure.tools[n] = Default::default();
 }
@@ -68,6 +69,7 @@ pub fn verify_pixels() -> Result<(), String> {
         let before = d.snapshot();
         let v = values(tip);
         let style = Style {
+            material: Default::default(),
             shape: Shape {
                 size: v[0],
                 aspect: v[1],

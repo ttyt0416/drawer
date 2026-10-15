@@ -40,6 +40,11 @@ pub struct Preset {
     pub pressure: crate::pressure::Mapping,
     pub ends: crate::stroke_ends::Settings,
     pub mouse: crate::mouse_pressure::Settings,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::brush_material::Settings::is_default"
+    )]
+    pub material: crate::brush_material::Settings,
 }
 impl Preset {
     pub fn validate(&self) -> Result<(), String> {
@@ -59,6 +64,7 @@ impl Preset {
         }) || self.pressure.response.error().is_some()
             || !self.ends.valid()
             || !self.mouse.valid()
+            || !self.material.valid()
         {
             return Err("Invalid brush preset values".into());
         }
@@ -84,6 +90,7 @@ impl Preset {
             pressure: snapshot.pressure.tools[n],
             ends: snapshot.input.ends[n],
             mouse: snapshot.input.mouse_pressure[n],
+            material: snapshot.input.materials[n],
         };
         p.validate()?;
         Ok(p)
@@ -121,6 +128,7 @@ impl Preset {
         next.pressure.tools[n] = self.pressure;
         next.input.ends[n] = self.ends;
         next.input.mouse_pressure[n] = self.mouse;
+        next.input.materials[n] = self.material;
         next.tool = self.tip.name().into();
         if !next.valid() {
             return Err("Preset would create invalid workspace settings".into());
@@ -336,6 +344,13 @@ mod tests {
             end: 7.0,
         };
         current.pressure.tools[1].opacity = true;
+        current.input.materials[1] = crate::brush_material::Settings {
+            mode: crate::brush_material::Mode::Water,
+            supply: 0.2,
+            retention: 0.8,
+            keep_density: true,
+            ..Default::default()
+        };
         let p = Preset::capture(&current, BrushTip::Pencil, "연필 질감").unwrap();
         assert_eq!(p.texture, "drawer.grain.1");
         let restored = p.apply(&snapshot()).unwrap();
@@ -346,6 +361,11 @@ mod tests {
         assert_eq!(restored.input.ends[1], current.input.ends[1]);
         assert_eq!(restored.pressure.tools[1], current.pressure.tools[1]);
         assert_eq!(restored.input.mouse_pressure[1].seed, 73);
+        assert_eq!(restored.input.materials[1], current.input.materials[1]);
+        assert_eq!(
+            Preset::decode(&p.encode().unwrap()).unwrap().material,
+            p.material
+        );
         let before = snapshot();
         for size in [0.1, 4096.0] {
             let next = select_size(&before, BrushTip::Pen, size).unwrap();

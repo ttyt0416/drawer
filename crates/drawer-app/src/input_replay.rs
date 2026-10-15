@@ -55,6 +55,7 @@ pub(super) fn run(
     app.panels.settings.brush_spacing = sequence.spacing;
     app.workspaces.store.current.input.smoothing = sequence.smoothing;
     app.workspaces.store.current.input.ends = sequence.ends;
+    app.workspaces.store.current.input.materials = sequence.materials;
     app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
     app.workspaces.store.current.cursors = sequence.cursors;
     app.references.session.workspace.color = sequence.color;

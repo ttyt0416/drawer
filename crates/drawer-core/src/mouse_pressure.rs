@@ -345,7 +345,11 @@ impl Replay {
         if let Some((point, _, _)) = points.first() {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;
         }
-        if style.color[3] == 0 || style.opacity == 0.0 {
+        if (style.color[3] == 0
+            && !style.material.pigment()
+            && !matches!(self.settings.effect, Effect::Blend | Effect::Smudge))
+            || style.opacity == 0.0
+        {
             stroke.restore_input_trace(trace, self.style.smoothing);
             return Ok(stroke);
         }
@@ -353,6 +357,9 @@ impl Replay {
             self.spray(doc, &mut stroke, &points, distance, finalizing, &cancel)?;
             if cancel() {
                 return Err("Timed mouse spray cancelled".into());
+            }
+            if finalizing {
+                stroke.finish_material(doc, &cancel)?;
             }
             stroke.restore_input_trace(trace, self.style.smoothing);
             return Ok(stroke);
@@ -476,8 +483,8 @@ impl Replay {
             previous = Some((point, at, micros));
         }
         stroke.finish_sample(doc)?;
-        if finalizing && self.settings.effect == Effect::Wet {
-            stroke.diffuse(doc, self.settings.strength, &cancel)?;
+        if finalizing {
+            stroke.finish_material(doc, &cancel)?;
         }
         if cancel() {
             return Err("Mouse reconstruction cancelled before publication".into());
@@ -862,6 +869,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            material: Default::default(),
             opacity: 1.0,
             hardness: 1.0,
             spacing: 0.15,

@@ -32,6 +32,8 @@ pub struct Sequence {
     #[serde(default)]
     pub ends: [crate::stroke_ends::Settings; 4],
     #[serde(default)]
+    pub materials: [crate::brush_material::Settings; 4],
+    #[serde(default)]
     pub mouse_pressure: [crate::mouse_pressure::Settings; 4],
     #[serde(default)]
     pub cursors: crate::brush_cursor::Settings,
@@ -72,6 +74,7 @@ impl Default for Sequence {
             spacing: spacing(),
             smoothing: [0.0; 4],
             ends: [Default::default(); 4],
+            materials: [Default::default(); 4],
             mouse_pressure: [Default::default(); 4],
             cursors: Default::default(),
             color: [30, 80, 160, 255],
@@ -113,6 +116,7 @@ impl Sequence {
             || !(0.0..=360.0).contains(&self.angle)
             || self.smoothing.iter().any(|v| !(0.0..=0.95).contains(v))
             || self.ends.iter().any(|s| !s.valid())
+            || self.materials.iter().any(|s| !s.valid())
             || self
                 .opacity
                 .iter()
