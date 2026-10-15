@@ -14,6 +14,11 @@ pub struct CanvasView {
     pub navigator_generation: u64,
     pub brush_shape: drawer_core::brush_cursor::Shape,
     pub first_point: Option<(u64, [f64; 2])>,
+    pub drag_pixels: f64,
+    pub input_active: bool,
+    pan_drag: Option<drawer_core::tool_input::Drag>,
+    input_document: Option<u64>,
+    input_blocked: bool,
     tool_icons: Vec<egui::TextureHandle>,
     #[cfg(test)]
     pub brush_outline: Vec<egui::Pos2>,
@@ -54,6 +59,11 @@ impl CanvasView {
             navigator_generation: 0,
             brush_shape: Default::default(),
             first_point: None,
+            drag_pixels: 4.0,
+            input_active: true,
+            pan_drag: None,
+            input_document: None,
+            input_blocked: false,
             tool_icons: drawer_core::assets::BrushTip::ALL
                 .into_iter()
                 .map(|tip| {
@@ -92,6 +102,12 @@ impl CanvasView {
             navigator_rect: None,
         }
     }
+    pub fn cancel_input(&mut self) {
+        self.pan_drag = None;
+        self.area_start = None;
+        self.first_point = None;
+        self.input_blocked = true;
+    }
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
@@ -101,6 +117,22 @@ impl CanvasView {
         navigator_ui: &mut egui::Ui,
         aids: drawer_core::aids::AidPreferences,
     ) -> bool {
+        if self.input_document != Some(document.id) {
+            self.cancel_input();
+            self.input_document = Some(document.id);
+        }
+        if ui.input(|i| !i.pointer.any_down() || i.pointer.any_pressed()) {
+            self.input_blocked = false;
+        }
+        let input_active = self.input_active
+            && !self.input_blocked
+            && ui.input(|i| {
+                i.focused
+                    && !i
+                        .events
+                        .iter()
+                        .any(|e| matches!(e, egui::Event::WindowFocused(false)))
+            });
         let before = document.view;
         let size = [document.width as f64, document.height as f64];
         let ppp = ui.ctx().pixels_per_point() as f64;
@@ -161,7 +193,7 @@ impl CanvasView {
             self.area_start = None;
             self.area_zoom = false;
         }
-        if self.area_zoom && !ui.input(|i| i.key_down(egui::Key::Space)) {
+        if input_active && self.area_zoom && !ui.input(|i| i.key_down(egui::Key::Space)) {
             if response.drag_started_by(egui::PointerButton::Primary) {
                 self.area_start = ui.input(|i| i.pointer.press_origin());
             }
@@ -170,33 +202,49 @@ impl CanvasView {
                 && let Some(end) = response.interact_pointer_pos()
             {
                 let selection = egui::Rect::from_two_pos(start, end).intersect(rect);
-                self.view_notice = document
-                    .view
-                    .fit_screen_region(
-                        drawer_core::scene::Rect {
-                            min: [selection.min.x as f64, selection.min.y as f64],
-                            max: [selection.max.x as f64, selection.max.y as f64],
-                        },
-                        drawer_core::scene::Rect {
-                            min: [rect.min.x as f64, rect.min.y as f64],
-                            max: [rect.max.x as f64, rect.max.y as f64],
-                        },
-                        size,
-                        ppp,
-                    )
-                    .err();
+                if start.distance(end) as f64 * ppp + 1e-9 < self.drag_pixels {
+                    self.view_notice = Some("Move beyond the configured drag threshold.".into());
+                } else {
+                    self.view_notice = document
+                        .view
+                        .fit_screen_region(
+                            drawer_core::scene::Rect {
+                                min: [selection.min.x as f64, selection.min.y as f64],
+                                max: [selection.max.x as f64, selection.max.y as f64],
+                            },
+                            drawer_core::scene::Rect {
+                                min: [rect.min.x as f64, rect.min.y as f64],
+                                max: [rect.max.x as f64, rect.max.y as f64],
+                            },
+                            size,
+                            ppp,
+                        )
+                        .err();
+                }
             }
             if response.clicked() {
                 self.view_notice =
                     Some("Drag a region larger than one document pixel in each direction.".into());
             }
         }
-        if response.dragged_by(egui::PointerButton::Middle)
-            || (response.dragged_by(egui::PointerButton::Primary)
-                && ui.input(|input| input.key_down(egui::Key::Space)))
+        if input_active
+            && (response.dragged_by(egui::PointerButton::Middle)
+                || (response.dragged_by(egui::PointerButton::Primary)
+                    && ui.input(|i| i.key_down(egui::Key::Space))))
         {
-            let delta = response.drag_delta();
-            document.view.pan_by([delta.x as f64, delta.y as f64]);
+            if let Some(pos) = response.interact_pointer_pos() {
+                let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(pos);
+                let drag = self.pan_drag.get_or_insert_with(|| {
+                    drawer_core::tool_input::Drag::new([origin.x as f64, origin.y as f64])
+                });
+                if let Some(delta) =
+                    drag.update([pos.x as f64, pos.y as f64], self.drag_pixels, ppp)
+                {
+                    document.view.pan_by(delta);
+                }
+            }
+        } else {
+            self.pan_drag = None;
         }
         if response.hovered() && self.area_start.is_none() {
             let wheel = ui.input_mut(|input| std::mem::take(&mut input.smooth_scroll_delta).y);
@@ -271,7 +319,8 @@ impl CanvasView {
         }
         self.paint_aids(ui, document, rect, aids, ppp);
         self.first_point = None;
-        if !self.area_zoom
+        if input_active
+            && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
             && response.is_pointer_button_down_on()
             && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
@@ -292,7 +341,8 @@ impl CanvasView {
         {
             self.cursor_rect = None;
         }
-        if (response.hovered() || response.dragged())
+        if input_active
+            && (response.hovered() || response.dragged())
             && let Some(pos) = response
                 .hover_pos()
                 .or_else(|| response.interact_pointer_pos())

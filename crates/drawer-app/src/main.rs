@@ -22,6 +22,7 @@ mod reference_pane;
 mod revert;
 mod size_fields;
 mod sizing_dialog;
+mod tool_input;
 mod ui_scale;
 mod view_commands;
 mod workspace;
@@ -84,6 +85,7 @@ struct Drawer {
     interface: ui_scale::Interface,
     workspaces: workspaces::Workspaces,
     controls: action_controls::Controls,
+    tool_input: tool_input::ToolInput,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -170,6 +172,7 @@ impl Drawer {
             interface: ui_scale::Interface::new(ctx),
             workspaces: Default::default(),
             controls: Default::default(),
+            tool_input: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -333,6 +336,7 @@ impl Drawer {
             ui.ctx().set_zoom_factor(self.interface.settings.zoom);
         }
         self.workspaces.input(ui.ctx());
+        self.held_tool_inputs(ui.ctx());
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
@@ -342,6 +346,9 @@ impl Drawer {
             aspect: self.panels.settings.brush_aspect,
             angle: self.panels.settings.brush_angle,
         };
+        self.canvas_view.input_active = self.workspaces.is_focused();
+        self.canvas_view.drag_pixels = self.workspaces.store.current.input.drag_pixels;
+        self.display.canvas.drag_pixels = self.workspaces.store.current.input.drag_pixels;
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -353,6 +360,7 @@ impl Drawer {
                     && self.movie_dialog.is_none()
                     && self.revert_pending.is_none()
                     && self.workspaces.staged.is_none()
+                    && !self.tool_input.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
@@ -386,6 +394,9 @@ impl Drawer {
                                 }
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
+                                }
+                                if ui.button("Tool input behavior").clicked() {
+                                    self.tool_input.open = true;
                                 }
                                 if ui.button("Input and commands").clicked() {
                                     self.controls.open = true;
@@ -461,6 +472,7 @@ impl Drawer {
         self.scratchpad(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
+        self.input_settings(ui.ctx());
         self.command_popups(ui.ctx());
         self.new_canvas_dialog(ui.ctx());
         self.close_dialog(ui.ctx());
@@ -885,8 +897,37 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                let mut input_workspace = self.capture_workspace();
+                input_workspace.input.hold_millis = 350;
+                input_workspace.input.drag_pixels = 12.0;
+                self.stage_workspace(
+                    input_workspace.clone(),
+                    self.workspaces.store.active.clone(),
+                );
+                self.apply_workspace(
+                    drawer_core::workspaces::Scope {
+                        other: true,
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .unwrap();
+                if drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    .unwrap()
+                    .current
+                    .input
+                    != input_workspace.input
+                {
+                    fail_smoke();
+                }
+                let mut held = drawer_core::tool_input::Controller::default();
+                held.press("E", BrushTip::Eraser, self.selected, None, 0.0, false);
+                if held.release("E", 0.351, input_workspace.input) != Some((self.selected, None)) {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3360,6 +3401,17 @@ mod tests {
         ] {
             frame(&ctx, &mut app, vec![event(key, egui::Modifiers::NONE)]);
             assert_eq!(app.selected, tip);
+            frame(
+                &ctx,
+                &mut app,
+                vec![egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
         }
         for (key, modifiers, expected) in [
             (egui::Key::S, egui::Modifiers::CTRL, Some(0)),

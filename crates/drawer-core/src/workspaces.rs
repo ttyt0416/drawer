@@ -242,6 +242,8 @@ pub struct Snapshot {
     pub bindings: Vec<Binding>,
     #[serde(default)]
     pub actions: crate::actions::Settings,
+    #[serde(default)]
+    pub input: crate::tool_input::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -260,6 +262,7 @@ impl Default for Snapshot {
             display: Default::default(),
             bindings: default_bindings(),
             actions: Default::default(),
+            input: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -298,6 +301,7 @@ impl Snapshot {
             && self.navigator.valid()
             && self.display.valid()
             && self.interface.valid()
+            && self.input.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -358,6 +362,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.input = incoming.input;
             next.interface = incoming.interface;
             next.interpolation = incoming.interpolation;
             next.aids = incoming.aids;

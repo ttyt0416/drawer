@@ -108,6 +108,9 @@ impl Workspaces {
     pub fn input_idle(&self) -> bool {
         self.keys.is_empty() && self.buttons.is_empty() && self.pad_point.is_none()
     }
+    pub fn is_focused(&self) -> bool {
+        self.focused
+    }
     pub fn command_label(&self, command: &str) -> String {
         self.store
             .current
@@ -128,11 +131,18 @@ impl Drawer {
         s.interface = self.interface.settings;
         s.interpolation = self.interpolation;
         s.aids = self.aids.preferences;
-        s.tool = self.selected.name().into();
+        s.tool = self
+            .tool_input
+            .controller
+            .persisted_tool()
+            .unwrap_or(self.selected)
+            .name()
+            .into();
         s.color = self.references.session.workspace.color;
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
+        self.tool_input.controller.cancel();
         self.panels.settings = s.panels;
         self.canvas_view.navigator = s.navigator;
         self.canvas_view.navigator_generation += 1;
@@ -613,7 +623,7 @@ impl Drawer {
 pub(super) fn shortcut(
     input: &mut egui::InputState,
     bindings: &[workspaces::Binding],
-) -> Option<String> {
+) -> Option<(String, egui::Key, bool)> {
     let found = input.events.iter().enumerate().find_map(|(index, event)| {
         let egui::Event::Key {
             key,
@@ -639,11 +649,11 @@ pub(super) fn shortcut(
                 && modifiers.shift == b.shift
                 && modifiers.alt == b.alt
                 && !modifiers.mac_cmd)
-                .then(|| (index, b.command.clone()))
+                .then(|| (index, b.command.clone(), *key, *repeat))
         })
     });
-    found.map(|(i, a)| {
+    found.map(|(i, a, key, repeat)| {
         input.events.remove(i);
-        a
+        (a, key, repeat)
     })
 }

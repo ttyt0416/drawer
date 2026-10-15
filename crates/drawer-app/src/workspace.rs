@@ -76,7 +76,11 @@ impl Drawer {
         });
     }
     pub(super) fn add_document(&mut self, mut document: Document) {
-        document.tool = self.selected;
+        document.tool = self
+            .tool_input
+            .controller
+            .persisted_tool()
+            .unwrap_or(self.selected);
         let id = document.id;
         let view = document.view;
         self.documents.push(document);
@@ -126,6 +130,7 @@ impl Drawer {
         self.select_tab(self.tabs.len() - 1);
     }
     pub(super) fn set_tool(&mut self, tip: BrushTip) {
+        self.tool_input.controller.cancel();
         self.selected = tip;
         if let Some(index) = self.active {
             self.documents[index].tool = tip;

@@ -163,6 +163,7 @@ impl Drawer {
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
             || self.show_new_canvas
+            || self.tool_input.open
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
@@ -173,8 +174,12 @@ impl Drawer {
         let action = ctx.input_mut(|input| {
             super::workspaces::shortcut(input, &self.workspaces.store.current.bindings)
         });
-        if let Some(action) = action {
-            self.execute_command(ctx, &action);
+        if let Some((action, key, repeat)) = action {
+            if let Some(tip) = BrushTip::ALL.iter().find(|t| t.name() == action) {
+                self.press_tool(ctx, key, *tip, repeat);
+            } else {
+                self.execute_command(ctx, &action);
+            }
         }
     }
     pub(super) fn show_panels_at(
@@ -598,10 +603,12 @@ impl Drawer {
 }
 #[cfg(test)]
 pub(super) fn shortcut_action(input: &mut egui::InputState) -> Option<u8> {
-    super::workspaces::shortcut(input, &drawer_core::workspaces::default_bindings()).and_then(|c| {
-        drawer_core::workspaces::COMMANDS
-            .iter()
-            .position(|a| *a == c)
-            .map(|n| n as u8)
-    })
+    super::workspaces::shortcut(input, &drawer_core::workspaces::default_bindings()).and_then(
+        |(c, _, _)| {
+            drawer_core::workspaces::COMMANDS
+                .iter()
+                .position(|a| *a == c)
+                .map(|n| n as u8)
+        },
+    )
 }

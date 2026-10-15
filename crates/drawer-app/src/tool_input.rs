@@ -1,0 +1,347 @@
+use super::*;
+use drawer_core::tool_input::{Controller, Settings};
+#[derive(Default)]
+pub(super) struct ToolInput {
+    pub controller: Controller,
+    pub open: bool,
+    draft: Option<Settings>,
+}
+impl Drawer {
+    fn runtime_tool(&mut self, tool: BrushTip, document: Option<u64>) {
+        if let Some(id) = document {
+            if let Some(n) = self.documents.iter().position(|d| d.id == id) {
+                self.documents[n].tool = tool;
+                if self.active == Some(n) {
+                    self.selected = tool;
+                }
+            }
+        } else {
+            self.selected = tool;
+            if let Some(n) = self.active {
+                self.documents[n].tool = tool;
+            }
+        }
+    }
+    pub(super) fn held_tool_inputs(&mut self, ctx: &egui::Context) {
+        let document = self.active.map(|n| self.documents[n].id);
+        let context_changed = self
+            .tool_input
+            .controller
+            .document()
+            .is_some_and(|d| d != document);
+        let focus_lost = ctx.input(|i| {
+            !i.focused
+                || i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::WindowFocused(false)))
+        });
+        let lost = focus_lost || ctx.egui_wants_keyboard_input();
+        if focus_lost {
+            ctx.input_mut(|i| {
+                i.keys_down.clear();
+                i.pointer = Default::default();
+                i.modifiers = Default::default();
+            });
+            ctx.stop_dragging();
+        }
+        if context_changed || lost {
+            if let Some((tool, id)) = self.tool_input.controller.cancel() {
+                self.runtime_tool(tool, id);
+                if let Some(storage) = &self.storage
+                    && let Err(e) = storage.save_brush(self.selected)
+                {
+                    self.status = Some(e.to_string());
+                }
+            }
+            self.canvas_view.cancel_input();
+        }
+        let time = ctx.input(|i| i.time);
+        let settings = self.workspaces.store.current.input;
+        let releases = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::Key {
+                        key,
+                        pressed: false,
+                        ..
+                    } => Some(key.name().to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        });
+        for key in releases {
+            if let Some((tool, id)) = self.tool_input.controller.release(&key, time, settings) {
+                self.runtime_tool(tool, id);
+                if self.tool_input.controller.persisted_tool().is_none()
+                    && let Some(storage) = &self.storage
+                    && let Err(e) = storage.save_brush(self.selected)
+                {
+                    self.status = Some(e.to_string());
+                }
+            }
+        }
+        if self.tool_input.controller.persisted_tool().is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
+    }
+    pub(super) fn press_tool(
+        &mut self,
+        ctx: &egui::Context,
+        key: egui::Key,
+        tip: BrushTip,
+        repeat: bool,
+    ) {
+        let id = self.active.map(|n| self.documents[n].id);
+        if let Some(tool) = self.tool_input.controller.press(
+            key.name(),
+            tip,
+            self.selected,
+            id,
+            ctx.input(|i| i.time),
+            repeat,
+        ) {
+            self.runtime_tool(tool, id);
+        }
+    }
+    pub(super) fn input_settings(&mut self, ctx: &egui::Context) {
+        if !self.tool_input.open {
+            return;
+        }
+        let mut draft = self
+            .tool_input
+            .draft
+            .unwrap_or(self.workspaces.store.current.input);
+        let mut open = true;
+        let mut apply = false;
+        let mut cancel = false;
+        egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).show(ctx,|ui|{
+            ui.add(egui::Slider::new(&mut draft.hold_millis,0..=5000).text("Temporary tool threshold (ms)"));
+            ui.add(egui::Slider::new(&mut draft.drag_pixels,0.0..=64.0).text("Drag threshold (screen pixels)"));
+            ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
+            ui.horizontal_wrapped(|ui|{apply=ui.button("Apply input behavior").clicked();cancel=ui.button("Cancel input behavior").clicked();if ui.button("Reset draft").clicked(){draft=Default::default();}
+                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>draft=s.input,Err(e)=>self.status=Some(e.to_string())}}
+            });
+        });
+        if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.tool_input.open = false;
+            self.tool_input.draft = None;
+        } else if apply {
+            let mut s = self.capture_workspace();
+            s.input = draft;
+            self.stage_workspace(s, self.workspaces.store.active.clone());
+            match self.apply_workspace(
+                drawer_core::workspaces::Scope {
+                    other: true,
+                    ..Default::default()
+                },
+                None,
+            ) {
+                Ok(()) => {
+                    self.tool_input.open = false;
+                    self.tool_input.draft = None;
+                }
+                Err(e) => {
+                    self.status = Some(e);
+                    self.workspaces.staged = None;
+                    self.tool_input.draft = Some(draft);
+                }
+            }
+        } else {
+            self.tool_input.draft = Some(draft);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::{TestDirectory, tiny_spec};
+    fn frame(ctx: &egui::Context, app: &mut Drawer, time: f64, events: Vec<egui::Event>) {
+        let mut o = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1100.0, 760.0),
+                )),
+                time: Some(time),
+                events,
+                ..Default::default()
+            },
+            |ui| app.show(ui),
+        );
+        o.textures_delta.clear();
+    }
+    fn key(key: egui::Key, pressed: bool, repeat: bool) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat,
+            modifiers: Default::default(),
+        }
+    }
+    #[test]
+    fn timed_tool_keys_release_together_focus_loss_overlap_and_restart() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        frame(&ctx, &mut app, 2.0, vec![key(egui::Key::N, true, false)]);
+        assert_eq!(app.selected, BrushTip::Pencil);
+        assert_eq!(app.capture_workspace().tool, "Pen");
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.selected, BrushTip::Pen);
+        frame(&ctx, &mut app, 2.299, vec![key(egui::Key::N, false, false)]);
+        assert_eq!(app.selected, BrushTip::Pencil);
+        assert_eq!(app.capture_workspace().tool, "Pencil");
+        frame(&ctx, &mut app, 3.0, vec![key(egui::Key::E, true, false)]);
+        frame(&ctx, &mut app, 3.29, vec![key(egui::Key::E, true, true)]);
+        assert_eq!(app.selected, BrushTip::Eraser);
+        assert!(
+            app.tool_input
+                .controller
+                .temporary(3.3, Settings::default())
+        );
+        let pos = app.canvas_view.viewport.unwrap().center();
+        let button = |button, pressed| egui::Event::PointerButton {
+            pos,
+            button,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(
+            &ctx,
+            &mut app,
+            3.3,
+            vec![
+                button(egui::PointerButton::Primary, true),
+                button(egui::PointerButton::Secondary, true),
+            ],
+        );
+        frame(
+            &ctx,
+            &mut app,
+            3.301,
+            vec![
+                key(egui::Key::E, false, false),
+                button(egui::PointerButton::Primary, false),
+                button(egui::PointerButton::Secondary, false),
+            ],
+        );
+        assert_eq!(app.selected, BrushTip::Pencil);
+        assert!(app.workspaces.input_idle());
+        frame(&ctx, &mut app, 4.0, vec![key(egui::Key::W, true, false)]);
+        assert_eq!(app.selected, BrushTip::Wash);
+        frame(
+            &ctx,
+            &mut app,
+            4.35,
+            vec![
+                button(egui::PointerButton::Primary, true),
+                egui::Event::WindowFocused(false),
+            ],
+        );
+        assert_eq!(app.selected, BrushTip::Pencil);
+        assert!(ctx.input(|i| i.keys_down.is_empty() && !i.pointer.any_down()));
+        assert!(app.canvas_view.first_point.is_none());
+        frame(&ctx, &mut app, 4.5, vec![egui::Event::WindowFocused(true)]);
+        frame(&ctx, &mut app, 5.0, vec![key(egui::Key::B, true, false)]);
+        frame(&ctx, &mut app, 5.01, vec![key(egui::Key::W, true, false)]);
+        frame(
+            &ctx,
+            &mut app,
+            5.1,
+            vec![
+                key(egui::Key::W, false, false),
+                key(egui::Key::B, false, false),
+            ],
+        );
+        assert_eq!(app.selected, BrushTip::Wash);
+        app.workspaces.store.current.input = Settings {
+            hold_millis: 650,
+            drag_pixels: 12.0,
+            ..Default::default()
+        };
+        app.workspaces.store.current.scratchpad.visible = true;
+        app.workspaces.store.current.scratchpad.stroke(
+            [2.0, 3.0],
+            [50.0, 70.0],
+            7.0,
+            BrushTip::Pen,
+            [30, 60, 90, 255],
+        );
+        app.persist_workspace().unwrap();
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.selected, BrushTip::Wash);
+        assert_eq!(
+            restarted.workspaces.store.current.input,
+            app.workspaces.store.current.input
+        );
+        assert_eq!(
+            restarted.workspaces.store.current.scratchpad,
+            app.workspaces.store.current.scratchpad
+        );
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
+    }
+    #[test]
+    fn configured_drag_threshold_pan_and_document_switch_do_not_leave_held_inputs() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.workspaces.store.current.input.drag_pixels = 12.0;
+        frame(&ctx, &mut app, 1.0, vec![]);
+        frame(&ctx, &mut app, 1.01, vec![]);
+        let before = app.documents[0].snapshot();
+        let pos = app.canvas_view.viewport.unwrap().center();
+        let pan = app.documents[0].view.pan;
+        let press = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Middle,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(
+            &ctx,
+            &mut app,
+            2.0,
+            vec![egui::Event::PointerMoved(pos), press(true)],
+        );
+        frame(
+            &ctx,
+            &mut app,
+            2.1,
+            vec![egui::Event::PointerMoved(pos + egui::vec2(11.0, 0.0))],
+        );
+        assert_eq!(app.documents[0].view.pan, pan);
+        frame(
+            &ctx,
+            &mut app,
+            2.2,
+            vec![egui::Event::PointerMoved(pos + egui::vec2(12.0, 0.0))],
+        );
+        assert!((app.documents[0].view.pan[0] - pan[0] - 12.0).abs() < 1e-9);
+        frame(&ctx, &mut app, 2.3, vec![press(false)]);
+        frame(&ctx, &mut app, 3.0, vec![key(egui::Key::E, true, false)]);
+        let first = app.documents[0].id;
+        app.create_canvas(tiny_spec()).unwrap();
+        assert_eq!(app.selected, BrushTip::Pen);
+        frame(&ctx, &mut app, 3.1, vec![]);
+        assert_eq!(
+            app.documents.iter().find(|d| d.id == first).unwrap().tool,
+            BrushTip::Pen
+        );
+        assert!(app.tool_input.controller.persisted_tool().is_none());
+        frame(&ctx, &mut app, 3.5, vec![key(egui::Key::E, false, false)]);
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+}

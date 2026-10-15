@@ -91,3 +91,5 @@ crates/drawer-core/src/workspaces.rs
 crates/drawer-app/src/workspaces.rs
 crates/drawer-core/src/actions.rs
 crates/drawer-app/src/action_controls.rs
+crates/drawer-core/src/tool_input.rs
+crates/drawer-app/src/tool_input.rs
