@@ -51,6 +51,12 @@ fn default_spacing() -> f64 {
 }
 impl Style {
     pub fn resolved(mut self) -> Self {
+        if self.tip == BrushTip::Eraser && self.material.valid() {
+            self.material = crate::brush_material::Settings {
+                alpha_lock: self.material.alpha_lock,
+                ..Default::default()
+            };
+        }
         if self.tip == BrushTip::Smudge && self.material.valid() {
             self.material.mode = crate::brush_material::Mode::Smudge;
             self.material.supply = 0.0;
@@ -187,12 +193,12 @@ impl Stroke {
                 }
                 sampled[3] = previous[3];
             }
-            let mut pigment = if m.smudge_distance == 0.0 {
-                sampled
+            let pickup = if m.smudge_distance == 0.0 {
+                m.mixing * (1.0 - m.retention)
             } else {
-                let pickup = m.mixing * (1.0 - m.retention.powf(distance / m.smudge_distance));
-                mix(previous, sampled, pickup)
+                m.mixing * (1.0 - m.retention.powf(distance / m.smudge_distance))
             };
+            let mut pigment = mix(previous, sampled, pickup);
             let supply = if m.colorless || m.mode == Mode::Smudge {
                 0.0
             } else {
@@ -214,7 +220,7 @@ impl Stroke {
             pigment
         };
         self.material_last = Some(center);
-        color[3] = (color[3] as f64 * (1.0 - m.dilution * m.water)).round() as u8;
+        color[3] = (color[3] as f64 * (1.0 - m.dilution)).round() as u8;
         color
     }
     pub fn finish_material(

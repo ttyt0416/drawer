@@ -286,6 +286,157 @@ pub fn verify() -> Result<(), String> {
     }
     Ok(())
 }
+
+fn verify_numeric_controls() -> Result<(), String> {
+    let base = Settings {
+        mode: Mode::Water,
+        supply: 0.3,
+        mixing: 0.4,
+        retention: 0.6,
+        smudge_distance: 17.0,
+        water: 0.7,
+        dilution: 0.2,
+        keep_density: true,
+        alpha_lock: false,
+        colorless: false,
+    };
+    for field in 0..6 {
+        let mut rendered = None;
+        for value in [0.0, 1.0] {
+            let mut changed = base;
+            match field {
+                0 => changed.supply = value,
+                1 => changed.mixing = value,
+                2 => changed.retention = value,
+                3 => changed.water = value,
+                4 => changed.dilution = value,
+                _ => changed.smudge_distance = value * 4096.0,
+            };
+            let (d, _) = probe(changed, 0.25)?;
+            if d.layers[0]
+                .pixels
+                .iter()
+                .enumerate()
+                .any(|(n, p)| n % 64 >= 32 && p[3] > 64)
+            {
+                return Err("Pigment controls exceeded the stroke opacity cap".into());
+            }
+            let pixels = d.layers[0].pixels.clone();
+            if rendered.as_ref() == Some(&pixels) {
+                return Err(format!(
+                    "Control {} had no effect with other values fixed",
+                    [
+                        "supply",
+                        "pickup",
+                        "retention",
+                        "water",
+                        "dilution",
+                        "smear distance"
+                    ][field]
+                ));
+            }
+            rendered = Some(pixels);
+        }
+    }
+    Ok(())
+}
+/// Boundary checks for independent controls, also run in the installed process.
+pub fn verify_independent() -> Result<(), String> {
+    verify_numeric_controls()?;
+    let base = Settings {
+        mode: Mode::Water,
+        supply: 0.0,
+        mixing: 1.0,
+        retention: 0.0,
+        water: 0.0,
+        ..Default::default()
+    };
+    let (dry, _) = probe(
+        Settings {
+            supply: 1.0,
+            dilution: 0.0,
+            ..base
+        },
+        1.0,
+    )?;
+    let (half, _) = probe(
+        Settings {
+            supply: 1.0,
+            dilution: 0.5,
+            ..base
+        },
+        1.0,
+    )?;
+    let (none, before) = probe(
+        Settings {
+            supply: 1.0,
+            dilution: 1.0,
+            ..base
+        },
+        1.0,
+    )?;
+    if dry.composite_pixel(48, 16)[3] != 255
+        || half.composite_pixel(48, 16)[3] != 128
+        || none.snapshot() != before
+    {
+        return Err("Dilution stopped working when water was zero".into());
+    }
+    let (local, _) = probe(
+        Settings {
+            smudge_distance: 0.0,
+            ..base
+        },
+        1.0,
+    )?;
+    let (no_pickup, _) = probe(
+        Settings {
+            smudge_distance: 0.0,
+            mixing: 0.0,
+            ..base
+        },
+        1.0,
+    )?;
+    let (retained, _) = probe(
+        Settings {
+            smudge_distance: 0.0,
+            retention: 1.0,
+            ..base
+        },
+        1.0,
+    )?;
+    if local.composite_pixel(24, 16)[2] != 255
+        || no_pickup.composite_pixel(24, 16)[0] != 255
+        || retained.composite_pixel(24, 16)[0] != 255
+    {
+        return Err("Zero smear distance overrode pickup or carried color retention".into());
+    }
+    for water in [0.0, 1.0] {
+        for dilution in [0.0, 1.0] {
+            for keep_density in [false, true] {
+                let (locked, original) = probe(
+                    Settings {
+                        supply: 0.5,
+                        water,
+                        dilution,
+                        keep_density,
+                        alpha_lock: true,
+                        ..base
+                    },
+                    1.0,
+                )?;
+                if locked.layers[0]
+                    .pixels
+                    .iter()
+                    .zip(&original.layers[0].pixels)
+                    .any(|(a, b)| a[3] != b[3])
+                {
+                    return Err("Alpha lock changed with independent pigment controls".into());
+                }
+            }
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,7 +481,7 @@ mod tests {
         let (a, _) = probe(
             Settings {
                 mode: Mode::Smudge,
-                retention: 1.0,
+                retention: 0.5,
                 smudge_distance: 0.0,
                 water: 0.0,
                 ..Default::default()
@@ -341,7 +492,7 @@ mod tests {
         let (b, _) = probe(
             Settings {
                 mode: Mode::Smudge,
-                retention: 1.0,
+                retention: 0.5,
                 smudge_distance: 4096.0,
                 water: 0.0,
                 ..Default::default()
@@ -403,5 +554,81 @@ mod tests {
         let sequence: crate::input_replay::Sequence = serde_json::from_value(old).unwrap();
         assert!(sequence.materials[..4].iter().all(Settings::is_default));
         assert_eq!(sequence.materials[5].mode, Mode::Smudge);
+    }
+    #[test]
+    fn zero_water_dilution_and_zero_smear_pickup_retention_are_independent() {
+        verify_independent().unwrap();
+    }
+
+    #[test]
+    fn each_numeric_control_changes_pixels_with_the_other_parameters_fixed() {
+        verify_numeric_controls().unwrap();
+    }
+    #[test]
+    fn eraser_ignores_pigment_only_options_and_alpha_lock_preserves_hidden_rgb() {
+        use crate::{
+            assets::BrushTip,
+            brush_cursor::Shape,
+            document::{Background, CanvasSpec, Document},
+            painting::{Stroke, Style},
+        };
+        let mut results = Vec::new();
+        for pigment in [false, true] {
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 3,
+                    height: 1,
+                    dpi: 300.0,
+                    background: Background::Transparent,
+                },
+                1024,
+            )
+            .unwrap();
+            d.layers[0].pixels = vec![[15, 22, 33, 0], [80, 90, 100, 128], [120, 130, 140, 255]];
+            let style = Style {
+                filters: Default::default(),
+                profile: Default::default(),
+                texture: Default::default(),
+                material: if pigment {
+                    Settings {
+                        mode: Mode::Water,
+                        supply: 0.0,
+                        mixing: 1.0,
+                        retention: 0.0,
+                        water: 1.0,
+                        dilution: 1.0,
+                        keep_density: true,
+                        ..Default::default()
+                    }
+                } else {
+                    Default::default()
+                },
+                shape: Shape {
+                    size: 6.0,
+                    aspect: 1.0,
+                    angle: 0.0,
+                },
+                tip: BrushTip::Eraser,
+                color: [0, 255, 0, 255],
+                smoothing: 0.0,
+                opacity: 1.0,
+                hardness: 1.0,
+                spacing: 0.15,
+                pressure: Default::default(),
+            };
+            let before = d.snapshot();
+            let mut locked = style;
+            locked.material.alpha_lock = true;
+            let mut stroke = Stroke::begin(&d, 0, locked).unwrap();
+            stroke.sample(&d, [1.5, 0.5]).unwrap();
+            assert!(!stroke.commit(&mut d).unwrap());
+            assert!(d.snapshot() == before);
+            let mut stroke = Stroke::begin(&d, 0, style).unwrap();
+            stroke.sample(&d, [1.5, 0.5]).unwrap();
+            stroke.commit(&mut d).unwrap();
+            assert!(d.layers[0].pixels.iter().all(|p| p[3] == 0));
+            results.push(d.layers.remove(0).pixels);
+        }
+        assert_eq!(results[0], results[1]);
     }
 }

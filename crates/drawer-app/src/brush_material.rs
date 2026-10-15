@@ -1,6 +1,17 @@
 use super::*;
 use drawer_core::brush_material::{Mode, Settings};
-pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, smudge: bool) {
+pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
+    if tip == BrushTip::Eraser {
+        crate::help::checkbox(
+            ui,
+            &mut s.alpha_lock,
+            "Keep the layer's original alpha",
+            "brush-material",
+        );
+        ui.label("Eraser removes alpha. Pigment mixing controls belong to color brushes.");
+        return;
+    }
+    let smudge = tip == BrushTip::Smudge;
     if smudge {
         s.mode = Mode::Smudge;
         s.supply = 0.0;
@@ -48,18 +59,20 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, smudge: bool) {
             "brush-material",
         );
     });
-    super::edit::slider(
-        ui,
-        &mut s.water,
-        0.0..=1.0,
-        "Water / diffusion",
-        "brush-material",
-    );
+    ui.add_enabled_ui(s.mode == Mode::Water, |ui| {
+        super::edit::slider(
+            ui,
+            &mut s.water,
+            0.0..=1.0,
+            "Water / diffusion",
+            "brush-material",
+        );
+    });
     super::edit::slider(
         ui,
         &mut s.dilution,
         0.0..=1.0,
-        "Dilution (0: none)",
+        "Dilution (independent of water)",
         "brush-material",
     );
     crate::help::checkbox(
@@ -154,10 +167,60 @@ pub(super) fn smoke() -> Result<(), String> {
     }
     Ok(())
 }
+
+pub(super) fn smoke_independent() -> Result<(), String> {
+    use drawer_core::input_replay::Sequence;
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
+    drawer_core::brush_material::verify_independent()?;
+    let cancel = AtomicBool::new(false);
+    let progress = AtomicUsize::new(0);
+    for mouse in [false, true] {
+        let mut s = Sequence::default();
+        s.pressure.tools[0].size = false;
+        s.pressure.tools[0].opacity = true;
+        s.materials[0] = Settings {
+            mode: Mode::Water,
+            supply: 1.0,
+            mixing: 0.0,
+            retention: 0.0,
+            water: 0.0,
+            dilution: 0.5,
+            ..Default::default()
+        };
+        for sample in &mut s.samples {
+            sample.event.pressure = Some(1.0);
+            if mouse {
+                sample.event.source = drawer_core::pointer_input::Source::MOUSE;
+                sample.event.pressure = None;
+            }
+        }
+        let half = super::input_replay::run(&s, &cancel, &progress)?;
+        if !half.record.passed
+            || half.pixels.iter().any(|p| p[3] > 128)
+            || half.pixels.iter().all(|p| p[3] != 128)
+        {
+            return Err("Dry dilution did not reduce the native mouse/pen pigment alpha".into());
+        }
+        for water in [0.0, 1.0] {
+            s.materials[0].water = water;
+            s.materials[0].dilution = 1.0;
+            s.expected_strokes = 0;
+            let blank = super::input_replay::run(&s, &cancel, &progress)?;
+            if !blank.record.passed || blank.pixels.iter().any(|p| p[3] > 0) {
+                return Err("Full dilution depended on the diffusion water setting".into());
+            }
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     #[test]
     fn pigment_water_native_mouse_replay_and_transparent_foreground() {
         super::smoke().unwrap();
+    }
+    #[test]
+    fn independent_zero_water_dilution_in_mouse_and_pen_pipeline() {
+        super::smoke_independent().unwrap();
     }
 }
