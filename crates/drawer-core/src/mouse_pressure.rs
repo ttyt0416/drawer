@@ -869,6 +869,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,
             hardness: 1.0,

@@ -45,6 +45,8 @@ pub struct Preset {
         skip_serializing_if = "crate::brush_material::Settings::is_default"
     )]
     pub material: crate::brush_material::Settings,
+    #[serde(default, skip_serializing_if = "crate::texture::Pattern::is_default")]
+    pub overlay: crate::texture::Pattern,
 }
 impl Preset {
     pub fn validate(&self) -> Result<(), String> {
@@ -65,6 +67,7 @@ impl Preset {
             || !self.ends.valid()
             || !self.mouse.valid()
             || !self.material.valid()
+            || !self.overlay.valid()
         {
             return Err("Invalid brush preset values".into());
         }
@@ -91,6 +94,7 @@ impl Preset {
             ends: snapshot.input.ends[n],
             mouse: snapshot.input.mouse_pressure[n],
             material: snapshot.input.materials[n],
+            overlay: snapshot.input.textures[n],
         };
         p.validate()?;
         Ok(p)
@@ -129,6 +133,7 @@ impl Preset {
         next.input.ends[n] = self.ends;
         next.input.mouse_pressure[n] = self.mouse;
         next.input.materials[n] = self.material;
+        next.input.textures[n] = self.overlay;
         next.tool = self.tip.name().into();
         if !next.valid() {
             return Err("Preset would create invalid workspace settings".into());
@@ -476,5 +481,22 @@ mod tests {
         assert!(Preset::read(&path).is_err());
         std::fs::write(&path, vec![b' '; 65537]).unwrap();
         assert!(Preset::read(&path).is_err());
+    }
+    #[test]
+    fn overlay_recipe_missing_reference_and_legacy_preset_defaults() {
+        let mut before = snapshot();
+        before.input.textures[0] = crate::texture::Pattern {
+            source: 999,
+            ..Default::default()
+        };
+        let p = Preset::capture(&before, BrushTip::Pen, "Missing recipe").unwrap();
+        let decoded = Preset::decode(&p.encode().unwrap()).unwrap();
+        let applied = decoded.apply(&snapshot()).unwrap();
+        assert!(applied.input.textures[0].missing());
+        assert_eq!(applied.input.textures[0].factor([3.5, 4.5]), 1.0);
+        let mut old = serde_json::to_value(&p).unwrap();
+        old.as_object_mut().unwrap().remove("overlay");
+        let legacy: Preset = serde_json::from_value(old).unwrap();
+        assert!(legacy.overlay.is_default());
     }
 }

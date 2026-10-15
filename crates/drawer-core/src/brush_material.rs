@@ -116,6 +116,7 @@ fn probe_in(
     d.mark_saved("material-baseline.drawer".into());
     let before = d.snapshot();
     let style = Style {
+        texture: Default::default(),
         material,
         opacity,
         hardness: 1.0,

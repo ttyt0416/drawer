@@ -83,3 +83,5 @@ Tool properties에서 도구별 속성을 숨기거나 슬라이더·숫자·읽
 Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어와 입력란 IME 옵션을 설정하고 숨긴 초기화 확인창을 전체·개별 복원합니다. IME 기본값은 사용자 상태 유지이며 자동 전환을 선택해도 입력 이탈 때 진입 전 열림 상태로 복원합니다. 조합 중 Esc는 조합만 취소합니다. Offline tutorial은 설치된 HELP.md의 로컬 내용을 엽니다.
 
 캔버스에서 왼쪽 버튼으로 그리며 B/N/E/W로 펜·연필·지우개·워시를 선택합니다. 한 번의 누름–놓음은 Undo 한 번으로 되돌립니다. 지우개는 알파를 지우고 현재 선택 밖은 바꾸지 않습니다. Esc/포커스 상실은 미완성 획을 취소합니다.
+
+브러시 질감은 Tool input behavior → Brush texture에서, 층/폴더 종이는 Layer / folder paper…에서 편집한다. 독자 세 질감은 별도 파일 없이 자체 문서와 함께 이동한다. Export rendered PSD…는 손실 안내와 렌더된 층/폴더 또는 전체 그림 대체·취소를 제공한다. PSD 열기는 raw RGBA8 RGB 합성 미리보기만 지원하며 PSD 편집 가능 층을 복원하지 않는다. 원본은 .drawer에 보관한다.

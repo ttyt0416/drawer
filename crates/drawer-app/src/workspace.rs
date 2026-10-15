@@ -176,6 +176,17 @@ impl Drawer {
         let mut document =
             drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;
+        let missing = document.scene.paper.missing();
+        if !missing.is_empty() {
+            self.status = Some(missing.join("; "));
+        }
+        if document
+            .source_path
+            .as_ref()
+            .is_some_and(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("psd")))
+        {
+            self.status=Some("PSD opened as its merged preview. Layer effects and editable layers were not imported.".into());
+        }
         document.view = self.default_view;
         self.documents.try_reserve(1).map_err(|e| e.to_string())?;
         self.tabs.try_reserve(1).map_err(|e| e.to_string())?;
@@ -249,6 +260,13 @@ impl Drawer {
     pub(super) fn export_png_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
         self.finish_stroke();
         let _awake = self.synchronous_power();
+        let target = self.export_target(index, path)?;
+        let available = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
+        drawer_core::png_export::export(&self.documents[index], &target, available)
+            .map_err(|e| e.to_string())
+    }
+    pub(super) fn export_target(&self, index: usize, path: &Path) -> Result<PathBuf, String> {
         let target = if path.exists() {
             path.canonicalize()
         } else {
@@ -268,10 +286,7 @@ impl Drawer {
         }) {
             return Err("That source is open in another drawing. Choose another filename.".into());
         }
-        let available = DEFAULT_DOCUMENT_BUDGET
-            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
-        drawer_core::png_export::export(&self.documents[index], &target, available)
-            .map_err(|e| e.to_string())
+        Ok(target)
     }
     pub(super) fn export_from(
         &mut self,
@@ -367,6 +382,8 @@ impl Drawer {
                 && let Some(paths) = rfd::FileDialog::new()
                     .set_title("Open local drawings")
                     .add_filter("Drawer document", &["drawer"])
+                    .add_filter("PNG", &["png"])
+                    .add_filter("Raw RGBA8 PSD merged preview", &["psd"])
                     .pick_files()
             {
                 for path in paths {
@@ -466,6 +483,12 @@ impl Drawer {
                     if button.clicked() {
                         self.begin_transform(ui.ctx(), change);
                     }
+                }
+                if crate::help::button(ui, "Layer / folder paper…", "textures").clicked() {
+                    self.textures.open = true;
+                }
+                if crate::help::button(ui, "Export rendered PSD…", "textures").clicked() {
+                    self.request_psd();
                 }
                 if crate::help::button(ui, "Export PNG…", "files").clicked()
                     && let Err(error) = self.export_from(self.active.unwrap(), || {

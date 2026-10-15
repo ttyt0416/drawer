@@ -180,3 +180,9 @@ docs/process/brush-presets.md
 crates/drawer-core/src/brush_material.rs
 crates/drawer-app/src/brush_material.rs
 docs/process/brush-material.md
+
+crates/drawer-core/src/texture.rs
+crates/drawer-core/src/paper.rs
+crates/drawer-core/src/psd.rs
+crates/drawer-app/src/texture_panel.rs
+docs/process/textures.md

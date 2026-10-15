@@ -9,7 +9,8 @@ use std::{
 /// Export pixels without changing document association, history, selection or view.
 pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()> {
     let invalid = |message: &str| io::Error::new(io::ErrorKind::InvalidInput, message);
-    if !document.scene.valid()
+    if !document.scene.paper.valid_for(document.layers.len())
+        || !document.scene.valid()
         || document
             .layers
             .iter()

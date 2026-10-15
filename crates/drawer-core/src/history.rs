@@ -157,6 +157,7 @@ impl Document {
     }
     pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
         if !after.valid()
+            || !after.paper.valid_for(self.layers.len())
             || self.scene.size_bytes().saturating_add(after.size_bytes())
                 > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
         {
@@ -219,6 +220,7 @@ impl Document {
             || after.dpi <= 0.0
             || !(1..=256).contains(&after.layers.len())
             || !after.scene.valid()
+            || !after.scene.paper.valid_for(after.layers.len())
             || after.animation.as_ref().is_some_and(|a| !a.valid())
             || after
                 .layers

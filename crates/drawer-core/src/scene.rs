@@ -181,6 +181,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::paper::Graph::is_empty")]
+    pub paper: crate::paper::Graph,
     #[serde(default)]
     pub grid: crate::aids::Grid,
     pub transform: Affine,
@@ -202,6 +204,7 @@ pub struct Scene {
 impl Scene {
     pub fn valid(&self) -> bool {
         self.transform.valid()
+            && self.paper.valid_for(256)
             && self.mouse_strokes.len() <= 4096
             && self
                 .mouse_strokes
@@ -264,7 +267,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.clips.len() * 64
+        self.paper.size_bytes()
+            + self.clips.len() * 64
             + self
                 .objects
                 .iter()

@@ -38,6 +38,7 @@ mod revert;
 mod screen_mode;
 mod size_fields;
 mod sizing_dialog;
+mod texture_panel;
 mod tool_input;
 mod tool_properties;
 mod ui_behavior;
@@ -115,6 +116,7 @@ struct Drawer {
     #[cfg(windows)]
     native_dial: Option<drawer_platform::Dial>,
     pressure: pressure_settings::Editor,
+    textures: texture_panel::Textures,
     replay: input_replay::Editor,
     acquisition: acquisition::Acquisition,
     help: help::Help,
@@ -227,6 +229,7 @@ impl Drawer {
             #[cfg(windows)]
             native_dial: None,
             pressure: Default::default(),
+            textures: Default::default(),
             replay: Default::default(),
             acquisition: Default::default(),
             help: help::Help::new(korean_font),
@@ -407,6 +410,7 @@ impl Drawer {
         self.process_drawing(ui.ctx());
         self.pointer_settings(ui.ctx());
         self.pressure_settings(ui.ctx());
+        self.texture_windows(ui.ctx());
         self.input_replay(ui.ctx());
         self.apply_theme(ui.ctx());
         self.canvas_view.measurement_mode = self.measurement_active();
@@ -478,6 +482,7 @@ impl Drawer {
                     && !self.acquisition.open
                     && !self.properties.open
                     && !self.brush_presets.open
+                    && !self.textures.modal()
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
@@ -1212,6 +1217,10 @@ impl eframe::App for Drawer {
                     eprintln!("Brush pigment/water: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = texture_panel::smoke(&root) {
+                    eprintln!("Textures/PSD: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = brush_presets::smoke() {
                     eprintln!("Local brush presets: {e}");
                     fail_smoke();
@@ -1287,7 +1296,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

@@ -12,6 +12,8 @@ pub struct Settings {
     pub ends: [crate::stroke_ends::Settings; 4],
     #[serde(default)]
     pub materials: [crate::brush_material::Settings; 4],
+    #[serde(default)]
+    pub textures: [crate::texture::Pattern; 4],
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
@@ -27,6 +29,7 @@ impl Default for Settings {
             smoothing: [0.0; 4],
             ends: [Default::default(); 4],
             materials: [Default::default(); 4],
+            textures: [Default::default(); 4],
             modifiers: [None; 3],
             mouse_pressure: [Default::default(); 4],
         }
@@ -37,6 +40,7 @@ impl Settings {
         self.version == 1
             && self.ends.iter().all(|s| s.valid())
             && self.materials.iter().all(|s| s.valid())
+            && self.textures.iter().all(|s| s.valid())
             && self.mouse_pressure.iter().all(|s| s.valid())
             && self.hold_millis <= 5000
             && (0.0..=64.0).contains(&self.drag_pixels)

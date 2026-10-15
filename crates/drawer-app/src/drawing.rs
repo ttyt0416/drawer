@@ -79,6 +79,7 @@ pub(super) struct Drawing {
     pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
     pub ends: [drawer_core::stroke_ends::Settings; 4],
     pub materials: [drawer_core::brush_material::Settings; 4],
+    pub textures: [drawer_core::texture::Pattern; 4],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -320,6 +321,9 @@ impl Drawing {
             self.error = Some(e);
             self.cancel();
         }
+    }
+    pub(super) fn forget_endpoints(&mut self, id: u64) {
+        self.endpoints.retain(|(d, _, _), _| *d != id);
     }
     fn remember(&mut self, id: u64, layer: usize, tip: BrushTip, point: Point) {
         if self.endpoints.len() >= 4096 && !self.endpoints.contains_key(&(id, layer, tip)) {
@@ -585,6 +589,7 @@ impl Drawing {
                 .position(|tip| *tip == style.tip)
                 .unwrap();
             style.material = self.materials[index];
+            style.texture = self.textures[index];
             style.opacity = self.opacity.unwrap_or([1.0; 4])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 4])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 4])[index];
@@ -603,7 +608,11 @@ impl Drawing {
                     let virtual_mouse = event.source.kind
                         == drawer_core::pointer_input::Kind::Mouse
                         && config.active();
-                    if virtual_mouse || self.ends[index].active() || style.material.active() {
+                    if virtual_mouse
+                        || self.ends[index].active()
+                        || style.material.active()
+                        || !style.texture.is_default()
+                    {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
                         {
@@ -666,6 +675,7 @@ impl Drawing {
                         || style.smoothing > 0.0
                         || self.ends[index].active()
                         || style.material.active()
+                        || !style.texture.is_default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -729,6 +739,7 @@ impl Drawer {
         self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
         self.drawing.ends = self.workspaces.store.current.input.ends;
         self.drawing.materials = self.workspaces.store.current.input.materials;
+        self.drawing.textures = self.workspaces.store.current.input.textures;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1067,6 +1078,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let style = Style {
+                texture: Default::default(),
                 material: Default::default(),
                 opacity: 1.0,
                 hardness: 1.0,
@@ -1150,6 +1162,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        texture: Default::default(),
         material: Default::default(),
         opacity: 1.0,
         hardness: 1.0,
@@ -1195,6 +1208,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        texture: Default::default(),
         material: Default::default(),
         opacity: 1.0,
         hardness: 1.0,
@@ -1288,6 +1302,75 @@ mod tests {
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: Default::default(),
+        }
+    }
+
+    #[test]
+    fn texture_only_mouse_and_pen_freeze_style_and_native_recipe_in_one_undo() {
+        use drawer_core::{
+            pointer_input::{Event, Kind, Phase, Source},
+            texture::Pattern,
+        };
+        for mouse in [false, true] {
+            let (ctx, mut app) = setup(1.0);
+            app.panels.settings.brush_size = 8.0;
+            app.workspaces.store.current.input.smoothing = [0.0; 4];
+            app.workspaces.store.current.pressure.tools[0].size = false;
+            app.workspaces.store.current.pressure.tools[0].opacity = false;
+            let pattern = Pattern {
+                source: 1,
+                strength: 1.0,
+                ..Default::default()
+            };
+            app.workspaces.store.current.input.textures[0] = pattern;
+            let before = app.documents[0].snapshot();
+            let p = point(&ctx, &app, [10.5, 20.5]);
+            let q = point(&ctx, &app, [40.5, 20.5]);
+            let source = if mouse {
+                Source::MOUSE
+            } else {
+                Source {
+                    kind: Kind::Pen,
+                    device: 9,
+                    contact: 1,
+                }
+            };
+            let event = |phase, pos: egui::Pos2| Event {
+                source,
+                phase,
+                position: [pos.x as f64, pos.y as f64],
+                pressure: if mouse { None } else { Some(1.0) },
+                attributes: Default::default(),
+                origin: Default::default(),
+            };
+            app.drawing
+                .virtual_events(vec![event(Phase::Down, p), event(Phase::Move, q)], true);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert!(app.documents[0].snapshot() == before);
+            app.workspaces.store.current.input.textures[0] = Default::default();
+            app.drawing.virtual_events(vec![event(Phase::Up, q)], true);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            let d = &mut app.documents[0];
+            assert_eq!(
+                d.composite_pixel(25, 20)[3],
+                (255.0 * pattern.factor([25.5, 20.5])).round() as u8
+            );
+            assert_eq!(d.scene.mouse_strokes[0].style.texture, pattern);
+            assert_eq!(d.history_counts(), (1, 0));
+            let after = d.snapshot();
+            let root = crate::tests::TestDirectory::new();
+            let path = root.0.join("texture.drawer");
+            drawer_core::files::save(d, &path).unwrap();
+            assert!(
+                drawer_core::files::open(&path, 1_000_000)
+                    .unwrap()
+                    .snapshot()
+                    == after
+            );
+            assert!(d.undo());
+            assert!(d.snapshot() == before);
+            assert!(d.redo());
+            assert!(d.snapshot() == after);
         }
     }
     #[test]

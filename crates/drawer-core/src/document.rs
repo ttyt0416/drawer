@@ -193,36 +193,15 @@ impl Document {
         y: u32,
         mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> [u8; 4] {
-        let mut color = [0.0f32; 3];
-        let mut alpha = 0.0;
-        let pixels = self
-            .layers
+        let mut color = self.scene.paper.composite(self, x, y, &mut pixel);
+        for cell in self
+            .animation
             .iter()
-            .enumerate()
-            .map(|(index, layer)| pixel(index, layer))
-            .chain(
-                self.animation
-                    .iter()
-                    .flat_map(|a| a.visible_cells(self.current_frame))
-                    .map(|cell| cell.pixel(x as i64, y as i64)),
-            );
-        for pixel in pixels {
-            let source_alpha = pixel[3] as f32 / 255.0;
-            for channel in 0..3 {
-                color[channel] =
-                    pixel[channel] as f32 * source_alpha + color[channel] * (1.0 - source_alpha);
-            }
-            alpha = source_alpha + alpha * (1.0 - source_alpha);
+            .flat_map(|a| a.visible_cells(self.current_frame))
+        {
+            color.add(cell.pixel(x as i64, y as i64));
         }
-        if alpha == 0.0 {
-            return [0; 4];
-        }
-        [
-            (color[0] / alpha).round() as u8,
-            (color[1] / alpha).round() as u8,
-            (color[2] / alpha).round() as u8,
-            (alpha * 255.0).round() as u8,
-        ]
+        color.rgba()
     }
 }
 

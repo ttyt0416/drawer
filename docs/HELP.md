@@ -319,3 +319,17 @@ Mouse stroke behavior에서 Normal, Blend with layer(현재 층 색 혼합), Smu
 [브러시 필압 연결](local:pressure)
 [가상 입력 자동 검증](local:input-replay)
 [키보드 정밀 편집](local:precision)
+
+
+## textures | 브러시·레이어·폴더 질감 | 종이 소재 텍스처 texture paper PSD 베이크 병합 누락
+
+Tool input behavior → Brush texture에서 각 브러시의 독자 Fine grain/Linen/Flecks 질감과 배율·강도·회전·문서 좌표 위치를 정합니다. 팁의 기존 입자와 독립적인 추가 질감입니다. Apply input behavior로 로컬 설정에 저장하고 브러시 프리셋에도 포함합니다. 그림의 확대·보기 회전은 질감 좌표를 바꾸지 않습니다. 획은 시작 때의 질감을 고정하고 전체 획 농도에 한 번 적용합니다.
+
+문서 위 Layer / folder paper…는 레이어 또는 폴더의 종이 질감을 편집합니다. Group all roots는 현재 최상위 층을 새 폴더 임시본으로 묶고 반복하면 중첩 폴더가 됩니다. 종이는 원본 RGB/알파를 바꾸지 않으며 폴더 합성 뒤 한 번 적용합니다. Apply paper는 실행 취소 한 번, Cancel paper는 변경 없음입니다. 저장된 효과를 Bake하면 현재 층 또는 폴더의 캔버스 밖 내용까지 렌더된 래스터로 바꾸고 Undo로 원본과 질감 설정을 복원합니다. 잠긴 자식이 있으면 전체 베이크를 거절합니다. 변경한 임시본은 먼저 적용해야 베이크할 수 있습니다.
+
+독자 세 질감은 실행 파일의 결정적 수식과 자체 문서의 매개변수로 완결됩니다. 별도 소재 파일이나 네트워크가 필요하지 않습니다. 알 수 없는 참조는 번호를 보존하고 No texture fallback 안내와 함께 무효과로 표시합니다.
+
+Export rendered PSD…는 손실 안내 후 최상위 레이어/폴더별 렌더 대체, 전체 그림 렌더 대체, 취소를 선택합니다. 원본 문서와 실행 취소·변경 표시는 유지합니다. 개체나 애니메이션이 있으면 현재 프레임의 전체 그림 대체를 선택해야 합니다. 기존 파일 교체는 별도 선택이 필요합니다. Open…의 PSD는 raw RGBA8 RGB 모드의 합성 미리보기만 읽으며 PSD 레이어/질감 설정을 가져오지 않습니다. 미리보기 DPI는300입니다. 편집 가능한 원본은 .drawer로 보관하세요.
+
+[브러시 입력 설정](local:modifier-tools)
+[혼색·수채](local:brush-material)

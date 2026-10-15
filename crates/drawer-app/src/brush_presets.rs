@@ -153,7 +153,7 @@ impl Drawer {
      });
     });
     if ui.button("Read local brush preset into draft…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Local brush preset",&["json"]).pick_file(){match Preset::read(&path){Ok(p)=>if e.draft.contains(&p.name){e.pending=Some(Pending::Collection(p));}else if let Err(err)=e.draft.put(p,false){self.status=Some(err);},Err(err)=>self.status=Some(err.to_string())}}
-    if let Some(p)=&e.restore{ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
+    if let Some(p)=&e.restore{if p.overlay.missing(){ui.colored_label(egui::Color32::YELLOW,p.overlay.label());}ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
     ui.separator();ui.heading("Quick size order");let mut movement=None;let mut remove=None;
     for(n,size)in e.draft.sizes.iter().enumerate(){ui.push_id(("size",n),|ui|{ui.horizontal(|ui|{ui.label(format!("{size} px"));if ui.add_enabled(n>0,egui::Button::new("Up")).clicked(){movement=Some((n,-1));}
     if ui.add_enabled(n+1<e.draft.sizes.len(),egui::Button::new("Down")).clicked(){movement=Some((n,1));}

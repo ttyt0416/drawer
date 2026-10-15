@@ -110,6 +110,19 @@ pub fn image(
             } else {
                 [0; 4]
             };
+            let value = if let Target::Raster(n) = target {
+                document.scene.paper.layer_pixel(
+                    document,
+                    n,
+                    [
+                        (px + bounds.min[0]).floor() as i64,
+                        (py + bounds.min[1]).floor() as i64,
+                    ],
+                    value,
+                )
+            } else {
+                value
+            };
             if checker {
                 let background = if (x / 4 + y / 4).is_multiple_of(2) {
                     180u8

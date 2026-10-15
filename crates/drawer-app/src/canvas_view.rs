@@ -335,6 +335,7 @@ impl CanvasView {
             .position(|t| *t == document.tool)
             .unwrap();
         let style = drawer_core::painting::Style {
+            texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,
             hardness: 1.0,

@@ -178,6 +178,7 @@ impl Drawer {
                     ui.label(tip.label());super::edit::number(ui,&mut draft.ends[n].start,0.0..=1e6,1.0," px start","modifier-tools");super::edit::number(ui,&mut draft.ends[n].end,0.0..=1e6,1.0," px end","modifier-tools");
                 });}
             });
+            ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::pattern_ui(ui,&mut draft.textures[n]));});}});
             ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
                 for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n]));});}
             });

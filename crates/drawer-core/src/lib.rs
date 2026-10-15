@@ -61,3 +61,8 @@ pub mod stroke_ends;
 pub mod brush_presets;
 
 pub mod brush_material;
+
+pub mod paper;
+pub mod texture;
+
+pub mod psd;

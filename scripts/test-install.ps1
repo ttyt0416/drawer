@@ -105,6 +105,7 @@ try {
     if ($smokeResult -notmatch 'basic_brushes=true') { throw '기본 브러시/누적/이력 시험 실패' }
     if ($smokeResult -notmatch 'brush_parameters=true') { throw '브러시 수치/단위/위젯 시험 실패' }
     if ($smokeResult -notmatch 'mouse_virtual_pressure=true') { throw '마우스 가상 필압/재계산/예측 분리 시험 실패' }
+    if ($smokeResult -notmatch 'textures_psd=true') { throw '브러시/종이 질감·PSD 베이크 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

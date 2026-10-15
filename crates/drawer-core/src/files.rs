@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 11;
+const VERSION: u32 = 12;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -32,7 +32,10 @@ pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
     match ext.as_str() {
         "drawer" => read_native(&path, budget),
         "png" => read_png(&path, budget),
-        _ => Err(invalid("Supported open formats: .drawer and .png")),
+        "psd" => crate::psd::open(&path, budget),
+        _ => Err(invalid(
+            "Supported open formats: .drawer, .png, raw RGB8 .psd merged preview",
+        )),
     }
 }
 fn read_png(path: &Path, budget: usize) -> io::Result<Document> {
@@ -177,7 +180,10 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
-        if !document.scene.valid() || document.memory_bytes() > budget {
+        if !document.scene.valid()
+            || !document.scene.paper.valid_for(document.layers.len())
+            || document.memory_bytes() > budget
+        {
             return Err(invalid("Invalid or oversized page geometry"));
         }
     }
@@ -243,7 +249,10 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     if document.animation.as_ref().is_some_and(|a| !a.valid()) {
         return Err(invalid("Invalid animation"));
     }
-    if !document.scene.valid() || document.scene.size_bytes() > MAX_SCENE_BYTES {
+    if !document.scene.valid()
+        || !document.scene.paper.valid_for(document.layers.len())
+        || document.scene.size_bytes() > MAX_SCENE_BYTES
+    {
         return Err(invalid("Invalid or oversized page geometry"));
     }
     let scene = serde_json::to_vec(&document.scene).map_err(|e| invalid(e.to_string()))?;
@@ -333,6 +342,7 @@ mod tests {
             layer: 0,
             settings: Default::default(),
             style: crate::painting::Style {
+                texture: Default::default(),
                 material: crate::brush_material::Settings {
                     mode: crate::brush_material::Mode::Water,
                     supply: 0.2,
@@ -383,6 +393,7 @@ mod tests {
             layer: 0,
             settings: Default::default(),
             style: crate::painting::Style {
+                texture: Default::default(),
                 material: Default::default(),
                 shape: Default::default(),
                 tip: crate::assets::BrushTip::Pen,

@@ -94,6 +94,13 @@ impl Nudge {
                 if !extent.valid() {
                     return Err("Layer position limit".into());
                 }
+                let inverse = after.scene.transform.inverse();
+                let delta = inverse.map([x as f64, y as f64]);
+                let origin = inverse.map([0.0; 2]);
+                after
+                    .scene
+                    .paper
+                    .shift_layer(self.layer, [delta[0] - origin[0], delta[1] - origin[1]]);
                 after.layers[self.layer].placement = if total == [0; 2] {
                     self.base.layers[self.layer].placement
                 } else {

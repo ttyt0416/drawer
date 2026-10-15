@@ -14,6 +14,8 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
+    #[serde(default, skip_serializing_if = "crate::texture::Pattern::is_default")]
+    pub texture: crate::texture::Pattern,
     #[serde(
         default,
         skip_serializing_if = "crate::brush_material::Settings::is_default"
@@ -45,6 +47,7 @@ impl Style {
     pub fn valid(self) -> bool {
         self.shape.valid()
             && self.material.valid()
+            && self.texture.valid()
             && (0.0..=1.0).contains(&self.opacity)
             && (0.0..=1.0).contains(&self.hardness)
             && (0.01..=10.0).contains(&self.spacing)
@@ -332,6 +335,7 @@ impl Stroke {
                 original,
                 desired,
                 self.style.opacity
+                    * self.style.texture.factor([x as f64 + 0.5, y as f64 + 0.5])
                     * doc
                         .scene
                         .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
@@ -772,7 +776,11 @@ impl Stroke {
                 } else {
                     over(base, paint_color, amount)
                 };
-                let mut result = mix(original, next, mask as f64 / 255.0 * self.style.opacity);
+                let mut result = mix(
+                    original,
+                    next,
+                    mask as f64 / 255.0 * self.style.opacity * self.style.texture.factor(point),
+                );
                 if self.style.material.alpha_lock {
                     result[3] = original[3];
                 }
@@ -889,6 +897,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                texture: Default::default(),
                 material: Default::default(),
                 shape: Shape {
                     size: 20.0,
@@ -951,6 +960,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,
             hardness: 1.0,

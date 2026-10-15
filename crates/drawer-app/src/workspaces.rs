@@ -608,7 +608,8 @@ impl Drawer {
                                 .show(ui, |ui| {
                                     ui.add_enabled_ui(
                                         self.workspaces.staged.is_none()
-                                            && !self.brush_presets.open,
+                                            && !self.brush_presets.open
+                                            && !self.textures.modal(),
                                         |ui| self.show_panel(ui, kind),
                                     )
                                 });
@@ -659,7 +660,9 @@ impl Drawer {
                     .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
                     .show(ctx, |ui| {
                         ui.add_enabled_ui(
-                            self.workspaces.staged.is_none() && !self.brush_presets.open,
+                            self.workspaces.staged.is_none()
+                                && !self.brush_presets.open
+                                && !self.textures.modal(),
                             |ui| self.show_panel(ui, kind),
                         )
                     });
@@ -706,6 +709,7 @@ impl Drawer {
             && !self.acquisition.open
             && !self.properties.open
             && !self.brush_presets.open
+            && !self.textures.modal()
             && !self.ui_behavior.open;
         let mut visible = true;
         egui::Window::new("Popup test painting")
