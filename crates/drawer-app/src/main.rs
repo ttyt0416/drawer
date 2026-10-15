@@ -25,6 +25,7 @@ mod panels;
 mod paste_dialog;
 mod pointer_input;
 mod preferences;
+mod pressure_settings;
 mod quality;
 mod reference_pane;
 mod revert;
@@ -101,6 +102,7 @@ struct Drawer {
     preferences: preferences::Preferences,
     drawing: drawing::Drawing,
     native_input: pointer_input::Native,
+    pressure: pressure_settings::Editor,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
@@ -204,6 +206,7 @@ impl Drawer {
             preferences: Default::default(),
             drawing: Default::default(),
             native_input: Default::default(),
+            pressure: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
@@ -381,6 +384,7 @@ impl Drawer {
     fn show(&mut self, ui: &mut egui::Ui) {
         self.process_drawing(ui.ctx());
         self.pointer_settings(ui.ctx());
+        self.pressure_settings(ui.ctx());
         self.apply_theme(ui.ctx());
         self.canvas_view.measurement_mode = self.measurement_active();
         self.canvas_view.measurement = self.measurement_line();
@@ -441,6 +445,7 @@ impl Drawer {
                     && !self.ui_behavior.open
                     && !self.tool_input.open
                     && !self.native_input.open
+                    && !self.pressure.open
                     && !self.properties.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
@@ -1098,6 +1103,7 @@ impl eframe::App for Drawer {
                 }
                 let mut pointer_workspace = self.capture_workspace();
                 pointer_workspace.pointer.pen.stabilization = Some(0.35);
+                pointer_workspace.pressure.tools[0].opacity = true;
                 self.stage_workspace(pointer_workspace, self.workspaces.store.active.clone());
                 if self
                     .apply_workspace(
@@ -1117,12 +1123,22 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if pressure_settings::smoke_pressure().is_err()
+                    || drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                        .unwrap()
+                        .unwrap()
+                        .current
+                        .pressure
+                        != self.workspaces.store.current.pressure
+                {
+                    fail_smoke();
+                }
                 let native_pen = &self.native_input.report;
                 if native_pen.is_empty() {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\nnative_pen={native_pen}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\nnative_pen={native_pen}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

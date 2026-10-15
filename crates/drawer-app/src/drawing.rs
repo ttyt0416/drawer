@@ -35,6 +35,7 @@ struct Session {
     view: u64,
     projection: Projection,
     last_screen: egui::Pos2,
+    last_pressure: f64,
 }
 #[derive(Default)]
 pub(super) struct Drawing {
@@ -43,6 +44,7 @@ pub(super) struct Drawing {
     events: Vec<(drawer_core::pointer_input::Event, bool)>,
     pub incoming: Vec<drawer_core::pointer_input::Event>,
     pub settings: drawer_core::pointer_input::Settings,
+    pub pressure: drawer_core::pressure::Settings,
     pub last_source: Option<drawer_core::pointer_input::Source>,
     pub error: Option<String>,
 }
@@ -99,10 +101,14 @@ impl Drawing {
             self.error = Some(e);
         }
     }
-    fn sample(&mut self, doc: &Document, pos: egui::Pos2) {
+    fn sample(&mut self, doc: &Document, pos: egui::Pos2, pressure: f64) {
         if let Some(s) = &mut self.active {
             s.last_screen = pos;
-            if let Err(e) = s.stroke.sample(doc, s.projection.point(pos)) {
+            s.last_pressure = pressure;
+            if let Err(e) = s
+                .stroke
+                .sample_pressure(doc, s.projection.point(pos), pressure)
+            {
                 self.error = Some(e);
                 self.cancel();
             }
@@ -111,16 +117,23 @@ impl Drawing {
     fn receive(&mut self, index: usize, doc: &mut Document) {
         use drawer_core::pointer_input::Decision;
         let event = self.events[index].0;
+        let pressure = if event.source.kind == drawer_core::pointer_input::Kind::Mouse {
+            1.0
+        } else {
+            event.pressure.unwrap_or(1.0)
+        };
         self.events[index].1 = true;
         match self.ownership.receive(event, self.settings) {
             Decision::Sample => self.sample(
                 doc,
                 egui::pos2(event.position[0] as f32, event.position[1] as f32),
+                pressure,
             ),
             Decision::Finish => {
                 self.sample(
                     doc,
                     egui::pos2(event.position[0] as f32, event.position[1] as f32),
+                    pressure,
                 );
                 self.finish_document(doc);
             }
@@ -205,7 +218,8 @@ impl Drawing {
         {
             s.projection = projection;
             let pos = s.last_screen;
-            self.sample(doc, pos);
+            let pressure = s.last_pressure;
+            self.sample(doc, pos, pressure);
         }
         for n in 0..self.events.len() {
             if self.events[n].1 {
@@ -250,8 +264,14 @@ impl Drawing {
                         view,
                         projection,
                         last_screen: pos,
+                        last_pressure: 1.0,
                     });
-                    self.sample(doc, pos);
+                    let pressure = if event.source.kind == drawer_core::pointer_input::Kind::Mouse {
+                        1.0
+                    } else {
+                        event.pressure.unwrap_or(1.0)
+                    };
+                    self.sample(doc, pos, pressure);
                 }
                 Err(e) => {
                     self.error = Some(e);
@@ -270,6 +290,7 @@ impl Drawer {
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.settings = self.workspaces.store.current.pointer;
+        self.drawing.pressure = self.workspaces.store.current.pressure;
         self.native_input.pump(ctx, &mut self.drawing.incoming);
         self.drawing.prepare(ctx);
         if self.tool_shortcuts_blocked(ctx) {
@@ -310,6 +331,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
         tip: BrushTip::Pen,
         color: [80, 20, 40, 255],
         smoothing: 0.0,
+        pressure: drawer_core::pressure::Mapping::default(),
     };
     for tip in [BrushTip::Pen, BrushTip::Eraser] {
         style.tip = tip;
@@ -467,6 +489,72 @@ mod tests {
             ],
         );
         assert!(app.documents[0].snapshot() == painted);
+    }
+    #[test]
+    fn pen_pressure_reaches_pixels_mouse_uses_one_and_stroke_keeps_mapping() {
+        use drawer_core::{
+            pointer_input::{Event, Kind, Phase, Source},
+            pressure::Mapping,
+        };
+        for pressure in [0.0, 0.5, 1.0] {
+            let (ctx, mut app) = setup(1.0);
+            app.panels.settings.brush_size = 12.0;
+            app.workspaces.store.current.pressure.tools[0] = Mapping {
+                size: false,
+                opacity: true,
+            };
+            let p = point(&ctx, &app, [20.5, 20.5]);
+            let source = Source {
+                kind: Kind::Pen,
+                device: 401,
+                contact: 88,
+            };
+            let event = |phase| Event {
+                source,
+                phase,
+                position: [p.x as f64, p.y as f64],
+                pressure: Some(pressure),
+            };
+            app.drawing.incoming = vec![event(Phase::Down)];
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert_eq!(
+                app.drawing.active.as_ref().unwrap().stroke.style().pressure,
+                Mapping {
+                    size: false,
+                    opacity: true
+                }
+            );
+            app.workspaces.store.current.pressure.tools[0] = Mapping {
+                size: true,
+                opacity: false,
+            };
+            app.drawing.incoming = vec![event(Phase::Up)];
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert_eq!(
+                app.documents[0].composite_pixel(20, 20)[3],
+                (255.0 * pressure).round() as u8
+            );
+            assert_eq!(
+                app.documents[0].history_counts(),
+                (usize::from(pressure > 0.0), 0)
+            );
+            app.workspaces.store.current.pressure.tools[0] = Mapping {
+                size: false,
+                opacity: true,
+            };
+            let mouse = point(&ctx, &app, [40.5, 30.5]);
+            frame(
+                &ctx,
+                &mut app,
+                1.0,
+                vec![
+                    egui::Event::PointerMoved(mouse),
+                    button(mouse, true),
+                    button(mouse, false),
+                ],
+            );
+            assert_eq!(app.documents[0].composite_pixel(40, 30)[3], 255);
+        }
     }
     #[test]
     fn mouse_fast_drag_preview_one_undo_eraser_and_view_coordinates() {

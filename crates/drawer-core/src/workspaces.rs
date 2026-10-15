@@ -249,6 +249,8 @@ pub struct Snapshot {
     #[serde(default)]
     pub pointer: crate::pointer_input::Settings,
     #[serde(default)]
+    pub pressure: crate::pressure::Settings,
+    #[serde(default)]
     pub help: crate::help::Preferences,
     #[serde(default)]
     pub behavior: crate::ui_behavior::Settings,
@@ -282,6 +284,7 @@ impl Default for Snapshot {
             actions: Default::default(),
             input: Default::default(),
             pointer: Default::default(),
+            pressure: Default::default(),
             help: Default::default(),
             behavior: Default::default(),
             cursors: Default::default(),
@@ -329,6 +332,7 @@ impl Snapshot {
             && self.interface.valid()
             && self.input.valid()
             && self.pointer.valid()
+            && self.pressure.valid()
             && self.help.valid()
             && self.behavior.valid()
             && self.cursors.valid()
@@ -401,6 +405,7 @@ impl Snapshot {
             next.properties = incoming.properties.clone();
             next.input = incoming.input;
             next.pointer = incoming.pointer;
+            next.pressure = incoming.pressure;
             next.help = incoming.help.clone();
             next.behavior = incoming.behavior;
             next.cursors = incoming.cursors;

@@ -43,3 +43,4 @@ pub mod preferences;
 
 pub mod painting;
 pub mod pointer_input;
+pub mod pressure;

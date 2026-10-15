@@ -167,6 +167,7 @@ impl Drawer {
             || self.ui_behavior.open
             || self.tool_input.open
             || self.native_input.open
+            || self.pressure.open
             || self.properties.open
             || self.controls.open
             || self.controls.radial.is_some()

@@ -127,3 +127,6 @@ crates/drawer-app/src/drawing.rs
 crates/drawer-core/src/pointer_input.rs
 crates/drawer-app/src/pointer_input.rs
 docs/process/pointer-input.md
+
+crates/drawer-core/src/pressure.rs
+crates/drawer-app/src/pressure_settings.rs

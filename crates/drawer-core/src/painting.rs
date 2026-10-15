@@ -17,6 +17,7 @@ pub struct Style {
     pub tip: BrushTip,
     pub color: [u8; 4],
     pub smoothing: f64,
+    pub pressure: crate::pressure::Mapping,
 }
 impl Style {
     fn valid(self) -> bool {
@@ -35,9 +36,12 @@ pub struct Stroke {
     trace: Trace,
     last: Option<Point>,
     last_stamp: Option<Point>,
+    pressure: f64,
+    last_stamp_pressure: f64,
     remainder: f64,
     changes: Vec<PixelChange>,
     unmasked: Vec<[u8; 4]>,
+    amounts: Vec<f64>,
     lookup: HashMap<usize, usize>,
     limit: usize,
 }
@@ -62,7 +66,7 @@ impl Stroke {
         let limit = budget
             .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()))
             .saturating_sub(256)
-            / 80;
+            / 96;
         if limit == 0 {
             return Err("No memory available for a stroke".into());
         }
@@ -76,9 +80,12 @@ impl Stroke {
             trace: Default::default(),
             last: None,
             last_stamp: None,
+            pressure: 1.0,
+            last_stamp_pressure: 1.0,
             remainder: 0.0,
             changes: vec![],
             unmasked: vec![],
+            amounts: vec![],
             lookup: HashMap::new(),
             limit,
         })
@@ -96,17 +103,41 @@ impl Stroke {
         Ok(())
     }
     pub fn sample(&mut self, doc: &Document, point: Point) -> Result<(), String> {
+        self.sample_pressure(doc, point, 1.0)
+    }
+    pub fn sample_pressure(
+        &mut self,
+        doc: &Document,
+        point: Point,
+        pressure: f64,
+    ) -> Result<(), String> {
         self.check(doc)?;
+        if !(0.0..=1.0).contains(&pressure) {
+            return Err("Invalid normalized pressure".into());
+        }
         if !point.iter().all(|n| n.is_finite() && n.abs() <= 1e12) {
             return Err("Invalid drawing coordinate".into());
         }
         let Some((_, to)) = self.trace.receive(point, self.style.smoothing) else {
+            if self.pressure != pressure
+                && (self.style.pressure.size || self.style.pressure.opacity)
+                && let Some(last) = self.last
+            {
+                self.stamp(doc, last, pressure)?;
+            }
+            self.pressure = pressure;
             return Ok(());
         };
         if let Some(from) = self.last {
             let delta = [to[0] - from[0], to[1] - from[1]];
             let length = delta[0].hypot(delta[1]);
-            let step = (self.style.shape.size * self.style.shape.aspect * 0.15).clamp(0.25, 8.0);
+            let pressure_scale = if self.style.pressure.size {
+                self.pressure.min(pressure)
+            } else {
+                1.0
+            };
+            let step = (self.style.shape.size * pressure_scale * self.style.shape.aspect * 0.15)
+                .clamp(0.25, 8.0);
             if length > 1e-9 {
                 let radius = self.style.shape.size * 0.5 + 1.0;
                 if let Some([begin, end]) = clip(
@@ -125,25 +156,36 @@ impl Stroke {
                         }
                         for n in start..=finish {
                             let t = (first + n as f64 * step) / length;
-                            self.stamp(doc, [from[0] + delta[0] * t, from[1] + delta[1] * t])?;
+                            self.stamp(
+                                doc,
+                                [from[0] + delta[0] * t, from[1] + delta[1] * t],
+                                self.pressure + (pressure - self.pressure) * t,
+                            )?;
                         }
                     }
                 }
                 self.remainder = (self.remainder + length).rem_euclid(step);
+            } else if self.pressure != pressure
+                && (self.style.pressure.size || self.style.pressure.opacity)
+            {
+                self.stamp(doc, to, pressure)?;
             }
         } else {
-            self.stamp(doc, to)?;
+            self.stamp(doc, to, pressure)?;
         }
         self.last = Some(to);
+        self.pressure = pressure;
         Ok(())
     }
     pub fn finish_sample(&mut self, doc: &Document) -> Result<(), String> {
         if let Some(last) = self.last
-            && self
-                .last_stamp
-                .is_none_or(|p| (last[0] - p[0]).hypot(last[1] - p[1]) > 1e-7)
+            && self.last_stamp.is_none_or(|p| {
+                (last[0] - p[0]).hypot(last[1] - p[1]) > 1e-7
+                    || (self.last_stamp_pressure != self.pressure
+                        && (self.style.pressure.size || self.style.pressure.opacity))
+            })
         {
-            self.stamp(doc, last)?;
+            self.stamp(doc, last, self.pressure)?;
         }
         Ok(())
     }
@@ -173,15 +215,34 @@ impl Stroke {
     pub fn style(&self) -> Style {
         self.style
     }
+    pub fn shape(&self) -> Shape {
+        let mut shape = self.style.shape;
+        if self.style.pressure.size {
+            shape.size *= self.pressure;
+        }
+        shape
+    }
     pub fn trace(&self) -> Trace {
         self.trace.clone()
     }
     pub fn changed_pixels(&self) -> usize {
         self.changes.len()
     }
-    fn stamp(&mut self, doc: &Document, center: Point) -> Result<(), String> {
+    fn stamp(&mut self, doc: &Document, center: Point, pressure: f64) -> Result<(), String> {
         self.last_stamp = Some(center);
-        let shape = self.style.shape;
+        self.last_stamp_pressure = pressure;
+        let mut shape = self.style.shape;
+        if self.style.pressure.size {
+            shape.size *= pressure;
+        }
+        let opacity = if self.style.pressure.opacity {
+            pressure
+        } else {
+            1.0
+        };
+        if shape.size == 0.0 || opacity == 0.0 {
+            return Ok(());
+        }
         let radius = shape.size * 0.5;
         let minor = radius * shape.aspect;
         let (sin, cos) = shape.angle.to_radians().sin_cos();
@@ -253,15 +314,25 @@ impl Stroke {
                 let old = self.lookup.get(&offset).copied();
                 let original = old.map_or(layer.pixels[offset], |n| self.changes[n].before);
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
+                let amount = if self.style.pressure.opacity {
+                    (amount * opacity).max(old.map_or(0.0, |n| self.amounts[n]))
+                } else {
+                    amount
+                };
+                let base = if self.style.pressure.opacity {
+                    original
+                } else {
+                    unmasked
+                };
                 let next = if self.style.tip == BrushTip::Eraser {
                     [
-                        unmasked[0],
-                        unmasked[1],
-                        unmasked[2],
-                        (unmasked[3] as f64 * (1.0 - amount)).round() as u8,
+                        base[0],
+                        base[1],
+                        base[2],
+                        (base[3] as f64 * (1.0 - amount)).round() as u8,
                     ]
                 } else {
-                    over(unmasked, self.style.color, amount)
+                    over(base, self.style.color, amount)
                 };
                 let result = mix(original, next, mask as f64 / 255.0);
                 if old.is_none() && result == original {
@@ -278,6 +349,7 @@ impl Stroke {
                     }
                     self.changes.try_reserve(1).map_err(|e| e.to_string())?;
                     self.unmasked.try_reserve(1).map_err(|e| e.to_string())?;
+                    self.amounts.try_reserve(1).map_err(|e| e.to_string())?;
                     self.lookup.try_reserve(1).map_err(|e| e.to_string())?;
                     let n = self.changes.len();
                     self.changes.push(PixelChange {
@@ -286,12 +358,14 @@ impl Stroke {
                         after: original,
                     });
                     self.unmasked.push(original);
+                    self.amounts.push(0.0);
                     self.lookup.insert(offset, n);
                     n
                 };
                 changed |= self.changes[index].after != result;
                 self.changes[index].after = result;
                 self.unmasked[index] = next;
+                self.amounts[index] = amount;
             }
         }
         if changed {
@@ -384,7 +458,115 @@ mod tests {
             tip,
             color: [30, 60, 90, 200],
             smoothing: 0.0,
+            pressure: crate::pressure::Mapping {
+                size: false,
+                opacity: false,
+            },
         }
+    }
+    #[test]
+    fn normalized_pressure_axes_are_independent_zero_half_full_and_bounded() {
+        use crate::pressure::Mapping;
+        for mapping in [
+            Mapping {
+                size: false,
+                opacity: false,
+            },
+            Mapping {
+                size: true,
+                opacity: false,
+            },
+            Mapping {
+                size: false,
+                opacity: true,
+            },
+            Mapping {
+                size: true,
+                opacity: true,
+            },
+        ] {
+            let mut widths = vec![];
+            for pressure in [0.0, 0.5, 1.0] {
+                let mut d = Document::create(
+                    CanvasSpec {
+                        width: 32,
+                        height: 32,
+                        dpi: 300.0,
+                        background: Background::Transparent,
+                    },
+                    8192,
+                )
+                .unwrap();
+                let before = d.snapshot();
+                let mut style = style(BrushTip::Pen);
+                style.shape.size = 12.0;
+                style.pressure = mapping;
+                let mut s = Stroke::begin(&d, 0, style).unwrap();
+                s.sample_pressure(&d, [16.5, 16.5], pressure).unwrap();
+                let preview = Renderer::preview(&d, Some(&s)).pixel([16.5, 16.5]);
+                let changed = s.commit(&mut d).unwrap();
+                let expected = if (mapping.size || mapping.opacity) && pressure == 0.0 {
+                    0
+                } else if mapping.opacity {
+                    (200.0 * pressure).round() as u8
+                } else {
+                    200
+                };
+                assert_eq!(d.composite_pixel(16, 16)[3], expected);
+                assert_eq!(preview, d.composite_pixel(16, 16));
+                assert_eq!(changed, expected > 0);
+                widths.push((0..32).filter(|x| d.composite_pixel(*x, 16)[3] > 0).count());
+                if changed {
+                    let after = d.snapshot();
+                    assert!(d.undo());
+                    assert!(d.snapshot() == before);
+                    assert!(d.redo());
+                    assert!(d.snapshot() == after);
+                }
+            }
+            if mapping.size {
+                assert!(widths[1] < widths[2]);
+            } else {
+                assert_eq!(widths[1], widths[2]);
+            }
+        }
+        let mut d = doc();
+        let mut style = style(BrushTip::Pen);
+        style.pressure = Mapping {
+            size: false,
+            opacity: true,
+        };
+        let mut s = Stroke::begin(&d, 0, style).unwrap();
+        for x in [2.5, 29.5, 2.5, 29.5] {
+            s.sample_pressure(&d, [x, 4.5], 0.5).unwrap();
+        }
+        s.commit(&mut d).unwrap();
+        assert_eq!(d.composite_pixel(12, 4)[3], 100);
+        assert!(d.layers[0].pixels.iter().all(|p| p[3] <= 100));
+        let before = d.snapshot();
+        let mut s = Stroke::begin(&d, 0, style).unwrap();
+        for p in [-0.1, 1.1, f64::NAN, f64::INFINITY] {
+            assert!(s.sample_pressure(&d, [2.5, 4.5], p).is_err());
+        }
+        drop(s);
+        assert!(d.snapshot() == before);
+        // A stationary pen can change pressure without needing a fake movement.
+        let mut s = Stroke::begin(&d, 0, style).unwrap();
+        s.sample_pressure(&d, [2.5, 8.5], 0.0).unwrap();
+        s.sample_pressure(&d, [2.5, 8.5], 1.0).unwrap();
+        s.commit(&mut d).unwrap();
+        assert_eq!(d.composite_pixel(2, 8)[3], 200);
+        let mut off = style;
+        off.pressure = Mapping {
+            size: false,
+            opacity: false,
+        };
+        let mut s = Stroke::begin(&d, 0, off).unwrap();
+        for p in [0.0, 0.5, 1.0, 0.0] {
+            s.sample_pressure(&d, [25.5, 8.5], p).unwrap();
+        }
+        s.commit(&mut d).unwrap();
+        assert_eq!(d.composite_pixel(25, 8)[3], 200);
     }
     #[test]
     fn point_and_fast_drag_preview_commit_one_history_and_exact_undo_redo() {

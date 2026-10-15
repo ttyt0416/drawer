@@ -85,6 +85,7 @@ impl Document {
         if changes.is_empty() {
             return Ok(false);
         }
+        changes.shrink_to_fit();
         let bytes =
             changes.len() * std::mem::size_of::<PixelChange>() + std::mem::size_of::<Edit>();
         if bytes > crate::document::DEFAULT_DOCUMENT_BUDGET / 4

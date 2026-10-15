@@ -326,6 +326,7 @@ impl CanvasView {
             tip: document.tool,
             color: paint.color,
             smoothing: self.smoothing[tip_index],
+            pressure: paint.drawing.pressure.tools[tip_index],
         };
         paint.drawing.canvas(
             ui,
@@ -463,7 +464,7 @@ impl CanvasView {
         {
             let active_style = stroke.map(|s| s.style());
             let cursor_tool = active_style.map_or(document.tool, |s| s.tip);
-            let cursor_shape = active_style.map_or(self.brush_shape, |s| s.shape);
+            let cursor_shape = stroke.map_or(self.brush_shape, |s| s.shape());
             let n = drawer_core::assets::BrushTip::ALL
                 .iter()
                 .position(|t| *t == cursor_tool)
