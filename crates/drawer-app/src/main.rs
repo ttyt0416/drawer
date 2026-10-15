@@ -1161,6 +1161,9 @@ impl eframe::App for Drawer {
                 if pointer_input::smoke_controls().is_err() {
                     fail_smoke();
                 }
+                if pointer_input::smoke_mapping().is_err() {
+                    fail_smoke();
+                }
                 #[cfg(windows)]
                 if self
                     .native_mouse
@@ -1193,7 +1196,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

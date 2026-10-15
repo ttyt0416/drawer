@@ -134,6 +134,34 @@ impl Drawer {
                 });
             });
             ui.label("The first drawing contact owns a stroke until release or cancellation.");
+            ui.collapsing("Tablet area, target and touch offset",|ui| {
+                use drawer_core::tablet_mapping::Target;
+                crate::help::checkbox(ui,&mut draft.mapping.enabled,"Map reported tablet area","pointer-input");
+                for n in 0..2 {ui.push_id(n,|ui| {
+                    super::edit::slider(ui,&mut draft.mapping.source.min[n],0.0..=1.0,if n==0 {"Area left"}else{"Area top"},"pointer-input");
+                    super::edit::slider(ui,&mut draft.mapping.source.max[n],0.0..=1.0,if n==0 {"Area right"}else{"Area bottom"},"pointer-input");
+                });}
+                egui::ComboBox::from_label("Mapping target").selected_text(format!("{:?}",draft.mapping.target)).show_ui(ui,|ui| {
+                    ui.selectable_value(&mut draft.mapping.target,Target::Canvas,"Active canvas");
+                    for monitor in &self.display.monitors {if monitor.valid() {ui.selectable_value(&mut draft.mapping.target,Target::Monitor{position:monitor.position,size:monitor.size},&monitor.key);}}
+                });
+                super::edit::slider(ui,&mut draft.mapping.touch_offset[0],-4096.0..=4096.0,"Touch X offset (physical px)","pointer-input");
+                super::edit::slider(ui,&mut draft.mapping.touch_offset[1],-4096.0..=4096.0,"Touch Y offset (physical px)","pointer-input");
+                ui.label("Area fractions run from 0 to 1. Native device area is required; missing data cancels drawing. Monitor geometry is saved and must be selected again after removal/layout changes. Relative mode and speed apply after mapping. Touch offset does not enable finger drawing.");
+                ui.label(format!("Last reported tablet position: {:?}",self.drawing.last_attributes.tablet));
+                if let Some(report)=&self.drawing.mapping_report {ui.label(report);}
+                ui.label("Mouse simulation only: move over this tablet preview. Open drawings are unchanged. Physical tablet validation remains pending.");
+                let (rect,response)=ui.allocate_exact_size(egui::vec2(220.0,90.0),egui::Sense::hover());
+                ui.painter().rect_stroke(rect,0.0,egui::Stroke::new(1.0,egui::Color32::GRAY),egui::StrokeKind::Inside);
+                let source=egui::Rect::from_min_max(rect.min+rect.size()*egui::vec2(draft.mapping.source.min[0] as f32,draft.mapping.source.min[1] as f32),rect.min+rect.size()*egui::vec2(draft.mapping.source.max[0] as f32,draft.mapping.source.max[1] as f32));
+                if draft.mapping.valid(){ui.painter().rect_stroke(source,0.0,egui::Stroke::new(1.0,egui::Color32::LIGHT_BLUE),egui::StrokeKind::Inside);}
+                if let Some(pos)=response.hover_pos(){
+                    let uv=[((pos.x-rect.min.x)/rect.width()) as f64,((pos.y-rect.min.y)/rect.height()) as f64];
+                    let e=Event{source:Source{kind:Kind::Pen,device:0,contact:0},phase:Phase::Move,position:[0.0;2],pressure:None,attributes:drawer_core::pointer_input::Attributes{tablet:Some(uv),..Default::default()},origin:Default::default()};
+                    let mut settings=draft.mapping;settings.enabled=true;
+                    ui.label(match self.drawing.mapping_context.map(settings,e){Ok(e)=>format!("Virtual tablet {uv:?} → window {:?}",e.position),Err(e)=>e.message().into()});
+                }
+            });
             crate::help::checkbox(ui,&mut draft.features.tilt_angle,"Use supported pen tilt for tip angle","pointer-input");
             crate::help::checkbox(ui,&mut draft.features.eraser,"Start inverted pen strokes as eraser","pointer-input");
             crate::help::checkbox(ui,&mut draft.features.button_eraser,"Start as eraser while any reported pen button is down","pointer-input");
@@ -260,9 +288,54 @@ pub(super) fn smoke_controls() -> Result<(), String> {
     }
     Ok(())
 }
+pub(super) fn smoke_mapping() -> Result<(), String> {
+    use drawer_core::{input_replay::Sequence, scene::Rect};
+    let run = |s: &Sequence| {
+        crate::input_replay::run(
+            s,
+            &std::sync::atomic::AtomicBool::new(false),
+            &std::sync::atomic::AtomicUsize::new(0),
+        )
+    };
+    let mut s = Sequence::default();
+    s.pointer.mapping.enabled = true;
+    s.pointer.mapping.source = Rect {
+        min: [0.25; 2],
+        max: [0.75; 2],
+    };
+    for sample in &mut s.samples {
+        sample.event.attributes.tablet = Some([0.5; 2]);
+        sample.event.pressure = Some(1.0);
+    }
+    let mapped = run(&s)?;
+    if !mapped.record.passed
+        || mapped.pixels[24 * 64 + 32][3] == 0
+        || mapped.pixels[20 * 64 + 8][3] != 0
+    {
+        return Err("Tablet mapping did not reach canvas pixels".into());
+    }
+    s.samples[1].event.attributes.tablet = Some([0.9; 2]);
+    s.expected_strokes = 0;
+    let outside = run(&s)?;
+    if !outside.record.passed || outside.pixels.iter().any(|p| p[3] != 0) {
+        return Err("Leaving/reentering tablet area committed a partial stroke".into());
+    }
+    for sample in &mut s.samples {
+        sample.event.attributes.tablet = None;
+    }
+    let missing = run(&s)?;
+    if !missing.record.passed || missing.pixels.iter().any(|p| p[3] != 0) {
+        return Err("Missing device area was guessed".into());
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mapping_replay_reaches_pixels_and_outside_or_missing_area_cannot_start_a_stroke() {
+        smoke_mapping().unwrap();
+    }
     #[test]
     fn pressure_relative_coordinates_and_numbered_buttons_reach_actual_pixels() {
         smoke_controls().unwrap();
@@ -282,6 +355,10 @@ mod tests {
         next.controls.mode = drawer_core::pen_controls::Mode::Relative;
         next.controls.speed = 0.5;
         next.controls.buttons[2] = drawer_core::pen_controls::Action::Eraser;
+        next.mapping.source.min = [0.1, 0.2];
+        next.mapping.source.max = [0.9, 0.8];
+        next.mapping.enabled = true;
+        next.mapping.touch_offset = [2.0, -3.0];
         next.mouse.enabled = false;
         next.pen.stabilization = Some(0.7);
         next.features.tilt_angle = true;

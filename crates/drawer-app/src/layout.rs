@@ -28,6 +28,11 @@ pub(super) struct Layout {
     #[cfg(test)]
     cancel_button: Option<egui::Rect>,
 }
+impl Layout {
+    pub(super) fn viewport(&self, id: u64) -> Option<egui::Rect> {
+        self.views.get(&id)?.viewport_rect()
+    }
+}
 impl Drawer {
     pub(super) fn layout_settings(&mut self, ctx: &egui::Context) {
         if !self.layout.open {

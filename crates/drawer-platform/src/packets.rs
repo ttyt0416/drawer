@@ -18,6 +18,15 @@ pub fn device_category(device: u32) -> Option<u32> {
         _ => None,
     }
 }
+pub fn tablet_point(point: [i32; 2], origin: [i32; 2], extent: [i32; 2]) -> Option<[f64; 2]> {
+    if extent.contains(&0) {
+        return None;
+    }
+    Some([
+        (point[0] as f64 - origin[0] as f64) / extent[0] as f64,
+        1.0 - (point[1] as f64 - origin[1] as f64) / extent[1] as f64,
+    ])
+}
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
@@ -97,6 +106,7 @@ pub fn attributes(p: &Packet, axes: Option<[Axis; 3]>) -> Attributes {
         eraser: p.status.map(|s| s & 0x10 != 0),
         button: Some(p.buttons != 0),
         buttons: Some(p.buttons),
+        tablet: None,
     }
     .normalized()
 }
@@ -175,6 +185,25 @@ impl Contact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tablet_normalization_retains_subpixel_resolution_and_signed_axis_extent() {
+        assert_eq!(
+            tablet_point([100, 200], [100, 200], [10000, 20000]),
+            Some([0.0, 1.0])
+        );
+        assert_eq!(
+            tablet_point([10100, 20200], [100, 200], [10000, 20000]),
+            Some([1.0, 0.0])
+        );
+        let p = tablet_point([101, 201], [100, 200], [10000, 20000]).unwrap();
+        assert!((p[0] - 0.0001).abs() < 1e-12);
+        assert!((p[1] - 0.99995).abs() < 1e-12);
+        assert_eq!(
+            tablet_point([-4900, -9800], [100, 200], [-10000, -20000]),
+            Some([0.5; 2])
+        );
+        assert_eq!(tablet_point([0; 2], [0; 2], [0, 1]), None);
+    }
     #[test]
     fn optional_packet_fields_signed_coordinates_and_pressure_range() {
         assert_eq!(device_category(u32::MAX), Some(99));

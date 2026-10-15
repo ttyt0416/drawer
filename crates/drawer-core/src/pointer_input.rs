@@ -77,6 +77,9 @@ pub struct Attributes {
     /// Reported logical pen button bits; None means numbering is unavailable.
     #[serde(default)]
     pub buttons: Option<u32>,
+    /// Raw tablet position normalized to its full device area; no screen guess.
+    #[serde(default)]
+    pub tablet: Option<[f64; 2]>,
 }
 impl Attributes {
     pub fn normalized(self) -> Self {
@@ -158,6 +161,10 @@ impl Event {
             .iter()
             .all(|v| v.is_finite() && v.abs() <= 1e12)
             && self.pressure.is_none_or(|v| (0.0..=1.0).contains(&v))
+            && self
+                .attributes
+                .tablet
+                .is_none_or(|p| p.iter().all(|v| v.is_finite() && v.abs() <= 1e12))
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -185,10 +192,13 @@ pub struct Settings {
     pub backend: Backend,
     #[serde(default)]
     pub controls: crate::pen_controls::Settings,
+    #[serde(default)]
+    pub mapping: crate::tablet_mapping::Settings,
 }
 impl Settings {
     pub fn valid(self) -> bool {
         self.controls.valid()
+            && self.mapping.valid()
             && [self.mouse, self.pen]
                 .into_iter()
                 .all(|s| s.stabilization.is_none_or(|v| (0.0..=0.95).contains(&v)))
@@ -281,6 +291,7 @@ mod tests {
             eraser: Some(true),
             button: Some(true),
             buttons: None,
+            tablet: None,
         };
         e.source = Source::MOUSE;
         assert_eq!(e.pressure_value(), 1.0);
@@ -327,6 +338,7 @@ mod tests {
             eraser: Some(true),
             button: Some(true),
             buttons: None,
+            tablet: None,
         }
         .normalized();
         assert_eq!(

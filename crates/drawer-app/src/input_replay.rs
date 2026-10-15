@@ -244,6 +244,7 @@ impl Drawer {
                 ui.horizontal_wrapped(|ui| {
                     if crate::help::button(ui,"Pressure 0 / jump / half / end","input-replay").clicked(){self.replay.sequence=Sequence::default();}
                     if crate::help::button(ui,"Missing end","input-replay").clicked(){let mut s=Sequence::default();s.samples.pop();s.expected_strokes=0;self.replay.sequence=s;}
+                    if crate::help::button(ui,"Tablet area sample","input-replay").clicked(){let mut s=Sequence::default();s.pointer.mapping.enabled=true;for sample in &mut s.samples {sample.event.attributes.tablet=Some([0.5;2]);}self.replay.sequence=s;}
                     if crate::help::button(ui,"Reverse time (invalid)","input-replay").clicked(){let mut s=Sequence::default();s.samples[1].micros=5000;self.replay.sequence=s;}
                 });
                 if crate::help::button(ui,"Use current brush settings in record","input-replay").clicked() {

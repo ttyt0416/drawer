@@ -93,6 +93,7 @@ try {
     if ($smokeResult -notmatch 'virtual_input_replay=true') { throw '가상 입력 재생/재현성/취소 시작 시험 실패' }
     if ($smokeResult -notmatch 'backend_switching=true' -or $smokeResult -notmatch 'wintab_initialization=Requested Wintab; active (Wintab|Pointer|Mouse)') { throw 'Pointer/Wintab/마우스 전환 및 복귀 시작 시험 실패' }
     if ($smokeResult -notmatch 'pen_click_controls=true') { throw '펜 임계값/상대 좌표/번호 버튼 픽셀 시험 실패' }
+    if ($smokeResult -notmatch 'tablet_mapping=true') { throw '태블릿 영역/누락/영역 이탈 픽셀 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

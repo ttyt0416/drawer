@@ -5,7 +5,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::{collections::HashMap, ffi::c_void, sync::Arc};
 use windows::{
     Win32::{
-        Foundation::{FreeLibrary, HMODULE, HWND, POINT},
+        Foundation::{FreeLibrary, HANDLE, HMODULE, HWND, POINT, RECT},
         Graphics::Gdi::ScreenToClient,
         System::LibraryLoader::{GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW},
         UI::{
@@ -61,10 +61,12 @@ fn client(window: isize, point: [i32; 2]) -> Result<[f64; 2], String> {
 type PointerInfo = unsafe extern "system" fn(u32, *mut POINTER_INFO) -> i32;
 type PenInfo = unsafe extern "system" fn(u32, *mut POINTER_PEN_INFO) -> i32;
 type PenHistory = unsafe extern "system" fn(u32, *mut u32, *mut POINTER_PEN_INFO) -> i32;
+type DeviceRects = unsafe extern "system" fn(HANDLE, *mut RECT, *mut RECT) -> i32;
 pub(super) struct Pointer {
     info: PointerInfo,
     pen: PenInfo,
     history: PenHistory,
+    rects: Option<DeviceRects>,
     contacts: HashMap<u32, Event>,
     _module: Module,
 }
@@ -86,10 +88,18 @@ impl Pointer {
                 ),
             )
         };
+        // SAFETY: optional public User32 export, exact documented WINAPI ABI.
+        // Module is retained for this optional function's entire lifetime.
+        let rects = unsafe {
+            m.symbol(b"GetPointerDeviceRects\0").ok().map(|p| {
+                std::mem::transmute::<unsafe extern "system" fn() -> isize, DeviceRects>(p)
+            })
+        };
         Ok(Self {
             info,
             pen,
             history,
+            rects,
             contacts: HashMap::new(),
             _module: m,
         })
@@ -194,6 +204,32 @@ impl Pointer {
                 return Err("Too many active pen contacts".into());
             }
             let mask = p.penMask;
+            let mut device_rect = RECT::default();
+            let mut display_rect = RECT::default();
+            let tablet = self.rects.and_then(|query| {
+                // SAFETY: numeric device handle from this live OS event and two
+                // correctly sized writable RECT outputs, used only for this call.
+                if unsafe {
+                    query(
+                        p.pointerInfo.sourceDevice,
+                        &mut device_rect,
+                        &mut display_rect,
+                    )
+                } == 0
+                {
+                    return None;
+                }
+                drawer_core::tablet_mapping::normalized(
+                    [
+                        p.pointerInfo.ptHimetricLocationRaw.x as f64,
+                        p.pointerInfo.ptHimetricLocationRaw.y as f64,
+                    ],
+                    drawer_core::scene::Rect {
+                        min: [device_rect.left as f64, device_rect.top as f64],
+                        max: [device_rect.right as f64, device_rect.bottom as f64],
+                    },
+                )
+            });
             let event = Event {
                 source: Source {
                     kind: Kind::Pen,
@@ -215,6 +251,7 @@ impl Pointer {
                     eraser: Some(p.penFlags & 6 != 0),
                     button: Some(p.penFlags & 1 != 0),
                     buttons: Some(u32::from(p.penFlags & 1 != 0)),
+                    tablet,
                 }
                 .normalized(),
                 origin: Origin::Unmarked,
@@ -311,6 +348,9 @@ pub(super) struct Wintab {
     mask: u32,
     device: u32,
     default_cursor: u32,
+    raw_origin: [i32; 2],
+    raw_extent: [i32; 2],
+    desktop: drawer_core::scene::Rect,
     pressure: Option<Axis>,
     orientation: Option<[Axis; 3]>,
     contact: Contact,
@@ -365,10 +405,8 @@ impl Wintab {
         if w <= 0 || h <= 0 {
             return Err("Invalid virtual desktop dimensions".into());
         }
-        c.out_org[0] = x;
-        c.out_org[1] = y.checked_add(h).ok_or("Desktop coordinate overflow")?;
-        c.out_ext[0] = w;
-        c.out_ext[1] = -h;
+        c.out_org = c.in_org;
+        c.out_ext = c.in_ext; // preserve native tablet resolution
         c.sys_mode = 0;
         // SAFETY: live owned root HWND and writable complete LOGCONTEXTW. Open
         // disabled; focus must be explicitly granted before accepting any packets.
@@ -385,6 +423,12 @@ impl Wintab {
             mask: c.pkt_data,
             device: c.device,
             default_cursor: info::<u32>(query, cat, 4).unwrap_or(0),
+            raw_origin: [c.out_org[0], c.out_org[1]],
+            raw_extent: [c.out_ext[0], c.out_ext[1]],
+            desktop: drawer_core::scene::Rect {
+                min: [x as f64, y as f64],
+                max: [x as f64 + w as f64, y as f64 + h as f64],
+            },
             pressure: info::<Axis>(query, cat, 15),
             orientation: info::<[Axis; 3]>(query, cat, 17),
             contact: Contact::default(),
@@ -395,6 +439,8 @@ impl Wintab {
         if c.pkt_mode & c.pkt_data != 0
             || c.msg_base != MSG_BASE
             || packets::device_category(c.device) != Some(cat)
+            || c.out_ext[0] == 0
+            || c.out_ext[1] == 0
         {
             return Err("Wintab changed absolute packet contract".into());
         }
@@ -471,11 +517,18 @@ impl Wintab {
         };
         let mut attributes = packets::attributes(&p, self.orientation);
         attributes.buttons = Some(p.buttons & !tip.map(|b| 1u32 << b).unwrap_or(0));
+        let uv = packets::tablet_point(p.point, self.raw_origin, self.raw_extent)
+            .ok_or("Invalid Wintab tablet extent")?;
+        attributes.tablet = Some(uv);
+        let offset = client(window, [0, 0])?;
+        let position = std::array::from_fn(|n| {
+            offset[n] + self.desktop.min[n] + uv[n] * (self.desktop.max[n] - self.desktop.min[n])
+        });
         Ok(self.contact.sample(
             self.device as u64,
             p.cursor,
             down,
-            client(window, p.point)?,
+            position,
             pressure,
             attributes,
         ))
@@ -490,13 +543,13 @@ impl Drop for Wintab {
 }
 pub(super) enum Driver {
     Pointer(Pointer),
-    Wintab(Wintab),
+    Wintab(Box<Wintab>),
 }
 impl Driver {
     fn open(backend: Backend, window: isize) -> Result<Self, String> {
         match backend {
             Backend::Pointer => Pointer::open().map(Self::Pointer),
-            Backend::Wintab => Wintab::open(window).map(Self::Wintab),
+            Backend::Wintab => Wintab::open(window).map(|w| Self::Wintab(Box::new(w))),
             Backend::Mouse => unreachable!(),
         }
     }
@@ -520,6 +573,11 @@ impl Driver {
     }
 }
 impl Input {
+    pub fn client_origin(&self) -> Option<[f64; 2]> {
+        let s = self.state.borrow();
+        let p = s.owner.as_ref()?.inner_position().ok()?;
+        Some([p.x as f64, p.y as f64])
+    }
     pub fn attach(&self, window: &Arc<winit::window::Window>) -> Result<(), String> {
         let RawWindowHandle::Win32(handle) =
             window.window_handle().map_err(|e| e.to_string())?.as_raw()

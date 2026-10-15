@@ -72,6 +72,9 @@ pub(super) struct Drawing {
     controls: drawer_core::pen_controls::Adapter,
     anchor: Option<[f64; 2]>,
     last_input: Option<drawer_core::pointer_input::Kind>,
+    pub mapping_context: drawer_core::tablet_mapping::Context,
+    pub mapping_report: Option<String>,
+    mapping_settings: Option<drawer_core::tablet_mapping::Settings>,
 }
 impl Drawing {
     pub(super) fn pen_cursor(&self, view: u64) -> Option<egui::Pos2> {
@@ -138,7 +141,21 @@ impl Drawing {
             .collect();
         for event in incoming {
             self.last_input = Some(event.source.kind);
-            events.extend(self.controls.event(event, bounds, anchor));
+            let mapped = match self.mapping_context.map(self.settings.mapping, event) {
+                Ok(e) => {
+                    if e.source.kind == drawer_core::pointer_input::Kind::Pen {
+                        self.mapping_report = None;
+                    }
+                    e
+                }
+                Err(error) => {
+                    self.mapping_report = Some(error.message().into());
+                    let mut e = event;
+                    e.phase = drawer_core::pointer_input::Phase::Cancel;
+                    e
+                }
+            };
+            events.extend(self.controls.event(mapped, bounds, anchor));
         }
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
@@ -381,12 +398,45 @@ impl Drawer {
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
-        self.drawing.anchor = self
-            .canvas_view
-            .viewport_rect()
-            .map(|r| [r.center().x as f64, r.center().y as f64]);
+        let target_view = self
+            .drawing
+            .active_view()
+            .or_else(|| self.active_tab.map(|n| self.tabs[n].id));
+        let canvas_rect = if !self.simple_view
+            && self.workspaces.store.current.layout.arrangement
+                != drawer_core::layout::Arrangement::Tabs
+        {
+            target_view.and_then(|id| self.layout.viewport(id))
+        } else {
+            self.canvas_view.viewport_rect()
+        };
+        let mut mapping_context = drawer_core::tablet_mapping::Context {
+            origin: [0.0; 2],
+            scale: ctx.pixels_per_point() as f64,
+            canvas: canvas_rect.map(|r| drawer_core::scene::Rect {
+                min: [r.min.x as f64, r.min.y as f64],
+                max: [r.max.x as f64, r.max.y as f64],
+            }),
+            monitors: self.display.monitors.clone(),
+        };
+        #[cfg(windows)]
+        if let Some(native) = &self.native_mouse {
+            mapping_context.origin = native.client_origin().unwrap_or([f64::NAN; 2]);
+        }
+        let mapping = self.drawing.settings.mapping;
+        let mapping_changed = self.drawing.mapping_settings != Some(mapping);
+        let environment_changed =
+            mapping.enabled && self.drawing.mapping_context != mapping_context;
+        if mapping_changed || environment_changed {
+            self.finish_stroke();
+            self.drawing.incoming.clear();
+            self.drawing.mapping_settings = Some(mapping);
+        }
+        self.drawing.mapping_context = mapping_context;
+        self.drawing.anchor = canvas_rect.map(|r| [r.center().x as f64, r.center().y as f64]);
         let preferred = self.drawing.settings.backend;
-        let changed = self.native_input.applied != Some(preferred)
+        let changed = mapping_changed
+            || self.native_input.applied != Some(preferred)
             || std::mem::take(&mut self.native_input.retry);
         if changed {
             self.finish_stroke();
@@ -404,7 +454,9 @@ impl Drawer {
             self.drawing.pen_available =
                 native.effective() != drawer_core::pointer_input::Backend::Mouse;
             match native.drain(ctx.pixels_per_point() as f64) {
-                Ok(events) => self.drawing.gui = Some(events),
+                Ok(events) => {
+                    self.drawing.gui = Some(if environment_changed { vec![] } else { events })
+                }
                 Err(error) => {
                     self.drawing.controls.reset();
                     self.drawing.cancel();
@@ -521,6 +573,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
         eraser: Some(true),
         button: Some(false),
         buttons: None,
+        tablet: None,
     }
     .normalized();
     let features = PenFeatures {
@@ -667,6 +720,42 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn mapped_input_scale_change_finishes_once_and_held_pen_does_not_restart() {
+        use drawer_core::pointer_input::{Attributes, Event, Kind, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        app.workspaces.store.current.pointer.mapping.enabled = true;
+        frame(&ctx, &mut app, 1.0, vec![]);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let e = |phase| Event {
+            source: Source {
+                kind: Kind::Pen,
+                device: 1,
+                contact: 1,
+            },
+            phase,
+            position: [0.0; 2],
+            pressure: Some(1.0),
+            attributes: Attributes {
+                tablet: Some([0.5; 2]),
+                ..Default::default()
+            },
+            origin: Default::default(),
+        };
+        app.drawing.virtual_events(vec![e(Phase::Down)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(app.drawing.pending());
+        app.drawing.virtual_events(vec![e(Phase::Move)], true);
+        frame(&ctx, &mut app, 2.0, vec![]);
+        assert!(!app.drawing.pending());
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        let saved = app.documents[0].snapshot();
+        app.drawing
+            .virtual_events(vec![e(Phase::Move), e(Phase::Up)], true);
+        frame(&ctx, &mut app, 2.0, vec![]);
+        assert!(app.documents[0].snapshot() == saved);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
     }
     #[test]
     fn backend_change_and_retry_finish_pending_stroke_once_and_discard_old_input() {
@@ -892,6 +981,7 @@ mod tests {
             eraser: Some(true),
             button: None,
             buttons: None,
+            tablet: None,
         };
         app.drawing.incoming = vec![event(Phase::Down, a)];
         frame(&ctx, &mut app, 1.0, vec![]);
