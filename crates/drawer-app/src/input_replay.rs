@@ -8,7 +8,7 @@ pub(super) struct Outcome {
     pub record: Record,
     pub pixels: Vec<[u8; 4]>,
 }
-fn frame(ctx: &egui::Context, app: &mut Drawer, time: f64, events: Vec<egui::Event>) {
+pub(super) fn frame(ctx: &egui::Context, app: &mut Drawer, time: f64, events: Vec<egui::Event>) {
     let mut output = ctx.run_ui(
         egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(

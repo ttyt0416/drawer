@@ -108,7 +108,11 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Mouse and pen input").open(&mut open).show(ctx,|ui| {
+        egui::Window::new("Mouse and pen input").open(&mut open).vscroll(true).show(ctx,|ui| {
+            let a=crate::help::button(ui,"Apply device input","pointer-input");
+            let c=crate::help::button(ui,"Cancel device input","pointer-input");
+            apply=a.clicked();cancel=c.clicked();
+            #[cfg(test)] {self.native_input.buttons=[Some(a.rect),Some(c.rect)];}
             ui.label(&self.native_input.report);
             egui::ComboBox::from_label("Pen input backend").selected_text(format!("{:?}",draft.backend)).show_ui(ui,|ui| {
                 for backend in drawer_core::pointer_input::Backend::ALL {ui.selectable_value(&mut draft.backend,backend,format!("{backend:?}"));}
@@ -134,6 +138,12 @@ impl Drawer {
                 });
             });
             ui.label("The first drawing contact owns a stroke until release or cancellation.");
+            ui.collapsing("Touch and palm policy",|ui| {
+                crate::help::checkbox(ui,&mut draft.touch.gestures,"Two-finger pan, zoom and rotation","pointer-input");
+                crate::help::checkbox(ui,&mut draft.touch.finger_drawing,"Enable single-finger drawing","pointer-input");
+                crate::help::checkbox(ui,&mut draft.touch.reject_palms,"Reject OS-marked palms","pointer-input");
+                ui.label("Touch is ignored during pen contact. Switching from finger drawing to a gesture cancels its pending ink. After a gesture, view/settings change or pen contact, lift all fingers before drawing again. Original UI touch clicks remain available.");
+            });
             ui.collapsing("Tablet area, target and touch offset",|ui| {
                 use drawer_core::tablet_mapping::Target;
                 crate::help::checkbox(ui,&mut draft.mapping.enabled,"Map reported tablet area","pointer-input");
@@ -177,11 +187,7 @@ impl Drawer {
                 }
                 if let Some(value)=&mut s.stabilization { super::edit::slider(ui,value,0.0..=0.95,"Stabilization","pointer-input"); }
             }
-            ui.label("Touch and untyped contacts do not draw. Mouse ID 0 is the GUI aggregate; pen IDs are valid for this session only.");
-            let a=crate::help::button(ui,"Apply device input","pointer-input");
-            let c=crate::help::button(ui,"Cancel device input","pointer-input");
-            apply=a.clicked();cancel=c.clicked();
-            #[cfg(test)] {self.native_input.buttons=[Some(a.rect),Some(c.rect)];}
+            ui.label("Untyped contacts never draw. Finger drawing uses its explicit touch option. Mouse ID 0 is the GUI aggregate; pen IDs are valid for this session only.");
             if crate::help::button(ui,"Reset draft","pointer-input").clicked(){draft=Default::default();}
         });
         if !open || cancel {
@@ -359,6 +365,9 @@ mod tests {
         next.mapping.source.max = [0.9, 0.8];
         next.mapping.enabled = true;
         next.mapping.touch_offset = [2.0, -3.0];
+        next.touch.finger_drawing = true;
+        next.touch.gestures = false;
+        next.touch.reject_palms = false;
         next.mouse.enabled = false;
         next.pen.stabilization = Some(0.7);
         next.features.tilt_angle = true;

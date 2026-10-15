@@ -29,6 +29,9 @@ pub(super) struct Layout {
     cancel_button: Option<egui::Rect>,
 }
 impl Layout {
+    pub(super) fn viewport_layer(&self, id: u64) -> Option<egui::LayerId> {
+        self.views.get(&id)?.viewport_layer()
+    }
     pub(super) fn viewport(&self, id: u64) -> Option<egui::Rect> {
         self.views.get(&id)?.viewport_rect()
     }

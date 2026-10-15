@@ -27,6 +27,43 @@ pub fn tablet_point(point: [i32; 2], origin: [i32; 2], extent: [i32; 2]) -> Opti
         1.0 - (point[1] as f64 - origin[1] as f64) / extent[1] as f64,
     ])
 }
+pub fn touch_event(
+    device: u64,
+    id: u32,
+    flags: u32,
+    hundredths: [i32; 2],
+    client_offset: [f64; 2],
+    frame: u64,
+) -> Option<Event> {
+    if flags & 64 != 0 {
+        return None;
+    } // explicit TOUCHEVENTF_PEN is not a finger
+    let phase = if flags & 4 != 0 {
+        Phase::Up
+    } else if flags & 2 != 0 {
+        Phase::Down
+    } else if flags & 1 != 0 {
+        Phase::Move
+    } else {
+        return None;
+    };
+    Some(Event {
+        source: Source {
+            kind: Kind::Touch,
+            device,
+            contact: id as u64,
+        },
+        phase,
+        position: std::array::from_fn(|n| hundredths[n] as f64 / 100.0 + client_offset[n]),
+        pressure: None,
+        attributes: Attributes {
+            palm: Some(flags & 128 != 0),
+            touch_frame: Some(frame),
+            ..Default::default()
+        },
+        origin: Default::default(),
+    })
+}
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
@@ -107,6 +144,8 @@ pub fn attributes(p: &Packet, axes: Option<[Axis; 3]>) -> Attributes {
         button: Some(p.buttons != 0),
         buttons: Some(p.buttons),
         tablet: None,
+        palm: None,
+        touch_frame: None,
     }
     .normalized()
 }
@@ -185,6 +224,29 @@ impl Contact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explicit_touch_flags_signed_hundredths_identity_palm_and_native_batch() {
+        let e = touch_event(0x1234, 7, 2 | 128, [-1250, 2500], [50.0, -20.0], 99).unwrap();
+        assert_eq!(
+            e.source,
+            Source {
+                kind: Kind::Touch,
+                device: 0x1234,
+                contact: 7
+            }
+        );
+        assert_eq!(e.position, [37.5, 5.0]);
+        assert_eq!(e.phase, Phase::Down);
+        assert_eq!(e.pressure, None);
+        assert_eq!(e.attributes.palm, Some(true));
+        assert_eq!(e.attributes.touch_frame, Some(99));
+        assert!(touch_event(1, 1, 2 | 64, [0; 2], [0.0; 2], 0).is_none());
+        assert!(touch_event(1, 1, 8, [0; 2], [0.0; 2], 0).is_none());
+        assert_eq!(
+            touch_event(1, 1, 4, [0; 2], [0.0; 2], 0).unwrap().phase,
+            Phase::Up
+        );
+    }
     #[test]
     fn tablet_normalization_retains_subpixel_resolution_and_signed_axis_extent() {
         assert_eq!(

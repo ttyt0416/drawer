@@ -48,3 +48,4 @@ pub mod pen_controls;
 pub mod pointer_input;
 pub mod pressure;
 pub mod tablet_mapping;
+pub mod touch;

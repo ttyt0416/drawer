@@ -149,3 +149,6 @@ crates/drawer-app/src/acquisition.rs
 crates/drawer-platform/src/acquire.rs
 crates/drawer-platform/src/child_job.rs
 docs/process/acquisition.md
+crates/drawer-core/src/touch.rs
+crates/drawer-platform/src/touch.rs
+docs/process/touch.md

@@ -59,7 +59,7 @@ struct Session {
 pub(super) struct Drawing {
     active: Option<Session>,
     ownership: drawer_core::pointer_input::Ownership,
-    events: Vec<(drawer_core::pointer_input::Event, bool)>,
+    events: Vec<(drawer_core::touch::Effect, bool)>,
     pub incoming: Vec<drawer_core::pointer_input::Event>,
     pub gui: Option<Vec<drawer_core::pointer_input::Event>>,
     pub pen_available: bool,
@@ -75,8 +75,16 @@ pub(super) struct Drawing {
     pub mapping_context: drawer_core::tablet_mapping::Context,
     pub mapping_report: Option<String>,
     mapping_settings: Option<drawer_core::tablet_mapping::Settings>,
+    touch: drawer_core::touch::Controller,
+    touch_view: u64,
+    touch_layer: Option<egui::LayerId>,
+    touch_allowed: bool,
 }
 impl Drawing {
+    pub(super) fn mouse_view_input(&self) -> bool {
+        self.last_input != Some(drawer_core::pointer_input::Kind::Touch)
+            && !self.touch.gui_drag_blocked()
+    }
     pub(super) fn pen_cursor(&self, view: u64) -> Option<egui::Pos2> {
         if self.settings.controls.mode != drawer_core::pen_controls::Mode::Relative
             || self.last_input != Some(drawer_core::pointer_input::Kind::Pen)
@@ -128,7 +136,17 @@ impl Drawing {
         let anchor = self
             .anchor
             .unwrap_or([rect.center().x as f64, rect.center().y as f64]);
-        let mut events = self.controls.configure(self.settings.controls);
+        use drawer_core::touch::Effect;
+        let mut effects = self.touch.configure(self.settings.touch);
+        if !self.touch_allowed {
+            effects.extend(self.touch.clear_touches());
+        }
+        let mut events: Vec<_> = self
+            .controls
+            .configure(self.settings.controls)
+            .into_iter()
+            .map(Effect::Pointer)
+            .collect();
         let incoming: Vec<_> = self
             .incoming
             .drain(..)
@@ -139,6 +157,7 @@ impl Drawing {
             )
             .filter(|e| drawer_core::pointer_input::drawing_event_allowed(*e, self.pen_available))
             .collect();
+        let mut mapped_events = Vec::with_capacity(incoming.len());
         for event in incoming {
             self.last_input = Some(event.source.kind);
             let mapped = match self.mapping_context.map(self.settings.mapping, event) {
@@ -155,12 +174,31 @@ impl Drawing {
                     e
                 }
             };
-            events.extend(self.controls.event(mapped, bounds, anchor));
+            mapped_events.push(mapped);
+        }
+        let target = self.mapping_context.canvas;
+        let layer = self.touch_layer;
+        let allowed = self.touch_allowed;
+        effects.extend(self.touch.process(&mapped_events, self.touch_view, |e| {
+            let p = egui::pos2(e.position[0] as f32, e.position[1] as f32);
+            allowed && target.is_some_and(|r| r.contains(e.position)) && ctx.layer_id_at(p) == layer
+        }));
+        for effect in effects {
+            match effect {
+                Effect::Pointer(e) => events.extend(
+                    self.controls
+                        .event(e, bounds, anchor)
+                        .into_iter()
+                        .map(Effect::Pointer),
+                ),
+                Effect::Motion(m) => events.push(Effect::Motion(m)),
+            }
         }
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.controls.reset();
+        self.touch.clear_touches();
         self.ownership.clear();
         if let Some(session) = self.active.take() {
             if let Some(doc) = documents
@@ -211,7 +249,9 @@ impl Drawing {
     }
     fn receive(&mut self, index: usize, doc: &mut Document) {
         use drawer_core::pointer_input::Decision;
-        let event = self.events[index].0;
+        let drawer_core::touch::Effect::Pointer(event) = self.events[index].0 else {
+            return;
+        };
         let pressure = event.pressure_value();
         self.events[index].1 = true;
         match self.ownership.receive(event, self.settings) {
@@ -246,6 +286,7 @@ impl Drawing {
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         }) {
             self.controls.reset();
+            self.touch.reset();
             self.cancel();
             self.events.clear();
             return;
@@ -261,6 +302,7 @@ impl Drawing {
         }
         if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.controls.reset();
+            self.touch.clear_touches();
             self.cancel();
             self.events.clear();
             ctx.input_mut(|i| {
@@ -269,6 +311,9 @@ impl Drawing {
             return;
         }
         for n in 0..self.events.len() {
+            if matches!(self.events[n].0, drawer_core::touch::Effect::Motion(_)) {
+                break;
+            }
             let Some(id) = self.active.as_ref().map(|s| s.stroke.document) else {
                 break;
             };
@@ -301,7 +346,7 @@ impl Drawing {
     ) {
         use drawer_core::pointer_input::{Decision, Phase};
         let rect = response.rect;
-        let projection = Projection {
+        let mut projection = Projection {
             view: doc.view,
             size: [doc.width as f64, doc.height as f64],
             center: [rect.center().x as f64, rect.center().y as f64],
@@ -322,7 +367,32 @@ impl Drawing {
             if self.events[n].1 {
                 continue;
             }
-            let event = self.events[n].0;
+            let event = match self.events[n].0 {
+                drawer_core::touch::Effect::Pointer(e) => e,
+                drawer_core::touch::Effect::Motion(m) => {
+                    if m.view != view {
+                        continue;
+                    }
+                    self.events[n].1 = true;
+                    if ui.is_enabled()
+                        && self.touch_allowed
+                        && self.active_view().is_none_or(|id| id == view)
+                    {
+                        self.finish_document(doc);
+                        if let Err(e) = m.apply(
+                            &mut doc.view,
+                            projection.size,
+                            projection.center,
+                            projection.ppp,
+                        ) {
+                            self.error = Some(e);
+                        }
+                        projection.view = doc.view;
+                        ui.ctx().request_repaint();
+                    }
+                    continue;
+                }
+            };
             if self.pending() {
                 if self.active_view() == Some(view) {
                     self.receive(n, doc);
@@ -424,6 +494,32 @@ impl Drawer {
             mapping_context.origin = native.client_origin().unwrap_or([f64::NAN; 2]);
         }
         let mapping = self.drawing.settings.mapping;
+        let touch_view = target_view.unwrap_or(0);
+        let touch_changed = self.drawing.touch_view != touch_view
+            || self.drawing.mapping_context.origin != mapping_context.origin
+            || self.drawing.mapping_context.scale != mapping_context.scale
+            || self.drawing.mapping_context.canvas != mapping_context.canvas;
+        if touch_changed {
+            self.drawing.touch.clear_touches();
+            if self
+                .drawing
+                .ownership
+                .owner()
+                .is_some_and(|s| s.kind == drawer_core::pointer_input::Kind::Touch)
+            {
+                self.drawing.cancel();
+            }
+        }
+        self.drawing.touch_view = touch_view;
+        self.drawing.touch_layer = if !self.simple_view
+            && self.workspaces.store.current.layout.arrangement
+                != drawer_core::layout::Arrangement::Tabs
+        {
+            target_view.and_then(|id| self.layout.viewport_layer(id))
+        } else {
+            self.canvas_view.viewport_layer()
+        };
+        self.drawing.touch_allowed = !self.tool_shortcuts_blocked(ctx);
         let mapping_changed = self.drawing.mapping_settings != Some(mapping);
         let environment_changed =
             mapping.enabled && self.drawing.mapping_context != mapping_context;
@@ -449,7 +545,7 @@ impl Drawer {
                 native.configure(preferred);
             }
             native.set_focus(ctx.input(|i| i.focused));
-            self.native_input.report = native.report();
+            self.native_input.report = format!("{} · {}", native.report(), native.touch_report());
             self.drawing.native_mouse = true;
             self.drawing.pen_available =
                 native.effective() != drawer_core::pointer_input::Backend::Mouse;
@@ -459,6 +555,7 @@ impl Drawer {
                 }
                 Err(error) => {
                     self.drawing.controls.reset();
+                    self.drawing.touch.reset();
                     self.drawing.cancel();
                     self.drawing.incoming.clear();
                     self.drawing.gui = Some(vec![]);
@@ -467,6 +564,18 @@ impl Drawer {
             }
         }
         self.drawing.prepare(ctx);
+        if ctx.input(|i| {
+            !i.focused
+                || i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::WindowFocused(false)))
+        }) {
+            self.drawing.controls.reset();
+            self.drawing.touch.reset();
+            self.drawing.cancel();
+            self.drawing.events.clear();
+            return;
+        }
         if self.tool_shortcuts_blocked(ctx) {
             self.finish_stroke();
         } else {
@@ -479,6 +588,175 @@ impl Drawer {
     }
 }
 
+pub(super) fn smoke_touch() -> Result<(), String> {
+    use drawer_core::pointer_input::{Attributes, Event, Kind, Phase, Source};
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.create_canvas(CanvasSpec {
+        width: 64,
+        height: 48,
+        dpi: 300.0,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    app.simple_view = true;
+    app.panels.settings.brush_size = 4.0;
+    app.documents[0].mark_saved("touch-virtual.drawer".into());
+    crate::input_replay::frame(&ctx, &mut app, 0.0, vec![]);
+    crate::input_replay::frame(&ctx, &mut app, 0.01, vec![]);
+    let rect = app
+        .canvas_view
+        .viewport_rect()
+        .ok_or("Touch canvas unavailable")?;
+    let p = [rect.center().x as f64, rect.center().y as f64];
+    let event = |id, phase, delta: [f64; 2], frame| Event {
+        source: Source {
+            kind: Kind::Touch,
+            device: 99,
+            contact: id,
+        },
+        phase,
+        position: [p[0] + delta[0], p[1] + delta[1]],
+        pressure: None,
+        attributes: Attributes {
+            touch_frame: Some(frame),
+            ..Default::default()
+        },
+        origin: Default::default(),
+    };
+    let mut time = 0.02;
+    let step = |app: &mut Drawer, time: &mut f64, events| {
+        app.drawing.virtual_events(events, true);
+        crate::input_replay::frame(&ctx, app, *time, vec![]);
+        *time += 0.01;
+    };
+    let original = app.documents[0].snapshot();
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(1, Phase::Down, [-10.0, 0.0], 1),
+            event(2, Phase::Down, [10.0, 0.0], 1),
+        ],
+    );
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(1, Phase::Move, [0.0, -20.0], 2),
+            event(2, Phase::Move, [0.0, 20.0], 2),
+        ],
+    );
+    let view = app.documents[0].view;
+    if (view.zoom - 2.0).abs() > 1e-6
+        || (view.angle - 90.0).abs() > 1e-6
+        || app.documents[0].snapshot() != original
+        || app.documents[0].dirty
+        || app.documents[0].history_counts() != (0, 0)
+    {
+        return Err(format!(
+            "Touch view-only manipulation failed: zoom {}, angle {}",
+            view.zoom, view.angle
+        ));
+    }
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(1, Phase::Up, [0.0, -20.0], 3),
+            event(2, Phase::Up, [0.0, 20.0], 3),
+        ],
+    );
+    app.workspaces.store.current.pointer.touch.finger_drawing = true;
+    step(&mut app, &mut time, vec![]);
+    step(
+        &mut app,
+        &mut time,
+        vec![event(1, Phase::Down, [0.0; 2], 4)],
+    );
+    if !app.drawing.pending() {
+        return Err("Enabled finger drawing did not start".into());
+    }
+    let mut pen = event(3, Phase::Down, [8.0, 0.0], 5);
+    pen.source.kind = Kind::Pen;
+    pen.attributes = Default::default();
+    step(&mut app, &mut time, vec![pen]);
+    if app.drawing.ownership.owner() != Some(pen.source)
+        || app.documents[0].history_counts() != (0, 0)
+    {
+        return Err("Pen did not discard pending finger ink".into());
+    }
+    let mut palm = event(2, Phase::Down, [0.0; 2], 6);
+    palm.attributes.palm = Some(true);
+    step(&mut app, &mut time, vec![palm]);
+    pen.phase = Phase::Up;
+    step(&mut app, &mut time, vec![pen]);
+    if app.documents[0].history_counts() != (1, 0) {
+        return Err("Pen/finger transition did not make one pen edit".into());
+    }
+    let painted = app.documents[0].snapshot();
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(1, Phase::Move, [0.0; 2], 7),
+            event(1, Phase::Up, [0.0; 2], 8),
+        ],
+    );
+    step(
+        &mut app,
+        &mut time,
+        vec![event(4, Phase::Down, [0.0; 2], 9)],
+    );
+    app.drawing.virtual_events(vec![], true);
+    crate::input_replay::frame(
+        &ctx,
+        &mut app,
+        time,
+        vec![egui::Event::WindowFocused(false)],
+    );
+    time += 0.01;
+    if app.drawing.pending() || app.documents[0].snapshot() != painted {
+        return Err("Focus loss committed finger preview".into());
+    }
+    crate::input_replay::frame(&ctx, &mut app, time, vec![egui::Event::WindowFocused(true)]);
+    time += 0.01;
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(4, Phase::Move, [-8.0, 0.0], 10),
+            event(4, Phase::Up, [-8.0, 0.0], 11),
+        ],
+    );
+    if app.documents[0].snapshot() != painted {
+        return Err("Held finger restarted after focus loss".into());
+    }
+    step(
+        &mut app,
+        &mut time,
+        vec![
+            event(4, Phase::Down, [-8.0, 0.0], 12),
+            event(4, Phase::Up, [-8.0, 0.0], 13),
+        ],
+    );
+    if app.documents[0].history_counts() != (2, 0) {
+        return Err(format!(
+            "Fresh finger stroke was not one edit: {:?}, focused {}",
+            app.documents[0].history_counts(),
+            ctx.input(|i| i.focused)
+        ));
+    }
+    let after = app.documents[0].snapshot();
+    if !app.documents[0].undo()
+        || app.documents[0].snapshot() != painted
+        || !app.documents[0].redo()
+        || app.documents[0].snapshot() != after
+    {
+        return Err("Finger stroke undo/redo failed".into());
+    }
+    Ok(())
+}
 pub(super) fn smoke_defaults() -> Result<(), String> {
     use drawer_core::{
         brush_cursor::Shape,
@@ -574,6 +852,8 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
         button: Some(false),
         buttons: None,
         tablet: None,
+        palm: None,
+        touch_frame: None,
     }
     .normalized();
     let features = PenFeatures {
@@ -663,6 +943,10 @@ pub(super) fn smoke_painting() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn touch_gestures_finger_ink_pen_priority_and_focus_use_the_actual_pipeline() {
+        smoke_touch().unwrap();
+    }
     use drawer_core::{
         brush_cursor::Mode,
         document::{Background, CanvasSpec},
@@ -720,6 +1004,53 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn completed_finger_stroke_precedes_gesture_in_the_same_input_batch() {
+        use drawer_core::pointer_input::{Attributes, Event, Kind, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        app.workspaces.store.current.pointer.touch.finger_drawing = true;
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let initial = app.documents[0].snapshot();
+        let event = |id, phase, p: Point, batch| {
+            let pos = point(&ctx, &app, p);
+            Event {
+                source: Source {
+                    kind: Kind::Touch,
+                    device: 9,
+                    contact: id,
+                },
+                phase,
+                position: [pos.x as f64, pos.y as f64],
+                pressure: None,
+                attributes: Attributes {
+                    touch_frame: Some(batch),
+                    ..Default::default()
+                },
+                origin: Default::default(),
+            }
+        };
+        let events = vec![
+            event(1, Phase::Down, [20.5, 20.5], 1),
+            event(1, Phase::Up, [20.5, 20.5], 1),
+            event(2, Phase::Down, [10.5, 30.5], 2),
+            event(3, Phase::Down, [30.5, 30.5], 2),
+            event(2, Phase::Move, [20.5, 20.5], 3),
+            event(3, Phase::Move, [20.5, 40.5], 3),
+        ];
+        app.drawing.virtual_events(events, true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(
+            app.documents[0].layers[0].pixels[20 * 64 + 20],
+            [180, 20, 40, 255]
+        );
+        assert_eq!(app.documents[0].layers[0].pixels[30 * 64 + 10], [0; 4]);
+        let view = app.documents[0].view;
+        assert!((view.angle - 90.0).abs() < 1e-6);
+        assert!(app.documents[0].undo());
+        assert!(app.documents[0].snapshot() == initial);
+        assert_eq!(app.documents[0].view, view);
     }
     #[test]
     fn mapped_input_scale_change_finishes_once_and_held_pen_does_not_restart() {
@@ -982,6 +1313,8 @@ mod tests {
             button: None,
             buttons: None,
             tablet: None,
+            palm: None,
+            touch_frame: None,
         };
         app.drawing.incoming = vec![event(Phase::Down, a)];
         frame(&ctx, &mut app, 1.0, vec![]);

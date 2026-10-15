@@ -48,3 +48,7 @@ The receiving root client's physical screen origin and egui pixels-per-point con
 A bounded physical-pixel touch offset is divided by receiving scale and applied only to identified touch. It does not enable finger drawing or turn an unknown input into a pen. The settings window's mouse preview explicitly supplies virtual UV, calculates through the same mapper and changes no document. The independent replay has a tablet-area sample for pixel/history verification. Apply/Cancel, backup and restart include all mapping settings; invalid zero areas and nonfinite values are rejected. These are local application mappings; physical devices/driver mapping and touch calibration remain unverified.
 
 Primary device-area API: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getpointerdevicerects
+
+## Known touch and gestures (050)
+
+Known native touches use an independent root-window WM_TOUCH adapter; it remains attached when the selected pen backend changes. Unknown egui touch and pressure-only contacts are not reclassified. Optional palm flags and explicit native batch IDs accompany the existing source/phase coordinates. Same-device contact identity and complete native-batch grouping drive two-finger view-only pan/zoom/rotation, with explicit single-finger drawing and OS-palm rejection settings. See touch.md for lifecycle, priority, callback ownership and verification limits. Touch-offset correction from item 048 runs before these policies. Untyped contacts still never draw.

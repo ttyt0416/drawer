@@ -17,6 +17,7 @@ pub struct CanvasView {
     pub compact_controls: bool,
     pub dock_navigator: bool,
     last_viewport: Option<egui::Rect>,
+    last_layer: Option<egui::LayerId>,
     pub brush_shape: drawer_core::brush_cursor::Shape,
     pub first_point: Option<(u64, [f64; 2])>,
     pub drag_pixels: f64,
@@ -58,6 +59,9 @@ impl CanvasView {
     pub(super) fn viewport_rect(&self) -> Option<egui::Rect> {
         self.last_viewport
     }
+    pub(super) fn viewport_layer(&self) -> Option<egui::LayerId> {
+        self.last_layer
+    }
     pub fn icon(&self, n: usize) -> egui::TextureId {
         self.tool_icons[n].id()
     }
@@ -80,6 +84,7 @@ impl CanvasView {
             compact_controls: false,
             dock_navigator: false,
             last_viewport: None,
+            last_layer: None,
             brush_shape: Default::default(),
             first_point: None,
             drag_pixels: 4.0,
@@ -214,17 +219,22 @@ impl CanvasView {
             egui::Sense::click_and_drag(),
         );
         self.last_viewport = Some(rect);
+        self.last_layer = Some(response.layer_id);
         crate::help::tag(ui.ctx(), &response, "tools");
         #[cfg(test)]
         {
             self.viewport = Some(rect);
         }
         let center = [rect.center().x as f64, rect.center().y as f64];
+        let mouse_view_input = input_active && paint.drawing.mouse_view_input();
+        if !mouse_view_input {
+            self.area_start = None;
+        }
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             self.area_start = None;
             self.area_zoom = false;
         }
-        if input_active && self.area_zoom && !ui.input(|i| i.key_down(egui::Key::Space)) {
+        if mouse_view_input && self.area_zoom && !ui.input(|i| i.key_down(egui::Key::Space)) {
             if response.drag_started_by(egui::PointerButton::Primary) {
                 self.area_start = ui.input(|i| i.pointer.press_origin());
             }
@@ -258,7 +268,7 @@ impl CanvasView {
                     Some("Drag a region larger than one document pixel in each direction.".into());
             }
         }
-        if input_active
+        if mouse_view_input
             && (response.dragged_by(egui::PointerButton::Middle)
                 || (response.dragged_by(egui::PointerButton::Primary)
                     && ui.input(|i| i.key_down(egui::Key::Space))))

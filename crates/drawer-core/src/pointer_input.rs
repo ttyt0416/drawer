@@ -80,6 +80,11 @@ pub struct Attributes {
     /// Raw tablet position normalized to its full device area; no screen guess.
     #[serde(default)]
     pub tablet: Option<[f64; 2]>,
+    #[serde(default)]
+    pub palm: Option<bool>,
+    /// Explicit native touch-batch identity, not a timestamp grouping heuristic.
+    #[serde(default)]
+    pub touch_frame: Option<u64>,
 }
 impl Attributes {
     pub fn normalized(self) -> Self {
@@ -194,6 +199,8 @@ pub struct Settings {
     pub controls: crate::pen_controls::Settings,
     #[serde(default)]
     pub mapping: crate::tablet_mapping::Settings,
+    #[serde(default)]
+    pub touch: crate::touch::Settings,
 }
 impl Settings {
     pub fn valid(self) -> bool {
@@ -207,6 +214,10 @@ impl Settings {
         match kind {
             Kind::Mouse => Some(self.mouse),
             Kind::Pen => Some(self.pen),
+            Kind::Touch => Some(DeviceSettings {
+                enabled: self.touch.finger_drawing,
+                stabilization: None,
+            }),
             _ => None,
         }
     }
@@ -292,6 +303,8 @@ mod tests {
             button: Some(true),
             buttons: None,
             tablet: None,
+            palm: None,
+            touch_frame: None,
         };
         e.source = Source::MOUSE;
         assert_eq!(e.pressure_value(), 1.0);
@@ -339,6 +352,8 @@ mod tests {
             button: Some(true),
             buttons: None,
             tablet: None,
+            palm: None,
+            touch_frame: None,
         }
         .normalized();
         assert_eq!(

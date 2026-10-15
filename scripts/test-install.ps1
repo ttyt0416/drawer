@@ -95,6 +95,7 @@ try {
     if ($smokeResult -notmatch 'pen_click_controls=true') { throw '펜 임계값/상대 좌표/번호 버튼 픽셀 시험 실패' }
     if ($smokeResult -notmatch 'tablet_mapping=true') { throw '태블릿 영역/누락/영역 이탈 픽셀 시험 실패' }
     if ($smokeResult -notmatch 'local_acquisition=true') { throw '로컬 취득/보조 프로세스 취소/임시 정리 시험 실패' }
+    if ($smokeResult -notmatch 'touch_gestures=true') { throw '터치 제스처/펜 우선/포커스 취소 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

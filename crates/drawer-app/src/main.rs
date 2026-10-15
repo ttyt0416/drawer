@@ -1169,6 +1169,10 @@ impl eframe::App for Drawer {
                 if pointer_input::smoke_mapping().is_err() {
                     fail_smoke();
                 }
+                if let Err(e) = drawing::smoke_touch() {
+                    eprintln!("Touch pipeline: {e}");
+                    fail_smoke();
+                }
                 let acquisition_work = self
                     .storage
                     .as_ref()
@@ -1188,7 +1192,7 @@ impl eframe::App for Drawer {
                 if self
                     .native_mouse
                     .as_ref()
-                    .is_none_or(|input| !input.attached())
+                    .is_none_or(|input| !input.attached() || !input.touch_available())
                     || drawing::smoke_dedup().is_err()
                 {
                     fail_smoke();
@@ -1216,7 +1220,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

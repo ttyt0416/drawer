@@ -18,6 +18,14 @@ struct State {
     failure: Option<String>,
     #[cfg(windows)]
     driver: Option<win::Driver>,
+    #[cfg(windows)]
+    touch: Option<touch::Hook>,
+    #[cfg(windows)]
+    touch_contacts: Vec<Event>,
+    #[cfg(windows)]
+    touch_frame: u64,
+    #[cfg(windows)]
+    touch_error: Option<String>,
     // Last: release native context and DLL before the window's owner.
     #[cfg(windows)]
     owner: Option<std::sync::Arc<winit::window::Window>>,
@@ -151,6 +159,9 @@ mod packets;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod acquire;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod touch;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod win;

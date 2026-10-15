@@ -47,7 +47,7 @@ impl Drop for Module {
         let _ = unsafe { FreeLibrary(self.0) };
     }
 }
-fn client(window: isize, point: [i32; 2]) -> Result<[f64; 2], String> {
+pub(super) fn client(window: isize, point: [i32; 2]) -> Result<[f64; 2], String> {
     let mut p = POINT {
         x: point[0],
         y: point[1],
@@ -252,6 +252,8 @@ impl Pointer {
                     button: Some(p.penFlags & 1 != 0),
                     buttons: Some(u32::from(p.penFlags & 1 != 0)),
                     tablet,
+                    palm: None,
+                    touch_frame: None,
                 }
                 .normalized(),
                 origin: Origin::Unmarked,
@@ -586,7 +588,7 @@ impl Input {
         };
         let old = {
             let mut s = self.state.borrow_mut();
-            let old = s.driver.take();
+            let old = (s.driver.take(), s.touch.take(), s.owner.take());
             s.window = handle.hwnd.get();
             s.owner = Some(window.clone());
             s.requested = None;
@@ -594,12 +596,36 @@ impl Input {
             old
         };
         drop(old);
+        let hook = super::touch::Hook::new(handle.hwnd.get(), Rc::downgrade(&self.state));
+        let mut s = self.state.borrow_mut();
+        s.touch_contacts.clear();
+        match hook {
+            Ok(hook) => {
+                s.touch = Some(hook);
+                s.touch_error = None;
+            }
+            Err(e) => s.touch_error = Some(e),
+        }
         Ok(())
+    }
+    pub fn touch_available(&self) -> bool {
+        self.state.borrow().touch.is_some()
+    }
+    pub fn touch_report(&self) -> String {
+        let s = self.state.borrow();
+        match &s.touch_error {
+            Some(e) => format!("Touch adapter: {e}"),
+            None if s.touch.is_some() => {
+                "Touch adapter attached; physical touch validation pending".into()
+            }
+            None => "Touch adapter unavailable".into(),
+        }
     }
     pub fn configure(&self, preferred: Backend) {
         let (window, old) = {
             let mut s = self.state.borrow_mut();
             s.queue.clear();
+            s.touch_contacts.clear();
             s.down = [false; 3];
             s.blocked = false;
             s.overflow = false;

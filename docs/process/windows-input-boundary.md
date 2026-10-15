@@ -14,3 +14,5 @@ Primary references:
 - https://docs.rs/winit/0.30.13/winit/platform/windows/trait.EventLoopBuilderExtWindows.html#tymethod.with_msg_hook
 
 The isolated local acquisition/child-job Windows modules are described in acquisition.md and are invoked only through explicit device commands. They do not share drawing pointers or hooks.
+
+WM_TOUCH is read inside a root-window-only subclass so sent and queued touch messages are copied before winit closes their borrowed touch handle. It never closes that handle or consumes the original message. The subclass owns a stable Weak context and is removed before the retained window owner drops; see touch.md. All drawing effects preserve dispatch order, including view manipulation between pointer strokes.
