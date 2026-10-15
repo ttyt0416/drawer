@@ -32,6 +32,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                     phase,
                     position: [pos.x as f64, pos.y as f64],
                     pressure: force.map(|p| p as f64),
+                    attributes: Default::default(),
                 });
                 if matches!(phase, Phase::Down | Phase::Move)
                     && matches!(raw.get(n+1),Some(egui::Event::PointerMoved(p)) if *p==pos)
@@ -54,6 +55,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                 phase: Phase::Move,
                 position: [p.x as f64, p.y as f64],
                 pressure: None,
+                attributes: Default::default(),
             }),
             egui::Event::PointerButton {
                 pos,
@@ -65,12 +67,14 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                 phase: if pressed { Phase::Down } else { Phase::Up },
                 position: [pos.x as f64, pos.y as f64],
                 pressure: None,
+                attributes: Default::default(),
             }),
             egui::Event::PointerGone => result.push(Event {
                 source,
                 phase: Phase::Cancel,
                 position: [0.0; 2],
                 pressure: None,
+                attributes: Default::default(),
             }),
             _ => {}
         }
@@ -85,6 +89,8 @@ struct ToolState {
     phase: Option<Phase>,
     contact: u64,
     down: bool,
+    buttons: std::collections::HashSet<octotablet::tool::ButtonID>,
+    buttons_supported: bool,
 }
 #[derive(Default)]
 pub(super) struct Native {
@@ -184,6 +190,7 @@ impl Native {
                             phase: Phase::Cancel,
                             position: [0.0; 2],
                             pressure: None,
+                            attributes: Default::default(),
                         });
                     }
                     continue;
@@ -199,9 +206,19 @@ impl Native {
                         phase: None,
                         contact: 0,
                         down: false,
+                        buttons: Default::default(),
+                        buttons_supported: false,
                     }
                 });
                 match event {
+                    ToolEvent::Button { button_id, pressed } => {
+                        s.buttons_supported = true;
+                        if pressed {
+                            s.buttons.insert(button_id);
+                        } else {
+                            s.buttons.remove(&button_id);
+                        }
+                    }
                     ToolEvent::Down => {
                         self.next += 1;
                         s.contact = self.next;
@@ -214,6 +231,7 @@ impl Native {
                     }
                     ToolEvent::Pose(pose) => s.pose = Some(pose),
                     ToolEvent::Out => {
+                        s.buttons.clear();
                         if s.down {
                             s.phase = Some(Phase::Cancel);
                             s.down = false;
@@ -233,6 +251,18 @@ impl Native {
                                 phase,
                                 position: pose.position.map(|p| p as f64 / zoom),
                                 pressure: pose.pressure.get().map(|p| p as f64),
+                                attributes: drawer_core::pointer_input::Attributes {
+                                    tilt: pose.tilt.map(|v| v.map(|n| n as f64)),
+                                    eraser: match tool.tool_type {
+                                        Some(Type::Eraser) => Some(true),
+                                        Some(
+                                            Type::Pen | Type::Pencil | Type::Brush | Type::Airbrush,
+                                        ) => Some(false),
+                                        _ => None,
+                                    },
+                                    button: s.buttons_supported.then_some(!s.buttons.is_empty()),
+                                }
+                                .normalized(),
                             };
                             if event.valid() && output.len() < 65536 {
                                 output.push(event);
@@ -267,7 +297,12 @@ impl Drawer {
         egui::Window::new("Mouse and pen input").open(&mut open).show(ctx,|ui| {
             ui.label(&self.native_input.report);
             ui.label("The first drawing contact owns a stroke until release or cancellation.");
+            crate::help::checkbox(ui,&mut draft.features.tilt_angle,"Use supported pen tilt for tip angle","pointer-input");
+            crate::help::checkbox(ui,&mut draft.features.eraser,"Start inverted pen strokes as eraser","pointer-input");
+            crate::help::checkbox(ui,&mut draft.features.button_eraser,"Start as eraser while any reported pen button is down","pointer-input");
+            ui.label("Eraser actions keep the current brush shape and pressure. The pen backend may include the nib among its buttons; button mapping is off by default.");
             if let Some(source)=self.drawing.last_source { ui.label(format!("Last drawing: {:?}, session device {}, contact {}",source.kind,source.device,source.contact)); }
+            ui.label(format!("Reported tilt {:?}; pen eraser {:?}; pen button {:?}",self.drawing.last_attributes.tilt,self.drawing.last_attributes.eraser,self.drawing.last_attributes.button));
             for (label,s) in [("Mouse",&mut draft.mouse),("Pen",&mut draft.pen)] {
                 ui.separator();ui.label(label);
                 crate::help::checkbox(ui,&mut s.enabled,"Enable drawing","pointer-input");
@@ -329,6 +364,9 @@ mod tests {
         let mut next = initial;
         next.mouse.enabled = false;
         next.pen.stabilization = Some(0.7);
+        next.features.tilt_angle = true;
+        next.features.eraser = false;
+        next.features.button_eraser = true;
         app.native_input.open = true;
         app.native_input.draft = Some(next);
         frame(&ctx, &mut app, vec![]);

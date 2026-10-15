@@ -23,6 +23,22 @@ impl Projection {
             )
             .map(|v| (v * 1024.0).round() / 1024.0)
     }
+    fn tilt_angle(self, tilt: Option<Point>) -> f64 {
+        let Some(tilt) = tilt else {
+            return 0.0;
+        };
+        let vector = tilt.map(f64::sin);
+        if vector[0].hypot(vector[1]) < 1e-9 {
+            return 0.0;
+        }
+        let p = self
+            .view
+            .screen_to_document([0.0; 2], self.size, self.center, self.ppp);
+        let q = self
+            .view
+            .screen_to_document(vector, self.size, self.center, self.ppp);
+        (q[1] - p[1]).atan2(q[0] - p[0]).to_degrees()
+    }
 }
 pub(super) struct PaintInput<'a> {
     pub drawing: &'a mut Drawing,
@@ -36,6 +52,8 @@ struct Session {
     projection: Projection,
     last_screen: egui::Pos2,
     last_pressure: f64,
+    last_attributes: drawer_core::pointer_input::Attributes,
+    tilt_angle: bool,
 }
 #[derive(Default)]
 pub(super) struct Drawing {
@@ -46,6 +64,7 @@ pub(super) struct Drawing {
     pub settings: drawer_core::pointer_input::Settings,
     pub pressure: drawer_core::pressure::Settings,
     pub last_source: Option<drawer_core::pointer_input::Source>,
+    pub last_attributes: drawer_core::pointer_input::Attributes,
     pub error: Option<String>,
 }
 impl Drawing {
@@ -101,14 +120,27 @@ impl Drawing {
             self.error = Some(e);
         }
     }
-    fn sample(&mut self, doc: &Document, pos: egui::Pos2, pressure: f64) {
+    fn sample(
+        &mut self,
+        doc: &Document,
+        pos: egui::Pos2,
+        pressure: f64,
+        attributes: drawer_core::pointer_input::Attributes,
+    ) {
+        self.last_attributes = attributes.normalized();
         if let Some(s) = &mut self.active {
             s.last_screen = pos;
             s.last_pressure = pressure;
-            if let Err(e) = s
-                .stroke
-                .sample_pressure(doc, s.projection.point(pos), pressure)
-            {
+            s.last_attributes = attributes.normalized();
+            let angle = if s.tilt_angle {
+                s.projection.tilt_angle(s.last_attributes.tilt)
+            } else {
+                0.0
+            };
+            if let Err(e) = s.stroke.set_angle_offset(angle).and_then(|_| {
+                s.stroke
+                    .sample_pressure(doc, s.projection.point(pos), pressure)
+            }) {
                 self.error = Some(e);
                 self.cancel();
             }
@@ -128,12 +160,14 @@ impl Drawing {
                 doc,
                 egui::pos2(event.position[0] as f32, event.position[1] as f32),
                 pressure,
+                event.attributes,
             ),
             Decision::Finish => {
                 self.sample(
                     doc,
                     egui::pos2(event.position[0] as f32, event.position[1] as f32),
                     pressure,
+                    event.attributes,
                 );
                 self.finish_document(doc);
             }
@@ -219,7 +253,8 @@ impl Drawing {
             s.projection = projection;
             let pos = s.last_screen;
             let pressure = s.last_pressure;
-            self.sample(doc, pos, pressure);
+            let attributes = s.last_attributes;
+            self.sample(doc, pos, pressure, attributes);
         }
         for n in 0..self.events.len() {
             if self.events[n].1 {
@@ -246,6 +281,10 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
+            style.tip = self
+                .settings
+                .features
+                .tip(event.source.kind, event.attributes, style.tip);
             if let Some(value) = self
                 .settings
                 .for_kind(event.source.kind)
@@ -265,13 +304,16 @@ impl Drawing {
                         projection,
                         last_screen: pos,
                         last_pressure: 1.0,
+                        last_attributes: Default::default(),
+                        tilt_angle: event.source.kind == drawer_core::pointer_input::Kind::Pen
+                            && self.settings.features.tilt_angle,
                     });
                     let pressure = if event.source.kind == drawer_core::pointer_input::Kind::Mouse {
                         1.0
                     } else {
                         event.pressure.unwrap_or(1.0)
                     };
-                    self.sample(doc, pos, pressure);
+                    self.sample(doc, pos, pressure, event.attributes);
                 }
                 Err(e) => {
                     self.error = Some(e);
@@ -305,6 +347,57 @@ impl Drawer {
     }
 }
 
+pub(super) fn smoke_attributes() -> Result<(), String> {
+    use drawer_core::{
+        brush_cursor::Shape,
+        pointer_input::{Attributes, Kind, PenFeatures},
+    };
+    let a = Attributes {
+        tilt: Some([0.0, 0.5]),
+        eraser: Some(true),
+        button: Some(false),
+    }
+    .normalized();
+    let features = PenFeatures {
+        tilt_angle: true,
+        eraser: true,
+        button_eraser: true,
+    };
+    let mut d = Document::create(
+        CanvasSpec {
+            width: 16,
+            height: 16,
+            dpi: 300.0,
+            background: Background::Color([80, 90, 100]),
+        },
+        4096,
+    )
+    .map_err(|e| e.to_string())?;
+    let before = d.snapshot();
+    let style = Style {
+        shape: Shape {
+            size: 4.0,
+            aspect: 0.25,
+            angle: 0.0,
+        },
+        tip: features.tip(Kind::Pen, a, BrushTip::Pen),
+        color: [20, 40, 80, 255],
+        smoothing: 0.0,
+        pressure: Default::default(),
+    };
+    let mut stroke = Stroke::begin(&d, 0, style)?;
+    stroke.set_angle_offset(90.0)?;
+    stroke.sample_pressure(&d, [8.5, 8.5], 1.0)?;
+    if stroke.shape().angle != 90.0
+        || !stroke.commit(&mut d)?
+        || d.composite_pixel(8, 8)[3] != 0
+        || !d.undo()
+        || d.snapshot() != before
+    {
+        return Err("Synthetic pen attribute rendering failed".into());
+    }
+    Ok(())
+}
 pub(super) fn smoke_painting() -> Result<(), String> {
     use drawer_core::{
         brush_cursor::Shape,
@@ -426,6 +519,7 @@ mod tests {
             phase,
             position: [pos.x as f64, pos.y as f64],
             pressure: Some(0.5),
+            attributes: Default::default(),
         };
         app.workspaces.store.current.pointer.pen.stabilization = Some(0.4);
         app.drawing.incoming = vec![event(pen, Phase::Down, p)];
@@ -515,6 +609,7 @@ mod tests {
                 phase,
                 position: [p.x as f64, p.y as f64],
                 pressure: Some(pressure),
+                attributes: Default::default(),
             };
             app.drawing.incoming = vec![event(Phase::Down)];
             frame(&ctx, &mut app, 1.0, vec![]);
@@ -558,6 +653,116 @@ mod tests {
                 ],
             );
             assert_eq!(app.documents[0].composite_pixel(40, 30)[3], 255);
+        }
+    }
+    #[test]
+    fn pen_tilt_eraser_button_release_missing_attributes_and_view_transform() {
+        use drawer_core::pointer_input::{Attributes, Event, Kind, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        app.workspaces.store.current.pointer.features.tilt_angle = true;
+        app.panels.settings.brush_size = 12.0;
+        app.panels.settings.brush_aspect = 0.25;
+        app.documents[0].layers[0].pixels.fill([90, 100, 110, 255]);
+        let before = app.documents[0].snapshot();
+        let p = point(&ctx, &app, [20.5, 20.5]);
+        let source = Source {
+            kind: Kind::Pen,
+            device: 905,
+            contact: 23,
+        };
+        let event = |phase, attributes| Event {
+            source,
+            phase,
+            position: [p.x as f64, p.y as f64],
+            pressure: Some(1.0),
+            attributes,
+        };
+        let mut a = Attributes {
+            tilt: Some([0.5, 0.0]),
+            eraser: Some(true),
+            button: None,
+        };
+        app.drawing.incoming = vec![event(Phase::Down, a)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(
+            app.drawing.active.as_ref().unwrap().stroke.style().tip,
+            BrushTip::Eraser
+        );
+        assert!(
+            app.drawing
+                .active
+                .as_ref()
+                .unwrap()
+                .stroke
+                .shape()
+                .angle
+                .abs()
+                < 1e-6
+        );
+        a.tilt = Some([0.0, 0.5]);
+        a.eraser = Some(false);
+        app.drawing.incoming = vec![event(Phase::Move, a)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!((app.drawing.active.as_ref().unwrap().stroke.shape().angle - 90.0).abs() < 1e-6);
+        app.drawing.incoming = vec![event(Phase::Up, a)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(app.documents[0].tool, BrushTip::Pen);
+        assert!(app.documents[0].composite_pixel(20, 20)[3] < 255);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(app.documents[0].undo());
+        assert!(app.documents[0].snapshot() == before);
+        app.workspaces.store.current.pointer.features.button_eraser = true;
+        a.button = Some(true);
+        a.tilt = None;
+        app.drawing.incoming = vec![event(Phase::Down, a)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(
+            app.drawing.active.as_ref().unwrap().stroke.style().tip,
+            BrushTip::Eraser
+        );
+        a.button = Some(false);
+        app.drawing.incoming = vec![event(Phase::Up, a)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        app.drawing.incoming = vec![event(Phase::Down, Attributes::default())];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(
+            app.drawing.active.as_ref().unwrap().stroke.style().tip,
+            BrushTip::Pen
+        );
+        assert_eq!(
+            app.drawing.active.as_ref().unwrap().stroke.shape().angle,
+            0.0
+        );
+        app.drawing.incoming = vec![event(Phase::Cancel, Attributes::default())];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(!app.drawing.pending());
+        for ppp in [1.0, 1.5, 2.0] {
+            for flipped in [false, true] {
+                let projection = Projection {
+                    view: View {
+                        angle: 37.0,
+                        flipped,
+                        ..Default::default()
+                    },
+                    size: [64.0, 48.0],
+                    center: [300.0, 200.0],
+                    ppp,
+                };
+                let angle = projection.tilt_angle(Some([0.4, 0.0]));
+                let v = [angle.to_radians().cos(), angle.to_radians().sin()];
+                let screen =
+                    projection
+                        .view
+                        .document_to_screen(v, projection.size, projection.center, ppp);
+                let origin = projection.view.document_to_screen(
+                    [0.0; 2],
+                    projection.size,
+                    projection.center,
+                    ppp,
+                );
+                assert!(screen[0] > origin[0]);
+                assert!((screen[1] - origin[1]).abs() < 1e-6);
+            }
         }
     }
     #[test]

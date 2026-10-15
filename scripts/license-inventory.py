@@ -16,6 +16,12 @@ selected = {node["id"] for node in metadata["resolve"]["nodes"]}
 lock = tomllib.loads((ROOT / "Cargo.lock").read_text())
 checksums = {(package["name"], package["version"]): package.get("checksum") for package in lock["package"]}
 upstream = json.loads((ROOT / "docs/licenses/upstream-sources.json").read_text())
+patched = json.loads((ROOT / "docs/licenses/patched-sources.json").read_text())
+for patch in patched:
+    directory = ROOT / patch["path"]
+    actual = {file.relative_to(directory).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest() for file in directory.rglob("*") if file.is_file()}
+    if actual != patch["files"]:
+        raise RuntimeError(f"Patched dependency source changed: {patch['name']}")
 for source in upstream:
     data = (ROOT / source["path"]).read_bytes()
     if hashlib.sha256(data).hexdigest() != source["sha256"]:
@@ -24,11 +30,14 @@ for source in upstream:
 components = []
 notices = ["Drawer third-party notices\nLocked Windows x64 dependency graph; generated from Cargo.lock and upstream notices.\n"]
 for package in sorted(metadata["packages"], key=lambda package: (package["name"], package["version"])):
-    if package["id"] not in selected or not package["source"]:
+    patch = next((p for p in patched if (p["name"], p["version"]) == (package["name"], package["version"])), None)
+    if package["id"] not in selected or (not package["source"] and not patch):
         continue
     if not package["license"]:
         raise RuntimeError(f"Missing license declaration: {package['name']}")
     crate = Path(package["manifest_path"]).parent
+    if patch and crate.resolve() != (ROOT / patch["path"]).resolve():
+        raise RuntimeError("Patched dependency path does not match its source inventory")
     files = [file for file in crate.iterdir() if file.is_file() and file.name.upper().startswith(("LICENSE", "LICENCE", "COPYING", "NOTICE"))]
     if package["license_file"]:
         files.append(crate / package["license_file"])
@@ -39,9 +48,13 @@ for package in sorted(metadata["packages"], key=lambda package: (package["name"]
     files = sorted(set(files))
     if not files:
         raise RuntimeError(f"Missing redistribution notice: {package['name']}")
-    component = {"name": package["name"], "version": package["version"], "source": f"https://crates.io/crates/{package['name']}/{package['version']}", "repository": package["repository"], "license": package["license"], "crate_sha256": checksums[(package["name"], package["version"])], "notice_files": [{"name": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()} for file in files], "supplement_sources": [source["source"] for source in supplement]}
+    component = {"name": package["name"], "version": package["version"], "source": f"https://crates.io/crates/{package['name']}/{package['version']}", "repository": package["repository"], "license": package["license"], "crate_sha256": patch["crate_sha256"] if patch else checksums[(package["name"], package["version"])], "notice_files": [{"name": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()} for file in files], "supplement_sources": [source["source"] for source in supplement]}
+    if patch:
+        component["local_patch"] = {"manifest": "docs/licenses/patched-sources.json", "upstream_revision": patch["upstream_revision"], "files": patch["files"]}
     components.append(component)
     notices.append(f"\n{'=' * 72}\n{package['name']} {package['version']}\n{component['source']}\nDeclared license: {component['license']}\n")
+    if patch:
+        notices.append("\nLocal modification: Windows Ink StylusButtonUp reports release as pressed=false.\nUpstream source and exact patched file hashes: COMPONENTS.json / local_patch.\n")
     for file in files:
         notices.append(f"\n--- {file.name} ---\n" + file.read_text(encoding="utf-8") + "\n")
 

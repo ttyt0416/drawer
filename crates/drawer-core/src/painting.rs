@@ -39,6 +39,8 @@ pub struct Stroke {
     last_stamp: Option<Point>,
     pressure: f64,
     last_stamp_pressure: f64,
+    angle_offset: f64,
+    last_stamp_angle: f64,
     remainder: f64,
     changes: Vec<PixelChange>,
     unmasked: Vec<[u8; 4]>,
@@ -66,7 +68,7 @@ impl Stroke {
         }
         let limit = budget
             .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()))
-            .saturating_sub(256)
+            .saturating_sub(std::mem::size_of::<Self>() + 256)
             / 96;
         if limit == 0 {
             return Err("No memory available for a stroke".into());
@@ -83,6 +85,8 @@ impl Stroke {
             last_stamp: None,
             pressure: 1.0,
             last_stamp_pressure: 1.0,
+            angle_offset: 0.0,
+            last_stamp_angle: 0.0,
             remainder: 0.0,
             changes: vec![],
             unmasked: vec![],
@@ -120,8 +124,9 @@ impl Stroke {
             return Err("Invalid drawing coordinate".into());
         }
         let Some((_, to)) = self.trace.receive(point, self.style.smoothing) else {
-            if self.pressure != pressure
-                && (self.style.pressure.size || self.style.pressure.opacity)
+            if ((self.pressure != pressure
+                && (self.style.pressure.size || self.style.pressure.opacity))
+                || self.last_stamp_angle != self.angle_offset)
                 && let Some(last) = self.last
             {
                 self.stamp(doc, last, pressure)?;
@@ -188,6 +193,7 @@ impl Stroke {
                 (last[0] - p[0]).hypot(last[1] - p[1]) > 1e-7
                     || (self.last_stamp_pressure != self.pressure
                         && (self.style.pressure.size || self.style.pressure.opacity))
+                    || self.last_stamp_angle != self.angle_offset
             })
         {
             self.stamp(doc, last, self.pressure)?;
@@ -220,8 +226,16 @@ impl Stroke {
     pub fn style(&self) -> Style {
         self.style
     }
+    pub fn set_angle_offset(&mut self, angle: f64) -> Result<(), String> {
+        if !angle.is_finite() || angle.abs() > 360.0 {
+            return Err("Invalid pen tilt angle".into());
+        }
+        self.angle_offset = angle;
+        Ok(())
+    }
     pub fn shape(&self) -> Shape {
         let mut shape = self.style.shape;
+        shape.angle += self.angle_offset;
         if self.style.pressure.size {
             shape.size *= self
                 .style
@@ -241,8 +255,10 @@ impl Stroke {
     fn stamp(&mut self, doc: &Document, center: Point, pressure: f64) -> Result<(), String> {
         self.last_stamp = Some(center);
         self.last_stamp_pressure = pressure;
+        self.last_stamp_angle = self.angle_offset;
         let pressure = self.style.pressure.response.map(pressure)?;
         let mut shape = self.style.shape;
+        shape.angle += self.angle_offset;
         if self.style.pressure.size {
             shape.size *= pressure;
         }
@@ -694,7 +710,7 @@ mod tests {
         assert!(!s.commit(&mut d).unwrap());
         d.scene.selection_mask = None;
         let before = d.snapshot();
-        let mut s = Stroke::with_budget(&d, 0, style(BrushTip::Pen), 512).unwrap();
+        let mut s = Stroke::with_budget(&d, 0, style(BrushTip::Pen), 2048).unwrap();
         assert!(s.sample(&d, [f64::NAN, 0.0]).is_err());
         s.sample(&d, [2.5, 4.5]).unwrap();
         assert!(s.sample(&d, [30.5, 4.5]).is_err());

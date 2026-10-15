@@ -87,6 +87,7 @@ try {
     if ($smokeResult -notmatch 'pointer_settings=true' -or $smokeResult -notmatch 'native_pen=.+') { throw '장치별 입력 설정/네이티브 초기화 시험 실패' }
     if ($smokeResult -notmatch 'pressure_mapping=true') { throw '필압 연결/설정 재열기 시작 시험 실패' }
     if ($smokeResult -notmatch 'pressure_curve=true') { throw '필압 범위/곡선 시작 시험 실패' }
+    if ($smokeResult -notmatch 'synthetic_pen_attributes=true') { throw '가상 펜 속성/픽셀 적용 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

@@ -28,6 +28,61 @@ pub enum Phase {
     Up,
     Cancel,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Attributes {
+    /// Absolute X/Y tilt from perpendicular in radians.
+    pub tilt: Option<[f64; 2]>,
+    pub eraser: Option<bool>,
+    /// Any button reported by the pen backend; no assumed hardware button number.
+    pub button: Option<bool>,
+}
+impl Attributes {
+    pub fn normalized(self) -> Self {
+        Self {
+            tilt: self
+                .tilt
+                .filter(|v| v.iter().all(|n| n.is_finite()))
+                .map(|v| {
+                    v.map(|n| n.clamp(-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2))
+                }),
+            ..self
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PenFeatures {
+    pub tilt_angle: bool,
+    pub eraser: bool,
+    pub button_eraser: bool,
+}
+impl Default for PenFeatures {
+    fn default() -> Self {
+        Self {
+            tilt_angle: false,
+            eraser: true,
+            button_eraser: false,
+        }
+    }
+}
+impl PenFeatures {
+    pub fn tip(
+        self,
+        kind: Kind,
+        attributes: Attributes,
+        current: crate::assets::BrushTip,
+    ) -> crate::assets::BrushTip {
+        if kind == Kind::Pen
+            && ((self.eraser && attributes.eraser == Some(true))
+                || (self.button_eraser && attributes.button == Some(true)))
+        {
+            crate::assets::BrushTip::Eraser
+        } else {
+            current
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Event {
@@ -36,6 +91,8 @@ pub struct Event {
     /// Window logical pixels. Conversion to document coordinates happens in the owning view.
     pub position: [f64; 2],
     pub pressure: Option<f64>,
+    #[serde(default)]
+    pub attributes: Attributes,
 }
 impl Event {
     pub fn valid(self) -> bool {
@@ -64,6 +121,8 @@ impl Default for DeviceSettings {
 pub struct Settings {
     pub mouse: DeviceSettings,
     pub pen: DeviceSettings,
+    #[serde(default)]
+    pub features: PenFeatures,
 }
 impl Settings {
     pub fn valid(self) -> bool {
@@ -138,12 +197,58 @@ impl Ownership {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn optional_pen_attributes_normalize_tilt_and_do_not_change_other_kinds() {
+        use crate::assets::BrushTip;
+        let a = Attributes {
+            tilt: Some([99.0, -99.0]),
+            eraser: Some(true),
+            button: Some(true),
+        }
+        .normalized();
+        assert_eq!(
+            a.tilt,
+            Some([std::f64::consts::FRAC_PI_2, -std::f64::consts::FRAC_PI_2])
+        );
+        assert_eq!(
+            Attributes {
+                tilt: Some([f64::NAN, 0.0]),
+                ..a
+            }
+            .normalized()
+            .tilt,
+            None
+        );
+        let features = PenFeatures {
+            tilt_angle: true,
+            eraser: true,
+            button_eraser: true,
+        };
+        assert_eq!(features.tip(Kind::Pen, a, BrushTip::Pen), BrushTip::Eraser);
+        for kind in [Kind::Mouse, Kind::Touch, Kind::Unknown] {
+            assert_eq!(features.tip(kind, a, BrushTip::Pen), BrushTip::Pen);
+        }
+        let off = PenFeatures {
+            tilt_angle: false,
+            eraser: false,
+            button_eraser: false,
+        };
+        assert_eq!(off.tip(Kind::Pen, a, BrushTip::Pencil), BrushTip::Pencil);
+        assert_eq!(
+            features.tip(Kind::Pen, Attributes::default(), BrushTip::Pencil),
+            BrushTip::Pencil
+        );
+        let old = r#"{"mouse":{"enabled":true,"stabilization":null},"pen":{"enabled":true,"stabilization":null}}"#;
+        let restored: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(restored.features, PenFeatures::default());
+    }
     fn event(source: Source, phase: Phase) -> Event {
         Event {
             source,
             phase,
             position: [1.0, 2.0],
             pressure: None,
+            attributes: Default::default(),
         }
     }
     #[test]

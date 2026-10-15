@@ -13176,6 +13176,9 @@ octotablet 0.1.0
 https://crates.io/crates/octotablet/0.1.0
 Declared license: MIT
 
+Local modification: Windows Ink StylusButtonUp reports release as pressed=false.
+Upstream source and exact patched file hashes: COMPONENTS.json / local_patch.
+
 --- LICENSE.txt ---
 MIT License
 

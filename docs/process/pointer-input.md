@@ -14,3 +14,9 @@ Primary API/source references:
 - https://github.com/Fuzzyzilla/octotablet/tree/main
 - https://github.com/emilk/egui/blob/0.36.2/crates/egui-winit/src/lib.rs
 - https://learn.microsoft.com/en-us/windows/win32/tablet/realtimestylus-reference
+
+## Optional pen attributes
+
+Tilt (radians), inverted eraser and any reported pen-button state are optional, separate from pressure. Non-finite tilt becomes absent and each finite axis is clamped to +/- pi/2. Selected tilt-angle mapping transforms the projected tilt vector through the inverse view transform, including mirror/DPI. Eraser/button actions are selected only for identified pens at Down, retain the current brush shape/pressure and remain fixed until Up/Cancel. Button mapping is off by default: the backend does not guarantee physical button numbering and may include the nib. Individual button assignments belong to item 047. Synthetic events exercise these mappings; a connected provider is not a physical hardware test.
+
+The published octotablet 0.1.0 reports StylusButtonUp with pressed=true. A licensed local source copy in vendor/octotablet changes only that flag to false. Its upstream archive checksum, revision, every patched-tree file hash and MIT license are included in the component inventory. No original drawing-program code is included. Cargo's registry patch pins the corrected source; the license checker rejects changes or extra files in that tree. Format Drawer-owned crates with `cargo fmt -p drawer-app -p drawer-core -p xtask` to preserve upstream bytes. Two existing upstream compiler warnings (unused status, unnecessary transmute) remain in that dependency; Drawer-owned static checks pass with warnings denied.

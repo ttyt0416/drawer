@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.md whitespace=-trailing-space
 docs/licenses/** whitespace=-trailing-space
+vendor/** whitespace=-trailing-space

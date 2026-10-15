@@ -1835,8 +1835,6 @@ dependencies = [
 [[package]]
 name = "octotablet"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c4b9470450ffa669cb3be55ef863dfd9592a06284cb291546363c514bb4aa3"
 dependencies = [
  "bitflags 2.13.2",
  "cfg_aliases",

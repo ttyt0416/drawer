@@ -1,6 +1,10 @@
 [workspace]
 members = ["crates/xtask", "crates/drawer-core", "crates/drawer-app"]
 resolver = "3"
+exclude = ["vendor/octotablet"]
+
+[patch.crates-io]
+octotablet = { path = "vendor/octotablet" }
 
 [workspace.package]
 version = "0.1.0"
