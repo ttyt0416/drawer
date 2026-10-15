@@ -347,8 +347,13 @@ impl Drawer {
                     && !self.canvas_view.navigator.floating
                     && let Some(active) = self.active
                 {
-                    self.canvas_view
-                        .navigator_in_dock(ui, &mut self.documents[active], ppp);
+                    let preview = self.drawing.preview(self.documents[active].id);
+                    self.canvas_view.navigator_in_dock(
+                        ui,
+                        &mut self.documents[active],
+                        ppp,
+                        preview,
+                    );
                 }
             });
             #[cfg(test)]
@@ -406,7 +411,7 @@ impl Drawer {
         let mut close = None;
         for (index, rect) in rects.iter().enumerate() {
             let tab = &mut self.tabs[index];
-            let Some(doc) = self.documents.iter().find(|d| d.id == tab.document_id) else {
+            let Some(doc) = self.documents.iter_mut().find(|d| d.id == tab.document_id) else {
                 continue;
             };
             let canvas = self
@@ -415,6 +420,30 @@ impl Drawer {
                 .entry(tab.id)
                 .or_insert_with(|| canvas_view::CanvasView::new(ctx));
             canvas.filter = self.interpolation.view;
+            canvas.simple = true;
+            canvas.compact_controls = true;
+            canvas.input_active = self.workspaces.is_focused();
+            canvas.smoothing = self.workspaces.store.current.input.smoothing;
+            canvas.cursors = self.workspaces.store.current.cursors;
+            canvas.behavior = self.workspaces.store.current.behavior;
+            if let Some(settings) = &self.workspaces.store.current.properties {
+                let p = &settings.tools[&drawer_core::tool_properties::Tool::brush(doc.tool)];
+                canvas.brush_shape = drawer_core::brush_cursor::Shape {
+                    size: p[&drawer_core::tool_properties::Property::Size].value,
+                    aspect: p[&drawer_core::tool_properties::Property::Aspect].value,
+                    angle: p[&drawer_core::tool_properties::Property::Angle].value,
+                };
+            }
+            let layer = match self
+                .panels
+                .targets
+                .get(&doc.id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+            {
+                drawer_core::thumbnail::Target::Raster(n) => Some(n),
+                _ => None,
+            };
             let frame = egui::Rect::from_min_size(
                 area.min + egui::vec2(rect.position[0] as f32, rect.position[1] as f32),
                 egui::vec2(rect.size[0] as f32, rect.size[1] as f32),
@@ -423,7 +452,11 @@ impl Drawer {
             let response = egui::Window::new(format!(
                 "{}{}",
                 doc.title,
-                if doc.dirty { " *" } else { "" }
+                if doc.dirty || self.drawing.changed(doc.id) {
+                    " *"
+                } else {
+                    ""
+                }
             ))
             .id(egui::Id::new(("arranged-canvas", tab.id)))
             .open(&mut open)
@@ -431,7 +464,24 @@ impl Drawer {
             .fixed_rect(frame)
             .min_size([1.0, 1.0])
             .show(ctx, |ui| {
-                canvas.show_only(ui, doc, &mut tab.view, true);
+                let saved = doc.view;
+                doc.view = tab.view;
+                let mut hidden = ui.new_child(egui::UiBuilder::new().invisible());
+                canvas.show(
+                    ui,
+                    doc,
+                    None,
+                    &mut hidden,
+                    self.aids.preferences,
+                    crate::drawing::PaintInput {
+                        drawing: &mut self.drawing,
+                        view: tab.id,
+                        layer,
+                        color: self.references.session.workspace.color,
+                    },
+                );
+                tab.view = doc.view;
+                doc.view = saved;
                 if ui.rect_contains_pointer(ui.min_rect())
                     && ui.input(|i| i.pointer.primary_pressed())
                 {
@@ -470,6 +520,48 @@ fn lock_ui(ui: &mut egui::Ui, lock: &mut drawer_core::layout::Lock) {
 mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, frame, tiny_spec};
+    #[test]
+    fn arranged_canvas_paints_shared_document_in_one_history_entry() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        app.documents[0].mark_saved("arranged.drawer".into());
+        app.duplicate_view();
+        app.workspaces.store.current.layout.arrangement = Arrangement::Tile;
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let tab = app.tabs[0].id;
+        let pos = app.layout.views[&tab].viewport.unwrap().center();
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        assert_eq!(app.drawing.active_view(), Some(tab));
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert_eq!(app.documents.len(), 1);
+        assert!(app.documents[0].undo());
+        assert!(!app.documents[0].dirty);
+    }
     #[test]
     fn stack_tabs_popup_bars_and_arranged_views_preserve_documents_and_close_safely() {
         let ctx = egui::Context::default();

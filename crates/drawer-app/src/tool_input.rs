@@ -261,6 +261,8 @@ mod tests {
             Some(BrushTip::Pencil),
         ];
         app.persist_workspace().unwrap();
+        // Isolate cursor/input behavior from painting, which is verified separately.
+        app.documents[0].scene.selection_mask = Some(drawer_core::selection::Mask::default());
         let before = app.documents[0].snapshot();
         let history = app.documents[0].history_counts();
         let mut time = 1.0;

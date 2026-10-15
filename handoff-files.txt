@@ -119,3 +119,7 @@ crates/drawer-app/src/preferences.rs
 docs/licenses/upstream/eto0202-michiu-6235158b40e8-LICENSE-MIT.txt
 
 docs/process/ime-preferences.md
+
+crates/drawer-core/src/painting.rs
+
+crates/drawer-app/src/drawing.rs

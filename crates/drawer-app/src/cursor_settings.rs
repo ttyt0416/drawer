@@ -254,6 +254,8 @@ mod tests {
         };
         frame(&ctx, &mut app, vec![]);
         frame(&ctx, &mut app, vec![]);
+        // Isolate cursor/input behavior from painting, which is verified separately.
+        app.documents[0].scene.selection_mask = Some(drawer_core::selection::Mask::default());
         let before = app.documents[0].snapshot();
         let rect = app.canvas_view.viewport.unwrap();
         let start = rect.center();

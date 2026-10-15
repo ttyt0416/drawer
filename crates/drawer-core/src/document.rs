@@ -181,12 +181,23 @@ impl Document {
         self.dirty = false;
     }
     pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        self.composite_pixel_with(x, y, |_, layer| {
+            layer.pixel(self.width, self.height, x as i64, y as i64)
+        })
+    }
+    pub(crate) fn composite_pixel_with(
+        &self,
+        x: u32,
+        y: u32,
+        mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
         let mut color = [0.0f32; 3];
         let mut alpha = 0.0;
         let pixels = self
             .layers
             .iter()
-            .map(|layer| layer.pixel(self.width, self.height, x as i64, y as i64))
+            .enumerate()
+            .map(|(index, layer)| pixel(index, layer))
             .chain(
                 self.animation
                     .iter()

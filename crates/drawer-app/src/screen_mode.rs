@@ -13,6 +13,7 @@ pub(super) fn preview_switch(ui: &mut egui::Ui, simple: bool) -> egui::Response 
 
 impl Drawer {
     pub(super) fn toggle_screen_mode(&mut self) {
+        self.finish_stroke();
         self.simple_view = !self.simple_view;
         self.canvas_view.cancel_input();
     }
@@ -157,13 +158,29 @@ impl Drawer {
         if let Some(n) = self.active {
             let overlay = self.sizing_overlay();
             let mut hidden = ui.new_child(egui::UiBuilder::new().invisible());
+            let view = self.active_tab.map_or(0, |t| self.tabs[t].id);
+            let layer = match self
+                .panels
+                .targets
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+            {
+                drawer_core::thumbnail::Target::Raster(n) => Some(n),
+                _ => None,
+            };
             let changed = self.canvas_view.show(
                 ui,
-                n,
                 &mut self.documents[n],
                 overlay,
                 &mut hidden,
                 self.aids.preferences,
+                crate::drawing::PaintInput {
+                    drawing: &mut self.drawing,
+                    view,
+                    layer,
+                    color: self.references.session.workspace.color,
+                },
             );
             if changed
                 && let Some(storage) = &self.storage

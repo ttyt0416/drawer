@@ -101,6 +101,13 @@ impl Drawer {
         if index >= self.tabs.len() {
             return;
         }
+        if self
+            .drawing
+            .active_view()
+            .is_some_and(|view| view != self.tabs[index].id)
+        {
+            self.finish_stroke();
+        }
         self.sync_tool_properties();
         self.sync_active_view();
         self.active_tab = Some(index);
@@ -174,6 +181,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        self.finish_stroke();
         let _awake = self.synchronous_power();
         let target = if path.exists() {
             path.canonicalize()
@@ -236,6 +244,7 @@ impl Drawer {
         }
     }
     pub(super) fn export_png_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        self.finish_stroke();
         let _awake = self.synchronous_power();
         let target = if path.exists() {
             path.canonicalize()
@@ -273,6 +282,7 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn request_close(&mut self, tab: usize) {
+        self.finish_stroke();
         if self.pending_close.is_some() || tab >= self.tabs.len() {
             return;
         }
@@ -306,6 +316,7 @@ impl Drawer {
         }
     }
     pub(super) fn begin_quit(&mut self) {
+        self.finish_stroke();
         self.quit_requested = true;
         self.advance_quit();
     }
@@ -473,7 +484,11 @@ impl Drawer {
                     let label = format!(
                         "{}{}",
                         document.title,
-                        if document.dirty { " *" } else { "" }
+                        if document.dirty || self.drawing.changed(document.id) {
+                            " *"
+                        } else {
+                            ""
+                        }
                     );
                     let title =
                         crate::help::selectable(ui, self.active_tab == Some(index), label, "files");

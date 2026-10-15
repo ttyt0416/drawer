@@ -1,6 +1,16 @@
 use crate::{document::Document, sizing::DocumentState};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PixelChange {
+    pub offset: usize,
+    pub before: [u8; 4],
+    pub after: [u8; 4],
+}
 enum EditKind {
+    Pixels {
+        layer: usize,
+        changes: Vec<PixelChange>,
+    },
     Pixel {
         layer: usize,
         offset: usize,
@@ -24,6 +34,9 @@ struct Edit {
 impl Edit {
     fn bytes(&self) -> usize {
         match &self.kind {
+            EditKind::Pixels { changes, .. } => {
+                changes.len() * std::mem::size_of::<PixelChange>() + std::mem::size_of::<Self>()
+            }
             EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
             EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
             EditKind::Scene { before, after } => {
@@ -63,6 +76,39 @@ impl History {
     }
 }
 impl Document {
+    pub(crate) fn commit_pixel_changes(
+        &mut self,
+        layer: usize,
+        mut changes: Vec<PixelChange>,
+    ) -> Result<bool, String> {
+        changes.retain(|p| p.before != p.after);
+        if changes.is_empty() {
+            return Ok(false);
+        }
+        let bytes =
+            changes.len() * std::mem::size_of::<PixelChange>() + std::mem::size_of::<Edit>();
+        if bytes > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+            || bytes + self.resident_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET
+        {
+            return Err("Stroke exceeds the undo memory budget".into());
+        }
+        let raster = self
+            .layers
+            .get_mut(layer)
+            .ok_or("Raster layer no longer exists")?;
+        if changes
+            .iter()
+            .any(|p| raster.pixels.get(p.offset) != Some(&p.before))
+        {
+            return Err("The layer changed during the stroke".into());
+        }
+        for p in &changes {
+            raster.pixels[p.offset] = p.after;
+        }
+        self.history.push(EditKind::Pixels { layer, changes });
+        self.history_changed();
+        Ok(true)
+    }
     pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
         if !after.valid()
             || self.scene.size_bytes().saturating_add(after.size_bytes())
@@ -160,6 +206,11 @@ impl Document {
             return false;
         };
         match &edit.kind {
+            EditKind::Pixels { layer, changes } => {
+                for p in changes {
+                    self.layers[*layer].pixels[p.offset] = p.before;
+                }
+            }
             EditKind::Pixel {
                 layer,
                 offset,
@@ -179,6 +230,11 @@ impl Document {
             return false;
         };
         match &edit.kind {
+            EditKind::Pixels { layer, changes } => {
+                for p in changes {
+                    self.layers[*layer].pixels[p.offset] = p.after;
+                }
+            }
             EditKind::Pixel {
                 layer,
                 offset,

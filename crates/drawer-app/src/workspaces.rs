@@ -149,6 +149,7 @@ impl Drawer {
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
+        self.finish_stroke();
         self.layout.generation += 1;
         self.reset_property_runtime();
         self.tool_input.controller.cancel();

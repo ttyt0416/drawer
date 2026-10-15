@@ -1,8 +1,9 @@
 use drawer_core::document::Document;
 use eframe::egui;
 
+type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
-    image: Option<((u64, u64, u32), egui::TextureHandle)>,
+    image: Option<(ImageKey, egui::TextureHandle)>,
     checker: egui::TextureHandle,
     pub move_delta: Option<[f64; 2]>,
     pub filter: drawer_core::interpolation::Filter,
@@ -13,6 +14,7 @@ pub struct CanvasView {
     pub navigator: drawer_core::navigator_preferences::Preferences,
     pub navigator_generation: u64,
     pub simple: bool,
+    pub compact_controls: bool,
     pub dock_navigator: bool,
     last_viewport: Option<egui::Rect>,
     pub brush_shape: drawer_core::brush_cursor::Shape,
@@ -50,6 +52,7 @@ struct ScreenKey {
     size: [usize; 2],
     ppp: f64,
     filter: drawer_core::interpolation::Filter,
+    stroke: (u64, u64),
 }
 impl CanvasView {
     pub fn icon(&self, n: usize) -> egui::TextureId {
@@ -71,6 +74,7 @@ impl CanvasView {
             navigator: Default::default(),
             navigator_generation: 0,
             simple: false,
+            compact_controls: false,
             dock_navigator: false,
             last_viewport: None,
             brush_shape: Default::default(),
@@ -135,11 +139,11 @@ impl CanvasView {
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
-        _index: usize,
         document: &mut Document,
         overlay: Option<drawer_core::scene::Rect>,
         navigator_ui: &mut egui::Ui,
         aids: drawer_core::aids::AidPreferences,
+        paint: crate::drawing::PaintInput<'_>,
     ) -> bool {
         if self.input_document != Some(document.id) {
             self.cancel_input();
@@ -148,7 +152,8 @@ impl CanvasView {
         if ui.input(|i| !i.pointer.any_down() || i.pointer.any_pressed()) {
             self.input_blocked = false;
         }
-        let input_active = self.input_active
+        let input_active = ui.is_enabled()
+            && self.input_active
             && !self.input_blocked
             && ui.input(|i| {
                 i.focused
@@ -161,46 +166,49 @@ impl CanvasView {
         let before = document.view;
         let size = [document.width as f64, document.height as f64];
         let ppp = ui.ctx().pixels_per_point() as f64;
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Zoom");
-            let mut percent = document.view.zoom * 100.0;
-            if super::edit::number(ui, &mut percent, 1.0_f64..=6400.0_f64, 1.0, "%", "view")
-                .changed()
-                && percent.is_finite()
-            {
-                document.view.zoom = (percent / 100.0).clamp(0.01, 64.0);
-            }
-            ui.label("Angle");
-            let mut angle = document.view.angle;
-            if super::edit::number(ui, &mut angle, -1e9_f64..=1e9_f64, 0.5, "°", "view").changed()
-            {
-                document.view.rotate(angle);
-            }
-            crate::help::checkbox(ui, &mut document.view.flipped, "Mirror", "view");
-            if crate::help::button(ui, "100%", "view").clicked() {
-                document.view.reset_zoom(size, ppp);
-            }
-            if crate::help::button(ui, "0°", "view").clicked() {
-                document.view.reset_angle(size, ppp);
-            }
-            if crate::help::button(ui, "Center", "view").clicked() {
-                document.view.pan = [0.0; 2];
-            }
-            if crate::help::button(ui, "Reset view", "view").clicked() {
-                document.view = Default::default();
-            }
-            if crate::help::checkbox(ui, &mut self.area_zoom, "Zoom region", "view").changed() {
-                self.area_start = None;
-                self.view_notice = None;
-            }
-        });
-        ui.label("Wheel to zoom · Middle drag or Space + drag to pan");
+        if !self.compact_controls {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Zoom");
+                let mut percent = document.view.zoom * 100.0;
+                if super::edit::number(ui, &mut percent, 1.0_f64..=6400.0_f64, 1.0, "%", "view")
+                    .changed()
+                    && percent.is_finite()
+                {
+                    document.view.zoom = (percent / 100.0).clamp(0.01, 64.0);
+                }
+                ui.label("Angle");
+                let mut angle = document.view.angle;
+                if super::edit::number(ui, &mut angle, -1e9_f64..=1e9_f64, 0.5, "°", "view")
+                    .changed()
+                {
+                    document.view.rotate(angle);
+                }
+                crate::help::checkbox(ui, &mut document.view.flipped, "Mirror", "view");
+                if crate::help::button(ui, "100%", "view").clicked() {
+                    document.view.reset_zoom(size, ppp);
+                }
+                if crate::help::button(ui, "0°", "view").clicked() {
+                    document.view.reset_angle(size, ppp);
+                }
+                if crate::help::button(ui, "Center", "view").clicked() {
+                    document.view.pan = [0.0; 2];
+                }
+                if crate::help::button(ui, "Reset view", "view").clicked() {
+                    document.view = Default::default();
+                }
+                if crate::help::checkbox(ui, &mut self.area_zoom, "Zoom region", "view").changed() {
+                    self.area_start = None;
+                    self.view_notice = None;
+                }
+            });
+            ui.label("Wheel to zoom · Middle drag or Space + drag to pan");
+        }
         if let Some(notice) = &self.view_notice {
             ui.label(notice);
         }
         let (rect, response) = ui.allocate_exact_size(
             ui.available_size().max(egui::vec2(1.0, 1.0)),
-            egui::Sense::drag(),
+            egui::Sense::click_and_drag(),
         );
         self.last_viewport = Some(rect);
         crate::help::tag(ui.ctx(), &response, "tools");
@@ -266,7 +274,9 @@ impl CanvasView {
         } else {
             self.pan_drag = None;
         }
-        self.working = !self.measurement_mode
+        self.working = (paint.drawing.active_view() == Some(paint.view)
+            || ui.input(|i| i.pointer.primary_pressed()))
+            && !self.measurement_mode
             && input_active
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
@@ -307,7 +317,31 @@ impl CanvasView {
                 );
             }
         }
-        self.update_image(ui, document);
+        let tip_index = drawer_core::assets::BrushTip::ALL
+            .iter()
+            .position(|t| *t == document.tool)
+            .unwrap();
+        let style = drawer_core::painting::Style {
+            shape: self.brush_shape,
+            tip: document.tool,
+            color: paint.color,
+            smoothing: self.smoothing[tip_index],
+        };
+        paint.drawing.canvas(
+            ui,
+            &response,
+            document,
+            paint.view,
+            paint.layer,
+            style,
+            input_active
+                && !self.measurement_mode
+                && !self.area_zoom
+                && !ui.input(|i| i.key_down(egui::Key::Space)),
+        );
+        self.working &= paint.drawing.active_view() == Some(paint.view);
+        let stroke = paint.drawing.preview(document.id);
+        self.update_image(ui, document, stroke);
         #[cfg(test)]
         {
             if !self.dock_navigator {
@@ -343,7 +377,7 @@ impl CanvasView {
                 self.show_navigator(navigator_ui, document, rect, ppp);
             }
         }
-        self.paint_paper(ui, document, document.view, rect);
+        self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
         if let Some(start) = self.area_start
             && let Some(end) = response.interact_pointer_pos()
@@ -390,12 +424,20 @@ impl CanvasView {
         if input_active
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
-            && response.is_pointer_button_down_on()
-            && ui.input(|i| {
-                i.pointer.button_pressed(egui::PointerButton::Primary)
-                    && i.pointer.latest_pos().is_some()
+            && (response.is_pointer_button_down_on()
+                || response.clicked_by(egui::PointerButton::Primary)
+                || response.drag_stopped_by(egui::PointerButton::Primary))
+            && let Some(pos) = ui.input(|i| {
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        ..
+                    } => Some(*pos),
+                    _ => None,
+                })
             })
-            && let Some(pos) = response.interact_pointer_pos()
         {
             self.first_point = Some((
                 document.id,
@@ -419,40 +461,51 @@ impl CanvasView {
                 .hover_pos()
                 .or_else(|| response.interact_pointer_pos())
         {
+            let active_style = stroke.map(|s| s.style());
+            let cursor_tool = active_style.map_or(document.tool, |s| s.tip);
+            let cursor_shape = active_style.map_or(self.brush_shape, |s| s.shape);
             let n = drawer_core::assets::BrushTip::ALL
                 .iter()
-                .position(|t| *t == document.tool)
+                .position(|t| *t == cursor_tool)
                 .unwrap();
             let appearance = self.cursors.tools[n];
             let strength = if self.working { self.smoothing[n] } else { 0.0 };
-            if ui.input(|i| i.pointer.primary_pressed() || i.pointer.primary_released()) {
-                self.cursor_trace.clear();
-            }
-            let points = ui.input(|i| {
-                i.events
-                    .iter()
-                    .filter_map(|e| match e {
-                        egui::Event::PointerMoved(p) => Some(*p),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            });
-            let moved = !points.is_empty();
-            for p in points {
-                let point =
-                    document
-                        .view
-                        .screen_to_document([p.x as f64, p.y as f64], size, center, ppp);
-                self.cursor_trace.receive(point, strength);
-            }
-            let point =
-                document
-                    .view
-                    .screen_to_document([pos.x as f64, pos.y as f64], size, center, ppp);
-            if self.cursor_trace.raw != Some(point) {
-                self.cursor_trace.receive(point, strength);
-            } else if !moved {
-                self.cursor_trace.prediction = None;
+            if let Some(stroke) = stroke {
+                self.cursor_trace = stroke.trace();
+            } else {
+                if ui.input(|i| i.pointer.primary_pressed() || i.pointer.primary_released()) {
+                    self.cursor_trace.clear();
+                }
+                let points = ui.input(|i| {
+                    i.events
+                        .iter()
+                        .filter_map(|e| match e {
+                            egui::Event::PointerMoved(p) => Some(*p),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                });
+                let moved = !points.is_empty();
+                for p in points {
+                    let point = document.view.screen_to_document(
+                        [p.x as f64, p.y as f64],
+                        size,
+                        center,
+                        ppp,
+                    );
+                    self.cursor_trace.receive(point, strength);
+                }
+                let point = document.view.screen_to_document(
+                    [pos.x as f64, pos.y as f64],
+                    size,
+                    center,
+                    ppp,
+                );
+                if self.cursor_trace.raw != Some(point) {
+                    self.cursor_trace.receive(point, strength);
+                } else if !moved {
+                    self.cursor_trace.prediction = None;
+                }
             }
             if !self.working {
                 self.cursor_trace.prediction = None;
@@ -465,7 +518,7 @@ impl CanvasView {
                     &painter,
                     &self.cursor_trace,
                     appearance,
-                    self.brush_shape,
+                    cursor_shape,
                     crate::cursor_settings::Projection {
                         view: document.view,
                         size,
@@ -489,15 +542,25 @@ impl CanvasView {
         }
         document.view != before
     }
-    fn update_image(&mut self, ui: &egui::Ui, document: &Document) {
+    fn update_image(
+        &mut self,
+        ui: &egui::Ui,
+        document: &Document,
+        stroke: Option<&drawer_core::painting::Stroke>,
+    ) {
         if self.image.as_ref().map(|(active, _)| *active)
-            != Some((document.id, document.revision, document.current_frame))
+            != Some((
+                document.id,
+                document.revision,
+                document.current_frame,
+                stroke.map_or((0, 0), |s| s.preview_key()),
+            ))
         {
             let reduction = document.width.max(document.height).div_ceil(2048).max(1);
             let width = document.width.div_ceil(reduction);
             let height = document.height.div_ceil(reduction);
             let mut pixels = Vec::with_capacity((width * height) as usize);
-            let renderer = drawer_core::render::Renderer::new(document);
+            let renderer = drawer_core::render::Renderer::preview(document, stroke);
             for y in 0..height {
                 for x in 0..width {
                     let pixel = renderer
@@ -513,7 +576,12 @@ impl CanvasView {
                 egui::TextureOptions::NEAREST,
             );
             self.image = Some((
-                (document.id, document.revision, document.current_frame),
+                (
+                    document.id,
+                    document.revision,
+                    document.current_frame,
+                    stroke.map_or((0, 0), |s| s.preview_key()),
+                ),
                 texture,
             ));
         }
@@ -524,6 +592,7 @@ impl CanvasView {
         document: &Document,
         view: drawer_core::view::View,
         rect: egui::Rect,
+        stroke: Option<&drawer_core::painting::Stroke>,
     ) {
         let size = [document.width as f64, document.height as f64];
         let center = [rect.center().x as f64, rect.center().y as f64];
@@ -571,9 +640,10 @@ impl CanvasView {
                 size: dimensions,
                 ppp,
                 filter: self.filter,
+                stroke: stroke.map_or((0, 0), |s| s.preview_key()),
             };
             if self.screen_image.as_ref().map(|(k, _)| *k) != Some(key) {
-                let renderer = drawer_core::render::Renderer::new(document);
+                let renderer = drawer_core::render::Renderer::preview(document, stroke);
                 let mut pixels = Vec::with_capacity(dimensions[0] * dimensions[1]);
                 let origin = view.screen_to_document(
                     [rect.min.x as f64, rect.min.y as f64],
@@ -728,15 +798,25 @@ impl CanvasView {
                 }
             }
         }
-        self.update_image(ui, document);
-        self.paint_paper(ui, document, *view, rect);
+        self.update_image(ui, document, None);
+        self.paint_paper(ui, document, *view, rect, None);
+    }
+    #[cfg(test)]
+    pub fn rendered_stroke(&self) -> (u64, u64) {
+        self.image.as_ref().map_or((0, 0), |(key, _)| key.3)
     }
     #[cfg(test)]
     pub fn rendered_revision(&self) -> Option<(u64, u64)> {
         self.image.as_ref().map(|(key, _)| (key.0, key.1))
     }
-    pub fn navigator_in_dock(&mut self, ui: &mut egui::Ui, document: &mut Document, ppp: f64) {
-        self.update_image(ui, document);
+    pub fn navigator_in_dock(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &mut Document,
+        ppp: f64,
+        stroke: Option<&drawer_core::painting::Stroke>,
+    ) {
+        self.update_image(ui, document, stroke);
         let rect = self
             .last_viewport
             .unwrap_or_else(|| ui.ctx().content_rect());

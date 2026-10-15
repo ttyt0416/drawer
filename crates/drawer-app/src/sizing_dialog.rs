@@ -200,6 +200,7 @@ impl Drawer {
             .unwrap();
     }
     pub(super) fn begin_sizing(&mut self, mode: Mode) {
+        self.finish_stroke();
         if self.sizing_dialog.is_none()
             && let Some(index) = self.active
         {

@@ -40,3 +40,5 @@ pub mod layout;
 pub mod tool_properties;
 
 pub mod preferences;
+
+pub mod painting;

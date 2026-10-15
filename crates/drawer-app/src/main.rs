@@ -12,6 +12,7 @@ mod aid_panel;
 mod canvas_view;
 mod cursor_settings;
 mod display_pane;
+mod drawing;
 mod edit;
 mod help;
 mod image_import_dialog;
@@ -97,6 +98,7 @@ struct Drawer {
     tool_input: tool_input::ToolInput,
     properties: tool_properties::Properties,
     preferences: preferences::Preferences,
+    drawing: drawing::Drawing,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
@@ -198,6 +200,7 @@ impl Drawer {
             tool_input: Default::default(),
             properties: Default::default(),
             preferences: Default::default(),
+            drawing: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
@@ -373,6 +376,7 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.process_drawing(ui.ctx());
         self.apply_theme(ui.ctx());
         self.canvas_view.measurement_mode = self.measurement_active();
         self.canvas_view.measurement = self.measurement_line();
@@ -514,6 +518,10 @@ impl Drawer {
         self.update_input_preferences(ui.ctx());
         self.persist_interface();
         self.sync_tool_properties();
+        if let Some(e) = self.drawing.error.take() {
+            self.status = Some(e);
+            ui.ctx().request_repaint();
+        }
         self.update_power();
         if let Err(e) = self.persist_workspace() {
             self.status = Some(e);
@@ -530,7 +538,8 @@ impl eframe::App for Drawer {
         if self.smoke_output.is_none()
             && !self.quit_ready
             && ui.ctx().input(|input| input.viewport().close_requested())
-            && (self.documents.iter().any(|doc| doc.dirty)
+            && (self.drawing.pending()
+                || self.documents.iter().any(|doc| doc.dirty)
                 || self.sizing_dialog.is_some()
                 || self.import_dialog.is_some()
                 || self.paste_dialog.is_some()
@@ -545,6 +554,7 @@ impl eframe::App for Drawer {
                 && self.movie_dialog.is_none()
                 && self.revert_pending.is_none()
             {
+                self.process_drawing(ui.ctx());
                 self.begin_quit();
             }
         }
@@ -1077,8 +1087,12 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if let Err(e) = drawing::smoke_painting() {
+                    eprintln!("Mouse painting: {e}");
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3789,6 +3803,8 @@ mod tests {
         app.documents[0].view.angle = 37.0;
         app.documents[0].view.flipped = true;
         app.documents[0].dirty = false;
+        // Isolate cursor/input behavior from painting, which is verified separately.
+        app.documents[0].scene.selection_mask = Some(drawer_core::selection::Mask::default());
         let before = app.documents[0].snapshot();
         let history = app.documents[0].history_counts();
         for size in [1.0, 4096.0] {

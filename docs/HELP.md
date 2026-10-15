@@ -186,7 +186,7 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 ## tutorial-ko | 로컬 그리기 안내 | 튜토리얼 처음 마우스 로컬 문서 저장 펜
 
 1. New canvas에서 크기와 DPI를 정하고 새 문서를 만듭니다.
-2. B/N/E/W로 펜·연필·지우개·워시를 고르고 Test painting의 독립 영역에서 마우스로 시험합니다. 실제 문서 획 엔진은 해당 기능 항목에서 추가합니다.
+2. B/N/E/W로 펜·연필·지우개·워시를 고르고 캔버스에 왼쪽 버튼을 눌러 그립니다. 한 번 놓을 때 한 획을 확정하며 Undo 한 번으로 되돌립니다. 지우개는 투명도를 지웁니다. Test painting은 문서와 분리된 시험 영역입니다.
 3. 휠로 확대하고 가운데 버튼 또는 Space+드래그로 보기만 이동합니다. 정보 창에서 두 점을 지정하면 문서 단위로 거리를 측정할 수 있습니다.
 4. Save as로 로컬 .drawer 문서를 저장하고 PNG 출력은 별도 사본으로 만듭니다. 여러 보기창은 같은 그림을 공유합니다.
 5. 입력란은 Enter/포커스 이동으로 확정하고 Esc로 편집을 취소합니다. 조합 중 Esc는 조합만 취소합니다. F1은 포커스 제어기의 로컬 설명을 엽니다.
@@ -195,8 +195,14 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 ## tutorial-en | Offline drawing tutorial | tutorial beginner mouse pen local save
 
 1. Create a document with New canvas, dimensions and DPI.
-2. Choose Pen/Pencil/Eraser/Wash with the default B/N/E/W keys. Try mouse strokes in the independent Test painting area. The document stroke engine is added in its checklist item.
+2. Choose Pen/Pencil/Eraser/Wash with the default B/N/E/W keys. Draw on the canvas with the left mouse button. Release to commit one stroke; Undo restores it in one step. Eraser removes alpha. Test painting is a separate practice area.
 3. Zoom with the wheel and pan with the middle button or Space+drag. The Information window measures two points in document units.
 4. Save a local .drawer document; PNG export creates a separate copy. Multiple views share one drawing.
 5. Commit field edits with Enter or focus change; Esc cancels an edit. During IME composition, Esc cancels composition only. F1 opens local context help.
 6. Physical pen validation is a separate step. No online account or cloud assets are required.
+
+## mouse-painting | 마우스 그리기와 지우기 | 마우스 획 취소 선택 지우개 알파
+
+캔버스 왼쪽 누름부터 놓음까지 한 획입니다. 움직이지 않고 클릭해도 한 점을 찍고 빠르게 움직인 구간도 연결합니다. 현재 래스터와 선택 마스크 안에서만 그리며 선택이 비어 있으면 변경하지 않습니다. 획 도중 도구·색·크기를 바꾸어도 시작할 때의 값으로 끝냅니다.
+
+누르는 동안 다른 보기에도 획을 미리 표시합니다. 정상적인 창 밖 놓음은 마지막 좌표까지 확정합니다. Esc·포커스 상실·포인터 취소·놓음 누락은 진행 중인 획을 버립니다. 저장/문서 닫기/화면 전환 명령은 유효한 진행 획을 먼저 확정합니다. 선택 제한과 지우기의 결과도 Undo/Redo로 복원합니다. 실제 펜 검증은 별도입니다.

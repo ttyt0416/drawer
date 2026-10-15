@@ -73,6 +73,9 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if !BrushTip::ALL.iter().any(|t| t.name() == command) && !command.starts_with("cycle-") {
+            self.finish_stroke();
+        }
         if let Some(reason) = self.command_reason(command) {
             self.status = Some(reason);
             return;

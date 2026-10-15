@@ -8,6 +8,7 @@ use crate::{
 
 pub struct Renderer<'a> {
     document: &'a Document,
+    stroke: Option<&'a crate::painting::Stroke>,
     text_contours: Vec<Vec<Contour>>,
 }
 struct Contour {
@@ -16,6 +17,9 @@ struct Contour {
 }
 impl<'a> Renderer<'a> {
     pub fn new(document: &'a Document) -> Self {
+        Self::preview(document, None)
+    }
+    pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
         let text_contours = document
             .scene
             .objects
@@ -32,6 +36,7 @@ impl<'a> Renderer<'a> {
             .collect();
         Self {
             document,
+            stroke,
             text_contours,
         }
     }
@@ -44,7 +49,13 @@ impl<'a> Renderer<'a> {
         {
             return [0; 4];
         }
-        let mut result = doc.composite_pixel(point[0] as u32, point[1] as u32);
+        let x = point[0] as u32;
+        let y = point[1] as u32;
+        let mut result = doc.composite_pixel_with(x, y, |index, layer| {
+            self.stroke
+                .and_then(|s| s.pixel(doc, index, layer, x, y))
+                .unwrap_or_else(|| layer.pixel(doc.width, doc.height, x as i64, y as i64))
+        });
         let scene = &doc.scene;
         let original = scene.transform.inverse().map(point);
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
