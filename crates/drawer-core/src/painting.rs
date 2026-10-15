@@ -16,6 +16,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 pub struct Style {
     #[serde(
         default,
+        skip_serializing_if = "crate::tip_sequence::Settings::is_default"
+    )]
+    pub sequence: crate::tip_sequence::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::stroke_filter::Settings::is_default"
     )]
     pub filters: crate::stroke_filter::Settings,
@@ -69,7 +74,8 @@ impl Style {
         (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.filters.valid()
+        self.sequence.valid()
+            && self.filters.valid()
             && self.profile.valid()
             && self.shape.valid()
             && self.material.valid()
@@ -102,6 +108,8 @@ pub struct Stroke {
     last_stamp: Option<Point>,
     pressure: f64,
     pressure_filter: crate::stroke_filter::Pressure,
+    sequence: crate::tip_sequence::Sequence,
+    mask_tip: BrushTip,
     last_stamp_pressure: f64,
     scale: f64,
     last_scale: f64,
@@ -167,16 +175,36 @@ impl Stroke {
         use crate::brush_material::Mode;
         use crate::mouse_pressure::Effect;
         let m = self.style.material;
+        let blend = |a, b, w| {
+            if m.space == crate::color_mix::Space::Standard {
+                mix(a, b, w)
+            } else {
+                crate::color_mix::mix(m.space, a, b, w)
+            }
+        };
         let mut color = if !m.pigment() {
             match self.effect {
-                Effect::Blend => mix(self.style.color, picked, self.strength),
+                Effect::Blend => blend(self.style.color, picked, self.strength),
                 Effect::Smudge => {
                     let carried = self.carried.unwrap_or(picked);
-                    self.carried = Some(mix(carried, picked, self.strength));
+                    self.carried = Some(blend(carried, picked, self.strength));
                     carried
                 }
                 _ => self.style.color,
             }
+        } else if m.mode == Mode::RunningColor {
+            let mut foreground = if m.colorless {
+                picked
+            } else {
+                self.style.color
+            };
+            foreground[3] =
+                (foreground[3] as f64 * if m.colorless { 1.0 } else { m.supply }).round() as u8;
+            let mut local = blend(foreground, picked, m.mixing);
+            if m.keep_density {
+                local[3] = local[3].max(picked[3]);
+            }
+            local
         } else if m.mode == Mode::Paint && !m.colorless {
             let mut color = self.style.color;
             color[3] = (color[3] as f64 * m.supply).round() as u8;
@@ -198,7 +226,7 @@ impl Stroke {
             } else {
                 m.mixing * (1.0 - m.retention.powf(distance / m.smudge_distance))
             };
-            let mut pigment = mix(previous, sampled, pickup);
+            let mut pigment = blend(previous, sampled, pickup);
             let supply = if m.colorless || m.mode == Mode::Smudge {
                 0.0
             } else {
@@ -209,7 +237,7 @@ impl Stroke {
             } else {
                 1.0 - (1.0 - supply).powf(distance / self.style.shape.size.max(0.1))
             };
-            pigment = mix(pigment, self.style.color, replenish);
+            pigment = blend(pigment, self.style.color, replenish);
             if m.keep_density {
                 if pigment[3] == 0 && previous[3] > 0 {
                     pigment[..3].copy_from_slice(&previous[..3]);
@@ -458,6 +486,8 @@ impl Stroke {
             last_stamp: None,
             pressure: 1.0,
             pressure_filter: Default::default(),
+            sequence: Default::default(),
+            mask_tip: style.tip,
             last_stamp_pressure: 1.0,
             scale: 1.0,
             last_scale: 1.0,
@@ -563,7 +593,7 @@ impl Stroke {
             if length > 1e-9 {
                 let radius = self.style.shape.size
                     * 0.5
-                    * if self.style.profile.square(self.style.tip) {
+                    * if self.style.sequence.enabled || self.style.profile.square(self.style.tip) {
                         1.0 + self.style.shape.aspect
                     } else {
                         1.0
@@ -661,6 +691,9 @@ impl Stroke {
     pub fn preview_key(&self) -> (u64, u64) {
         (self.nonce, self.preview_revision)
     }
+    pub fn mask_tip(&self) -> BrushTip {
+        self.mask_tip
+    }
     pub fn style(&self) -> Style {
         self.style
     }
@@ -722,7 +755,17 @@ impl Stroke {
         if shape.size == 0.0 || opacity == 0.0 || self.style.opacity == 0.0 {
             return Ok(());
         }
-        let (center, radius, minor) = if self.style.tip == BrushTip::PixelPen {
+        let mask_tip = if self.style.sequence.enabled {
+            let Some(slot) = self.sequence.next(self.style.sequence) else {
+                return Ok(());
+            };
+            self.style.sequence.tip(slot, self.style.tip)
+        } else {
+            self.style.tip
+        };
+        self.mask_tip = mask_tip;
+        let pixel_tip = self.style.tip == BrushTip::PixelPen || mask_tip == BrushTip::PixelPen;
+        let (center, radius, minor) = if pixel_tip {
             let width = shape.size.round().max(1.0);
             let height = (width * shape.aspect).round().max(1.0);
             let offset = |n: f64| {
@@ -750,7 +793,7 @@ impl Stroke {
             (center, shape.size * 0.5, shape.size * 0.5 * shape.aspect)
         };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
-        let extent = if self.style.profile.square(self.style.tip) {
+        let extent = if self.style.profile.square(mask_tip) {
             [
                 radius * cos.abs() + minor * sin.abs() + 1.0,
                 radius * sin.abs() + minor * cos.abs() + 1.0,
@@ -793,7 +836,49 @@ impl Stroke {
             return Err("Stroke pixel-work budget exceeded; pending stroke cancelled".into());
         }
         let mut changed = false;
-        let picked = self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64);
+        let picked = if self.style.material.mode == crate::brush_material::Mode::RunningColor
+            && self.style.material.quality == crate::color_mix::Quality::High
+        {
+            self.pixel_work = self.pixel_work.saturating_add(9);
+            if self.pixel_work > 64 * 1024 * 1024 {
+                return Err("Color sampling work budget exceeded".into());
+            }
+            let mut samples = [([0; 4], 0.0); 9];
+            let mut sample_count = 0;
+            for dy in [-0.5, 0.0, 0.5] {
+                for dx in [-0.5, 0.0, 0.5] {
+                    let p = [
+                        center[0] + dx * radius * cos - dy * minor * sin,
+                        center[1] + dx * radius * sin + dy * minor * cos,
+                    ];
+                    if p[0] >= 0.0
+                        && p[1] >= 0.0
+                        && p[0] < doc.width as f64
+                        && p[1] < doc.height as f64
+                    {
+                        let weight = doc.scene.selection_coverage(p) as f64 / 255.0;
+                        if weight > 0.0 {
+                            samples[sample_count] = (
+                                self.candidate(doc, p[0].floor() as i64, p[1].floor() as i64),
+                                weight,
+                            );
+                            sample_count += 1;
+                        }
+                    }
+                }
+            }
+            crate::color_mix::average(self.style.material.space, samples)
+        } else if self.style.material.mode == crate::brush_material::Mode::RunningColor
+            && (center[0] < 0.0
+                || center[1] < 0.0
+                || center[0] >= doc.width as f64
+                || center[1] >= doc.height as f64
+                || doc.scene.selection_coverage(center) == 0)
+        {
+            [0; 4]
+        } else {
+            self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64)
+        };
         let paint_color = self.pigment_color(picked, center);
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
@@ -808,7 +893,7 @@ impl Stroke {
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
-                let distance = if self.style.profile.square(self.style.tip) {
+                let distance = if self.style.profile.square(mask_tip) {
                     q[0].abs().max(q[1].abs())
                 } else {
                     q[0].hypot(q[1])
@@ -819,7 +904,7 @@ impl Stroke {
                 } else {
                     ((1.0 - distance) / (1.0 - self.style.hardness)).clamp(0.0, 1.0)
                 };
-                let coverage = if self.style.tip == BrushTip::PixelPen {
+                let coverage = if pixel_tip {
                     if distance < 1.0 { 1.0 } else { 0.0 }
                 } else {
                     edge * softness
@@ -827,7 +912,7 @@ impl Stroke {
                 if coverage <= 0.0 {
                     continue;
                 }
-                let amount = match self.style.tip {
+                let amount = match mask_tip {
                     BrushTip::Pen | BrushTip::Eraser | BrushTip::Smudge | BrushTip::PixelPen => {
                         coverage
                     }
@@ -887,8 +972,10 @@ impl Stroke {
                         base[2],
                         (base[3] as f64 * (1.0 - amount)).round() as u8,
                     ]
-                } else if self.style.material.mode == crate::brush_material::Mode::Smudge
-                    || self.style.material.colorless
+                } else if matches!(
+                    self.style.material.mode,
+                    crate::brush_material::Mode::Smudge | crate::brush_material::Mode::RunningColor
+                ) || self.style.material.colorless
                 {
                     mix(base, paint_color, amount)
                 } else {
@@ -1022,6 +1109,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),
                 texture: Default::default(),
@@ -1090,6 +1178,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),
@@ -1111,6 +1200,56 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+    #[test]
+    fn running_quality_respects_selection_boundary_alpha_lock_and_empty_edges() {
+        use crate::{brush_material::Mode, color_mix::Quality, scene::Rect};
+        for alpha_lock in [false, true] {
+            let mut d = doc();
+            for y in 0..12 {
+                for x in 0..32 {
+                    d.layers[0].pixels[y * 32 + x] = if x < 16 {
+                        [255, 0, 0, 255]
+                    } else {
+                        [0, 0, 255, 128]
+                    };
+                }
+            }
+            d.scene.selection = Some(Rect {
+                min: [16.0, 0.0],
+                max: [32.0, 12.0],
+            });
+            let before = d.snapshot();
+            let mut s = style(BrushTip::Pen);
+            s.shape.size = 10.0;
+            s.material = crate::brush_material::Settings {
+                mode: Mode::RunningColor,
+                quality: Quality::High,
+                supply: 0.0,
+                mixing: 1.0,
+                alpha_lock,
+                ..Default::default()
+            };
+            let mut st = Stroke::begin(&d, 0, s).unwrap();
+            st.direct_dab(&d, [16.5, 6.5], [16.5, 6.5], 1.0).unwrap();
+            st.commit(&mut d).unwrap();
+            assert_eq!(d.composite_pixel(15, 6), [255, 0, 0, 255]);
+            assert_eq!(d.composite_pixel(16, 6), [0, 0, 255, 128]);
+            assert!(d.snapshot() == before);
+        }
+        let mut d = doc();
+        let mut s = style(BrushTip::Pen);
+        s.material.mode = Mode::RunningColor;
+        s.material.quality = Quality::High;
+        s.material.supply = 0.0;
+        s.material.mixing = 1.0;
+        let mut st = Stroke::begin(&d, 0, s).unwrap();
+        st.direct_dab(&d, [-0.1, 6.5], [-0.1, 6.5], 1.0).unwrap();
+        assert!(!st.commit(&mut d).unwrap());
+        let mut st = Stroke::begin(&d, 0, s).unwrap();
+        st.pixel_work = 64 * 1024 * 1024;
+        assert!(st.direct_dab(&d, [4.5, 6.5], [4.5, 6.5], 1.0).is_err());
+        assert_eq!(d.history_counts(), (0, 0));
     }
     #[test]
     fn sparse_fast_thin_tips_are_connected_and_replay_history_is_exact() {

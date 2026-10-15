@@ -237,6 +237,58 @@ mod tests {
         assert_eq!(results[1], results[2]);
     }
     #[test]
+    fn popup_sequence_keeps_stroke_state_and_cancel_restores_every_preview_pixel() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        let doc = app.documents[0].snapshot();
+        app.workspaces.store.current.scratchpad.visible = true;
+        app.workspaces.store.current.input.sequences[0] = drawer_core::tip_sequence::Settings {
+            enabled: true,
+            count: 1,
+            tips: [7, 0, 0, 0, 0, 0, 0, 0],
+            order: drawer_core::tip_sequence::Order::OneTimeOnly,
+            ..Default::default()
+        };
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.workspaces.pad_rect.unwrap();
+        let at = |x: f32| rect.min + egui::vec2(x, 30.0) * 3.0;
+        let down = |pos| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        };
+        let up = |pos| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        };
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(at(20.0)), down(at(20.0))],
+        );
+        let first = app.workspaces.store.current.scratchpad.pixels.clone();
+        assert!(first.iter().any(|p| p[3] > 0));
+        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(at(80.0))]);
+        assert!(app.workspaces.store.current.scratchpad.pixels == first);
+        frame(&ctx, &mut app, vec![up(at(80.0))]);
+        assert!(app.workspaces.store.current.scratchpad.pixels == first);
+        frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(at(70.0)), down(at(70.0))],
+        );
+        assert!(app.workspaces.store.current.scratchpad.pixels != first);
+        frame(&ctx, &mut app, vec![egui::Event::WindowFocused(false)]);
+        assert!(app.workspaces.store.current.scratchpad.pixels == first);
+        assert!(!app.workspaces.painting());
+        assert!(app.documents[0].snapshot() == doc);
+    }
+    #[test]
     fn live_cursor_filtered_prediction_minimum_styles_mirror_no_input_and_restart() {
         let ctx = egui::Context::default();
         let root = TestDirectory::new();

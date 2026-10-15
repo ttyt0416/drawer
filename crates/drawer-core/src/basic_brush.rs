@@ -60,6 +60,7 @@ pub fn restore_input(snapshot: &mut Snapshot, tip: BrushTip) {
     snapshot.input.textures[n] = Default::default();
     snapshot.input.profiles[n] = Default::default();
     snapshot.input.filters[n] = Default::default();
+    snapshot.input.sequences[n] = Default::default();
     snapshot.input.mouse_pressure[n] = Default::default();
     snapshot.pressure.tools[n] = Default::default();
 }
@@ -99,6 +100,7 @@ pub fn verify_pixels() -> Result<(), String> {
         let before = d.snapshot();
         let v = values(tip);
         let style = Style {
+            sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),

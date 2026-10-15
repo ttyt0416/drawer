@@ -173,11 +173,12 @@ impl Drawer {
             super::edit::slider(ui,&mut draft.drag_pixels,0.0..=64.0,"Drag threshold (screen pixels)","modifier-tools");
             for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.label()),"modifier-tools");}
             ui.collapsing("Stroke start / end geometry — all drawing devices",|ui| {
-                ui.label("Distance in document pixels; 0 disables that end. Position stabilization and real pressure remain independent.");
+                ui.label("Choose document length, stroke percentage, or a held fade. Geometry remains independent of position and pressure.");
                 for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-ends",n),|ui| {
-                    ui.label(tip.label());super::edit::number(ui,&mut draft.ends[n].start,0.0..=1e6,1.0," px start","modifier-tools");super::edit::number(ui,&mut draft.ends[n].end,0.0..=1e6,1.0," px end","modifier-tools");
+                    ui.label(tip.label());super::tip_sequence::ends_ui(ui,&mut draft.ends[n]);
                 });}
             });
+            ui.collapsing("Multiple local tips and order",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-sequence",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_sequence::settings_ui(ui,&mut draft.sequences[n]));});}});
             ui.collapsing("Independent position and device pressure filters",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-filter",n),|ui|{ui.collapsing(tip.label(),|ui|super::stroke_filter::settings_ui(ui,&mut draft.filters[n]));});}});
             ui.collapsing("Tip images and minimum outputs",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-profile",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_profile::settings_ui(ui,&mut draft.profiles[n],tip));});}});
             ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::pattern_ui(ui,&mut draft.textures[n]));});}});
@@ -422,6 +423,13 @@ mod tests {
         let before = app.documents[0].snapshot();
         let baseline = app.capture_workspace();
         let mut draft = baseline.input;
+        draft.sequences[0] = drawer_core::tip_sequence::Settings {
+            enabled: true,
+            count: 3,
+            tips: [7, 2, 999, 0, 0, 0, 0, 0],
+            seed: 825,
+            order: drawer_core::tip_sequence::Order::OneRandomCycle,
+        };
         draft.filters[0] = drawer_core::stroke_filter::Settings {
             position_enabled: false,
             pressure_enabled: true,
@@ -434,11 +442,15 @@ mod tests {
         };
         draft.smoothing[0] = 0.95;
         draft.ends[0] = drawer_core::stroke_ends::Settings {
+            method: drawer_core::stroke_ends::Method::Percentage,
+            fade_minimum: 0.3,
             start: 9.0,
             end: 17.0,
         };
         draft.materials[0] = drawer_core::brush_material::Settings {
-            mode: drawer_core::brush_material::Mode::Water,
+            mode: drawer_core::brush_material::Mode::RunningColor,
+            space: drawer_core::color_mix::Space::Perceptual,
+            quality: drawer_core::color_mix::Quality::High,
             supply: 0.2,
             retention: 0.8,
             keep_density: true,

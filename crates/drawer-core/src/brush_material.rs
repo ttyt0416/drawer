@@ -5,16 +5,24 @@ pub enum Mode {
     #[default]
     Paint,
     Blend,
+    RunningColor,
     Smudge,
     Water,
 }
 impl Mode {
-    pub const ALL: [Self; 4] = [Self::Paint, Self::Blend, Self::Smudge, Self::Water];
+    pub const ALL: [Self; 5] = [
+        Self::Paint,
+        Self::Blend,
+        Self::RunningColor,
+        Self::Smudge,
+        Self::Water,
+    ];
     pub fn label(self) -> &'static str {
         match self {
-            Self::Paint => "Paint",
+            Self::Paint => "None",
             Self::Blend => "Blend",
-            Self::Smudge => "Smudge",
+            Self::RunningColor => "Running color",
+            Self::Smudge => "Smear",
             Self::Water => "Watercolor",
         }
     }
@@ -22,6 +30,10 @@ impl Mode {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub space: crate::color_mix::Space,
+    #[serde(default)]
+    pub quality: crate::color_mix::Quality,
     pub mode: Mode,
     pub supply: f64,
     pub mixing: f64,
@@ -36,6 +48,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            space: Default::default(),
+            quality: Default::default(),
             mode: Mode::Paint,
             supply: 1.0,
             mixing: 0.5,
@@ -116,6 +130,7 @@ fn probe_in(
     d.mark_saved("material-baseline.drawer".into());
     let before = d.snapshot();
     let style = Style {
+        sequence: Default::default(),
         filters: Default::default(),
         profile: Default::default(),
         texture: Default::default(),
@@ -150,6 +165,8 @@ fn probe_in(
 /// Same pigment/alpha checks run in unit tests and the installed native process.
 pub fn verify() -> Result<(), String> {
     let base = Settings {
+        space: Default::default(),
+        quality: Default::default(),
         mode: Mode::Water,
         supply: 0.0,
         mixing: 1.0,
@@ -289,6 +306,8 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        space: Default::default(),
+        quality: Default::default(),
         mode: Mode::Water,
         supply: 0.3,
         mixing: 0.4,
@@ -344,6 +363,8 @@ fn verify_numeric_controls() -> Result<(), String> {
 pub fn verify_independent() -> Result<(), String> {
     verify_numeric_controls()?;
     let base = Settings {
+        space: Default::default(),
+        quality: Default::default(),
         mode: Mode::Water,
         supply: 0.0,
         mixing: 1.0,
@@ -586,6 +607,7 @@ mod tests {
             .unwrap();
             d.layers[0].pixels = vec![[15, 22, 33, 0], [80, 90, 100, 128], [120, 130, 140, 255]];
             let style = Style {
+                sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),
                 texture: Default::default(),
@@ -630,5 +652,101 @@ mod tests {
             results.push(d.layers.remove(0).pixels);
         }
         assert_eq!(results[0], results[1]);
+    }
+}
+
+/// Independent stripe checks also run in the installed application.
+pub fn verify_mix_modes() -> Result<(), String> {
+    use crate::color_mix::{Quality, Space};
+    let mut results = Vec::new();
+    for mode in [Mode::Paint, Mode::Blend, Mode::RunningColor, Mode::Smudge] {
+        let (d, _) = probe(
+            Settings {
+                mode,
+                supply: 0.4,
+                mixing: 0.7,
+                retention: 0.8,
+                smudge_distance: 16.0,
+                ..Default::default()
+            },
+            1.0,
+        )?;
+        let pixels = d.layers[0].pixels.clone();
+        if results.contains(&pixels) {
+            return Err(format!("{} duplicated another mix mode", mode.label()));
+        }
+        results.push(pixels);
+    }
+    let base = Settings {
+        mode: Mode::Blend,
+        supply: 0.4,
+        mixing: 0.7,
+        ..Default::default()
+    };
+    let (standard, _) = probe(base, 1.0)?;
+    let (perceptual, _) = probe(
+        Settings {
+            space: Space::Perceptual,
+            ..base
+        },
+        1.0,
+    )?;
+    if standard.layers[0].pixels == perceptual.layers[0].pixels {
+        return Err("Perceptual pigment mode had no effect".into());
+    }
+    use crate::{
+        assets::BrushTip,
+        brush_cursor::Shape,
+        painting::{Stroke, Style},
+    };
+    let render = |quality, mode| -> Result<Vec<[u8; 4]>, String> {
+        let (mut d, _) = probe(Settings::default(), 0.0)?;
+        let s = Style {
+            sequence: Default::default(),
+            filters: Default::default(),
+            profile: Default::default(),
+            texture: Default::default(),
+            material: Settings {
+                mode,
+                quality,
+                supply: 0.0,
+                mixing: 1.0,
+                ..Default::default()
+            },
+            shape: Shape {
+                size: 12.0,
+                aspect: 1.0,
+                angle: 0.0,
+            },
+            tip: BrushTip::Pen,
+            color: [0; 4],
+            opacity: 1.0,
+            hardness: 1.0,
+            spacing: 0.15,
+            smoothing: 0.0,
+            pressure: crate::pressure::Mapping {
+                size: false,
+                opacity: true,
+                ..Default::default()
+            },
+        };
+        let mut st = Stroke::begin(&d, 0, s)?;
+        st.direct_dab(&d, [16.5, 16.5], [16.5, 16.5], 1.0)?;
+        st.commit(&mut d)?;
+        Ok(d.layers.remove(0).pixels)
+    };
+    if render(Quality::Normal, Mode::RunningColor)? == render(Quality::High, Mode::RunningColor)? {
+        return Err("Running color footprint quality was ignored".into());
+    }
+    if render(Quality::Normal, Mode::Blend)? != render(Quality::High, Mode::Blend)? {
+        return Err("Running quality leaked into another mode".into());
+    }
+    crate::color_mix::verify()
+}
+#[cfg(test)]
+mod mix_mode_tests {
+    #[test]
+    fn stripe_modes_perceptual_and_running_quality_are_independent() {
+        super::verify_mix_modes().unwrap();
     }
 }

@@ -435,10 +435,15 @@ impl Replay {
                     positions.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
                 }
                 if self.ends.active() && length > 1e-9 {
+                    let [start_length, end_length] = self.ends.lengths(distance);
                     for n in 0..=4 {
                         for knot in [
-                            self.ends.start * n as f64 / 4.0,
-                            distance - self.ends.end * n as f64 / 4.0,
+                            start_length * n as f64 / 4.0,
+                            if self.ends.method == crate::stroke_ends::Method::Fade {
+                                end_length * n as f64 / 4.0
+                            } else {
+                                distance - end_length * n as f64 / 4.0
+                            },
                         ] {
                             if knot > start && knot < at {
                                 positions.push(knot);
@@ -890,6 +895,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),

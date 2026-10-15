@@ -74,3 +74,6 @@ pub mod extended_brushes;
 pub mod tip_profile;
 
 pub mod stroke_filter;
+
+pub mod color_mix;
+pub mod tip_sequence;

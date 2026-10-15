@@ -60,6 +60,11 @@ pub struct Preset {
         skip_serializing_if = "crate::stroke_filter::Settings::is_default"
     )]
     pub filters: crate::stroke_filter::Settings,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::tip_sequence::Settings::is_default"
+    )]
+    pub sequence: crate::tip_sequence::Settings,
 }
 impl Preset {
     pub fn validate(&self) -> Result<(), String> {
@@ -81,6 +86,7 @@ impl Preset {
             || !self.mouse.valid()
             || !self.material.valid()
             || !self.overlay.valid()
+            || !self.sequence.valid()
             || !self.filters.valid()
             || !self.profile.valid()
         {
@@ -112,6 +118,7 @@ impl Preset {
             overlay: snapshot.input.textures[n],
             profile: snapshot.input.profiles[n],
             filters: snapshot.input.filters[n],
+            sequence: snapshot.input.sequences[n],
         };
         p.validate()?;
         Ok(p)
@@ -153,6 +160,7 @@ impl Preset {
         next.input.textures[n] = self.overlay;
         next.input.profiles[n] = self.profile;
         next.input.filters[n] = self.filters;
+        next.input.sequences[n] = self.sequence;
         next.tool = self.tip.name().into();
         if !next.valid() {
             return Err("Preset would create invalid workspace settings".into());
@@ -364,6 +372,8 @@ mod tests {
             .value = 47.0;
         current.input.mouse_pressure[1].seed = 73;
         current.input.ends[1] = crate::stroke_ends::Settings {
+            method: Default::default(),
+            fade_minimum: 0.0,
             start: 2.0,
             end: 7.0,
         };

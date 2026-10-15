@@ -155,6 +155,7 @@ mod tests {
                 ..Default::default()
             };
             let style = Style {
+                sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),
                 texture: p,

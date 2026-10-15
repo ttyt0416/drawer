@@ -379,3 +379,15 @@ Tool input behavior → Independent position and device pressure filters에서 �
 [최소 굵기·농도](local:tip-profile)
 [가상 입력 검증](local:input-replay)
 
+
+## tip-sequence | 여러 팁·혼색·시작끝 방식 | 순서 시드 반복 왕복 무작위 페이드 taper running perceptual
+
+도구 입력 설정 → Multiple local tips and order에서 독자 팁 마스크 최대8개를 추가·삭제·위아래 이동한다. Current tool tip 또는7개 내장 마스크를 고르며 마스크를 바꿔도 원래 도구의 지우기/번짐 동작은 유지한다. 사용자 이미지 등록은 별도 소재 기능이다. 누락된 참조는 번호를 보존하고 현재 도구 팁으로 대체하며 경고한다.
+
+Repeat는 순환, Reverse는 끝에서 왕복, Do not repeat는 마지막 팁을 계속 사용한다. Random은 고정 시드 복원추출, One time only는 한 번 진행 후 중단, One random cycle은 고정 시드로 중복 없이 섞어 한 번 쓰고 중단한다. 순서 상태는 새 획에서 시작하며 미리보기·취소·Undo/Redo 결과가 재현된다. 한 번의 획 설정과 시드는 문서에 보존한다.
+
+혼색 None은 주색, Blend는 누적 운반색 혼합, Running color는 현재 도장 위치의 층 색과 혼합, Smear는 기존 안료 운반이다. Standard는 sRGB, Perceptual은 Oklab 좌표에서 알파를 고려해 안료를 혼합한다. Normal은 중심 색을, High quality는 Running color에서 선택/캔버스 내부9점의 평균 색을 사용한다. 고품질은 안티앨리어싱 설정이 아니다. 원본 프로그램의 수치/픽셀 일치를 주장하지 않는다. 기존 마우스 특수 효과는 별도 입력 설정을 따른다.
+
+Specify length는 문서 픽셀 거리, By percentage는 전체 획 길이의0~100%를 사용한다. Fade는 시작부터 끝 거리까지 크기를 줄이고 정한 최소 배율을 계속 유지하며 시작 길이를 적용하지 않는다. 시작끝 크기와 필압 농도는 독립이다. 시험 칠하기도 현재 팁 순서·혼색을 한 획으로 유지하며 Esc/포커스 상실 때 획 시작 전으로 복원한다.
+
+[브러시 혼색](local:brush-material)

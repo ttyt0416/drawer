@@ -36,6 +36,13 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
         );
     });
     ui.add_enabled_ui(s.mode != Mode::Paint || s.colorless, |ui| {
+        egui::ComboBox::from_id_salt("mix-space")
+            .selected_text(s.space.label())
+            .show_ui(ui, |ui| {
+                for space in drawer_core::color_mix::Space::ALL {
+                    ui.selectable_value(&mut s.space, space, space.label());
+                }
+            });
         super::edit::slider(
             ui,
             &mut s.mixing,
@@ -43,22 +50,39 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
             "Layer pigment pickup",
             "brush-material",
         );
-        super::edit::slider(
-            ui,
-            &mut s.retention,
-            0.0..=1.0,
-            "Carried color retention",
-            "brush-material",
-        );
-        super::edit::number(
-            ui,
-            &mut s.smudge_distance,
-            0.0..=4096.0,
-            1.0,
-            " px smear distance",
-            "brush-material",
-        );
     });
+    ui.add_enabled_ui(
+        s.mode != Mode::Paint && s.mode != Mode::RunningColor,
+        |ui| {
+            super::edit::slider(
+                ui,
+                &mut s.retention,
+                0.0..=1.0,
+                "Carried color retention",
+                "brush-material",
+            );
+            super::edit::number(
+                ui,
+                &mut s.smudge_distance,
+                0.0..=4096.0,
+                1.0,
+                " px smear distance",
+                "brush-material",
+            );
+        },
+    );
+    ui.add_enabled_ui(s.mode == Mode::RunningColor, |ui| {
+        egui::ComboBox::from_id_salt("mix-quality")
+            .selected_text(s.quality.label())
+            .show_ui(ui, |ui| {
+                for quality in drawer_core::color_mix::Quality::ALL {
+                    ui.selectable_value(&mut s.quality, quality, quality.label());
+                }
+            });
+    });
+    if s.mode == Mode::RunningColor {
+        ui.label("Running color uses the current local pigment without carrying color from earlier positions. High quality reads more samples inside the footprint and selection.");
+    }
     ui.add_enabled_ui(s.mode == Mode::Water, |ui| {
         super::edit::slider(
             ui,

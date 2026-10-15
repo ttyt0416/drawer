@@ -42,6 +42,7 @@ mod sizing_dialog;
 mod stroke_filter;
 mod texture_panel;
 mod tip_profile;
+mod tip_sequence;
 mod tool_input;
 mod tool_properties;
 mod ui_behavior;
@@ -1232,6 +1233,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = tip_sequence::smoke() {
+                    eprintln!("Tip sequence/mixing: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = stroke_filter::smoke() {
                     eprintln!("Independent filters: {e}");
                     fail_smoke();
@@ -1319,7 +1324,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

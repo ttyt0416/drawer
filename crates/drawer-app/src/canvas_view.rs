@@ -339,6 +339,7 @@ impl CanvasView {
             .position(|t| *t == document.tool)
             .unwrap();
         let style = drawer_core::painting::Style {
+            sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),
@@ -562,7 +563,7 @@ impl CanvasView {
                     crate::cursor_settings::Projection {
                         square: active_style
                             .map_or(self.profiles[n], |s| s.profile)
-                            .square(cursor_tool),
+                            .square(stroke.map_or(cursor_tool, |s| s.mask_tip())),
                         view: document.view,
                         size,
                         center,

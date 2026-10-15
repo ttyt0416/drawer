@@ -199,3 +199,8 @@ docs/process/tip-profile.md
 crates/drawer-core/src/stroke_filter.rs
 crates/drawer-app/src/stroke_filter.rs
 docs/process/stroke-filter.md
+
+crates/drawer-core/src/tip_sequence.rs
+crates/drawer-core/src/color_mix.rs
+crates/drawer-app/src/tip_sequence.rs
+docs/process/tip-sequence.md
