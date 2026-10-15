@@ -964,6 +964,8 @@ impl eframe::App for Drawer {
                 }
                 let mut input_workspace = self.capture_workspace();
                 input_workspace.input.hold_millis = 350;
+                input_workspace.input.modifiers =
+                    [Some(BrushTip::Eraser), None, Some(BrushTip::Pencil)];
                 input_workspace.input.drag_pixels = 12.0;
                 self.stage_workspace(
                     input_workspace.clone(),
@@ -989,6 +991,11 @@ impl eframe::App for Drawer {
                 let mut held = drawer_core::tool_input::Controller::default();
                 held.press("E", BrushTip::Eraser, self.selected, None, 0.0, false);
                 if held.release("E", 0.351, input_workspace.input) != Some((self.selected, None)) {
+                    fail_smoke();
+                }
+                held.press_modifier("@Ctrl", BrushTip::Eraser, self.selected, None, 1.0);
+                if held.release("@Ctrl", 1.01, input_workspace.input) != Some((self.selected, None))
+                {
                     fail_smoke();
                 }
                 if self.help.rendered_topic.as_deref() != Some("licenses")
@@ -1060,7 +1067,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3178,6 +3185,12 @@ mod tests {
         );
         std::fs::remove_file(storage.root().join("settings/navigator.json.write.tmp")).unwrap();
         std::fs::write(storage.root().join("settings/navigator.json"), "damaged").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(storage.root().join("settings/navigator.json"))
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(std::time::SystemTime::UNIX_EPOCH))
+            .unwrap();
         assert!(Preferences::load(&storage).is_err());
         let mut recovered = Drawer::new(&ctx, None)
             .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());

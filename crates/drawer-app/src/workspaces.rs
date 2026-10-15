@@ -188,7 +188,10 @@ impl Drawer {
                 if newer("panels.json") {
                     store.current.panels = legacy.panels;
                 }
-                if newer("navigator.json") {
+                // A damaged individual file must not be hidden by equal/coarse timestamps.
+                if newer("navigator.json")
+                    || drawer_core::navigator_preferences::Preferences::load(storage).is_err()
+                {
                     store.current.navigator = legacy.navigator;
                 }
                 if newer("display.json") {

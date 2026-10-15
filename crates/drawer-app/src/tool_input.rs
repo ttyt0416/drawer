@@ -5,6 +5,8 @@ pub(super) struct ToolInput {
     pub controller: Controller,
     pub open: bool,
     draft: Option<Settings>,
+    modifiers: [bool; 3],
+    blocked: [bool; 3],
 }
 impl Drawer {
     fn runtime_tool(&mut self, tool: BrushTip, document: Option<u64>) {
@@ -35,7 +37,22 @@ impl Drawer {
                     .iter()
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         });
-        let lost = focus_lost || ctx.egui_wants_keyboard_input();
+        let modifiers = ctx.input(|i| [i.modifiers.ctrl, i.modifiers.shift, i.modifiers.alt]);
+        let chord = ctx.input(|i| {
+            i.events
+                .iter()
+                .any(|e| matches!(e, egui::Event::Key { pressed: true, .. }))
+        });
+        let modal = self.tool_shortcuts_blocked(ctx);
+        let lost = focus_lost || modal;
+        let suspend = chord && modifiers.iter().any(|m| *m);
+        for (n, down) in modifiers.iter().enumerate() {
+            if !down {
+                self.tool_input.blocked[n] = false;
+            } else if lost || context_changed || suspend {
+                self.tool_input.blocked[n] = true;
+            }
+        }
         if focus_lost {
             ctx.input_mut(|i| {
                 i.keys_down.clear();
@@ -44,7 +61,7 @@ impl Drawer {
             });
             ctx.stop_dragging();
         }
-        if context_changed || lost {
+        if context_changed || lost || suspend {
             if let Some((tool, id)) = self.tool_input.controller.cancel() {
                 self.runtime_tool(tool, id);
                 if let Some(storage) = &self.storage
@@ -81,6 +98,28 @@ impl Drawer {
                 }
             }
         }
+        for (n, down) in modifiers.iter().copied().enumerate() {
+            let key = ["@Ctrl", "@Shift", "@Alt"][n];
+            if !down && self.tool_input.modifiers[n] {
+                if let Some((tool, id)) = self.tool_input.controller.release(key, time, settings) {
+                    self.runtime_tool(tool, id);
+                }
+            } else if down
+                && !self.tool_input.modifiers[n]
+                && !self.tool_input.blocked[n]
+                && let Some(tip) = settings.modifiers[n]
+                && let Some(tool) = self.tool_input.controller.press_modifier(
+                    key,
+                    tip,
+                    self.selected,
+                    document,
+                    time,
+                )
+            {
+                self.runtime_tool(tool, document);
+            }
+        }
+        self.tool_input.modifiers = modifiers;
         if self.tool_input.controller.persisted_tool().is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
@@ -119,6 +158,19 @@ impl Drawer {
             ui.add(egui::Slider::new(&mut draft.hold_millis,0..=5000).text("Temporary tool threshold (ms)"));
             ui.add(egui::Slider::new(&mut draft.drag_pixels,0.0..=64.0).text("Drag threshold (screen pixels)"));
             for (n,tip) in BrushTip::ALL.iter().enumerate(){ui.add(egui::Slider::new(&mut draft.smoothing[n],0.0..=0.95).text(format!("{} stabilization",tip.name())));}
+            ui.separator();
+            ui.label("Hold a modifier to use its tool; release always restores the previous tool.");
+            for (n, label) in ["Ctrl", "Shift", "Alt"].into_iter().enumerate() {
+                egui::ComboBox::from_id_salt(("modifier-tool",n)).selected_text(format!("{label}: {}",draft.modifiers[n].map_or("Unassigned",|t|t.name()))).show_ui(ui,|ui|{
+                    ui.selectable_value(&mut draft.modifiers[n], None,"Unassigned");
+                    for tip in BrushTip::ALL { ui.selectable_value(&mut draft.modifiers[n],Some(tip),tip.name()); }
+                });
+                if draft.modifiers[n].is_some() {
+                    let shared = self.workspaces.store.current.bindings.iter().filter(|b| [b.ctrl,b.shift,b.alt][n]).map(|b|b.label()).collect::<Vec<_>>();
+                    if !shared.is_empty(){ui.colored_label(egui::Color32::YELLOW,format!("Shared shortcuts: {}. A key chord suspends the modifier tool until release.",shared.join(", ")));}
+                }
+            }
+            ui.label("Input fields, menus and dialogs take priority. After suspension, release the modifier before using it again.");
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
             ui.horizontal_wrapped(|ui|{apply=ui.button("Apply input behavior").clicked();cancel=ui.button("Cancel input behavior").clicked();if ui.button("Reset draft").clicked(){draft=Default::default();}
                 if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>draft=s.input,Err(e)=>self.status=Some(e.to_string())}}
@@ -181,6 +233,131 @@ mod tests {
             repeat,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn modifier_tools_release_during_pointer_input_suspend_for_chords_popups_and_focus() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        app.workspaces.store.current.input.modifiers = [
+            Some(BrushTip::Eraser),
+            Some(BrushTip::Wash),
+            Some(BrushTip::Pencil),
+        ];
+        app.persist_workspace().unwrap();
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let mut time = 1.0;
+        let mut run =
+            |app: &mut Drawer, modifiers: egui::Modifiers, mut events: Vec<egui::Event>| {
+                events.insert(0, egui::Event::ModifiersChanged(modifiers));
+                time += 0.1;
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1100.0, 760.0),
+                        )),
+                        time: Some(time),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| app.show(ui),
+                );
+                out.textures_delta.clear();
+            };
+        let none = egui::Modifiers::NONE;
+        let ctrl = egui::Modifiers::CTRL;
+        run(&mut app, none, vec![]);
+        for (mods, tool) in [
+            (ctrl, BrushTip::Eraser),
+            (egui::Modifiers::SHIFT, BrushTip::Wash),
+            (egui::Modifiers::ALT, BrushTip::Pencil),
+        ] {
+            run(&mut app, mods, vec![]);
+            assert_eq!(app.selected, tool);
+            assert_eq!(app.capture_workspace().tool, "Pen");
+            let pos = app.canvas_view.viewport.unwrap().center();
+            run(
+                &mut app,
+                mods,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: mods,
+                    },
+                ],
+            );
+            run(&mut app, none, vec![]);
+            assert_eq!(app.selected, BrushTip::Pen);
+            run(
+                &mut app,
+                none,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: none,
+                }],
+            );
+            assert!(app.tool_input.controller.persisted_tool().is_none());
+        }
+        run(&mut app, ctrl, vec![]);
+        assert_eq!(app.selected, BrushTip::Eraser);
+        run(
+            &mut app,
+            ctrl,
+            vec![egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: ctrl,
+            }],
+        );
+        assert_eq!(app.selected, BrushTip::Pen);
+        run(
+            &mut app,
+            ctrl,
+            vec![egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: false,
+                repeat: false,
+                modifiers: ctrl,
+            }],
+        );
+        assert_eq!(app.selected, BrushTip::Pen);
+        run(&mut app, none, vec![]);
+        run(&mut app, ctrl, vec![]);
+        assert_eq!(app.selected, BrushTip::Eraser);
+        app.controls.quick = Some(2);
+        run(&mut app, ctrl, vec![]);
+        assert_eq!(app.selected, BrushTip::Pen);
+        app.controls.quick = None;
+        run(&mut app, ctrl, vec![]);
+        assert_eq!(app.selected, BrushTip::Pen);
+        run(&mut app, none, vec![]);
+        run(&mut app, ctrl, vec![]);
+        run(&mut app, ctrl, vec![egui::Event::WindowFocused(false)]);
+        assert_eq!(app.selected, BrushTip::Pen);
+        run(&mut app, none, vec![egui::Event::WindowFocused(true)]);
+        assert!(app.tool_input.controller.persisted_tool().is_none());
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(
+            restarted.workspaces.store.current.input.modifiers,
+            app.workspaces.store.current.input.modifiers
+        );
+        assert_eq!(restarted.selected, BrushTip::Pen);
+        assert_eq!(app.documents[0].snapshot(), before);
+        assert_eq!(app.documents[0].history_counts(), history);
     }
     #[test]
     fn timed_tool_keys_release_together_focus_loss_overlap_and_restart() {

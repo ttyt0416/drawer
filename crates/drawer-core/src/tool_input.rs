@@ -8,6 +8,9 @@ pub struct Settings {
     pub drag_pixels: f64,
     #[serde(default)]
     pub smoothing: [f64; 4],
+    /// Ctrl, Shift, Alt. Modifiers always restore on release.
+    #[serde(default)]
+    pub modifiers: [Option<BrushTip>; 3],
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -16,6 +19,7 @@ impl Default for Settings {
             hold_millis: 300,
             drag_pixels: 4.0,
             smoothing: [0.0; 4],
+            modifiers: [None; 3],
         }
     }
 }
@@ -33,6 +37,7 @@ struct Held {
     tool: BrushTip,
     time: f64,
     sequence: u64,
+    restore: bool,
 }
 /// Releases are resolved independently; short choices commit in press order.
 #[derive(Default)]
@@ -66,8 +71,21 @@ impl Controller {
             tool,
             time,
             sequence: self.sequence,
+            restore: false,
         });
         Some(tool)
+    }
+    pub fn press_modifier(
+        &mut self,
+        key: &str,
+        tool: BrushTip,
+        current: BrushTip,
+        document: Option<u64>,
+        time: f64,
+    ) -> Option<BrushTip> {
+        let result = self.press(key, tool, current, document, time, false)?;
+        self.held.last_mut()?.restore = true;
+        Some(result)
     }
     pub fn release(
         &mut self,
@@ -78,7 +96,8 @@ impl Controller {
         let index = self.held.iter().position(|h| h.key == key)?;
         let h = self.held.remove(index);
         let (base, document) = self.base.as_mut()?;
-        if time.is_finite()
+        if !h.restore
+            && time.is_finite()
             && time >= h.time
             && (time - h.time) * 1000.0 + 1e-7 < settings.hold_millis as f64
             && h.sequence > self.committed
@@ -148,6 +167,27 @@ impl Drag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn modifiers_always_restore_and_overlap_in_press_order() {
+        for duration in [0.01, 0.3, 10.0] {
+            let mut c = Controller::default();
+            c.press_modifier("@Ctrl", BrushTip::Eraser, BrushTip::Pen, Some(1), 0.0);
+            c.press_modifier("@Shift", BrushTip::Wash, BrushTip::Eraser, Some(1), 0.001);
+            assert_eq!(c.persisted_tool(), Some(BrushTip::Pen));
+            assert_eq!(
+                c.release("@Ctrl", duration, Settings::default()),
+                Some((BrushTip::Wash, Some(1)))
+            );
+            assert_eq!(
+                c.release("@Shift", duration, Settings::default()),
+                Some((BrushTip::Pen, Some(1)))
+            );
+        }
+        let legacy: Settings =
+            serde_json::from_str(r#"{"version":1,"hold_millis":300,"drag_pixels":4}"#).unwrap();
+        assert_eq!(legacy.modifiers, [None; 3]);
+        assert!(serde_json::from_str::<Settings>(r#"{"version":1,"hold_millis":300,"drag_pixels":4,"modifiers":["Missing",null,null]}"#).is_err());
+    }
     #[test]
     fn short_long_boundary_repeat_and_bad_time_release() {
         let mut c = Controller::default();

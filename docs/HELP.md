@@ -138,3 +138,9 @@ Dark/Light 테마와 도킹된 도구 패널의 좌/우 배치를 선택하고 I
 
 [눈금·보정](local:aids)
 [작업공간](local:workspace)
+
+## modifier-tools | Modifier tools | Ctrl Shift Alt temporary hold conflicts 수정키 임시 도구 충돌
+
+Open Tool input behavior to assign Ctrl, Shift or Alt to a temporary tool. Modifier tools always return to the previous tool when released, even before the short-key threshold. Letter tool keys still follow the configured hold threshold. Overlapping modifiers restore in press order.
+
+Shared shortcuts appear in the editor. Key chords, input fields, menus and dialogs take priority and suspend modifier tools until the modifier is released. Release and press again after closing a popup. Window focus loss cancels pending tool input. These assignments are local workspace preferences and do not add drawing history.

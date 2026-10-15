@@ -155,8 +155,8 @@ impl Panels {
     }
 }
 impl Drawer {
-    pub(super) fn basic_shortcuts(&mut self, ctx: &egui::Context) {
-        if self.pending_close.is_some()
+    pub(super) fn tool_shortcuts_blocked(&self, ctx: &egui::Context) -> bool {
+        self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()
             || self.paste_dialog.is_some()
@@ -170,7 +170,11 @@ impl Drawer {
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
             || ctx.egui_wants_keyboard_input()
-        {
+            || self.controls.quick.is_some()
+            || egui::Popup::is_any_open(ctx)
+    }
+    pub(super) fn basic_shortcuts(&mut self, ctx: &egui::Context) {
+        if self.tool_shortcuts_blocked(ctx) {
             return;
         }
         let action = ctx.input_mut(|input| {
