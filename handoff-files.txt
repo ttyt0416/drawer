@@ -142,3 +142,4 @@ crates/drawer-app/src/input_replay.rs
 docs/process/input-replay.md
 crates/drawer-platform/src/win.rs
 crates/drawer-platform/src/packets.rs
+crates/drawer-core/src/pen_controls.rs

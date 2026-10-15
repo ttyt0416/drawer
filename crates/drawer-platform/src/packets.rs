@@ -96,6 +96,7 @@ pub fn attributes(p: &Packet, axes: Option<[Axis; 3]>) -> Attributes {
         tilt,
         eraser: p.status.map(|s| s & 0x10 != 0),
         button: Some(p.buttons != 0),
+        buttons: Some(p.buttons),
     }
     .normalized()
 }

@@ -1,6 +1,6 @@
 //! Device identity and contact ownership; independent of a particular window backend.
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Kind {
     Mouse,
     Pen,
@@ -25,7 +25,7 @@ pub fn backend_candidates(preferred: Backend) -> &'static [Backend] {
         Backend::Mouse => &[Backend::Mouse],
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Source {
     pub kind: Kind,
     pub device: u64,
@@ -74,6 +74,9 @@ pub struct Attributes {
     pub eraser: Option<bool>,
     /// Any button reported by the pen backend; no assumed hardware button number.
     pub button: Option<bool>,
+    /// Reported logical pen button bits; None means numbering is unavailable.
+    #[serde(default)]
+    pub buttons: Option<u32>,
 }
 impl Attributes {
     pub fn normalized(self) -> Self {
@@ -180,12 +183,15 @@ pub struct Settings {
     pub features: PenFeatures,
     #[serde(default)]
     pub backend: Backend,
+    #[serde(default)]
+    pub controls: crate::pen_controls::Settings,
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        [self.mouse, self.pen]
-            .into_iter()
-            .all(|s| s.stabilization.is_none_or(|v| (0.0..=0.95).contains(&v)))
+        self.controls.valid()
+            && [self.mouse, self.pen]
+                .into_iter()
+                .all(|s| s.stabilization.is_none_or(|v| (0.0..=0.95).contains(&v)))
     }
     pub fn for_kind(self, kind: Kind) -> Option<DeviceSettings> {
         match kind {
@@ -274,6 +280,7 @@ mod tests {
             tilt: Some([0.5, 0.3]),
             eraser: Some(true),
             button: Some(true),
+            buttons: None,
         };
         e.source = Source::MOUSE;
         assert_eq!(e.pressure_value(), 1.0);
@@ -319,6 +326,7 @@ mod tests {
             tilt: Some([99.0, -99.0]),
             eraser: Some(true),
             button: Some(true),
+            buttons: None,
         }
         .normalized();
         assert_eq!(

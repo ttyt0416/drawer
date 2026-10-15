@@ -69,8 +69,22 @@ pub(super) struct Drawing {
     pub last_source: Option<drawer_core::pointer_input::Source>,
     pub last_attributes: drawer_core::pointer_input::Attributes,
     pub error: Option<String>,
+    controls: drawer_core::pen_controls::Adapter,
+    anchor: Option<[f64; 2]>,
+    last_input: Option<drawer_core::pointer_input::Kind>,
 }
 impl Drawing {
+    pub(super) fn pen_cursor(&self, view: u64) -> Option<egui::Pos2> {
+        if self.settings.controls.mode != drawer_core::pen_controls::Mode::Relative
+            || self.last_input != Some(drawer_core::pointer_input::Kind::Pen)
+            || self.active_view().is_some_and(|id| id != view)
+        {
+            return None;
+        }
+        self.controls
+            .cursor()
+            .map(|p| egui::pos2(p[0] as f32, p[1] as f32))
+    }
     pub(super) fn virtual_events(
         &mut self,
         events: Vec<drawer_core::pointer_input::Event>,
@@ -103,7 +117,16 @@ impl Drawing {
         self.ownership.clear();
     }
     pub fn prepare(&mut self, ctx: &egui::Context) {
-        self.events = self
+        let rect = ctx.content_rect();
+        let bounds = [
+            [rect.min.x as f64, rect.min.y as f64],
+            [rect.max.x as f64, rect.max.y as f64],
+        ];
+        let anchor = self
+            .anchor
+            .unwrap_or([rect.center().x as f64, rect.center().y as f64]);
+        let mut events = self.controls.configure(self.settings.controls);
+        let incoming: Vec<_> = self
             .incoming
             .drain(..)
             .chain(
@@ -112,10 +135,15 @@ impl Drawing {
                     .unwrap_or_else(|| crate::pointer_input::gui_events(ctx)),
             )
             .filter(|e| drawer_core::pointer_input::drawing_event_allowed(*e, self.pen_available))
-            .map(|e| (e, false))
             .collect();
+        for event in incoming {
+            self.last_input = Some(event.source.kind);
+            events.extend(self.controls.event(event, bounds, anchor));
+        }
+        self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.controls.reset();
         self.ownership.clear();
         if let Some(session) = self.active.take() {
             if let Some(doc) = documents
@@ -200,6 +228,7 @@ impl Drawing {
                     .iter()
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         }) {
+            self.controls.reset();
             self.cancel();
             self.events.clear();
             return;
@@ -214,6 +243,7 @@ impl Drawing {
             return;
         }
         if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.controls.reset();
             self.cancel();
             self.events.clear();
             ctx.input_mut(|i| {
@@ -296,10 +326,17 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
+            let current_tip = style.tip;
             style.tip =
                 self.settings
                     .features
                     .tip(event.source.kind, event.pen_attributes(), style.tip);
+            if event.source.kind == drawer_core::pointer_input::Kind::Pen {
+                style.tip =
+                    self.settings
+                        .controls
+                        .tip(event.pen_attributes(), current_tip, style.tip);
+            }
             if let Some(value) = self
                 .settings
                 .for_kind(event.source.kind)
@@ -344,6 +381,10 @@ impl Drawer {
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
+        self.drawing.anchor = self
+            .canvas_view
+            .viewport_rect()
+            .map(|r| [r.center().x as f64, r.center().y as f64]);
         let preferred = self.drawing.settings.backend;
         let changed = self.native_input.applied != Some(preferred)
             || std::mem::take(&mut self.native_input.retry);
@@ -365,6 +406,7 @@ impl Drawer {
             match native.drain(ctx.pixels_per_point() as f64) {
                 Ok(events) => self.drawing.gui = Some(events),
                 Err(error) => {
+                    self.drawing.controls.reset();
                     self.drawing.cancel();
                     self.drawing.incoming.clear();
                     self.drawing.gui = Some(vec![]);
@@ -478,6 +520,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
         tilt: Some([0.0, 0.5]),
         eraser: Some(true),
         button: Some(false),
+        buttons: None,
     }
     .normalized();
     let features = PenFeatures {
@@ -848,6 +891,7 @@ mod tests {
             tilt: Some([0.5, 0.0]),
             eraser: Some(true),
             button: None,
+            buttons: None,
         };
         app.drawing.incoming = vec![event(Phase::Down, a)];
         frame(&ctx, &mut app, 1.0, vec![]);

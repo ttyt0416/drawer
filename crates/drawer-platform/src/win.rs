@@ -214,6 +214,7 @@ impl Pointer {
                         .then_some([(p.tiltX as f64).to_radians(), (p.tiltY as f64).to_radians()]),
                     eraser: Some(p.penFlags & 6 != 0),
                     button: Some(p.penFlags & 1 != 0),
+                    buttons: Some(u32::from(p.penFlags & 1 != 0)),
                 }
                 .normalized(),
                 origin: Origin::Unmarked,
@@ -468,13 +469,15 @@ impl Wintab {
         } else {
             return Err("Wintab cursor reports neither tip button nor pressure".into());
         };
+        let mut attributes = packets::attributes(&p, self.orientation);
+        attributes.buttons = Some(p.buttons & !tip.map(|b| 1u32 << b).unwrap_or(0));
         Ok(self.contact.sample(
             self.device as u64,
             p.cursor,
             down,
             client(window, p.point)?,
             pressure,
-            packets::attributes(&p, self.orientation),
+            attributes,
         ))
     }
 }

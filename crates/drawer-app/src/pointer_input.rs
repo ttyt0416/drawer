@@ -115,6 +115,24 @@ impl Drawer {
             });
             if crate::help::button(ui,"Retry current backend","pointer-input").clicked(){self.native_input.retry=true;}
             ui.label("One pen backend is active. Wintab requires a locally installed driver. Lift the pen after switching or regaining focus.");
+            ui.collapsing("Pen click, coordinates and buttons",|ui| {
+                use drawer_core::pen_controls::{Action,Mode};
+                let mut threshold=draft.controls.click_pressure.is_some();
+                if crate::help::checkbox(ui,&mut threshold,"Use click pressure threshold","pointer-input").changed(){draft.controls.click_pressure=threshold.then_some(0.1);}
+                if let Some(value)=&mut draft.controls.click_pressure {super::edit::slider(ui,value,0.0..=1.0,"Click pressure","pointer-input");}
+                egui::ComboBox::from_label("Pen coordinates").selected_text(format!("{:?}",draft.controls.mode)).show_ui(ui,|ui| {
+                    ui.selectable_value(&mut draft.controls.mode,Mode::Absolute,"Absolute");ui.selectable_value(&mut draft.controls.mode,Mode::Relative,"Relative");
+                });
+                super::edit::slider(ui,&mut draft.controls.speed,0.05..=10.0,"Relative speed","pointer-input");
+                ui.label("Relative mode uses a drawing cursor, starting at the canvas center and continuing from its last location. It does not move the system cursor. Missing pressure uses 1. Threshold crossings begin/end strokes.");
+                ui.label(format!("Last numbered button bits: {:?}",self.drawing.last_attributes.buttons));
+                ui.label("Button numbers are reported logical IDs and may differ between backends. Pointer exposes its barrel as 1. Wintab excludes the tip when identified. Ignore wins over eraser; mappings are frozen when drawing starts.");
+                egui::ScrollArea::vertical().id_salt("pen-button-map").max_height(140.0).show(ui,|ui|{
+                    for (n,action) in draft.controls.buttons.iter_mut().enumerate() {ui.push_id(n,|ui| {
+                        egui::ComboBox::from_label(format!("Pen button {}",n+1)).selected_text(format!("{action:?}")).show_ui(ui,|ui| {for value in Action::ALL {ui.selectable_value(action,value,format!("{value:?}"));}});
+                    });}
+                });
+            });
             ui.label("The first drawing contact owns a stroke until release or cancellation.");
             crate::help::checkbox(ui,&mut draft.features.tilt_angle,"Use supported pen tilt for tip angle","pointer-input");
             crate::help::checkbox(ui,&mut draft.features.eraser,"Start inverted pen strokes as eraser","pointer-input");
@@ -187,9 +205,68 @@ pub(super) fn smoke_backends(input: &drawer_platform::Input) -> Result<String, S
     Ok(wintab)
 }
 
+pub(super) fn smoke_controls() -> Result<(), String> {
+    use drawer_core::{
+        input_replay::Sequence,
+        pen_controls::{Action, Mode},
+    };
+    let run = |s: &Sequence| {
+        crate::input_replay::run(
+            s,
+            &std::sync::atomic::AtomicBool::new(false),
+            &std::sync::atomic::AtomicUsize::new(0),
+        )
+    };
+    let mut s = Sequence {
+        size: 2.0,
+        ..Default::default()
+    };
+    s.pressure.tools[0].size = false;
+    s.pressure.tools[0].opacity = false;
+    s.pointer.controls.click_pressure = Some(0.5);
+    let threshold = run(&s)?;
+    if !threshold.record.passed
+        || threshold.pixels[20 * 64 + 8][3] != 0
+        || threshold.pixels[20 * 64 + 24][3] == 0
+    {
+        return Err("Click pressure did not gate the actual drawing".into());
+    }
+    s.pointer.controls.click_pressure = None;
+    s.pointer.controls.mode = Mode::Relative;
+    s.pointer.controls.speed = 0.5;
+    let relative = run(&s)?;
+    if !relative.record.passed
+        || relative.pixels[24 * 64 + 32][3] == 0
+        || relative.pixels[20 * 64 + 8][3] != 0
+    {
+        return Err("Relative pen cursor did not reach the drawing".into());
+    }
+    s.pointer.controls.mode = Mode::Absolute;
+    s.pointer.features.eraser = false;
+    s.background = [200, 80, 40, 255];
+    s.pointer.controls.buttons[0] = Action::Eraser;
+    for sample in &mut s.samples {
+        sample.event.attributes.buttons = Some(1);
+    }
+    let eraser = run(&s)?;
+    if !eraser.record.passed || eraser.pixels.iter().all(|p| p[3] == 255) {
+        return Err("Numbered pen eraser mapping did not remove pixels".into());
+    }
+    s.pointer.controls.buttons[0] = Action::Ignore;
+    s.expected_strokes = 0;
+    let ignore = run(&s)?;
+    if !ignore.record.passed || ignore.pixels.iter().any(|p| *p != s.background) {
+        return Err("Ignored pen button changed the document".into());
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pressure_relative_coordinates_and_numbered_buttons_reach_actual_pixels() {
+        smoke_controls().unwrap();
+    }
     #[test]
     fn device_settings_cancel_apply_backup_restart_leave_document_unchanged() {
         use crate::tests::{TestDirectory, click, frame, tiny_spec};
@@ -201,6 +278,10 @@ mod tests {
         let initial = app.workspaces.store.current.pointer;
         let mut next = initial;
         next.backend = drawer_core::pointer_input::Backend::Wintab;
+        next.controls.click_pressure = Some(0.4);
+        next.controls.mode = drawer_core::pen_controls::Mode::Relative;
+        next.controls.speed = 0.5;
+        next.controls.buttons[2] = drawer_core::pen_controls::Action::Eraser;
         next.mouse.enabled = false;
         next.pen.stabilization = Some(0.7);
         next.features.tilt_angle = true;

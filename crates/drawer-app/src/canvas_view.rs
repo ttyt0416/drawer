@@ -458,12 +458,19 @@ impl CanvasView {
         {
             self.cursor_rect = None;
         }
+        let relative_cursor = paint
+            .drawing
+            .pen_cursor(paint.view)
+            .filter(|p| rect.contains(*p));
         if input_active
-            && ui.input(|i| i.pointer.latest_pos().is_some())
-            && (response.hovered() || response.dragged())
-            && let Some(pos) = response
-                .hover_pos()
-                .or_else(|| response.interact_pointer_pos())
+            && (relative_cursor.is_some()
+                || (ui.input(|i| i.pointer.latest_pos().is_some())
+                    && (response.hovered() || response.dragged())))
+            && let Some(pos) = relative_cursor.or_else(|| {
+                response
+                    .hover_pos()
+                    .or_else(|| response.interact_pointer_pos())
+            })
         {
             let active_style = stroke.map(|s| s.style());
             let cursor_tool = active_style.map_or(document.tool, |s| s.tip);
@@ -480,15 +487,19 @@ impl CanvasView {
                 if ui.input(|i| i.pointer.primary_pressed() || i.pointer.primary_released()) {
                     self.cursor_trace.clear();
                 }
-                let points = ui.input(|i| {
-                    i.events
-                        .iter()
-                        .filter_map(|e| match e {
-                            egui::Event::PointerMoved(p) => Some(*p),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                });
+                let points = if relative_cursor.is_some() {
+                    vec![]
+                } else {
+                    ui.input(|i| {
+                        i.events
+                            .iter()
+                            .filter_map(|e| match e {
+                                egui::Event::PointerMoved(p) => Some(*p),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                };
                 let moved = !points.is_empty();
                 for p in points {
                     let point = document.view.screen_to_document(

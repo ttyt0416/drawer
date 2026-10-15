@@ -30,3 +30,11 @@ Primary API contracts:
 - https://developer-docs.wacom.com/docs/icbt/windows/wintab/wintab-reference/
 - https://developer-docs.wacom.com/docs/icbt/windows/wintab/wintab-basics/
 - https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw
+
+## Drawing click and coordinate controls (047)
+
+Local controls default to no extra click threshold, absolute coordinates, relative gain 1 and all numbered buttons unchanged. The safe core adapter runs before ownership for native and virtual input alike. Enabled pressure threshold is inclusive; crossings emit Down/Up while the physical contact remains, final Up/Cancel ends it. Missing pressure resolves to 1; real zero stays zero. Invalid numeric input cancels the affected contact. Repeated Down cancels and blocks until lift. At most 32 raw pen contacts are retained. Touch/mouse input is not transformed.
+
+Relative mode starts at the last canvas center, integrates window-logical displacement times gain (0.05..10), clips to the receiving content rectangle and carries its drawing cursor across lift/repress without a new absolute jump. It changes no OS pointer position or menu click. Focus loss, settings/provider change, external stroke finish and retry clear its state. Before a threshold click is accepted the virtual cursor is still visible. Native tilt/eraser attributes and brush pressure calculations are separate.
+
+Optional logical button bits are explicit API data, never inferred from position/pressure. Pointer exposes barrel bit 0. Wintab excludes the identified nib bit, preserving the driver's other logical bit numbers. Unknown numbering is None. The 32 slots can keep defaults, use the selected brush, erase or ignore drawing. Ignore > eraser > current-brush priority is deterministic. Ignore blocks until physical lift; the selected tip remains fixed for a logical stroke. Legacy any-button eraser remains available separately. These controls are application drawing policy, not driver settings or a promise of physical button numbering. Hardware testing remains pending.
