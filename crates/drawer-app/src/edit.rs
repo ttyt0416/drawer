@@ -34,6 +34,46 @@ struct Draft {
     before_composition: Option<String>,
     action: Option<Action>,
 }
+#[derive(Clone, Default)]
+struct NumericFields(std::collections::HashMap<egui::Id, NumericField>);
+#[derive(Clone)]
+struct NumericField {
+    layer: egui::LayerId,
+    frame: u64,
+    invalid: bool,
+}
+pub(super) fn invalid_layer(ctx: &egui::Context, layer: egui::LayerId) -> bool {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data(|d| d.get_temp::<NumericFields>(egui::Id::new("drawer-numeric-fields")))
+        .is_some_and(|fields| {
+            fields
+                .0
+                .values()
+                .any(|f| f.layer == layer && f.frame.saturating_add(1) >= frame && f.invalid)
+        })
+}
+pub(super) fn discard_layer(ctx: &egui::Context, layer: egui::LayerId) {
+    let ids = ctx.data_mut(|data| {
+        let mut fields = data
+            .get_temp::<NumericFields>(egui::Id::new("drawer-numeric-fields"))
+            .unwrap_or_default();
+        let ids = fields
+            .0
+            .iter()
+            .filter_map(|(id, f)| (f.layer == layer).then_some(*id))
+            .collect::<Vec<_>>();
+        fields.0.retain(|_, f| f.layer != layer);
+        data.insert_temp(egui::Id::new("drawer-numeric-fields"), fields);
+        ids
+    });
+    for id in ids {
+        ctx.memory_mut(|m| m.surrender_focus(id));
+        ctx.data_mut(|d| {
+            d.remove::<Draft>(id.with("drawer-edit-draft"));
+            d.remove::<bool>(id.with("drawer-number-editing"));
+        });
+    }
+}
 #[derive(Clone, Copy)]
 struct Clipboard {
     write: fn(&str) -> Result<(), String>,
@@ -234,12 +274,43 @@ fn field_id(
         draft.error = None;
         ui.memory_mut(|m| m.surrender_focus(id));
     }
+    let mut stepped = false;
+    if focused
+        && !cancel
+        && !draft.composing
+        && let Rule::Number { min, max, integer } = rule
+    {
+        let direction = ui.input_mut(|i| {
+            let modifiers = i.modifiers;
+            i.consume_key(modifiers, egui::Key::ArrowUp) as i32
+                - i.consume_key(modifiers, egui::Key::ArrowDown) as i32
+        });
+        if direction != 0 && rule.valid(&draft.text) {
+            let base = ui
+                .ctx()
+                .data(|d| d.get_temp::<f64>(id.with("drawer-number-step")))
+                .unwrap_or(if integer { 1.0 } else { 0.01 });
+            let step = precision_step(base, ui.input(|i| i.modifiers.ctrl), integer);
+            let next = (draft.text.trim().parse::<f64>().unwrap() + direction as f64 * step)
+                .clamp(min, max);
+            if next != value.parse::<f64>().unwrap_or(f64::NAN) {
+                *value = next.to_string();
+                draft.source = value.clone();
+                draft.text = value.clone();
+                draft.error = None;
+                stepped = true;
+            }
+        }
+    }
     let mut out = egui::TextEdit::singleline(&mut draft.text)
         .id(id)
         .char_limit(1024)
         .desired_width(120.0)
         .show(ui);
     out.response.flags.remove(egui::response::Flags::CHANGED);
+    if stepped {
+        out.response.mark_changed();
+    }
     if !cancel && !cancel_composition && !draft.composing && (enter || out.response.lost_focus()) {
         if rule.valid(&draft.text) {
             if *value != draft.text {
@@ -289,6 +360,26 @@ fn field_id(
         draft.composing,
     );
     super::help::tag(ui.ctx(), &out.response, topic);
+    if matches!(rule, Rule::Number { .. }) {
+        let frame = ui.ctx().cumulative_frame_nr();
+        let layer = ui.layer_id();
+        let invalid = !rule.valid(&draft.text) || draft.composing;
+        ui.ctx().data_mut(|data| {
+            let mut fields = data
+                .get_temp::<NumericFields>(egui::Id::new("drawer-numeric-fields"))
+                .unwrap_or_default();
+            fields.0.retain(|_, f| f.frame.saturating_add(2) >= frame);
+            fields.0.insert(
+                id,
+                NumericField {
+                    layer,
+                    frame,
+                    invalid,
+                },
+            );
+            data.insert_temp(egui::Id::new("drawer-numeric-fields"), fields);
+        });
+    }
     ui.ctx().data_mut(|d| d.insert_temp(state_id, draft));
     out.response.response
 }
@@ -302,11 +393,17 @@ pub(super) fn number<T: egui::emath::Numeric>(
     topic: &'static str,
 ) -> egui::Response {
     let id = ui.next_auto_id();
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(id.with("drawer-number-step"), speed));
     let editing_id = id.with("drawer-number-editing");
     let editing = ui
         .ctx()
         .data(|d| d.get_temp::<bool>(editing_id))
         .unwrap_or(false)
+        || ui
+            .ctx()
+            .data(|d| d.get_temp::<Draft>(id.with("drawer-edit-draft")))
+            .is_some_and(|d| d.error.is_some() || d.text != d.source || d.composing)
         || (ui.memory(|m| m.has_focus(id)) && !ui.input(|i| i.pointer.primary_down()));
     if editing {
         let mut text = value.to_f64().to_string();
@@ -361,25 +458,48 @@ pub(super) fn slider<T: egui::emath::Numeric>(
     label: impl Into<String>,
     topic: &'static str,
 ) -> egui::Response {
+    slider_with_step(
+        ui,
+        value,
+        range,
+        label,
+        topic,
+        if T::INTEGRAL { 1.0 } else { 0.01 },
+    )
+}
+pub(super) fn slider_with_step<T: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    value: &mut T,
+    range: std::ops::RangeInclusive<T>,
+    label: impl Into<String>,
+    topic: &'static str,
+    increment: f64,
+) -> egui::Response {
     let min = range.start().to_f64();
     let max = range.end().to_f64();
-    let step = precision_step(
-        if T::INTEGRAL { 1.0 } else { 0.01 },
-        ui.input(|i| i.modifiers.ctrl),
-        T::INTEGRAL,
-    );
+    let original = value.to_f64();
+    let bounded = original.clamp(min, max);
+    *value = T::from_f64(bounded);
+    let fine = ui.input(|i| i.modifiers.ctrl);
+    let step = precision_step(increment, fine, T::INTEGRAL);
     ui.horizontal(|ui| {
         let before = value.to_f64();
-        let a = ui.add(
-            egui::Slider::new(value, range)
+        let mut proposal = *value;
+        let mut a = ui.add(
+            egui::Slider::new(&mut proposal, range)
+                .step_by(step)
                 .show_value(false)
                 .text(label.into()),
         );
-        if ui.input(|i| i.modifiers.ctrl) && a.is_pointer_button_down_on() {
+        let pointer = a.is_pointer_button_down_on() || a.dragged() || a.drag_stopped();
+        if pointer && fine {
             let delta = ui.input(|i| i.pointer.delta().x) as f64;
             let movement = delta * (max - min) / ui.spacing().slider_width.max(1.0) as f64 * 0.1;
             *value = T::from_f64((before + (movement / step).round() * step).clamp(min, max));
-        } else if ui.input(|i| i.modifiers.ctrl) && a.has_focus() {
+        } else if pointer {
+            *value = proposal;
+        }
+        if a.has_focus() {
             let direction = ui.input(|i| {
                 i.num_presses(egui::Key::ArrowRight) as i32
                     - i.num_presses(egui::Key::ArrowLeft) as i32
@@ -388,15 +508,15 @@ pub(super) fn slider<T: egui::emath::Numeric>(
                 *value = T::from_f64((before + direction as f64 * step).clamp(min, max));
             }
         }
+        a.flags.remove(egui::response::Flags::CHANGED);
+        if value.to_f64() != original {
+            a.mark_changed();
+        }
+        if bounded != original {
+            a = a.on_hover_text(format!("Value limited to dependent range {min} to {max}"));
+        }
         super::help::tag(ui.ctx(), &a, topic);
-        let b = number(
-            ui,
-            value,
-            min..=max,
-            if T::INTEGRAL { 1.0 } else { 0.01 },
-            "",
-            topic,
-        );
+        let b = number(ui, value, min..=max, increment, "", topic);
         a | b
     })
     .inner
@@ -707,6 +827,59 @@ mod tests {
             3.0
         ));
         assert_eq!(text, "한");
+    }
+    #[test]
+    fn invalid_numeric_layer_blocks_apply_cancel_discards_and_key_step_matches_value() {
+        let ctx = egui::Context::default();
+        let mut n = 5.0;
+        fn draw(
+            ctx: &egui::Context,
+            n: &mut f64,
+            events: Vec<egui::Event>,
+        ) -> (egui::Id, egui::LayerId) {
+            let mut result = None;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let r = number(ui, n, 0.0..=10.0, 1.0, "", "tools");
+                    result = Some((r.id, ui.layer_id()));
+                },
+            );
+            out.textures_delta.clear();
+            result.unwrap()
+        }
+        let (id, layer) = draw(&ctx, &mut n, vec![]);
+        ctx.memory_mut(|m| m.request_focus(id));
+        draw(&ctx, &mut n, vec![]);
+        draw(&ctx, &mut n, vec![key(egui::Key::ArrowUp, false, false)]);
+        assert_eq!(n, 6.0);
+        let mut state = egui::TextEdit::load_state(&ctx, id).unwrap();
+        state.cursor.set_char_range(Some(CCursorRange::two(
+            CCursor::new(0_usize),
+            CCursor::new(100_usize),
+        )));
+        state.store(&ctx, id);
+        draw(&ctx, &mut n, vec![egui::Event::Paste("NaN".into())]);
+        assert!(invalid_layer(&ctx, layer));
+        draw(&ctx, &mut n, vec![key(egui::Key::Enter, false, false)]);
+        assert_eq!(n, 6.0);
+        assert!(invalid_layer(&ctx, layer));
+        discard_layer(&ctx, layer);
+        assert!(!invalid_layer(&ctx, layer));
+        draw(&ctx, &mut n, vec![]);
+        ctx.memory_mut(|m| m.request_focus(id));
+        draw(&ctx, &mut n, vec![]);
+        assert_eq!(
+            ctx.data(|d| d.get_temp::<Draft>(id.with("drawer-edit-draft")))
+                .unwrap()
+                .text,
+            "6"
+        );
+        draw(&ctx, &mut n, vec![key(egui::Key::ArrowDown, false, false)]);
+        assert_eq!(n, 5.0);
     }
     #[test]
     fn numeric_button_commits_on_focus_change_and_escape_restores_the_edit_start() {

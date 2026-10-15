@@ -74,6 +74,8 @@ pub(super) struct Drawing {
     pub mode: super::precision::Mode,
     pub connect_line: bool,
     pub opacity: Option<[f64; 4]>,
+    pub hardness: Option<[f64; 4]>,
+    pub spacing: Option<[f64; 4]>,
     pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
@@ -576,8 +578,9 @@ impl Drawing {
                 .iter()
                 .position(|tip| *tip == style.tip)
                 .unwrap();
-            style.color[3] =
-                (style.color[3] as f64 * self.opacity.unwrap_or([1.0; 4])[index]).round() as u8;
+            style.opacity = self.opacity.unwrap_or([1.0; 4])[index];
+            style.hardness = self.hardness.unwrap_or([1.0; 4])[index];
+            style.spacing = self.spacing.unwrap_or([0.15; 4])[index];
             if self.connect_line {
                 self.ownership.clear();
                 self.connect_line = false;
@@ -691,6 +694,8 @@ impl Drawer {
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
+        self.drawing.hardness = Some(self.panels.settings.brush_hardness);
+        self.drawing.spacing = Some(self.panels.settings.brush_spacing);
         self.drawing
             .endpoints
             .retain(|(id, _, _), _| self.documents.iter().any(|d| d.id == *id));
@@ -1026,6 +1031,9 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let style = Style {
+                opacity: 1.0,
+                hardness: 1.0,
+                spacing: 0.15,
                 shape: Shape {
                     size: 4.0,
                     aspect: 1.0,
@@ -1105,6 +1113,9 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        opacity: 1.0,
+        hardness: 1.0,
+        spacing: 0.15,
         shape: Shape {
             size: 4.0,
             aspect: 0.25,
@@ -1146,6 +1157,9 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        opacity: 1.0,
+        hardness: 1.0,
+        spacing: 0.15,
         shape: Shape {
             size: 1.0,
             aspect: 1.0,
@@ -1236,6 +1250,49 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn brush_parameters_freeze_on_down_and_zero_opacity_has_no_history() {
+        let (ctx, mut app) = setup(1.0);
+        app.panels.settings.brush_hardness[0] = 0.3;
+        app.panels.settings.brush_spacing[0] = 0.4;
+        app.panels.settings.brush_opacity[0] = 0.5;
+        let p = point(&ctx, &app, [10.5, 20.5]);
+        let q = point(&ctx, &app, [30.5, 20.5]);
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![egui::Event::PointerMoved(p), button(p, true)],
+        );
+        let frozen = app.drawing.active.as_ref().unwrap().stroke.style();
+        assert_eq!(
+            (frozen.opacity, frozen.hardness, frozen.spacing),
+            (0.5, 0.3, 0.4)
+        );
+        app.panels.settings.brush_opacity[0] = 0.0;
+        app.panels.settings.brush_hardness[0] = 1.0;
+        app.panels.settings.brush_spacing[0] = 10.0;
+        frame(&ctx, &mut app, 1.0, vec![egui::Event::PointerMoved(q)]);
+        assert_eq!(app.drawing.active.as_ref().unwrap().stroke.style(), frozen);
+        frame(&ctx, &mut app, 1.0, vec![button(q, false)]);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(
+            app.documents[0].layers[0]
+                .pixels
+                .iter()
+                .all(|p| p[3] <= 128)
+        );
+        let before = app.documents[0].snapshot();
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![egui::Event::PointerMoved(p), button(p, true)],
+        );
+        frame(&ctx, &mut app, 1.0, vec![button(p, false)]);
+        assert!(app.documents[0].snapshot() == before);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
     }
     #[test]
     fn completed_finger_stroke_precedes_gesture_in_the_same_input_batch() {

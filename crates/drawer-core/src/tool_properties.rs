@@ -64,15 +64,30 @@ pub enum Property {
     Aspect,
     Angle,
     Stabilization,
+    Opacity,
+    Hardness,
+    Spacing,
 }
 impl Property {
-    pub const ALL: [Self; 4] = [Self::Size, Self::Aspect, Self::Angle, Self::Stabilization];
+    pub const ALL: [Self; 7] = [
+        Self::Size,
+        Self::Aspect,
+        Self::Angle,
+        Self::Stabilization,
+        Self::Opacity,
+        Self::Hardness,
+        Self::Spacing,
+    ];
+    pub const LEGACY: [Self; 4] = [Self::Size, Self::Aspect, Self::Angle, Self::Stabilization];
     pub fn name(self) -> &'static str {
         match self {
             Self::Size => "Size",
             Self::Aspect => "Aspect",
             Self::Angle => "Tip angle",
             Self::Stabilization => "Stabilization",
+            Self::Opacity => "Opacity",
+            Self::Hardness => "Hardness",
+            Self::Spacing => "Spacing",
         }
     }
     pub fn bounds(self) -> [f64; 2] {
@@ -81,6 +96,8 @@ impl Property {
             Self::Aspect => [0.05, 1.0],
             Self::Angle => [0.0, 360.0],
             Self::Stabilization => [0.0, 0.95],
+            Self::Opacity | Self::Hardness => [0.0, 1.0],
+            Self::Spacing => [0.01, 10.0],
         }
     }
 }
@@ -101,12 +118,15 @@ pub struct State {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     pub version: u32,
+    #[serde(default)]
+    pub size_unit: crate::numeric::Unit,
     pub tools: BTreeMap<Tool, BTreeMap<Property, State>>,
 }
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: 2,
+            size_unit: Default::default(),
             tools: Tool::ALL
                 .into_iter()
                 .map(|t| {
@@ -122,10 +142,21 @@ impl Default for Settings {
                                         value: match p {
                                             Property::Size => 12.0,
                                             Property::Aspect => 1.0,
+                                            Property::Opacity | Property::Hardness => 1.0,
+                                            Property::Spacing => 0.15,
                                             _ => 0.0,
                                         },
                                         visible: true,
-                                        control: Control::Number,
+                                        control: if matches!(
+                                            p,
+                                            Property::Opacity
+                                                | Property::Hardness
+                                                | Property::Spacing
+                                        ) {
+                                            Control::Slider
+                                        } else {
+                                            Control::Number
+                                        },
                                     },
                                 )
                             })
@@ -148,13 +179,20 @@ pub struct Preview {
 }
 impl Settings {
     pub fn valid(&self) -> bool {
-        self.version == 1
+        [1, 2].contains(&self.version)
+            && crate::numeric::Unit::SIZE.contains(&self.size_unit)
             && self.tools.len() == Tool::ALL.len()
             && Tool::ALL.into_iter().all(|t| {
                 self.tools.get(&t).is_some_and(|props| {
-                    props.len()
-                        == Property::ALL
-                            .into_iter()
+                    (self.version != 1 || props.keys().all(|p| Property::LEGACY.contains(p)))
+                        && props.len()
+                            == (if self.version == 1 {
+                                Property::LEGACY.as_slice()
+                            } else {
+                                Property::ALL.as_slice()
+                            })
+                            .iter()
+                            .copied()
                             .filter(|p| t.bounds(*p).is_some())
                             .count()
                         && props.iter().all(|(p, s)| {
@@ -169,12 +207,36 @@ impl Settings {
         if std::fs::metadata(path)?.len() > 65536 {
             return Err(io::Error::other("Tool property preset exceeds 64 KiB"));
         }
-        let settings: Self =
+        let mut settings: Self =
             serde_json::from_slice(&std::fs::read(path)?).map_err(io::Error::other)?;
         if !settings.valid() {
             return Err(io::Error::other("Invalid tool property preset"));
         }
+        settings.upgrade([1.0; 4], [1.0; 4], [0.15; 4]);
         Ok(settings)
+    }
+    pub fn upgrade(&mut self, opacity: [f64; 4], hardness: [f64; 4], spacing: [f64; 4]) {
+        if self.version != 1 {
+            return;
+        }
+        for (n, tip) in BrushTip::ALL.into_iter().enumerate() {
+            let properties = self.tools.get_mut(&Tool::brush(tip)).unwrap();
+            for (property, value) in [
+                (Property::Opacity, opacity[n]),
+                (Property::Hardness, hardness[n]),
+                (Property::Spacing, spacing[n]),
+            ] {
+                properties.insert(
+                    property,
+                    State {
+                        value,
+                        visible: true,
+                        control: Control::Slider,
+                    },
+                );
+            }
+        }
+        self.version = 2;
     }
     pub fn save(&self, path: &Path) -> io::Result<()> {
         if !self.valid() {
@@ -282,6 +344,53 @@ impl Settings {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_properties_upgrade_retains_values_and_new_fields_copy_atomically() {
+        use super::*;
+        let mut settings = Settings {
+            version: 1,
+            ..Default::default()
+        };
+        for properties in settings.tools.values_mut() {
+            properties.retain(|p, _| Property::LEGACY.contains(p));
+        }
+        settings
+            .tools
+            .get_mut(&Tool::Pen)
+            .unwrap()
+            .get_mut(&Property::Size)
+            .unwrap()
+            .value = 35.0;
+        assert!(settings.valid());
+        settings.upgrade([0.2, 0.3, 0.4, 0.5], [0.5; 4], [0.4; 4]);
+        assert!(settings.valid());
+        assert_eq!(settings.tools[&Tool::Pen][&Property::Size].value, 35.0);
+        for (n, tip) in BrushTip::ALL.into_iter().enumerate() {
+            assert_eq!(
+                settings.tools[&Tool::brush(tip)][&Property::Opacity].value,
+                [0.2, 0.3, 0.4, 0.5][n]
+            );
+        }
+        let next = settings
+            .preview(
+                Tool::Pen,
+                &[Tool::Eraser],
+                &[Property::Opacity, Property::Hardness, Property::Spacing],
+                CopyKind::Values,
+            )
+            .unwrap()
+            .next;
+        for p in [Property::Opacity, Property::Hardness, Property::Spacing] {
+            assert_eq!(
+                next.tools[&Tool::Eraser][&p],
+                settings.tools[&Tool::Pen][&p]
+            );
+        }
+        assert_eq!(
+            serde_json::from_slice::<Settings>(&serde_json::to_vec(&next).unwrap()).unwrap(),
+            next
+        );
+    }
     use super::*;
     #[test]
     fn value_and_display_copies_skip_auxiliary_tools_and_preserve_other_fields() {

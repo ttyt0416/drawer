@@ -272,18 +272,19 @@ impl Drawer {
             let cfg = self.workspaces.store.current.layout.clone();
             let wanted = (cfg.width[n] / ppp) as f32;
             let width = wanted.clamp((80.0 / ppp) as f32, (width * 0.4).max((80.0 / ppp) as f32));
+            let dock_id = egui::Id::new((
+                if n == 0 {
+                    "drawer-dock-left"
+                } else {
+                    "drawer-dock-right"
+                },
+                self.layout.generation,
+                ppp.to_bits(),
+            ));
             let panel = if n == 0 {
-                egui::Panel::left(egui::Id::new((
-                    "drawer-dock-left",
-                    self.layout.generation,
-                    ppp.to_bits(),
-                )))
+                egui::Panel::left(dock_id)
             } else {
-                egui::Panel::right(egui::Id::new((
-                    "drawer-dock-right",
-                    self.layout.generation,
-                    ppp.to_bits(),
-                )))
+                egui::Panel::right(dock_id)
             };
             let panel = panel
                 .resizable(!cfg.dock_locks[n].width)
@@ -368,7 +369,12 @@ impl Drawer {
             {
                 self.layout.dock_rects[n] = Some(response.response.rect);
             }
-            if !cfg.dock_locks[n].width {
+            if !cfg.dock_locks[n].width
+                && ui
+                    .ctx()
+                    .read_response(dock_id.with("__resize"))
+                    .is_some_and(|r| r.dragged() || r.drag_stopped() || r.double_clicked())
+            {
                 self.workspaces.store.current.layout.width[n] =
                     (response.response.rect.width() as f64 * ppp).clamp(80.0, 4096.0);
             }
@@ -623,6 +629,54 @@ mod tests {
         app.workspaces.store.current.layout.arrangement = Arrangement::Tabs;
         frame(&ctx, &mut app, vec![]);
         assert_eq!(app.layout.rendered_windows, 0);
+    }
+    #[test]
+    fn automatic_content_width_does_not_change_preferences_but_unlocked_drag_does() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let before = app.workspaces.store.current.layout.width[0];
+        for _ in 0..3 {
+            frame(&ctx, &mut app, vec![]);
+        }
+        assert_eq!(app.workspaces.store.current.layout.width[0], before);
+        let handle = egui::Id::new((
+            "drawer-dock-left",
+            app.layout.generation,
+            (ctx.pixels_per_point() as f64).to_bits(),
+        ))
+        .with("__resize");
+        let rect = ctx.read_response(handle).unwrap().rect;
+        let start = egui::pos2(rect.left() + 0.25, rect.center().y);
+        let end = start + egui::vec2(40.0, 0.0);
+        for events in [
+            vec![egui::Event::PointerMoved(start)],
+            vec![egui::Event::PointerButton {
+                pos: start,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+            vec![egui::Event::PointerMoved(end)],
+            vec![egui::Event::PointerMoved(end)],
+            vec![egui::Event::PointerButton {
+                pos: end,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        ] {
+            frame(&ctx, &mut app, events);
+        }
+        assert!(
+            app.workspaces.store.current.layout.width[0] > before + 20.0,
+            "saved={} before={before} rendered={:?} start={start:?} response={:?}",
+            app.workspaces.store.current.layout.width[0],
+            app.layout.dock_rects[0],
+            ctx.read_response(handle)
+        );
     }
     #[test]
     fn locked_dock_drag_and_layout_cancel_apply_backup_restart_are_local() {

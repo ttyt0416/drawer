@@ -123,6 +123,9 @@ pub(super) fn smoke_pressure() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let mut style = Style {
+                opacity: 1.0,
+                hardness: 1.0,
+                spacing: 0.15,
                 shape: Shape {
                     size: 4.0,
                     aspect: 1.0,

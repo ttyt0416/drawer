@@ -436,6 +436,8 @@ impl Snapshot {
             next.scratchpad = incoming.scratchpad.clone();
             next.panels.brush_size = incoming.panels.brush_size;
             next.panels.brush_opacity = incoming.panels.brush_opacity;
+            next.panels.brush_hardness = incoming.panels.brush_hardness;
+            next.panels.brush_spacing = incoming.panels.brush_spacing;
             next.panels.brush_aspect = incoming.panels.brush_aspect;
             next.panels.brush_angle = incoming.panels.brush_angle;
         }

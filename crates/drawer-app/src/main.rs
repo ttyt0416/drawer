@@ -424,6 +424,9 @@ impl Drawer {
         self.direct_actions(ui.ctx());
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.sync_tool_properties();
+        self.drawing.opacity = Some(self.panels.settings.brush_opacity);
+        self.drawing.hardness = Some(self.panels.settings.brush_hardness);
+        self.drawing.spacing = Some(self.panels.settings.brush_spacing);
         self.canvas_view.brush_shape = drawer_core::brush_cursor::Shape {
             size: self.panels.settings.brush_size,
             aspect: self.panels.settings.brush_aspect,
@@ -1191,6 +1194,10 @@ impl eframe::App for Drawer {
                     eprintln!("Keyboard precision: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = tool_properties::smoke() {
+                    eprintln!("Brush parameters: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = mouse_pressure::smoke() {
                     eprintln!("Mouse pressure reconstruction: {e}");
                     fail_smoke();
@@ -1250,7 +1257,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

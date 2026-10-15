@@ -1,11 +1,145 @@
 use super::*;
+use drawer_core::numeric::{Range, Scalar, Unit};
 use drawer_core::tool_properties::{Control, CopyKind, Preview, Property, Settings, Tool};
+fn property_value(
+    ui: &mut egui::Ui,
+    value: &mut f64,
+    property: Property,
+    control: Control,
+    size_unit: Unit,
+    dpi: f64,
+) -> Option<egui::Response> {
+    let [min, max] = property.bounds();
+    let mut scalar = match Scalar::new(*value, Range { min, max }) {
+        Ok(value) => value,
+        Err(e) => {
+            ui.colored_label(egui::Color32::LIGHT_RED, e);
+            return None;
+        }
+    };
+    let unit = match property {
+        Property::Size => size_unit,
+        Property::Opacity | Property::Hardness | Property::Stabilization => Unit::Percent,
+        _ => Unit::Scalar,
+    };
+    let (mut display, range) = match scalar.display(unit, dpi) {
+        Ok(result) => result,
+        Err(e) => {
+            ui.colored_label(egui::Color32::LIGHT_RED, e);
+            return None;
+        }
+    };
+    let step = if matches!(property, Property::Size | Property::Angle) {
+        1.0
+    } else {
+        0.01
+    };
+    let factor = unit.factor(dpi).unwrap();
+    ui.horizontal(|ui| {
+        let suffix = if property == Property::Angle {
+            "°"
+        } else {
+            unit.label()
+        };
+        ui.label(format!("{} ({suffix})", property.name()));
+        let response = match control {
+            Control::Slider => Some(super::edit::slider_with_step(
+                ui,
+                &mut display,
+                range.min..=range.max,
+                "",
+                "tool-properties",
+                step / factor,
+            )),
+            Control::Number => Some(super::edit::number(
+                ui,
+                &mut display,
+                range.min..=range.max,
+                step / factor,
+                "",
+                "tool-properties",
+            )),
+            Control::Indicator => {
+                ui.label(display.to_string());
+                None
+            }
+        };
+        if response.as_ref().is_some_and(|r| r.changed()) {
+            match scalar.set_display(display, unit, dpi) {
+                Ok(true) => *value = scalar.value(),
+                Ok(false) => {}
+                Err(e) => {
+                    ui.colored_label(egui::Color32::LIGHT_RED, e);
+                }
+            }
+        }
+        response
+    })
+    .inner
+}
+/// Exercise the production widgets in the installed process without external UI control.
+pub(super) fn smoke() -> Result<(), String> {
+    for unit in Unit::SIZE {
+        for control in [Control::Number, Control::Slider] {
+            let ctx = egui::Context::default();
+            let mut value = 300.0;
+            let mut id = egui::Id::NULL;
+            let mut draw = |events| {
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        id = property_value(ui, &mut value, Property::Size, control, unit, 300.0)
+                            .unwrap()
+                            .id;
+                    },
+                );
+                out.textures_delta.clear();
+                (id, value)
+            };
+            let (id, initial) = draw(vec![]);
+            if initial != 300.0 {
+                return Err("Unit display changed canonical size".into());
+            }
+            ctx.memory_mut(|m| m.request_focus(id));
+            draw(vec![]);
+            let key = if control == Control::Number {
+                egui::Key::ArrowUp
+            } else {
+                egui::Key::ArrowRight
+            };
+            let (_, next) = draw(vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }]);
+            if (next - 301.0).abs() > 1e-9 {
+                return Err(format!(
+                    "Unit/widget increment diverged: {unit:?}/{control:?}: {next}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+fn size_unit(ui: &mut egui::Ui, unit: &mut Unit, dpi: f64) {
+    let valid = !super::edit::invalid_layer(ui.ctx(), ui.layer_id());
+    ui.add_enabled_ui(valid,|ui| {
+        egui::ComboBox::from_id_salt("brush-size-unit").selected_text(format!("Size unit: {}",unit.label())).show_ui(ui,|ui| {
+            for value in Unit::SIZE {ui.selectable_value(unit,value,value.label());}
+        }).response.on_hover_text(format!("Physical size uses the active document DPI ({dpi}); canonical size stays in document pixels"));
+    });
+}
 struct Editor {
     draft: Settings,
     source: Tool,
     scope: u8,
     targets: [bool; 6],
-    properties: [bool; 4],
+    properties: [bool; 7],
     kind: CopyKind,
     preview: Option<Preview>,
     reset_preview: bool,
@@ -18,7 +152,7 @@ impl Editor {
             source,
             scope: 0,
             targets: [false; 6],
-            properties: [true; 4],
+            properties: [true; 7],
             kind: CopyKind::Values,
             preview: None,
             reset_preview: false,
@@ -51,6 +185,12 @@ fn migrated(app: &Drawer) -> Settings {
             app.panels.settings.brush_angle,
             app.workspaces.store.current.input.smoothing
                 [BrushTip::ALL.iter().position(|t| *t == tip).unwrap()],
+            app.panels.settings.brush_opacity
+                [BrushTip::ALL.iter().position(|t| *t == tip).unwrap()],
+            app.panels.settings.brush_hardness
+                [BrushTip::ALL.iter().position(|t| *t == tip).unwrap()],
+            app.panels.settings.brush_spacing
+                [BrushTip::ALL.iter().position(|t| *t == tip).unwrap()],
         ];
         for (p, value) in Property::ALL.into_iter().zip(values) {
             settings
@@ -69,6 +209,17 @@ impl Drawer {
         if self.workspaces.store.current.properties.is_none() {
             self.workspaces.store.current.properties = Some(migrated(self));
         }
+        self.workspaces
+            .store
+            .current
+            .properties
+            .as_mut()
+            .unwrap()
+            .upgrade(
+                self.panels.settings.brush_opacity,
+                self.panels.settings.brush_hardness,
+                self.panels.settings.brush_spacing,
+            );
         let n = BrushTip::ALL
             .iter()
             .position(|t| *t == self.selected)
@@ -78,6 +229,9 @@ impl Drawer {
             self.panels.settings.brush_aspect,
             self.panels.settings.brush_angle,
             self.workspaces.store.current.input.smoothing[n],
+            self.panels.settings.brush_opacity[n],
+            self.panels.settings.brush_hardness[n],
+            self.panels.settings.brush_spacing[n],
         ];
         let tool = Tool::brush(self.selected);
         let settings = self.workspaces.store.current.properties.as_mut().unwrap();
@@ -98,6 +252,9 @@ impl Drawer {
         self.panels.settings.brush_aspect = values[1];
         self.panels.settings.brush_angle = values[2];
         self.workspaces.store.current.input.smoothing[n] = values[3];
+        self.panels.settings.brush_opacity[n] = values[4];
+        self.panels.settings.brush_hardness[n] = values[5];
+        self.panels.settings.brush_spacing[n] = values[6];
         self.properties.applied = Some(self.selected);
     }
     pub(super) fn reset_property_runtime(&mut self) {
@@ -115,36 +272,21 @@ impl Drawer {
             .unwrap()
             .tools[&tool]
             .clone();
+        let unit = self
+            .workspaces
+            .store
+            .current
+            .properties
+            .as_ref()
+            .unwrap()
+            .size_unit;
+        let dpi = self.active.map_or(300.0, |n| self.documents[n].dpi);
         for (p, state) in states {
             if !state.visible {
                 continue;
             }
-            let [min, max] = p.bounds();
             let mut value = state.value;
-            ui.horizontal(|ui| {
-                ui.label(p.name());
-                match state.control {
-                    Control::Slider => {
-                        super::edit::slider(ui, &mut value, min..=max, p.name(), "tool-properties");
-                    }
-                    Control::Number => {
-                        super::edit::number(
-                            ui,
-                            &mut value,
-                            min..=max,
-                            match p {
-                                Property::Aspect | Property::Stabilization => 0.01,
-                                _ => 1.0,
-                            },
-                            "",
-                            "tool-properties",
-                        );
-                    }
-                    Control::Indicator => {
-                        ui.label(value.to_string());
-                    }
-                }
-            });
+            property_value(ui, &mut value, p, state.control, unit, dpi);
             match p {
                 Property::Size => self.panels.settings.brush_size = value,
                 Property::Aspect => self.panels.settings.brush_aspect = value,
@@ -156,8 +298,32 @@ impl Drawer {
                         .unwrap();
                     self.workspaces.store.current.input.smoothing[n] = value;
                 }
+                Property::Opacity | Property::Hardness | Property::Spacing => {
+                    let n = BrushTip::ALL
+                        .iter()
+                        .position(|t| *t == self.selected)
+                        .unwrap();
+                    match p {
+                        Property::Opacity => self.panels.settings.brush_opacity[n] = value,
+                        Property::Hardness => self.panels.settings.brush_hardness[n] = value,
+                        Property::Spacing => self.panels.settings.brush_spacing[n] = value,
+                        _ => unreachable!(),
+                    }
+                }
             }
         }
+        size_unit(
+            ui,
+            &mut self
+                .workspaces
+                .store
+                .current
+                .properties
+                .as_mut()
+                .unwrap()
+                .size_unit,
+            dpi,
+        );
         if crate::help::button(ui, "Configure tool properties", "tool-properties").clicked() {
             self.properties.open = true;
         }
@@ -182,9 +348,12 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
+        let mut layer = None;
+        let dpi = self.active.map_or(300.0, |n| self.documents[n].dpi);
         egui::Window::new("Tool property settings").open(&mut open).constrain(true).vscroll(true).show(ctx,|ui|{
+            layer = Some(ui.layer_id());
             ui.horizontal(|ui|{
-                let a=crate::help::button(ui,"Apply tool properties","tool-properties");let c=crate::help::button(ui,"Cancel tool properties","tool-properties");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.properties.apply=Some(a.rect);self.properties.cancel=Some(c.rect);}
+                let a=ui.add_enabled(!super::edit::invalid_layer(ctx,ui.layer_id()) && editor.draft.valid(),egui::Button::new("Apply tool properties"));let c=crate::help::button(ui,"Cancel tool properties","tool-properties");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.properties.apply=Some(a.rect);self.properties.cancel=Some(c.rect);}
             });
             let mut accept=false;let mut dismiss=false;
             if let Some(preview)=&editor.preview {
@@ -192,34 +361,45 @@ impl Drawer {
                 ui.separator();ui.heading("Review property changes");egui::ScrollArea::vertical().id_salt("property-copy-preview").max_height(180.0).show(ui,|ui|{for line in &preview.reports{ui.label(line);}});
                 ui.horizontal(|ui|{let a=crate::help::button(ui,"Accept preview into draft","tool-properties");let c=crate::help::button(ui,"Cancel property copy","tool-properties");accept=a.clicked();dismiss=c.clicked();#[cfg(test)]{self.properties.accept_copy=Some(a.rect);self.properties.cancel_copy=Some(c.rect);}});
             }
-            if accept{editor.draft=editor.preview.take().unwrap().next;if editor.reset_preview&&editor.hide_reset{self.workspaces.store.current.preferences.suppressed.insert(drawer_core::preferences::Confirmation::ResetProperties);}editor.reset_preview=false;editor.hide_reset=false;}else if dismiss{editor.preview=None;editor.reset_preview=false;editor.hide_reset=false;}
-            ui.horizontal_wrapped(|ui|{for tool in Tool::ALL {crate::help::selectable(ui,editor.source==tool,tool.name(),"tool-properties").clicked().then(||editor.source=tool);}});
+            if accept{editor.draft=editor.preview.take().unwrap().next;super::edit::discard_layer(ctx,ui.layer_id());if editor.reset_preview&&editor.hide_reset{self.workspaces.store.current.preferences.suppressed.insert(drawer_core::preferences::Confirmation::ResetProperties);}editor.reset_preview=false;editor.hide_reset=false;}else if dismiss{editor.preview=None;editor.reset_preview=false;editor.hide_reset=false;}
+            ui.horizontal_wrapped(|ui|{for tool in Tool::ALL {if crate::help::selectable(ui,editor.source==tool,tool.name(),"tool-properties").clicked(){super::edit::discard_layer(ctx,ui.layer_id());editor.source=tool;}}});
             if editor.draft.tools[&editor.source].is_empty(){ui.label("This tool has no shared brush properties; copies skip unsupported properties.");}
             for p in Property::ALL {if let Some(state)=editor.draft.tools.get_mut(&editor.source).unwrap().get_mut(&p) {ui.push_id(p.name(),|ui|{
-                ui.horizontal(|ui|{ui.label(p.name());let [min,max]=p.bounds();super::edit::number(ui,&mut state.value,min..=max,0.01,"","tool-properties");crate::help::checkbox(ui,&mut state.visible,"Visible","tool-properties");});
+                property_value(ui,&mut state.value,p,Control::Number,editor.draft.size_unit,dpi);
+                ui.horizontal(|ui|{crate::help::checkbox(ui,&mut state.visible,"Visible","tool-properties");});
                 ui.horizontal(|ui|{for control in [Control::Slider,Control::Number,Control::Indicator]{ui.selectable_value(&mut state.control,control,format!("{control:?}"));}});
             });}}
+            size_unit(ui,&mut editor.draft.size_unit,dpi);
+            let pending=super::edit::invalid_layer(ctx,ui.layer_id());
+            if pending {ui.colored_label(egui::Color32::LIGHT_RED,"Finish or cancel the invalid number before applying, copying, or saving.");}
             ui.separator();ui.label("Copy selected properties");
             ui.horizontal(|ui|{for(n,p)in Property::ALL.into_iter().enumerate(){crate::help::checkbox(ui,&mut editor.properties[n],p.name(),"tool-properties");}});
             ui.horizontal(|ui|{ui.selectable_value(&mut editor.kind,CopyKind::Values,"Values only");ui.selectable_value(&mut editor.kind,CopyKind::Appearance,"Visibility / controls only");});
             ui.horizontal(|ui|{for(n,name)in ["Same tool group","Selected tools","All tools"].into_iter().enumerate(){ui.selectable_value(&mut editor.scope,n as u8,name);}});
             if editor.scope==1{ui.horizontal_wrapped(|ui|{for(n,t)in Tool::ALL.into_iter().enumerate(){crate::help::checkbox(ui,&mut editor.targets[n],t.name(),"tool-properties");}});}
-            if crate::help::button(ui,"Preview property copy","tool-properties").clicked(){
+            if ui.add_enabled(!pending,egui::Button::new("Preview property copy")).clicked(){
                 let targets=Tool::ALL.into_iter().enumerate().filter_map(|(n,t)|(editor.scope==2 || (editor.scope==0&&t.group()==editor.source.group()) || (editor.scope==1&&editor.targets[n])).then_some(t)).collect::<Vec<_>>();
                 let properties=Property::ALL.into_iter().enumerate().filter_map(|(n,p)|editor.properties[n].then_some(p)).collect::<Vec<_>>();
                 match editor.draft.preview(editor.source,&targets,&properties,editor.kind){Ok(preview)=>{editor.preview=Some(preview);editor.reset_preview=false;},Err(e)=>self.status=Some(e)}
             }
             let reset=crate::help::button(ui,"Reset all tool properties…","tool-properties");#[cfg(test)]{self.properties.reset=Some(reset.rect);}
-            if reset.clicked(){if self.workspaces.store.current.preferences.suppressed.contains(&drawer_core::preferences::Confirmation::ResetProperties){editor.draft=Settings::default();editor.preview=None;}else{editor.reset_preview=true;editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}}
+            if reset.clicked(){if self.workspaces.store.current.preferences.suppressed.contains(&drawer_core::preferences::Confirmation::ResetProperties){editor.draft=Settings::default();editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());}else{editor.reset_preview=true;editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}}
             ui.horizontal_wrapped(|ui|{
-                if crate::help::button(ui,"Save local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().set_file_name("tool-properties.json").save_file() && let Err(e)=editor.draft.save(&path){self.status=Some(e.to_string());}
-                if crate::help::button(ui,"Read local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Tool property preset",&["json"]).pick_file(){match Settings::read(&path){Ok(s)=>{editor.draft=s;editor.preview=None;},Err(e)=>self.status=Some(e.to_string())}}
-                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore before-apply properties")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>if let Some(properties)=s.properties{editor.draft=properties;editor.preview=None;}else{self.status=Some("The backup predates per-tool properties".into());},Err(e)=>self.status=Some(e.to_string())}}
+                if ui.add_enabled(!pending,egui::Button::new("Save local property preset…")).clicked() && let Some(path)=rfd::FileDialog::new().set_file_name("tool-properties.json").save_file() && let Err(e)=editor.draft.save(&path){self.status=Some(e.to_string());}
+                if crate::help::button(ui,"Read local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Tool property preset",&["json"]).pick_file(){match Settings::read(&path){Ok(s)=>{editor.draft=s;editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
+                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore before-apply properties")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>if let Some(mut properties)=s.properties{properties.upgrade(s.panels.brush_opacity,s.panels.brush_hardness,s.panels.brush_spacing);editor.draft=properties;editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());}else{self.status=Some("The backup predates per-tool properties".into());},Err(e)=>self.status=Some(e.to_string())}}
             });
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if let Some(layer) = layer {
+                super::edit::discard_layer(ctx, layer);
+            }
             self.properties.open = false;
             self.properties.editor = None;
+        } else if apply && layer.is_some_and(|layer| super::edit::invalid_layer(ctx, layer)) {
+            self.status =
+                Some("Invalid numeric input: finish or cancel the field before applying".into());
+            self.properties.editor = Some(editor);
         } else if apply {
             let mut snapshot = self.capture_workspace();
             snapshot.properties = Some(editor.draft.clone());
@@ -234,6 +414,9 @@ impl Drawer {
                 None,
             ) {
                 Ok(()) => {
+                    if let Some(layer) = layer {
+                        super::edit::discard_layer(ctx, layer);
+                    }
                     self.properties.open = false;
                     self.properties.editor = None;
                     self.sync_tool_properties();
@@ -254,6 +437,10 @@ impl Drawer {
 mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, frame, tiny_spec};
+    #[test]
+    fn canonical_units_and_slider_number_keys_use_the_same_increment() {
+        smoke().unwrap();
+    }
     #[test]
     fn values_switch_per_tool_and_display_state_preset_restart_preserve_document() {
         let root = TestDirectory::new();

@@ -14,15 +14,30 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
+    #[serde(default = "full_opacity")]
+    pub opacity: f64,
+    #[serde(default = "full_opacity")]
+    pub hardness: f64,
+    #[serde(default = "default_spacing")]
+    pub spacing: f64,
     pub shape: Shape,
     pub tip: BrushTip,
     pub color: [u8; 4],
     pub smoothing: f64,
     pub pressure: crate::pressure::Mapping,
 }
+fn full_opacity() -> f64 {
+    1.0
+}
+fn default_spacing() -> f64 {
+    0.15
+}
 impl Style {
     pub fn valid(self) -> bool {
         self.shape.valid()
+            && (0.0..=1.0).contains(&self.opacity)
+            && (0.0..=1.0).contains(&self.hardness)
+            && (0.01..=10.0).contains(&self.spacing)
             && self.shape.angle.abs() <= 1e12
             && (0.0..=0.95).contains(&self.smoothing)
             && self.pressure.response.error().is_none()
@@ -347,8 +362,8 @@ impl Stroke {
             } else {
                 1.0
             };
-            let step = (self.style.shape.size * pressure_scale * self.style.shape.aspect * 0.15)
-                .clamp(0.25, 8.0);
+            let step =
+                (self.style.shape.size * pressure_scale * self.style.spacing).max(1.0 / 1024.0);
             if length > 1e-9 {
                 let radius = self.style.shape.size * 0.5 + 1.0;
                 if let Some([begin, end]) = clip(
@@ -481,7 +496,7 @@ impl Stroke {
         } else {
             1.0
         };
-        if shape.size == 0.0 || opacity == 0.0 {
+        if shape.size == 0.0 || opacity == 0.0 || self.style.opacity == 0.0 {
             return Ok(());
         }
         let radius = shape.size * 0.5;
@@ -536,7 +551,13 @@ impl Stroke {
                 let dy = point[1] - center[1];
                 let distance =
                     ((dx * cos + dy * sin) / radius).hypot((-dx * sin + dy * cos) / minor);
-                let coverage = ((1.0 - distance) * minor + 0.5).clamp(0.0, 1.0);
+                let edge = ((1.0 - distance) * minor + 0.5).clamp(0.0, 1.0);
+                let softness = if self.style.hardness == 1.0 {
+                    1.0
+                } else {
+                    ((1.0 - distance) / (1.0 - self.style.hardness)).clamp(0.0, 1.0)
+                };
+                let coverage = edge * softness;
                 if coverage <= 0.0 {
                     continue;
                 }
@@ -591,7 +612,7 @@ impl Stroke {
                 } else {
                     over(base, paint_color, amount)
                 };
-                let result = mix(original, next, mask as f64 / 255.0);
+                let result = mix(original, next, mask as f64 / 255.0 * self.style.opacity);
                 if old.is_none() && result == original {
                     continue;
                 }
@@ -707,6 +728,9 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            opacity: 1.0,
+            hardness: 1.0,
+            spacing: 0.15,
             shape: Shape {
                 size: 1.0,
                 aspect: 1.0,
@@ -721,6 +745,88 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+    #[test]
+    fn brush_parameters_validate_softness_spacing_opacity_and_short_stroke() {
+        let mut s = style(BrushTip::Pen);
+        for (opacity, hardness, spacing) in [(0.0, 0.0, 0.01), (1.0, 1.0, 10.0)] {
+            s.opacity = opacity;
+            s.hardness = hardness;
+            s.spacing = spacing;
+            assert!(s.valid());
+        }
+        for bad in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
+            s = style(BrushTip::Pen);
+            s.opacity = bad;
+            assert!(!s.valid());
+            s = style(BrushTip::Pen);
+            s.hardness = bad;
+            assert!(!s.valid());
+        }
+        s = style(BrushTip::Pen);
+        s.shape.size = 0.0;
+        assert!(Stroke::begin(&doc(), 0, s).is_err());
+        for bad in [0.0, 10.01, f64::NAN] {
+            s = style(BrushTip::Pen);
+            s.spacing = bad;
+            assert!(!s.valid());
+        }
+        let mut hard = doc();
+        let mut soft = doc();
+        s = style(BrushTip::Pen);
+        s.shape.size = 8.0;
+        let mut stroke = Stroke::begin(&hard, 0, s).unwrap();
+        stroke.sample(&hard, [12.5, 6.5]).unwrap();
+        stroke.commit(&mut hard).unwrap();
+        s.hardness = 0.0;
+        let mut stroke = Stroke::begin(&soft, 0, s).unwrap();
+        stroke.sample(&soft, [12.5, 6.5]).unwrap();
+        stroke.commit(&mut soft).unwrap();
+        assert_eq!(hard.composite_pixel(12, 6), soft.composite_pixel(12, 6));
+        assert!(
+            soft.composite_pixel(15, 6)[3] > 0
+                && soft.composite_pixel(15, 6)[3] < hard.composite_pixel(15, 6)[3]
+        );
+        let mut d = doc();
+        let original = d.snapshot();
+        s.opacity = 0.0;
+        let mut stroke = Stroke::begin(&d, 0, s).unwrap();
+        stroke.sample(&d, [4.5, 6.5]).unwrap();
+        stroke.sample(&d, [4.6, 6.5]).unwrap();
+        assert!(!stroke.commit(&mut d).unwrap());
+        assert!(d.snapshot() == original);
+        assert_eq!(d.history_counts(), (0, 0));
+        s.hardness = 1.0;
+        s.opacity = 0.5;
+        s.color[3] = 255;
+        s.spacing = 0.01;
+        let mut stroke = Stroke::begin(&d, 0, s).unwrap();
+        for x in [4.5, 20.5, 4.5, 20.5] {
+            stroke.sample(&d, [x, 6.5]).unwrap();
+        }
+        stroke.commit(&mut d).unwrap();
+        assert!(d.layers[0].pixels.iter().all(|p| p[3] <= 128));
+        assert_eq!(d.composite_pixel(4, 6)[3], 128);
+        let mut sparse = doc();
+        s.opacity = 1.0;
+        s.spacing = 10.0;
+        s.shape.size = 1.0;
+        let mut stroke = Stroke::begin(&sparse, 0, s).unwrap();
+        stroke.sample(&sparse, [2.5, 6.5]).unwrap();
+        stroke.sample(&sparse, [29.5, 6.5]).unwrap();
+        stroke.commit(&mut sparse).unwrap();
+        assert_eq!(sparse.composite_pixel(6, 6)[3], 0);
+        assert!(sparse.composite_pixel(2, 6)[3] > 0);
+        assert!(sparse.composite_pixel(29, 6)[3] > 0);
+        let mut legacy = serde_json::to_value(s).unwrap();
+        for key in ["opacity", "hardness", "spacing"] {
+            legacy.as_object_mut().unwrap().remove(key);
+        }
+        let restored: Style = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            (restored.opacity, restored.hardness, restored.spacing),
+            (1.0, 1.0, 0.15)
+        );
     }
     #[test]
     fn normalized_pressure_axes_are_independent_zero_half_full_and_bounded() {
@@ -804,7 +910,9 @@ mod tests {
             s.sample_pressure(&d, [x, 4.5], 0.5).unwrap();
         }
         s.commit(&mut d).unwrap();
-        assert_eq!(d.composite_pixel(12, 4)[3], 100);
+        // Diameter-relative 0.15 spacing need not land on this exact pixel centre.
+        assert!((95..=100).contains(&d.composite_pixel(12, 4)[3]));
+        assert_eq!(d.composite_pixel(2, 4)[3], 100);
         assert!(d.layers[0].pixels.iter().all(|p| p[3] <= 100));
         let before = d.snapshot();
         let mut s = Stroke::begin(&d, 0, style).unwrap();

@@ -18,6 +18,7 @@ pub mod mouse_pressure;
 pub mod movie;
 pub mod navigator;
 pub mod navigator_preferences;
+pub mod numeric;
 pub mod panels;
 pub mod paste;
 pub mod png_export;

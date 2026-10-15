@@ -2,6 +2,9 @@ use crate::storage::UserStorage;
 fn default_opacity() -> [f64; 4] {
     [1.0; 4]
 }
+fn default_spacing() -> [f64; 4] {
+    [0.15; 4]
+}
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -114,6 +117,10 @@ pub struct Settings {
     pub brush_size: f64,
     #[serde(default = "default_opacity")]
     pub brush_opacity: [f64; 4],
+    #[serde(default = "default_opacity")]
+    pub brush_hardness: [f64; 4],
+    #[serde(default = "default_spacing")]
+    pub brush_spacing: [f64; 4],
     #[serde(default = "default_aspect")]
     pub brush_aspect: f64,
     #[serde(default)]
@@ -126,6 +133,8 @@ impl Default for Settings {
             panels: [Panel::default(); 4],
             brush_size: 12.0,
             brush_opacity: [1.0; 4],
+            brush_hardness: [1.0; 4],
+            brush_spacing: [0.15; 4],
             brush_aspect: 1.0,
             brush_angle: 0.0,
         }
@@ -134,6 +143,8 @@ impl Default for Settings {
 impl Settings {
     pub fn valid(self) -> bool {
         self.version == 1
+            && self.brush_hardness.iter().all(|v| (0.0..=1.0).contains(v))
+            && self.brush_spacing.iter().all(|v| (0.01..=10.0).contains(v))
             && self
                 .brush_opacity
                 .iter()

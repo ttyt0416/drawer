@@ -292,7 +292,7 @@ impl Replay {
         if let Some((point, _, _)) = points.first() {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;
         }
-        if style.color[3] == 0 {
+        if style.color[3] == 0 || style.opacity == 0.0 {
             return Ok(stroke);
         }
         if self.settings.effect == Effect::Spray {
@@ -304,8 +304,7 @@ impl Replay {
         }
         let area = style.shape.size.min(doc.width as f64)
             * (style.shape.size * style.shape.aspect).min(doc.height as f64);
-        let work = area
-            * (distance / (style.shape.size * style.shape.aspect * 0.15).clamp(0.25, 8.0) + 2.0);
+        let work = area * (distance / (style.shape.size * style.spacing).max(1.0 / 1024.0) + 2.0);
         if work > 64.0 * 1024.0 * 1024.0 {
             return Err(
                 "Mouse reconstruction pixel-work budget exceeded; pending stroke cancelled".into(),
@@ -677,6 +676,9 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            opacity: 1.0,
+            hardness: 1.0,
+            spacing: 0.15,
             shape: Shape {
                 size: 8.0,
                 ..Default::default()
