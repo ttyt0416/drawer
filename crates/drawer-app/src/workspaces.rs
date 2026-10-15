@@ -16,6 +16,8 @@ pub(super) struct Workspaces {
     placed: [Option<(Placement, drawer_core::display_view::Monitor)>; 4],
     pad_texture: Option<egui::TextureHandle>,
     pad_point: Option<[f64; 2]>,
+    pad_trace: drawer_core::brush_cursor::Trace,
+    pad_style: Option<(BrushTip, [u8; 4], f64, f64)>,
     focused: bool,
     keys: HashSet<egui::Key>,
     buttons: HashSet<usize>,
@@ -43,6 +45,8 @@ impl Default for Workspaces {
             placed: Default::default(),
             pad_texture: None,
             pad_point: None,
+            pad_trace: Default::default(),
+            pad_style: None,
             focused: true,
             keys: HashSet::new(),
             buttons: HashSet::new(),
@@ -163,6 +167,8 @@ impl Drawer {
         }
         self.workspaces.placed = Default::default();
         self.workspaces.pad_point = None;
+        self.workspaces.pad_trace.clear();
+        self.workspaces.pad_style = None;
     }
     pub(super) fn load_workspaces(&mut self, storage: &UserStorage) {
         match Store::load(storage) {
@@ -590,7 +596,10 @@ impl Drawer {
             self.workspaces.pad_point = None;
             return;
         }
-        let drawing = self.pending_close.is_none()
+        let drawing = self.workspaces.staged.is_none()
+            && !self.cursors.open
+            && !self.show_new_canvas
+            && self.pending_close.is_none()
             && self.sizing_dialog.is_none()
             && self.import_dialog.is_none()
             && self.movie_dialog.is_none()
@@ -626,7 +635,6 @@ impl Drawer {
                         egui::TextureOptions::NEAREST,
                     )
                 });
-                texture.set(image, egui::TextureOptions::NEAREST);
                 let response = ui.add(
                     egui::Image::new(&*texture)
                         .fit_to_exact_size(egui::vec2(384.0, 288.0))
@@ -636,30 +644,127 @@ impl Drawer {
                 {
                     self.workspaces.pad_rect = Some(response.rect);
                 }
-                if drawing
-                    && self.workspaces.focused
-                    && response.is_pointer_button_down_on()
-                    && let Some(pos) = response.interact_pointer_pos()
-                {
-                    let point = [
-                        (pos.x - response.rect.min.x) as f64 / 3.0,
-                        (pos.y - response.rect.min.y) as f64 / 3.0,
-                    ];
-                    let from = self.workspaces.pad_point.unwrap_or(point);
-                    self.workspaces.store.current.scratchpad.stroke(
-                        from,
-                        point,
-                        self.panels.settings.brush_size,
-                        self.selected,
-                        self.references.session.workspace.color,
-                    );
-                    self.workspaces.pad_point = Some(point);
+                let owning = response.is_pointer_button_down_on()
+                    || response.drag_stopped_by(egui::PointerButton::Primary);
+                if drawing && self.workspaces.focused && owning {
+                    let events = ui.input(|i| i.events.clone());
+                    for event in events {
+                        let mut sample = None;
+                        let mut finish = false;
+                        match event {
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed: true,
+                                ..
+                            } if response.rect.contains(pos) => {
+                                self.workspaces.pad_trace.clear();
+                                let n = BrushTip::ALL
+                                    .iter()
+                                    .position(|t| *t == self.selected)
+                                    .unwrap();
+                                self.workspaces.pad_style = Some((
+                                    self.selected,
+                                    self.references.session.workspace.color,
+                                    self.panels.settings.brush_size,
+                                    self.workspaces.store.current.input.smoothing[n],
+                                ));
+                                sample = Some(pos);
+                            }
+                            egui::Event::PointerMoved(pos)
+                                if self.workspaces.pad_style.is_some() =>
+                            {
+                                sample = Some(pos)
+                            }
+                            egui::Event::PointerButton {
+                                pos,
+                                button: egui::PointerButton::Primary,
+                                pressed: false,
+                                ..
+                            } => {
+                                sample = Some(pos);
+                                finish = true;
+                            }
+                            egui::Event::PointerGone | egui::Event::WindowFocused(false) => {
+                                self.workspaces.pad_style = None;
+                                self.workspaces.pad_trace.clear();
+                            }
+                            _ => {}
+                        }
+                        if let (Some(pos), Some((tip, color, size, strength))) =
+                            (sample, self.workspaces.pad_style)
+                        {
+                            let point = [
+                                (pos.x - response.rect.min.x) as f64 / 3.0,
+                                (pos.y - response.rect.min.y) as f64 / 3.0,
+                            ];
+                            self.workspaces.pad_trace.paint(
+                                &mut self.workspaces.store.current.scratchpad,
+                                point,
+                                strength,
+                                size,
+                                tip,
+                                color,
+                            );
+                            self.workspaces.pad_point = self.workspaces.pad_trace.corrected;
+                        }
+                        if finish {
+                            self.workspaces.pad_style = None;
+                            self.workspaces.pad_point = None;
+                            self.workspaces.pad_trace.clear();
+                        }
+                    }
                 } else {
+                    self.workspaces.pad_style = None;
                     self.workspaces.pad_point = None;
+                    self.workspaces.pad_trace.clear();
+                }
+                if self.workspaces.pad_style.is_some()
+                    && self.workspaces.store.current.behavior.brush_cursor
+                {
+                    let n = BrushTip::ALL
+                        .iter()
+                        .position(|t| *t == self.selected)
+                        .unwrap();
+                    let _ = crate::cursor_settings::paint(
+                        &ui.painter_at(response.rect),
+                        &self.workspaces.pad_trace,
+                        self.workspaces.store.current.cursors.tools[n],
+                        drawer_core::brush_cursor::Shape {
+                            size: self.panels.settings.brush_size,
+                            aspect: self.panels.settings.brush_aspect,
+                            angle: self.panels.settings.brush_angle,
+                        },
+                        crate::cursor_settings::Projection {
+                            view: drawer_core::view::View {
+                                zoom: 3.0 * ui.ctx().pixels_per_point() as f64,
+                                ..Default::default()
+                            },
+                            size: drawer_core::workspaces::PAD_SIZE.map(|v| v as f64),
+                            center: [
+                                response.rect.center().x as f64,
+                                response.rect.center().y as f64,
+                            ],
+                            ppp: ui.ctx().pixels_per_point() as f64,
+                        },
+                        self.canvas_view.icon(n),
+                    );
                 }
                 if ui.button("Clear test area").clicked() {
                     self.workspaces.store.current.scratchpad.pixels.fill([0; 4]);
                 }
+                let image = egui::ColorImage::new(
+                    size,
+                    self.workspaces
+                        .store
+                        .current
+                        .scratchpad
+                        .pixels
+                        .iter()
+                        .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+                        .collect(),
+                );
+                texture.set(image, egui::TextureOptions::NEAREST);
             });
         self.workspaces.store.current.scratchpad.visible = visible;
     }

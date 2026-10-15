@@ -163,6 +163,7 @@ impl Drawer {
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
             || self.show_new_canvas
+            || self.cursors.open
             || self.ui_behavior.open
             || self.tool_input.open
             || self.controls.open

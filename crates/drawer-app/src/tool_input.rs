@@ -118,6 +118,7 @@ impl Drawer {
         egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).show(ctx,|ui|{
             ui.add(egui::Slider::new(&mut draft.hold_millis,0..=5000).text("Temporary tool threshold (ms)"));
             ui.add(egui::Slider::new(&mut draft.drag_pixels,0.0..=64.0).text("Drag threshold (screen pixels)"));
+            for (n,tip) in BrushTip::ALL.iter().enumerate(){ui.add(egui::Slider::new(&mut draft.smoothing[n],0.0..=0.95).text(format!("{} stabilization",tip.name())));}
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
             ui.horizontal_wrapped(|ui|{apply=ui.button("Apply input behavior").clicked();cancel=ui.button("Cancel input behavior").clicked();if ui.button("Reset draft").clicked(){draft=Default::default();}
                 if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>draft=s.input,Err(e)=>self.status=Some(e.to_string())}}

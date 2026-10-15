@@ -10,6 +10,7 @@ use std::{path::PathBuf, sync::Arc};
 mod action_controls;
 mod aid_panel;
 mod canvas_view;
+mod cursor_settings;
 mod display_pane;
 mod help;
 mod image_import_dialog;
@@ -90,6 +91,7 @@ struct Drawer {
     tool_input: tool_input::ToolInput,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
+    cursors: cursor_settings::Cursors,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -180,6 +182,7 @@ impl Drawer {
             tool_input: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
+            cursors: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -359,6 +362,10 @@ impl Drawer {
                 self.workspaces.store.current.behavior.scrollbars,
             )
         });
+        self.canvas_view.cursors = self.workspaces.store.current.cursors;
+        self.canvas_view.smoothing = self.workspaces.store.current.input.smoothing;
+        self.display.canvas.cursors = self.workspaces.store.current.cursors;
+        self.display.canvas.smoothing = self.workspaces.store.current.input.smoothing;
         self.canvas_view.behavior = self.workspaces.store.current.behavior;
         self.display.canvas.behavior = self.workspaces.store.current.behavior;
         self.canvas_view.input_active = self.workspaces.is_focused();
@@ -376,6 +383,7 @@ impl Drawer {
                     && self.movie_dialog.is_none()
                     && self.revert_pending.is_none()
                     && self.workspaces.staged.is_none()
+                    && !self.cursors.open
                     && !self.ui_behavior.open
                     && !self.tool_input.open
                     && !self.controls.open
@@ -418,6 +426,9 @@ impl Drawer {
                                 }
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
+                                }
+                                if ui.button("Cursor styles").clicked() {
+                                    self.cursors.open = true;
                                 }
                                 if ui.button("Panels, cursor and power").clicked() {
                                     self.ui_behavior.open = true;
@@ -501,6 +512,7 @@ impl Drawer {
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
         self.behavior_settings(ui.ctx());
+        self.cursor_settings(ui.ctx());
         self.help_window(ui.ctx());
         self.command_popups(ui.ctx());
         self.new_canvas_dialog(ui.ctx());
@@ -594,6 +606,11 @@ impl eframe::App for Drawer {
                 self.open_help("licenses");
                 self.workspaces.store.current.behavior.auto_hide = true;
                 self.workspaces.store.current.behavior.hide_delay_ms = 0;
+                self.workspaces.store.current.cursors.tools[0].mode =
+                    drawer_core::brush_cursor::Mode::Both;
+                self.workspaces.store.current.cursors.tools[0].prediction = true;
+                self.workspaces.store.current.cursors.tools[0].minimum_pixels = 4.0;
+                self.workspaces.store.current.input.smoothing[0] = 0.6;
                 self.workspaces.store.current.scratchpad.visible = true;
                 self.workspaces.store.current.scratchpad.stroke(
                     [20.0, 20.0],
@@ -987,8 +1004,24 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                let mut trace = drawer_core::brush_cursor::Trace::default();
+                trace.receive([5.0, 5.0], 0.6);
+                trace.receive([80.0, 30.0], 0.6);
+                if trace
+                    .marks(self.workspaces.store.current.cursors.tools[0])
+                    .len()
+                    != 3
+                    || drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                        .unwrap()
+                        .unwrap()
+                        .current
+                        .cursors
+                        != self.workspaces.store.current.cursors
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

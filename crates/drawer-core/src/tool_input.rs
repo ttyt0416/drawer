@@ -6,6 +6,8 @@ pub struct Settings {
     pub version: u32,
     pub hold_millis: u32,
     pub drag_pixels: f64,
+    #[serde(default)]
+    pub smoothing: [f64; 4],
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -13,12 +15,16 @@ impl Default for Settings {
             version: 1,
             hold_millis: 300,
             drag_pixels: 4.0,
+            smoothing: [0.0; 4],
         }
     }
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        self.version == 1 && self.hold_millis <= 5000 && (0.0..=64.0).contains(&self.drag_pixels)
+        self.version == 1
+            && self.hold_millis <= 5000
+            && (0.0..=64.0).contains(&self.drag_pixels)
+            && self.smoothing.iter().all(|s| (0.0..=0.95).contains(s))
     }
 }
 #[derive(Clone)]

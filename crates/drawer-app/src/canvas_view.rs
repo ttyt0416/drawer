@@ -18,6 +18,9 @@ pub struct CanvasView {
     pub input_active: bool,
     pub behavior: drawer_core::ui_behavior::Settings,
     pub working: bool,
+    pub cursors: drawer_core::brush_cursor::Settings,
+    pub smoothing: [f64; 4],
+    pub cursor_trace: drawer_core::brush_cursor::Trace,
     pan_drag: Option<drawer_core::tool_input::Drag>,
     input_document: Option<u64>,
     input_blocked: bool,
@@ -44,6 +47,9 @@ struct ScreenKey {
     filter: drawer_core::interpolation::Filter,
 }
 impl CanvasView {
+    pub fn icon(&self, n: usize) -> egui::TextureId {
+        self.tool_icons[n].id()
+    }
     pub fn cursor_tool_count(&self) -> usize {
         self.tool_icons.len()
     }
@@ -65,6 +71,9 @@ impl CanvasView {
             input_active: true,
             behavior: Default::default(),
             working: false,
+            cursors: Default::default(),
+            smoothing: [0.0; 4],
+            cursor_trace: Default::default(),
             pan_drag: None,
             input_document: None,
             input_blocked: false,
@@ -110,6 +119,7 @@ impl CanvasView {
         self.pan_drag = None;
         self.area_start = None;
         self.first_point = None;
+        self.cursor_trace.clear();
         self.input_blocked = true;
     }
     pub fn show(
@@ -255,7 +265,7 @@ impl CanvasView {
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
             && response.is_pointer_button_down_on()
-            && ui.input(|i| i.pointer.primary_down());
+            && ui.input(|i| i.pointer.primary_down() && i.pointer.latest_pos().is_some());
         if self.working
             && self.behavior.edge_pan
             && !ui.input(|i| i.pointer.primary_pressed())
@@ -354,7 +364,10 @@ impl CanvasView {
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
             && response.is_pointer_button_down_on()
-            && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Primary))
+            && ui.input(|i| {
+                i.pointer.button_pressed(egui::PointerButton::Primary)
+                    && i.pointer.latest_pos().is_some()
+            })
             && let Some(pos) = response.interact_pointer_pos()
         {
             self.first_point = Some((
@@ -373,54 +386,79 @@ impl CanvasView {
             self.cursor_rect = None;
         }
         if input_active
-            && self.behavior.brush_cursor
+            && ui.input(|i| i.pointer.latest_pos().is_some())
             && (response.hovered() || response.dragged())
             && let Some(pos) = response
                 .hover_pos()
                 .or_else(|| response.interact_pointer_pos())
         {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            let n = drawer_core::assets::BrushTip::ALL
+                .iter()
+                .position(|t| *t == document.tool)
+                .unwrap();
+            let appearance = self.cursors.tools[n];
+            let strength = if self.working { self.smoothing[n] } else { 0.0 };
+            if ui.input(|i| i.pointer.primary_pressed() || i.pointer.primary_released()) {
+                self.cursor_trace.clear();
+            }
+            let points = ui.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::PointerMoved(p) => Some(*p),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            });
+            let moved = !points.is_empty();
+            for p in points {
+                let point =
+                    document
+                        .view
+                        .screen_to_document([p.x as f64, p.y as f64], size, center, ppp);
+                self.cursor_trace.receive(point, strength);
+            }
             let point =
                 document
                     .view
                     .screen_to_document([pos.x as f64, pos.y as f64], size, center, ppp);
-            let outline: Vec<_> = self
-                .brush_shape
-                .outline(document.view, point, size, center, ppp)
-                .into_iter()
-                .map(|p| egui::pos2(p[0] as f32, p[1] as f32))
-                .collect();
-            painter.add(egui::Shape::closed_line(
-                outline.clone(),
-                egui::Stroke::new(3.0, egui::Color32::BLACK),
-            ));
-            painter.add(egui::Shape::closed_line(
-                outline.clone(),
-                egui::Stroke::new(1.0, egui::Color32::WHITE),
-            ));
-            let icon = drawer_core::assets::BrushTip::ALL
-                .iter()
-                .position(|tip| *tip == document.tool)
-                .unwrap();
-            painter.image(
-                self.tool_icons[icon].id(),
-                egui::Rect::from_min_size(pos + egui::vec2(10.0, 10.0), egui::vec2(16.0, 16.0)),
-                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
-            #[cfg(test)]
-            {
-                self.brush_outline = outline;
+            if self.cursor_trace.raw != Some(point) {
+                self.cursor_trace.receive(point, strength);
+            } else if !moved {
+                self.cursor_trace.prediction = None;
             }
-            for delta in [egui::vec2(7.0, 0.0), egui::vec2(0.0, 7.0)] {
-                let line = [pos - delta, pos + delta];
-                painter.line_segment(line, egui::Stroke::new(3.0, egui::Color32::BLACK));
-                painter.line_segment(line, egui::Stroke::new(1.0, egui::Color32::WHITE));
+            if !self.working {
+                self.cursor_trace.prediction = None;
             }
-            #[cfg(test)]
-            {
-                self.cursor_rect = Some(egui::Rect::from_center_size(pos, egui::vec2(14.0, 14.0)));
+            if self.behavior.brush_cursor {
+                if appearance.style != drawer_core::brush_cursor::Style::System {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+                }
+                let outline = crate::cursor_settings::paint(
+                    &painter,
+                    &self.cursor_trace,
+                    appearance,
+                    self.brush_shape,
+                    crate::cursor_settings::Projection {
+                        view: document.view,
+                        size,
+                        center,
+                        ppp,
+                    },
+                    self.tool_icons[n].id(),
+                );
+                #[cfg(test)]
+                {
+                    self.brush_outline = outline;
+                    self.cursor_rect = (appearance.style
+                        != drawer_core::brush_cursor::Style::System)
+                        .then_some(egui::Rect::from_center_size(pos, egui::vec2(14.0, 14.0)));
+                }
+                #[cfg(not(test))]
+                let _ = outline;
             }
+        } else {
+            self.cursor_trace.clear();
         }
         document.view != before
     }
