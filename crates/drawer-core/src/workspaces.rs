@@ -254,6 +254,8 @@ pub struct Snapshot {
     pub cursors: crate::brush_cursor::Settings,
     #[serde(default)]
     pub information: crate::information::Settings,
+    #[serde(default)]
+    pub layout: crate::layout::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -277,6 +279,7 @@ impl Default for Snapshot {
             behavior: Default::default(),
             cursors: Default::default(),
             information: Default::default(),
+            layout: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -320,6 +323,7 @@ impl Snapshot {
             && self.behavior.valid()
             && self.cursors.valid()
             && self.information.valid()
+            && self.layout.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -353,6 +357,7 @@ impl Snapshot {
         }
         let mut next = self.clone();
         if scope.layout {
+            next.layout = incoming.layout.clone();
             next.placements = incoming.placements.clone();
             next.order = incoming.order;
             let bars = next.panels.panels.map(|p| p.commands);

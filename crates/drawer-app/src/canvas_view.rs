@@ -13,6 +13,8 @@ pub struct CanvasView {
     pub navigator: drawer_core::navigator_preferences::Preferences,
     pub navigator_generation: u64,
     pub simple: bool,
+    pub dock_navigator: bool,
+    last_viewport: Option<egui::Rect>,
     pub brush_shape: drawer_core::brush_cursor::Shape,
     pub first_point: Option<(u64, [f64; 2])>,
     pub drag_pixels: f64,
@@ -69,6 +71,8 @@ impl CanvasView {
             navigator: Default::default(),
             navigator_generation: 0,
             simple: false,
+            dock_navigator: false,
+            last_viewport: None,
             brush_shape: Default::default(),
             first_point: None,
             drag_pixels: 4.0,
@@ -198,6 +202,7 @@ impl CanvasView {
             ui.available_size().max(egui::vec2(1.0, 1.0)),
             egui::Sense::drag(),
         );
+        self.last_viewport = Some(rect);
         crate::help::tag(ui.ctx(), &response, "tools");
         #[cfg(test)]
         {
@@ -305,9 +310,14 @@ impl CanvasView {
         self.update_image(ui, document);
         #[cfg(test)]
         {
-            self.navigator_rect = None;
+            if !self.dock_navigator {
+                self.navigator_rect = None;
+            }
         }
-        if self.navigator.visible && !self.simple {
+        if self.navigator.visible
+            && !self.simple
+            && (self.navigator.floating || !self.dock_navigator)
+        {
             if self.navigator.floating {
                 let mut open = true;
                 let response = egui::Window::new("Navigator")
@@ -724,6 +734,13 @@ impl CanvasView {
     #[cfg(test)]
     pub fn rendered_revision(&self) -> Option<(u64, u64)> {
         self.image.as_ref().map(|(key, _)| (key.0, key.1))
+    }
+    pub fn navigator_in_dock(&mut self, ui: &mut egui::Ui, document: &mut Document, ppp: f64) {
+        self.update_image(ui, document);
+        let rect = self
+            .last_viewport
+            .unwrap_or_else(|| ui.ctx().content_rect());
+        self.show_navigator(ui, document, rect, ppp);
     }
     fn show_navigator(
         &mut self,

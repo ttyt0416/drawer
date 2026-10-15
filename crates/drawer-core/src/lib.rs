@@ -34,3 +34,5 @@ pub mod ui_scale;
 pub mod view;
 pub mod view_layout;
 pub mod workspaces;
+
+pub mod layout;

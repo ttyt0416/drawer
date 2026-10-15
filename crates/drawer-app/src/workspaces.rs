@@ -149,6 +149,7 @@ impl Drawer {
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
+        self.layout.generation += 1;
         self.tool_input.controller.cancel();
         self.panels.settings = s.panels;
         self.canvas_view.navigator = s.navigator;
@@ -496,6 +497,8 @@ impl Drawer {
             let monitor =
                 drawer_core::display_view::selected(&self.display.monitors, p.monitor.as_deref())
                     .cloned();
+            let locks = self.workspaces.store.current.layout.panel_locks[index];
+            let titles = self.workspaces.store.current.layout.titles;
             if let Some(monitor) = monitor {
                 let reposition =
                     self.workspaces.placed[index].as_ref() != Some(&(p.clone(), monitor.clone()));
@@ -503,6 +506,8 @@ impl Drawer {
                     .with_title(format!("Drawer — {}", kind.label()))
                     .with_inner_size([p.size[0] as f32, p.size[1] as f32])
                     .with_min_inner_size([80.0, 80.0])
+                    .with_decorations(titles)
+                    .with_resizable(!(locks.width && locks.height))
                     .with_visible(self.smoke_output.is_none());
                 builder.monitor = Some(monitor.index);
                 ctx.show_viewport_immediate(
@@ -512,6 +517,47 @@ impl Drawer {
                         if class != egui::ViewportClass::EmbeddedWindow {
                             self.workspaces.native_panels += 1;
                             let ppp = ui.ctx().pixels_per_point() as f64;
+                            let current =
+                                egui::vec2((p.size[0] / ppp) as f32, (p.size[1] / ppp) as f32);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::MinInnerSize(
+                                    egui::vec2(
+                                        if locks.width {
+                                            current.x
+                                        } else {
+                                            (80.0 / ppp) as f32
+                                        },
+                                        if locks.height {
+                                            current.y
+                                        } else {
+                                            (80.0 / ppp) as f32
+                                        },
+                                    ),
+                                ));
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::MaxInnerSize(
+                                    egui::vec2(
+                                        if locks.width {
+                                            current.x
+                                        } else {
+                                            (4096.0 / ppp) as f32
+                                        },
+                                        if locks.height {
+                                            current.y
+                                        } else {
+                                            (4096.0 / ppp) as f32
+                                        },
+                                    ),
+                                ));
+                            if locks.position {
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                        egui::pos2(
+                                            (p.position[0] / ppp) as f32,
+                                            (p.position[1] / ppp) as f32,
+                                        ),
+                                    ));
+                            }
                             if reposition {
                                 ui.ctx()
                                     .send_viewport_cmd(egui::ViewportCommand::SetMonitor(
@@ -529,15 +575,20 @@ impl Drawer {
                                 ));
                             } else {
                                 ui.ctx().input(|i| {
-                                    if let Some(r) = i.viewport().outer_rect {
+                                    if !locks.position
+                                        && let Some(r) = i.viewport().outer_rect
+                                    {
                                         p.position = [r.min.x as f64 * ppp, r.min.y as f64 * ppp];
                                     }
                                     if let Some(r) = i.viewport().inner_rect {
                                         let actual =
                                             [r.width() as f64 * ppp, r.height() as f64 * ppp]
                                                 .map(|n| n.clamp(80.0, 4096.0));
-                                        p.size[0] = actual[0];
-                                        if !self.ui_behavior.hidden[index].collapsed
+                                        if !locks.width {
+                                            p.size[0] = actual[0];
+                                        }
+                                        if !locks.height
+                                            && !self.ui_behavior.hidden[index].collapsed
                                             && self.ui_behavior.resize_skip[index] == 0
                                         {
                                             p.size[1] = actual[1];
@@ -585,10 +636,20 @@ impl Drawer {
                 self.workspaces.placed[index] = Some((p.clone(), monitor.clone()));
             } else {
                 let mut visible = true;
-                egui::Window::new(format!("{} — floating", kind.label()))
+                let response = egui::Window::new(format!("{} — floating", kind.label()))
                     .id(egui::Id::new(("floating-panel", index)))
                     .open(&mut visible)
-                    .default_size([260.0, 320.0])
+                    .default_size([
+                        (p.size[0] / ctx.pixels_per_point() as f64) as f32,
+                        (p.size[1] / ctx.pixels_per_point() as f64) as f32,
+                    ])
+                    .title_bar(titles)
+                    .movable(!locks.position)
+                    .resizable([!locks.width, !locks.height])
+                    .current_pos([
+                        (p.position[0] / ctx.pixels_per_point() as f64) as f32,
+                        (p.position[1] / ctx.pixels_per_point() as f64) as f32,
+                    ])
                     .constrain(true)
                     .vscroll(true)
                     .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
@@ -597,6 +658,21 @@ impl Drawer {
                             self.show_panel(ui, kind)
                         })
                     });
+                if let Some(r) = response {
+                    let ppp = ctx.pixels_per_point() as f64;
+                    if !locks.position {
+                        p.position = [
+                            r.response.rect.min.x as f64 * ppp,
+                            r.response.rect.min.y as f64 * ppp,
+                        ];
+                    }
+                    if !locks.width {
+                        p.size[0] = (r.response.rect.width() as f64 * ppp).clamp(80.0, 4096.0);
+                    }
+                    if !locks.height {
+                        p.size[1] = (r.response.rect.height() as f64 * ppp).clamp(80.0, 4096.0);
+                    }
+                }
                 self.panels.settings.panels[index].visible = visible;
             }
             p.dock = self.workspaces.store.current.placements[index].dock;

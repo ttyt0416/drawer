@@ -60,6 +60,9 @@ impl Drawer {
             {
                 self.screen_button = Some(button.rect);
             }
+            if crate::help::button(ui, "Layout", "workspace").clicked() {
+                self.layout.open = true;
+            }
             if button.clicked() {
                 self.toggle_screen_mode();
                 self.canvas_view.simple = self.simple_view;

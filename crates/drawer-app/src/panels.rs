@@ -188,48 +188,46 @@ impl Drawer {
             }
         }
     }
-    pub(super) fn show_panels_at(
-        &mut self,
-        ui: &mut egui::Ui,
-        dock: drawer_core::workspaces::Dock,
-    ) {
-        let height = (ui.available_height() * 0.58).clamp(60.0, 360.0);
-        egui::ScrollArea::vertical()
-            .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
-            .id_salt(("workspace-panels", format!("{dock:?}")))
-            .max_height(height)
-            .show(ui, |ui| {
-                let order = self.workspaces.store.current.order;
-                for kind in order {
-                    if self.workspaces.store.current.placements[kind.index()].dock == dock
-                        && self.panels.settings.panels[kind.index()].visible
-                    {
-                        self.show_panel(ui, kind);
-                    }
-                }
-            });
-    }
     pub(super) fn show_panel(&mut self, ui: &mut egui::Ui, kind: Kind) {
         let cfg = self.panels.settings.panels[kind.index()];
         let shown = self.panel_auto_hide(ui, kind);
         ui.push_id(kind.index(), |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.heading(kind.label());
-                ui.menu_button("Dock", |ui| {
-                    for dock in drawer_core::workspaces::Dock::ALL {
-                        if ui
-                            .selectable_label(
-                                self.workspaces.store.current.placements[kind.index()].dock == dock,
-                                format!("{dock:?}"),
-                            )
-                            .clicked()
-                        {
-                            self.workspaces.store.current.placements[kind.index()].dock = dock;
-                            ui.close();
-                        }
+            if self.workspaces.store.current.layout.titles {
+                ui.horizontal_wrapped(|ui| {
+                    ui.heading(kind.label());
+                    let placement = &self.workspaces.store.current.placements[kind.index()];
+                    let lock = self.workspaces.store.current.layout.panel_locks[kind.index()]
+                        .position
+                        || match placement.dock {
+                            drawer_core::workspaces::Dock::Left => {
+                                self.workspaces.store.current.layout.dock_locked(0)
+                            }
+                            drawer_core::workspaces::Dock::Right => {
+                                self.workspaces.store.current.layout.dock_locked(1)
+                            }
+                            _ => false,
+                        };
+                    if lock {
+                        ui.label("Dock locked");
+                        return;
                     }
+                    ui.menu_button("Dock", |ui| {
+                        for dock in drawer_core::workspaces::Dock::ALL {
+                            if ui
+                                .selectable_label(
+                                    self.workspaces.store.current.placements[kind.index()].dock
+                                        == dock,
+                                    format!("{dock:?}"),
+                                )
+                                .clicked()
+                            {
+                                self.workspaces.store.current.placements[kind.index()].dock = dock;
+                                ui.close();
+                            }
+                        }
+                    });
                 });
-            });
+            }
             if !shown {
                 let reveal = crate::help::button(ui, "Show panel contents", "tools");
                 if reveal.clicked() || reveal.has_focus() {

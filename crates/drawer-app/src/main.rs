@@ -16,6 +16,7 @@ mod edit;
 mod help;
 mod image_import_dialog;
 mod information;
+mod layout;
 mod movie_dialog;
 mod navigator_panel;
 mod new_canvas;
@@ -96,6 +97,7 @@ struct Drawer {
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
     information: information::Information,
+    layout: layout::Layout,
     simple_view: bool,
     screen_modes_seen: u8,
     #[cfg(test)]
@@ -194,6 +196,7 @@ impl Drawer {
             ui_behavior: Default::default(),
             cursors: Default::default(),
             information: Default::default(),
+            layout: Default::default(),
             simple_view: false,
             screen_modes_seen: 0,
             #[cfg(test)]
@@ -403,6 +406,11 @@ impl Drawer {
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
         self.canvas_view.working = false;
+        #[cfg(test)]
+        {
+            self.canvas_view.navigator_rect = None;
+            self.layout.panel_rects.clear();
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             self.screen_mode_controls(ui);
             ui.add_enabled_ui(
@@ -419,7 +427,7 @@ impl Drawer {
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
-                    if self.simple_view {
+                    if self.simple_view || !self.workspaces.store.current.layout.menu {
                         let _menu = ui.menu_button("All tools and commands", |ui| {
                             ui.set_min_width(500.0_f32.min(ui.ctx().content_rect().width() - 40.0));
                             egui::ScrollArea::vertical()
@@ -444,58 +452,24 @@ impl Drawer {
                                 }
                             }
                         });
-                        self.simple_canvas(ui);
-                        return;
+                        if self.simple_view {
+                            self.simple_canvas(ui);
+                            return;
+                        }
                     }
-                    egui::ScrollArea::vertical()
-                        .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
-                        .id_salt("document-commands")
-                        .max_height((ui.available_height() * 0.5).clamp(100.0, 360.0))
-                        .show(ui, |ui| self.full_commands(ui));
-                    let right_docked = drawer_core::panels::Kind::ALL.iter().any(|k| {
-                        self.panels.settings.panels[k.index()].visible
-                            && self.workspaces.store.current.placements[k.index()].dock
-                                == drawer_core::workspaces::Dock::Right
-                    });
-                    ui.columns(if right_docked { 3 } else { 2 }, |columns| {
-                        columns[0].set_width(170.0);
-                        self.show_panels_at(&mut columns[0], drawer_core::workspaces::Dock::Left);
-                        if right_docked {
-                            columns[2].set_width(170.0);
-                            self.show_panels_at(
-                                &mut columns[2],
-                                drawer_core::workspaces::Dock::Right,
-                            );
-                        }
-                        if let Some(active) = self.active {
-                            let document = &self.documents[active];
-                            columns[1].label(format!(
-                                "{} · {} × {} · {} DPI",
-                                document.title, document.width, document.height, document.dpi
-                            ));
-                            let overlay = self.sizing_overlay();
-                            let (left, right) = columns.split_at_mut(1);
-                            let changed = self.canvas_view.show(
-                                &mut right[0],
-                                active,
-                                &mut self.documents[active],
-                                overlay,
-                                &mut left[0],
-                                self.aids.preferences,
-                            );
-                            if changed
-                                && let Some(storage) = &self.storage
-                                && let Err(error) = storage.save_view(self.documents[active].view)
-                            {
-                                self.status = Some(error.to_string());
-                            }
-                        } else {
-                            columns[1].heading("Create a canvas to begin");
-                        }
-                    });
+                    if self.workspaces.store.current.layout.menu {
+                        egui::ScrollArea::vertical()
+                            .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
+                            .id_salt("document-commands")
+                            .max_height((ui.available_height() * 0.5).clamp(100.0, 360.0))
+                            .show(ui, |ui| self.full_commands(ui));
+                    }
+                    self.docked_workspace(ui);
                 },
             );
         });
+        self.layout_windows(ui.ctx());
+        self.layout_settings(ui.ctx());
         self.capture_information();
         self.information_panel(ui.ctx());
         if !self.simple_view {
@@ -599,6 +573,8 @@ impl eframe::App for Drawer {
                 self.workspaces.store.current.placements[0].dock =
                     drawer_core::workspaces::Dock::Floating;
                 self.open_help("licenses");
+                self.workspaces.store.current.layout.panel_locks[0].width = true;
+                self.workspaces.store.current.layout.panel_locks[0].position = true;
                 self.workspaces.store.current.behavior.auto_hide = true;
                 self.workspaces.store.current.behavior.hide_delay_ms = 0;
                 self.workspaces.store.current.cursors.tools[0].mode =
@@ -628,6 +604,7 @@ impl eframe::App for Drawer {
                     .unwrap();
             }
             if self.frames == 3 {
+                self.workspaces.store.current.layout.titles = false;
                 self.toggle_screen_mode();
                 self.workspaces.store.current.information.theme =
                     drawer_core::information::Theme::Light;
@@ -640,12 +617,20 @@ impl eframe::App for Drawer {
                 self.smoke_start_sizing(ui.ctx());
             }
             if self.frames == 5 {
+                self.workspaces.store.current.layout.titles = true;
+                self.workspaces.store.current.layout.arrangement =
+                    drawer_core::layout::Arrangement::Tile;
                 self.toggle_screen_mode();
             }
             if self.frames > 120 {
                 fail_smoke();
             }
             if self.frames >= 6 && self.sizing_dialog.is_none() {
+                if self.layout.rendered_windows != self.tabs.len()
+                    || !self.workspaces.store.current.layout.panel_locks[0].position
+                {
+                    fail_smoke();
+                }
                 if !help::has_context(ui.ctx()) {
                     fail_smoke();
                 }
@@ -1061,7 +1046,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -3450,6 +3435,24 @@ mod tests {
         app.panels.settings.panels[Kind::Layers.index()].visible = true;
         frame(&ctx, &mut app, vec![]);
         frame(&ctx, &mut app, vec![]);
+        // The resized dock reserves navigator space; scroll the panel to its last track.
+        let header = app.layout.panel_rects[&Kind::Layers].min + egui::vec2(12.0, 12.0);
+        frame(
+            &ctx,
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(header),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    phase: egui::TouchPhase::Move,
+                    delta: egui::vec2(0.0, -160.0),
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        for _ in 0..8 {
+            frame(&ctx, &mut app, vec![]);
+        }
         let rect = app.panels.targets_buttons[&Target::Track(0)];
         click(&ctx, &mut app, rect);
         assert_eq!(app.panels.targets[&id], Target::Track(0));

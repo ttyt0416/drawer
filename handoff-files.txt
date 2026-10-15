@@ -106,3 +106,6 @@ crates/drawer-app/src/information.rs
 crates/drawer-app/src/screen_mode.rs
 
 crates/drawer-app/src/edit.rs
+
+crates/drawer-core/src/layout.rs
+crates/drawer-app/src/layout.rs
