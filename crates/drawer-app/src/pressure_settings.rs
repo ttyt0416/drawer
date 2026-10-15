@@ -22,13 +22,35 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Brush pressure").open(&mut open).show(ctx,|ui| {
+        egui::Window::new("Brush pressure").open(&mut open).vscroll(true).show(ctx,|ui| {
+            let a=ui.add_enabled_ui(draft.valid(),|ui|crate::help::button(ui,"Apply pressure","pressure")).inner;
+            let c=crate::help::button(ui,"Cancel pressure","pressure");
+            apply=a.clicked();cancel=c.clicked();
+            #[cfg(test)] {self.pressure.buttons=[Some(a.rect),Some(c.rect)];}
+            ui.separator();
             ui.horizontal(|ui| {for (n,tip) in BrushTip::ALL.into_iter().enumerate() {
                 if crate::help::selectable(ui,self.pressure.tool==n,tip.name(),"pressure").clicked(){self.pressure.tool=n;}
             }});
             let mapping=&mut draft.tools[self.pressure.tool];
             crate::help::checkbox(ui,&mut mapping.size,"Pressure controls size","pressure");
             crate::help::checkbox(ui,&mut mapping.opacity,"Pressure controls opacity","pressure");
+            ui.label("Input pressure range");
+            ui.horizontal(|ui| {
+                ui.label("Minimum");super::edit::number(ui,&mut mapping.response.minimum,0.0..=1.0,0.01,"","pressure");
+                ui.label("Maximum");super::edit::number(ui,&mut mapping.response.maximum,0.0..=1.0,0.01,"","pressure");
+            });
+            ui.label("Monotone output curve (endpoints fixed at 0 and 1)");
+            for n in 1..4 {super::edit::slider(ui,&mut mapping.response.curve[n],0.0..=1.0,format!("At {}% range",n*25),"pressure");}
+            if mapping.response.error().is_none() {
+                let (rect,_)=ui.allocate_exact_size(egui::vec2(240.0,80.0),egui::Sense::hover());
+                let painter=ui.painter();
+                painter.rect_stroke(rect,0.0,egui::Stroke::new(1.0,egui::Color32::GRAY),egui::StrokeKind::Inside);
+                let points=(0..=64).map(|n| {
+                    let x=n as f64/64.0;let y=mapping.response.map(x).unwrap();
+                    egui::pos2(rect.left()+x as f32*rect.width(),rect.bottom()-y as f32*rect.height())
+                }).collect();
+                painter.add(egui::Shape::line(points,egui::Stroke::new(1.5,egui::Color32::LIGHT_BLUE)));
+            }
             ui.label("Pressure 0–1 scales each enabled axis independently. Mouse and missing pressure use 1.");
             ui.label("A stroke keeps the settings used when it starts. Opacity pressure limits the stroke's ink contribution, including overlapping stamps.");
             ui.separator();
@@ -39,7 +61,7 @@ impl Drawer {
             if ui.add_enabled(!self.pressure.path.is_empty(),egui::Button::new("Load preset into draft")).clicked() {
                 match Settings::read(&path){Ok(s)=>draft=s,Err(e)=>self.status=Some(e.to_string())}
             }
-            if ui.add_enabled(!self.pressure.path.is_empty() && (!path.exists() || self.pressure.replace),egui::Button::new("Save draft preset")).clicked()
+            if ui.add_enabled(draft.valid() && !self.pressure.path.is_empty() && (!path.exists() || self.pressure.replace),egui::Button::new("Save draft preset")).clicked()
                 && let Err(e)=draft.save(&path){self.status=Some(e.to_string());}
             if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked() {
                 match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")) {
@@ -47,10 +69,10 @@ impl Drawer {
                 }
             }
             if crate::help::button(ui,"Reset pressure draft","pressure").clicked(){draft=Settings::default();}
-            let a=crate::help::button(ui,"Apply pressure","pressure");
-            let c=crate::help::button(ui,"Cancel pressure","pressure");
-            apply=a.clicked();cancel=c.clicked();
-            #[cfg(test)] {self.pressure.buttons=[Some(a.rect),Some(c.rect)];}
+            for (tip,m) in BrushTip::ALL.into_iter().zip(draft.tools) {
+                if let Some(error)=m.response.error(){ui.colored_label(egui::Color32::YELLOW,format!("{}: {error}",tip.name()));}
+            }
+
         });
         if !open || cancel {
             self.pressure.open = false;
@@ -88,37 +110,52 @@ pub(super) fn smoke_pressure() -> Result<(), String> {
         painting::{Stroke, Style},
         pressure::Mapping,
     };
-    for pressure in [0.0, 0.5, 1.0] {
-        let mut d = Document::create(
-            CanvasSpec {
-                width: 32,
-                height: 16,
-                dpi: 300.0,
-                background: Background::Transparent,
-            },
-            4096,
-        )
-        .map_err(|e| e.to_string())?;
-        let style = Style {
-            shape: Shape {
-                size: 4.0,
-                aspect: 1.0,
-                angle: 0.0,
-            },
-            tip: BrushTip::Pen,
-            color: [20, 40, 80, 200],
-            smoothing: 0.0,
-            pressure: Mapping {
-                size: false,
-                opacity: true,
-            },
-        };
-        let mut s = Stroke::begin(&d, 0, style)?;
-        s.sample_pressure(&d, [5.5, 6.5], pressure)?;
-        s.sample_pressure(&d, [25.5, 6.5], pressure)?;
-        s.commit(&mut d)?;
-        if d.composite_pixel(15, 6)[3] != (200.0 * pressure).round() as u8 {
-            return Err("Native pressure opacity mismatch".into());
+    for curved in [false, true] {
+        for pressure in [0.0, 0.5, 1.0] {
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 32,
+                    height: 16,
+                    dpi: 300.0,
+                    background: Background::Transparent,
+                },
+                4096,
+            )
+            .map_err(|e| e.to_string())?;
+            let mut style = Style {
+                shape: Shape {
+                    size: 4.0,
+                    aspect: 1.0,
+                    angle: 0.0,
+                },
+                tip: BrushTip::Pen,
+                color: [20, 40, 80, 200],
+                smoothing: 0.0,
+                pressure: Mapping {
+                    size: false,
+                    opacity: true,
+                    ..Default::default()
+                },
+            };
+            if curved {
+                style.pressure.response = drawer_core::pressure::Response {
+                    minimum: 0.25,
+                    maximum: 0.75,
+                    curve: [0.0, 0.1, 0.25, 0.8, 1.0],
+                };
+            }
+            let mut s = Stroke::begin(&d, 0, style)?;
+            s.sample_pressure(&d, [5.5, 6.5], pressure)?;
+            s.sample_pressure(&d, [25.5, 6.5], pressure)?;
+            s.commit(&mut d)?;
+            let expected = if curved && pressure == 0.5 {
+                50
+            } else {
+                (200.0 * pressure).round() as u8
+            };
+            if d.composite_pixel(15, 6)[3] != expected {
+                return Err("Native pressure opacity mismatch".into());
+            }
         }
     }
     Ok(())
@@ -139,12 +176,27 @@ mod tests {
         let mut next = initial;
         next.tools[0].size = false;
         next.tools[0].opacity = true;
+        next.tools[0].response = drawer_core::pressure::Response {
+            minimum: 0.25,
+            maximum: 0.75,
+            curve: [0.0, 0.1, 0.25, 0.8, 1.0],
+        };
         app.pressure.open = true;
         app.pressure.draft = Some(next);
         frame(&ctx, &mut app, vec![]);
         frame(&ctx, &mut app, vec![]);
         let rect = app.pressure.buttons[1].unwrap();
         click(&ctx, &mut app, rect);
+        assert_eq!(app.workspaces.store.current.pressure, initial);
+        let mut invalid = next;
+        invalid.tools[0].response.minimum = 0.75;
+        app.pressure.open = true;
+        app.pressure.draft = Some(invalid);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.pressure.buttons[0].unwrap();
+        click(&ctx, &mut app, rect);
+        assert!(app.pressure.open);
         assert_eq!(app.workspaces.store.current.pressure, initial);
         app.pressure.open = true;
         app.pressure.draft = Some(next);

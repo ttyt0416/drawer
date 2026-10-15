@@ -24,6 +24,7 @@ impl Style {
         self.shape.valid()
             && self.shape.angle.abs() <= 1e12
             && (0.0..=0.95).contains(&self.smoothing)
+            && self.pressure.response.error().is_none()
     }
 }
 pub struct Stroke {
@@ -132,7 +133,11 @@ impl Stroke {
             let delta = [to[0] - from[0], to[1] - from[1]];
             let length = delta[0].hypot(delta[1]);
             let pressure_scale = if self.style.pressure.size {
-                self.pressure.min(pressure)
+                self.style
+                    .pressure
+                    .response
+                    .map(self.pressure)?
+                    .min(self.style.pressure.response.map(pressure)?)
             } else {
                 1.0
             };
@@ -218,7 +223,12 @@ impl Stroke {
     pub fn shape(&self) -> Shape {
         let mut shape = self.style.shape;
         if self.style.pressure.size {
-            shape.size *= self.pressure;
+            shape.size *= self
+                .style
+                .pressure
+                .response
+                .map(self.pressure)
+                .unwrap_or(0.0);
         }
         shape
     }
@@ -231,6 +241,7 @@ impl Stroke {
     fn stamp(&mut self, doc: &Document, center: Point, pressure: f64) -> Result<(), String> {
         self.last_stamp = Some(center);
         self.last_stamp_pressure = pressure;
+        let pressure = self.style.pressure.response.map(pressure)?;
         let mut shape = self.style.shape;
         if self.style.pressure.size {
             shape.size *= pressure;
@@ -461,6 +472,7 @@ mod tests {
             pressure: crate::pressure::Mapping {
                 size: false,
                 opacity: false,
+                ..Default::default()
             },
         }
     }
@@ -471,18 +483,22 @@ mod tests {
             Mapping {
                 size: false,
                 opacity: false,
+                ..Default::default()
             },
             Mapping {
                 size: true,
                 opacity: false,
+                ..Default::default()
             },
             Mapping {
                 size: false,
                 opacity: true,
+                ..Default::default()
             },
             Mapping {
                 size: true,
                 opacity: true,
+                ..Default::default()
             },
         ] {
             let mut widths = vec![];
@@ -535,6 +551,7 @@ mod tests {
         style.pressure = Mapping {
             size: false,
             opacity: true,
+            ..Default::default()
         };
         let mut s = Stroke::begin(&d, 0, style).unwrap();
         for x in [2.5, 29.5, 2.5, 29.5] {
@@ -560,6 +577,7 @@ mod tests {
         off.pressure = Mapping {
             size: false,
             opacity: false,
+            ..Default::default()
         };
         let mut s = Stroke::begin(&d, 0, off).unwrap();
         for p in [0.0, 0.5, 1.0, 0.0] {
@@ -567,6 +585,45 @@ mod tests {
         }
         s.commit(&mut d).unwrap();
         assert_eq!(d.composite_pixel(25, 8)[3], 200);
+    }
+    #[test]
+    fn pressure_range_curve_changes_new_stroke_only_and_invalid_style_is_rejected() {
+        use crate::pressure::Response;
+        let mut d = doc();
+        d.edit_pixel(0, 0, 0, [1, 2, 3, 255]);
+        let before = d.snapshot();
+        let mut style = style(BrushTip::Pen);
+        style.shape.size = 4.0;
+        style.pressure.opacity = true;
+        style.pressure.response = Response {
+            minimum: 0.25,
+            maximum: 0.75,
+            curve: [0.0, 0.1, 0.25, 0.8, 1.0],
+        };
+        let mut s = Stroke::begin(&d, 0, style).unwrap();
+        // Changing the external draft cannot alter a stroke that is already underway.
+        style.pressure.response = Response::default();
+        s.sample_pressure(&d, [12.5, 6.5], 0.5).unwrap();
+        assert_eq!(Renderer::preview(&d, Some(&s)).pixel([12.5, 6.5])[3], 50);
+        s.commit(&mut d).unwrap();
+        assert_eq!(d.composite_pixel(12, 6)[3], 50);
+        assert_eq!(d.composite_pixel(0, 0), [1, 2, 3, 255]);
+        assert!(d.undo());
+        assert!(d.snapshot() == before);
+        style.pressure.size = true;
+        style.pressure.opacity = false;
+        style.pressure.response = Response {
+            minimum: 0.25,
+            maximum: 0.75,
+            curve: [0.0, 0.1, 0.25, 0.8, 1.0],
+        };
+        let mut s = Stroke::begin(&d, 0, style).unwrap();
+        s.sample_pressure(&d, [12.5, 6.5], 0.5).unwrap();
+        assert_eq!(s.shape().size, 1.0);
+        s.commit(&mut d).unwrap();
+        assert_eq!(d.composite_pixel(12, 6)[3], 200);
+        style.pressure.response.minimum = style.pressure.response.maximum;
+        assert!(Stroke::begin(&d, 0, style).is_err());
     }
     #[test]
     fn point_and_fast_drag_preview_commit_one_history_and_exact_undo_redo() {

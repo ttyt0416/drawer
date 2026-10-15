@@ -502,6 +502,7 @@ mod tests {
             app.workspaces.store.current.pressure.tools[0] = Mapping {
                 size: false,
                 opacity: true,
+                ..Default::default()
             };
             let p = point(&ctx, &app, [20.5, 20.5]);
             let source = Source {
@@ -521,12 +522,14 @@ mod tests {
                 app.drawing.active.as_ref().unwrap().stroke.style().pressure,
                 Mapping {
                     size: false,
-                    opacity: true
+                    opacity: true,
+                    ..Default::default()
                 }
             );
             app.workspaces.store.current.pressure.tools[0] = Mapping {
                 size: true,
                 opacity: false,
+                ..Default::default()
             };
             app.drawing.incoming = vec![event(Phase::Up)];
             frame(&ctx, &mut app, 1.0, vec![]);
@@ -541,6 +544,7 @@ mod tests {
             app.workspaces.store.current.pressure.tools[0] = Mapping {
                 size: false,
                 opacity: true,
+                ..Default::default()
             };
             let mouse = point(&ctx, &app, [40.5, 30.5]);
             frame(
