@@ -699,6 +699,7 @@ impl Drawer {
             && !self.tool_input.open
             && !self.native_input.open
             && !self.pressure.open
+            && !self.replay.open
             && !self.properties.open
             && !self.ui_behavior.open;
         let mut visible = true;

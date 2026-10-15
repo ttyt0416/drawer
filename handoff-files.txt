@@ -157,3 +157,7 @@ vendor/octotablet/src/util.rs
 crates/drawer-platform/Cargo.toml
 crates/drawer-platform/src/lib.rs
 docs/process/windows-input-boundary.md
+
+crates/drawer-core/src/input_replay.rs
+crates/drawer-app/src/input_replay.rs
+docs/process/input-replay.md

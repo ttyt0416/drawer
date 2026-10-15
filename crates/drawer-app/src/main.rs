@@ -17,6 +17,7 @@ mod edit;
 mod help;
 mod image_import_dialog;
 mod information;
+mod input_replay;
 mod layout;
 mod movie_dialog;
 mod navigator_panel;
@@ -105,6 +106,7 @@ struct Drawer {
     #[cfg(windows)]
     native_mouse: Option<drawer_platform::Input>,
     pressure: pressure_settings::Editor,
+    replay: input_replay::Editor,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
@@ -211,6 +213,7 @@ impl Drawer {
             #[cfg(windows)]
             native_mouse: None,
             pressure: Default::default(),
+            replay: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
@@ -389,6 +392,7 @@ impl Drawer {
         self.process_drawing(ui.ctx());
         self.pointer_settings(ui.ctx());
         self.pressure_settings(ui.ctx());
+        self.input_replay(ui.ctx());
         self.apply_theme(ui.ctx());
         self.canvas_view.measurement_mode = self.measurement_active();
         self.canvas_view.measurement = self.measurement_line();
@@ -450,6 +454,7 @@ impl Drawer {
                     && !self.tool_input.open
                     && !self.native_input.open
                     && !self.pressure.open
+                    && !self.replay.open
                     && !self.properties.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
@@ -1150,6 +1155,9 @@ impl eframe::App for Drawer {
                 if drawing::smoke_defaults().is_err() {
                     fail_smoke();
                 }
+                if input_replay::smoke_replay().is_err() {
+                    fail_smoke();
+                }
                 #[cfg(windows)]
                 if self
                     .native_mouse
@@ -1164,7 +1172,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nmouse_origin_backend=true\nsynthetic_pen_dedup=true\nmissing_pen_properties=true\nnative_pen={native_pen}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nmouse_origin_backend=true\nsynthetic_pen_dedup=true\nmissing_pen_properties=true\nvirtual_input_replay=true\nnative_pen={native_pen}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

@@ -71,6 +71,16 @@ pub(super) struct Drawing {
     pub error: Option<String>,
 }
 impl Drawing {
+    pub(super) fn virtual_events(
+        &mut self,
+        events: Vec<drawer_core::pointer_input::Event>,
+        pen_available: bool,
+    ) {
+        self.incoming = events;
+        self.gui = Some(vec![]);
+        self.pen_available = pen_available;
+        self.native_mouse = true;
+    }
     pub fn active_view(&self) -> Option<u64> {
         self.active.as_ref().map(|s| s.view)
     }

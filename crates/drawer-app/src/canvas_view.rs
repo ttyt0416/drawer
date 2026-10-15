@@ -55,6 +55,9 @@ struct ScreenKey {
     stroke: (u64, u64),
 }
 impl CanvasView {
+    pub(super) fn viewport_rect(&self) -> Option<egui::Rect> {
+        self.last_viewport
+    }
     pub fn icon(&self, n: usize) -> egui::TextureId {
         self.tool_icons[n].id()
     }

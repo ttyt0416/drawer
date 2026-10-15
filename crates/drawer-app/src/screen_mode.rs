@@ -131,6 +131,9 @@ impl Drawer {
             if crate::help::button(ui, "Brush pressure", "pressure").clicked() {
                 self.pressure.open = true;
             }
+            if crate::help::button(ui, "Virtual input replay", "input-replay").clicked() {
+                self.replay.open = true;
+            }
             if crate::help::button(ui, "Input and commands", "screen-mode").clicked() {
                 self.controls.open = true;
             }
