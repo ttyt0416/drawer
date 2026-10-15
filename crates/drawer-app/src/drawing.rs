@@ -84,6 +84,7 @@ pub(super) struct Drawing {
     pub filters: [drawer_core::stroke_filter::Settings; 7],
     pub sequences: [drawer_core::tip_sequence::Settings; 7],
     pub dynamics: [drawer_core::brush_dynamics::Settings; 7],
+    pub patterns: [drawer_core::brush_pattern::Settings; 7],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -603,6 +604,7 @@ impl Drawing {
             style.filters = self.filters[index];
             style.sequence = self.sequences[index];
             style.dynamics = self.dynamics[index];
+            style.pattern = self.patterns[index];
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
@@ -629,6 +631,7 @@ impl Drawing {
                         || !style.filters.is_default()
                         || !style.sequence.is_default()
                         || !style.dynamics.is_default()
+                        || !style.pattern.is_default()
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -701,6 +704,7 @@ impl Drawing {
                         || !style.filters.is_default()
                         || !style.sequence.is_default()
                         || !style.dynamics.is_default()
+                        || !style.pattern.is_default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -769,6 +773,7 @@ impl Drawer {
         self.drawing.filters = self.workspaces.store.current.input.filters;
         self.drawing.sequences = self.workspaces.store.current.input.sequences;
         self.drawing.dynamics = self.workspaces.store.current.input.dynamics;
+        self.drawing.patterns = self.workspaces.store.current.input.patterns;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1110,6 +1115,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
             }
             let style = Style {
+                pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
@@ -1198,6 +1204,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        pattern: Default::default(),
         dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),
@@ -1248,6 +1255,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        pattern: Default::default(),
         dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),

@@ -857,6 +857,7 @@ impl Drawer {
                                     .position(|t| *t == self.selected)
                                     .unwrap();
                                 let style = drawer_core::painting::Style {
+                                    pattern: self.workspaces.store.current.input.patterns[n],
                                     dynamics: self.workspaces.store.current.input.dynamics[n],
                                     sequence: self.workspaces.store.current.input.sequences[n],
                                     filters: self.workspaces.store.current.input.filters[n],

@@ -79,3 +79,5 @@ pub mod color_mix;
 pub mod tip_sequence;
 
 pub mod brush_dynamics;
+
+pub mod brush_pattern;

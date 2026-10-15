@@ -208,3 +208,7 @@ docs/process/tip-sequence.md
 crates/drawer-core/src/brush_dynamics.rs
 crates/drawer-app/src/brush_dynamics.rs
 docs/process/brush-dynamics.md
+
+crates/drawer-core/src/brush_pattern.rs
+crates/drawer-app/src/brush_pattern.rs
+docs/process/brush-pattern.md

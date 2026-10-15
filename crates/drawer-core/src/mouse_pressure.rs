@@ -964,6 +964,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            pattern: Default::default(),
             dynamics: Default::default(),
             sequence: Default::default(),
             filters: Default::default(),
@@ -1240,6 +1241,7 @@ mod dynamics_tests {
         )
         .unwrap();
         let style = Style {
+            pattern: Default::default(),
             dynamics: crate::brush_dynamics::Settings {
                 speed: crate::brush_dynamics::Curve {
                     enabled: true,

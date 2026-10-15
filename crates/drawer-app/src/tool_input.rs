@@ -178,6 +178,7 @@ impl Drawer {
                     ui.label(tip.label());super::tip_sequence::ends_ui(ui,&mut draft.ends[n]);
                 });}
             });
+            ui.collapsing("Scatter, ribbon and repeating decorations",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-pattern",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_pattern::settings_ui(ui,&mut draft.patterns[n]));});}});
             ui.collapsing("Tip direction, size dynamics and spacing",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-dynamics",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_dynamics::settings_ui(ui,&mut draft.dynamics[n]));});}});
             ui.collapsing("Multiple local tips and order",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-sequence",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_sequence::settings_ui(ui,&mut draft.sequences[n]));});}});
             ui.collapsing("Independent position and device pressure filters",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-filter",n),|ui|{ui.collapsing(tip.label(),|ui|super::stroke_filter::settings_ui(ui,&mut draft.filters[n]));});}});
@@ -424,6 +425,14 @@ mod tests {
         let before = app.documents[0].snapshot();
         let baseline = app.capture_workspace();
         let mut draft = baseline.input;
+        draft.patterns[0] = drawer_core::brush_pattern::Settings {
+            mode: drawer_core::brush_pattern::Mode::Scatter,
+            width: 123.0,
+            count: 8,
+            seed: 778,
+            aspect: 0.3,
+            ..Default::default()
+        };
         draft.dynamics[0] = drawer_core::brush_dynamics::Settings {
             direction: drawer_core::brush_dynamics::Direction::Pen,
             minimum_size: 1.0,

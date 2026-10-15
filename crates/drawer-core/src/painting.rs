@@ -16,6 +16,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 pub struct Style {
     #[serde(
         default,
+        skip_serializing_if = "crate::brush_pattern::Settings::is_default"
+    )]
+    pub pattern: crate::brush_pattern::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::brush_dynamics::Settings::is_default"
     )]
     pub dynamics: crate::brush_dynamics::Settings,
@@ -76,10 +81,18 @@ impl Style {
     }
     /// Conservative minor-axis spacing also covers a thin tip across its narrow direction.
     pub(crate) fn step(self, pressure_scale: f64) -> f64 {
-        (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
+        (self.shape.size
+            * if self.pattern.mode == crate::brush_pattern::Mode::Decoration {
+                self.pattern.interval
+            } else {
+                self.shape.aspect * self.spacing
+            }
+            * pressure_scale)
+            .max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.dynamics.valid()
+        self.pattern.valid()
+            && self.dynamics.valid()
             && self.sequence.valid()
             && self.filters.valid()
             && self.profile.valid()
@@ -119,6 +132,8 @@ pub struct Stroke {
     heading: Option<f64>,
     particle: Option<Point>,
     dynamic_index: u64,
+    pattern_index: u64,
+    ribbon: Option<(Point, f64)>,
     sequence: crate::tip_sequence::Sequence,
     mask_tip: BrushTip,
     last_stamp_pressure: f64,
@@ -541,6 +556,8 @@ impl Stroke {
             heading: None,
             particle: None,
             dynamic_index: 0,
+            pattern_index: 0,
+            ribbon: None,
             sequence: Default::default(),
             mask_tip: style.tip,
             last_stamp_pressure: 1.0,
@@ -647,7 +664,9 @@ impl Stroke {
             } else {
                 1.0
             };
-            let step = if self.style.dynamics.is_default() {
+            let step = if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
+                0.5
+            } else if self.style.dynamics.is_default() {
                 self.style
                     .step(pressure_scale * self.last_scale.min(self.scale))
             } else if self.style.dynamics.spacing_with_size {
@@ -655,8 +674,11 @@ impl Stroke {
                     .dynamic_size(self.pressure, self.dynamic_index)?
                     .min(self.dynamic_size(pressure, self.dynamic_index)?);
                 (size
-                    * self.style.shape.aspect
-                    * self.style.spacing
+                    * if self.style.pattern.mode == crate::brush_pattern::Mode::Decoration {
+                        self.style.pattern.interval
+                    } else {
+                        self.style.shape.aspect * self.style.spacing
+                    }
                     * self.last_scale.min(self.scale))
                 .max(1.0 / 1024.0)
             } else {
@@ -670,7 +692,12 @@ impl Stroke {
                     } else {
                         1.0
                     }
-                    + 1.0;
+                    + 1.0
+                    + if self.style.pattern.mode == crate::brush_pattern::Mode::Scatter {
+                        self.style.pattern.width * 0.5
+                    } else {
+                        0.0
+                    };
                 if let Some([begin, end]) = clip(
                     from,
                     to,
@@ -787,6 +814,10 @@ impl Stroke {
             .dynamic_size(self.pressure, self.dynamic_index.saturating_sub(1))
             .unwrap_or(0.0)
             * self.scale;
+        if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
+            shape.size *= shape.aspect;
+            shape.aspect = 1.0;
+        }
         shape
     }
     pub(crate) fn restore_input_trace(&mut self, trace: Trace, smoothing: f64) {
@@ -806,7 +837,39 @@ impl Stroke {
         pressure: f64,
         scale: f64,
     ) -> Result<(), String> {
-        if !self.style.dynamics.is_default() && self.dynamic_index >= 262144 {
+        if self.style.pattern.mode != crate::brush_pattern::Mode::Scatter {
+            return self.stamp_single(doc, center, pressure, scale);
+        }
+        let pattern = self.style.pattern;
+        for particle in 0..pattern.count {
+            let offset = pattern.offset(
+                self.pattern_index,
+                particle,
+                self.style.shape.angle + self.style.dynamics.scatter_angle,
+            );
+            self.particle = Some([-offset[0], -offset[1]]);
+            self.stamp_single(
+                doc,
+                [center[0] + offset[0], center[1] + offset[1]],
+                pressure,
+                scale,
+            )?;
+        }
+        self.pattern_index = self.pattern_index.saturating_add(1);
+        self.last_stamp = Some(center);
+        Ok(())
+    }
+    fn stamp_single(
+        &mut self,
+        doc: &Document,
+        center: Point,
+        pressure: f64,
+        scale: f64,
+    ) -> Result<(), String> {
+        if (!self.style.dynamics.is_default()
+            || self.style.pattern.mode != crate::brush_pattern::Mode::Dabs)
+            && self.dynamic_index >= 262144
+        {
             return Err("Brush dynamics dab-work budget exceeded; pending stroke cancelled".into());
         }
         self.last_stamp = Some(center);
@@ -818,6 +881,13 @@ impl Stroke {
         shape.size = self.dynamic_size(pressure, self.dynamic_index)? * scale;
         shape.angle += self.rotation();
         self.dynamic_index = self.dynamic_index.saturating_add(1);
+        let ribbon = if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
+            shape.size *= shape.aspect;
+            shape.aspect = 1.0;
+            self.ribbon.replace((center, shape.size * 0.5))
+        } else {
+            None
+        };
         let pressure = self.style.pressure.response.map(pressure)?;
         let opacity = if self.style.pressure.opacity {
             self.style.profile.opacity(pressure)
@@ -878,22 +948,22 @@ impl Stroke {
         };
         let layer = &doc.layers[self.layer];
         let storage = layer.extent(doc.width, doc.height);
+        let lower = std::array::from_fn::<_, 2, _>(|n| {
+            (center[n] - extent[n]).min(ribbon.map_or(f64::INFINITY, |(p, r)| p[n] - r - 1.0))
+        });
+        let upper = std::array::from_fn::<_, 2, _>(|n| {
+            (center[n] + extent[n]).max(ribbon.map_or(f64::NEG_INFINITY, |(p, r)| p[n] + r + 1.0))
+        });
         let low = [
-            (center[0] - extent[0])
-                .floor()
-                .max(0.0)
-                .max(storage.offset[0] as f64) as i64,
-            (center[1] - extent[1])
-                .floor()
-                .max(0.0)
-                .max(storage.offset[1] as f64) as i64,
+            lower[0].floor().max(0.0).max(storage.offset[0] as f64) as i64,
+            lower[1].floor().max(0.0).max(storage.offset[1] as f64) as i64,
         ];
         let high = [
-            (center[0] + extent[0])
+            upper[0]
                 .ceil()
                 .min(doc.width as f64 - 1.0)
                 .min((storage.offset[0] + storage.width as i64 - 1) as f64) as i64,
-            (center[1] + extent[1])
+            upper[1]
                 .ceil()
                 .min(doc.height as f64 - 1.0)
                 .min((storage.offset[1] + storage.height as i64 - 1) as f64) as i64,
@@ -965,12 +1035,26 @@ impl Stroke {
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
-                let distance = if self.style.profile.square(mask_tip) {
-                    q[0].abs().max(q[1].abs())
-                } else {
-                    q[0].hypot(q[1])
-                };
-                let edge = ((1.0 - distance) * minor + 0.5).clamp(0.0, 1.0);
+                let (distance, edge_radius) =
+                    if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
+                        crate::brush_pattern::ribbon_distance(
+                            point,
+                            ribbon.unwrap_or((center, radius)),
+                            (center, radius),
+                        )
+                    } else if self.style.pattern.mode == crate::brush_pattern::Mode::Decoration {
+                        (self.style.pattern.decoration.distance(q), minor)
+                    } else {
+                        (
+                            if self.style.profile.square(mask_tip) {
+                                q[0].abs().max(q[1].abs())
+                            } else {
+                                q[0].hypot(q[1])
+                            },
+                            minor,
+                        )
+                    };
+                let edge = ((1.0 - distance) * edge_radius + 0.5).clamp(0.0, 1.0);
                 let softness = if self.style.hardness == 1.0 {
                     1.0
                 } else {
@@ -1021,7 +1105,8 @@ impl Stroke {
                     continue;
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
-                let limited = self.style.tip == BrushTip::PixelPen
+                let limited = self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
+                    || self.style.tip == BrushTip::PixelPen
                     || (self.style.pressure.opacity
                         && self.style.tip != BrushTip::Marker
                         && self.style.tip != BrushTip::Smudge);
@@ -1181,6 +1266,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
@@ -1251,6 +1337,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            pattern: Default::default(),
             dynamics: Default::default(),
             sequence: Default::default(),
             filters: Default::default(),
@@ -1274,6 +1361,20 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+    #[test]
+    fn pattern_dab_budget_rejects_without_publishing() {
+        let mut d = doc();
+        let before = d.snapshot();
+        let mut s = style(BrushTip::Pen);
+        s.pattern.mode = crate::brush_pattern::Mode::Scatter;
+        let mut st = Stroke::begin(&d, 0, s).unwrap();
+        st.dynamic_index = 262144;
+        assert!(st.direct_dab(&d, [12.5, 6.5], [12.5, 6.5], 1.0).is_err());
+        drop(st);
+        assert!(d.snapshot() == before);
+        assert_eq!(d.history_counts(), (0, 0));
+        assert!(!d.undo());
     }
     #[test]
     fn running_quality_respects_selection_boundary_alpha_lock_and_empty_edges() {

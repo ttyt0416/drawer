@@ -50,6 +50,8 @@ pub struct Sequence {
     pub sequences: [crate::tip_sequence::Settings; 7],
     #[serde(default, deserialize_with = "crate::brush_slots::read")]
     pub dynamics: [crate::brush_dynamics::Settings; 7],
+    #[serde(default, deserialize_with = "crate::brush_slots::read")]
+    pub patterns: [crate::brush_pattern::Settings; 7],
     #[serde(default)]
     #[serde(deserialize_with = "crate::brush_slots::read")]
     pub mouse_pressure: [crate::mouse_pressure::Settings; 7],
@@ -98,6 +100,7 @@ impl Default for Sequence {
             filters: [Default::default(); 7],
             sequences: [Default::default(); 7],
             dynamics: [Default::default(); 7],
+            patterns: [Default::default(); 7],
             mouse_pressure: [Default::default(); 7],
             cursors: Default::default(),
             color: [30, 80, 160, 255],
@@ -149,6 +152,7 @@ impl Sequence {
             || self.spacing.iter().any(|v| !(0.01..=10.0).contains(v))
             || self.sequences.iter().any(|s| !s.valid())
             || self.dynamics.iter().any(|s| !s.valid())
+            || self.patterns.iter().any(|s| !s.valid())
             || self.filters.iter().any(|s| !s.valid())
             || self.profiles.iter().any(|s| !s.valid())
             || self.mouse_pressure.iter().any(|s| !s.valid())
