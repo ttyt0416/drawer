@@ -70,3 +70,5 @@ pub mod psd;
 pub mod brush_slots;
 
 pub mod extended_brushes;
+
+pub mod tip_profile;

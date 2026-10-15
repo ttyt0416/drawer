@@ -87,3 +87,5 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 브러시 질감은 Tool input behavior → Brush texture에서, 층/폴더 종이는 Layer / folder paper…에서 편집한다. 독자 세 질감은 별도 파일 없이 자체 문서와 함께 이동한다. Export rendered PSD…는 손실 안내와 렌더된 층/폴더 또는 전체 그림 대체·취소를 제공한다. PSD 열기는 raw RGBA8 RGB 합성 미리보기만 지원하며 PSD 편집 가능 층을 복원하지 않는다. 원본은 .drawer에 보관한다.
 
 기본 도구는 일곱 개다. Marker(Y)는 같은 획 안에서 다시 지나가면 안료가 쌓이고, Smudge(U)는 현재 층의 색만 운반하며, Pixel pen(P)은 기본 크기1의 단단한1픽셀 경계를 그린다. 새 키는 새 설정의 기본값이며 기존 배정은 유지한다. 도구별 설정과 로컬 프리셋을 독립적으로 저장한다.
+
+Tool input behavior → Tip images and minimum outputs에서 브러시별 최소 굵기/농도와 독자 둥근/사각 팁을 선택한다. 최소100%는 압력0에서도 최대값이며 필압 연결은 Brush pressure에서 켠다. 가장자리 부드러움은 Tool properties의 Hardness다.

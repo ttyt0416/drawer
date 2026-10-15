@@ -129,8 +129,19 @@ impl Trace {
         tip: crate::assets::BrushTip,
         color: [u8; 4],
     ) {
+        self.paint_tip(pad, point, strength, size, (tip, Default::default()), color);
+    }
+    pub fn paint_tip(
+        &mut self,
+        pad: &mut crate::workspaces::Scratchpad,
+        point: Point,
+        strength: f64,
+        size: f64,
+        tip: (crate::assets::BrushTip, crate::tip_profile::Settings),
+        color: [u8; 4],
+    ) {
         if let Some((from, to)) = self.receive(point, strength) {
-            pad.stroke(from, to, size, tip, color);
+            pad.stroke_tip(from, to, size, tip, color);
         }
     }
 }

@@ -524,7 +524,9 @@ impl Replay {
             let geometry = self.ends.scale(distance, total, finalizing);
             stroke.set_geometry_scale(geometry)?;
             let scale = if self.style.pressure.size {
-                self.style.pressure.response.map(pressure)?
+                self.style
+                    .profile
+                    .size(self.style.pressure.response.map(pressure)?)
             } else {
                 1.0
             };
@@ -870,6 +872,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,

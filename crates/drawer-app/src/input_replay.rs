@@ -57,6 +57,7 @@ pub(super) fn run(
     app.workspaces.store.current.input.ends = sequence.ends;
     app.workspaces.store.current.input.materials = sequence.materials;
     app.workspaces.store.current.input.textures = sequence.textures;
+    app.workspaces.store.current.input.profiles = sequence.profiles;
     app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
     app.workspaces.store.current.cursors = sequence.cursors;
     app.references.session.workspace.color = sequence.color;

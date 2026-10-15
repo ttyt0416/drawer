@@ -54,6 +54,7 @@ pub fn verify() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        profile: Default::default(),
         texture: Default::default(),
         material: Default::default(),
         shape: Shape {

@@ -18,6 +18,8 @@ pub struct Settings {
     #[serde(default)]
     #[serde(deserialize_with = "crate::brush_slots::read")]
     pub textures: [crate::texture::Pattern; 7],
+    #[serde(default, deserialize_with = "crate::brush_slots::read")]
+    pub profiles: [crate::tip_profile::Settings; 7],
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
@@ -35,6 +37,7 @@ impl Default for Settings {
             ends: [Default::default(); 7],
             materials: crate::brush_slots::materials(),
             textures: [Default::default(); 7],
+            profiles: [Default::default(); 7],
             modifiers: [None; 3],
             mouse_pressure: [Default::default(); 7],
         }
@@ -45,6 +48,7 @@ impl Settings {
         self.version == 1
             && self.ends.iter().all(|s| s.valid())
             && self.materials.iter().all(|s| s.valid())
+            && self.profiles.iter().all(|s| s.valid())
             && self.textures.iter().all(|s| s.valid())
             && self.mouse_pressure.iter().all(|s| s.valid())
             && self.hold_millis <= 5000

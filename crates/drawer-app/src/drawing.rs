@@ -80,6 +80,7 @@ pub(super) struct Drawing {
     pub ends: [drawer_core::stroke_ends::Settings; 7],
     pub materials: [drawer_core::brush_material::Settings; 7],
     pub textures: [drawer_core::texture::Pattern; 7],
+    pub profiles: [drawer_core::tip_profile::Settings; 7],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -591,6 +592,7 @@ impl Drawing {
             style.material = self.materials[index];
             style = style.resolved();
             style.texture = self.textures[index];
+            style.profile = self.profiles[index];
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
@@ -613,6 +615,7 @@ impl Drawing {
                         || self.ends[index].active()
                         || style.material.active()
                         || !style.texture.is_default()
+                        || !style.profile.is_default()
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -677,6 +680,7 @@ impl Drawing {
                         || self.ends[index].active()
                         || style.material.active()
                         || !style.texture.is_default()
+                        || !style.profile.is_default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -741,6 +745,7 @@ impl Drawer {
         self.drawing.ends = self.workspaces.store.current.input.ends;
         self.drawing.materials = self.workspaces.store.current.input.materials;
         self.drawing.textures = self.workspaces.store.current.input.textures;
+        self.drawing.profiles = self.workspaces.store.current.input.profiles;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1082,6 +1087,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
             }
             let style = Style {
+                profile: Default::default(),
                 texture: Default::default(),
                 material: Default::default(),
                 opacity: 1.0,
@@ -1166,6 +1172,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        profile: Default::default(),
         texture: Default::default(),
         material: Default::default(),
         opacity: 1.0,
@@ -1212,6 +1219,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        profile: Default::default(),
         texture: Default::default(),
         material: Default::default(),
         opacity: 1.0,
@@ -1309,6 +1317,60 @@ mod tests {
         }
     }
 
+    #[test]
+    fn zero_pressure_floors_and_tip_shape_are_frozen_until_commit() {
+        use drawer_core::{
+            pointer_input::{Event, Kind, Phase, Source},
+            tip_profile::{Image, Settings},
+        };
+        let (ctx, mut app) = setup(1.0);
+        app.panels.settings.brush_size = 8.0;
+        app.panels.settings.brush_opacity[0] = 0.5;
+        app.references.session.workspace.color = [40, 100, 180, 255];
+        app.workspaces.store.current.pressure.tools[0].size = true;
+        app.workspaces.store.current.pressure.tools[0].opacity = true;
+        let profile = Settings {
+            minimum_size: 0.5,
+            minimum_opacity: 0.4,
+            image: Image::Square,
+        };
+        app.workspaces.store.current.input.profiles[0] = profile;
+        let before = app.documents[0].snapshot();
+        let p = point(&ctx, &app, [10.5, 20.5]);
+        let q = point(&ctx, &app, [40.5, 20.5]);
+        let event = |phase, pos: egui::Pos2| Event {
+            source: Source {
+                kind: Kind::Pen,
+                device: 19,
+                contact: 1,
+            },
+            phase,
+            position: [pos.x as f64, pos.y as f64],
+            pressure: Some(0.0),
+            attributes: Default::default(),
+            origin: Default::default(),
+        };
+        app.drawing
+            .virtual_events(vec![event(Phase::Down, p), event(Phase::Move, q)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(
+            app.drawing.active.as_ref().unwrap().stroke.shape().size,
+            4.0
+        );
+        assert!(app.documents[0].snapshot() == before);
+        app.workspaces.store.current.input.profiles[0] = Default::default();
+        app.drawing.virtual_events(vec![event(Phase::Up, q)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let d = &mut app.documents[0];
+        assert_eq!(d.scene.mouse_strokes[0].style.profile, profile);
+        assert_eq!(d.composite_pixel(25, 20)[3], 51);
+        assert_eq!(d.history_counts(), (1, 0));
+        let after = d.snapshot();
+        assert!(d.undo());
+        assert!(d.snapshot() == before);
+        assert!(d.redo());
+        assert!(d.snapshot() == after);
+    }
     #[test]
     fn texture_only_mouse_and_pen_freeze_style_and_native_recipe_in_one_undo() {
         use drawer_core::{

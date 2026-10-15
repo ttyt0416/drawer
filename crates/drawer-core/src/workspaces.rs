@@ -201,6 +201,17 @@ impl Scratchpad {
         tip: BrushTip,
         color: [u8; 4],
     ) {
+        self.stroke_tip(from, to, size, (tip, Default::default()), color);
+    }
+    pub fn stroke_tip(
+        &mut self,
+        from: [f64; 2],
+        to: [f64; 2],
+        size: f64,
+        tip: (BrushTip, crate::tip_profile::Settings),
+        color: [u8; 4],
+    ) {
+        let (tip, profile) = tip;
         if !from
             .iter()
             .chain(to.iter())
@@ -226,6 +237,7 @@ impl Scratchpad {
         d.layers[0].pixels.clone_from(&self.pixels);
         let v = crate::basic_brush::values(tip);
         let style = crate::painting::Style {
+            profile,
             texture: Default::default(),
             material: crate::basic_brush::material(tip),
             shape: crate::brush_cursor::Shape {

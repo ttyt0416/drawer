@@ -26,6 +26,7 @@ pub struct CanvasView {
     pub working: bool,
     pub cursors: drawer_core::brush_cursor::Settings,
     pub smoothing: [f64; 7],
+    pub profiles: [drawer_core::tip_profile::Settings; 7],
     pub cursor_trace: drawer_core::brush_cursor::Trace,
     pub measurement_mode: bool,
     pub measurement: Option<([f64; 2], [f64; 2])>,
@@ -93,6 +94,7 @@ impl CanvasView {
             working: false,
             cursors: Default::default(),
             smoothing: [0.0; 7],
+            profiles: [Default::default(); 7],
             cursor_trace: Default::default(),
             measurement_mode: false,
             measurement: None,
@@ -335,6 +337,7 @@ impl CanvasView {
             .position(|t| *t == document.tool)
             .unwrap();
         let style = drawer_core::painting::Style {
+            profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,
@@ -550,6 +553,9 @@ impl CanvasView {
                     appearance,
                     cursor_shape,
                     crate::cursor_settings::Projection {
+                        square: active_style
+                            .map_or(self.profiles[n], |s| s.profile)
+                            .square(cursor_tool),
                         view: document.view,
                         size,
                         center,

@@ -2,6 +2,14 @@ use super::*;
 use drawer_core::workspaces::{self, Dock, Placement, Scope, Snapshot, Store};
 use std::collections::HashSet;
 
+#[derive(Clone, Copy)]
+struct PadStyle {
+    tip: BrushTip,
+    profile: drawer_core::tip_profile::Settings,
+    color: [u8; 4],
+    size: f64,
+    smoothing: f64,
+}
 pub(super) struct Workspaces {
     pub store: Store,
     saved: Option<Snapshot>,
@@ -17,7 +25,7 @@ pub(super) struct Workspaces {
     pad_texture: Option<egui::TextureHandle>,
     pad_point: Option<[f64; 2]>,
     pad_trace: drawer_core::brush_cursor::Trace,
-    pad_style: Option<(BrushTip, [u8; 4], f64, f64)>,
+    pad_style: Option<PadStyle>,
     focused: bool,
     keys: HashSet<egui::Key>,
     buttons: HashSet<usize>,
@@ -766,12 +774,13 @@ impl Drawer {
                                     .iter()
                                     .position(|t| *t == self.selected)
                                     .unwrap();
-                                self.workspaces.pad_style = Some((
-                                    self.selected,
-                                    self.references.session.workspace.color,
-                                    self.panels.settings.brush_size,
-                                    self.workspaces.store.current.input.smoothing[n],
-                                ));
+                                self.workspaces.pad_style = Some(PadStyle {
+                                    tip: self.selected,
+                                    profile: self.workspaces.store.current.input.profiles[n],
+                                    color: self.references.session.workspace.color,
+                                    size: self.panels.settings.brush_size,
+                                    smoothing: self.workspaces.store.current.input.smoothing[n],
+                                });
                                 sample = Some(pos);
                             }
                             egui::Event::PointerMoved(pos)
@@ -794,20 +803,18 @@ impl Drawer {
                             }
                             _ => {}
                         }
-                        if let (Some(pos), Some((tip, color, size, strength))) =
-                            (sample, self.workspaces.pad_style)
-                        {
+                        if let (Some(pos), Some(style)) = (sample, self.workspaces.pad_style) {
                             let point = [
                                 (pos.x - response.rect.min.x) as f64 / 3.0,
                                 (pos.y - response.rect.min.y) as f64 / 3.0,
                             ];
-                            self.workspaces.pad_trace.paint(
+                            self.workspaces.pad_trace.paint_tip(
                                 &mut self.workspaces.store.current.scratchpad,
                                 point,
-                                strength,
-                                size,
-                                tip,
-                                color,
+                                style.smoothing,
+                                style.size,
+                                (style.tip, style.profile),
+                                style.color,
                             );
                             self.workspaces.pad_point = self.workspaces.pad_trace.corrected;
                         }
@@ -822,7 +829,7 @@ impl Drawer {
                     self.workspaces.pad_point = None;
                     self.workspaces.pad_trace.clear();
                 }
-                if self.workspaces.pad_style.is_some()
+                if let Some(style) = self.workspaces.pad_style
                     && self.workspaces.store.current.behavior.brush_cursor
                 {
                     let n = BrushTip::ALL
@@ -839,6 +846,7 @@ impl Drawer {
                             angle: self.panels.settings.brush_angle,
                         },
                         crate::cursor_settings::Projection {
+                            square: style.profile.square(style.tip),
                             view: drawer_core::view::View {
                                 zoom: 3.0 * ui.ctx().pixels_per_point() as f64,
                                 ..Default::default()

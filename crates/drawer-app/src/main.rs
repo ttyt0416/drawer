@@ -40,6 +40,7 @@ mod screen_mode;
 mod size_fields;
 mod sizing_dialog;
 mod texture_panel;
+mod tip_profile;
 mod tool_input;
 mod tool_properties;
 mod ui_behavior;
@@ -448,6 +449,8 @@ impl Drawer {
             )
         });
         self.canvas_view.cursors = self.workspaces.store.current.cursors;
+        self.canvas_view.profiles = self.workspaces.store.current.input.profiles;
+        self.display.canvas.profiles = self.workspaces.store.current.input.profiles;
         self.canvas_view.smoothing = self.workspaces.store.current.input.smoothing;
         self.display.canvas.cursors = self.workspaces.store.current.cursors;
         self.display.canvas.smoothing = self.workspaces.store.current.input.smoothing;
@@ -1222,6 +1225,10 @@ impl eframe::App for Drawer {
                     eprintln!("Textures/PSD: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = tip_profile::smoke() {
+                    eprintln!("Tip minimums/images: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = extended_brushes::smoke() {
                     eprintln!("Extended brushes: {e}");
                     fail_smoke();
@@ -1301,7 +1308,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

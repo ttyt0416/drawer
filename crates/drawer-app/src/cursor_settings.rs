@@ -8,6 +8,7 @@ pub(super) struct Cursors {
 }
 #[derive(Clone, Copy)]
 pub(super) struct Projection {
+    pub square: bool,
     pub view: drawer_core::view::View,
     pub size: [f64; 2],
     pub center: [f64; 2],
@@ -22,6 +23,7 @@ pub(super) fn paint(
     icon: egui::TextureId,
 ) -> Vec<egui::Pos2> {
     let Projection {
+        square,
         view,
         size,
         center,
@@ -55,8 +57,12 @@ pub(super) fn paint(
         if appearance.style == Style::Outline
             && !(appearance.mode == Mode::Both && kind == Mark::Raw)
         {
-            let outline = shape
-                .displayed_outline(view, point, size, center, ppp, appearance.minimum_pixels)
+            let mut outline =
+                shape.displayed_outline(view, point, size, center, ppp, appearance.minimum_pixels);
+            if square {
+                drawer_core::tip_profile::rectify_outline(&mut outline, projected);
+            }
+            let outline = outline
                 .into_iter()
                 .map(|p| egui::pos2(p[0] as f32, p[1] as f32))
                 .collect::<Vec<_>>();

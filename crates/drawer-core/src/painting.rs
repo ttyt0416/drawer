@@ -14,6 +14,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::tip_profile::Settings::is_default"
+    )]
+    pub profile: crate::tip_profile::Settings,
     #[serde(default, skip_serializing_if = "crate::texture::Pattern::is_default")]
     pub texture: crate::texture::Pattern,
     #[serde(
@@ -53,7 +58,8 @@ impl Style {
         (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.shape.valid()
+        self.profile.valid()
+            && self.shape.valid()
             && self.material.valid()
             && self.texture.valid()
             && (0.0..=1.0).contains(&self.opacity)
@@ -502,10 +508,13 @@ impl Stroke {
             let length = delta[0].hypot(delta[1]);
             let pressure_scale = if self.style.pressure.size {
                 self.style
-                    .pressure
-                    .response
-                    .map(self.pressure)?
-                    .min(self.style.pressure.response.map(pressure)?)
+                    .profile
+                    .size(self.style.pressure.response.map(self.pressure)?)
+                    .min(
+                        self.style
+                            .profile
+                            .size(self.style.pressure.response.map(pressure)?),
+                    )
             } else {
                 1.0
             };
@@ -513,7 +522,14 @@ impl Stroke {
                 .style
                 .step(pressure_scale * self.last_scale.min(self.scale));
             if length > 1e-9 {
-                let radius = self.style.shape.size * 0.5 + 1.0;
+                let radius = self.style.shape.size
+                    * 0.5
+                    * if self.style.profile.square(self.style.tip) {
+                        1.0 + self.style.shape.aspect
+                    } else {
+                        1.0
+                    }
+                    + 1.0;
                 if let Some([begin, end]) = clip(
                     from,
                     to,
@@ -621,12 +637,13 @@ impl Stroke {
         shape.angle += self.angle_offset;
         shape.size *= self.scale;
         if self.style.pressure.size {
-            shape.size *= self
-                .style
-                .pressure
-                .response
-                .map(self.pressure)
-                .unwrap_or(0.0);
+            shape.size *= self.style.profile.size(
+                self.style
+                    .pressure
+                    .response
+                    .map(self.pressure)
+                    .unwrap_or(0.0),
+            );
         }
         shape
     }
@@ -656,10 +673,10 @@ impl Stroke {
         shape.size *= scale;
         shape.angle += self.angle_offset;
         if self.style.pressure.size {
-            shape.size *= pressure;
+            shape.size *= self.style.profile.size(pressure);
         }
         let opacity = if self.style.pressure.opacity {
-            pressure
+            self.style.profile.opacity(pressure)
         } else {
             1.0
         };
@@ -694,7 +711,7 @@ impl Stroke {
             (center, shape.size * 0.5, shape.size * 0.5 * shape.aspect)
         };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
-        let extent = if self.style.tip == BrushTip::PixelPen {
+        let extent = if self.style.profile.square(self.style.tip) {
             [
                 radius * cos.abs() + minor * sin.abs() + 1.0,
                 radius * sin.abs() + minor * cos.abs() + 1.0,
@@ -752,7 +769,7 @@ impl Stroke {
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
-                let distance = if self.style.tip == BrushTip::PixelPen {
+                let distance = if self.style.profile.square(self.style.tip) {
                     q[0].abs().max(q[1].abs())
                 } else {
                     q[0].hypot(q[1])
@@ -966,6 +983,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                profile: Default::default(),
                 texture: Default::default(),
                 material: crate::brush_material::Settings {
                     keep_density: tip == BrushTip::Smudge,
@@ -1032,6 +1050,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),
             opacity: 1.0,

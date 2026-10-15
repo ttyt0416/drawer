@@ -191,3 +191,7 @@ crates/drawer-core/src/brush_slots.rs
 crates/drawer-core/src/extended_brushes.rs
 crates/drawer-app/src/extended_brushes.rs
 docs/process/extended-brushes.md
+
+crates/drawer-core/src/tip_profile.rs
+crates/drawer-app/src/tip_profile.rs
+docs/process/tip-profile.md

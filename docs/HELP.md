@@ -350,3 +350,16 @@ Pixel pen은 문서 격자에 맞춘 정수 크기 직사각형 팁입니다. �
 [브러시 속성](local:tool-properties)
 [혼색·수채](local:brush-material)
 [질감과 종이](local:textures)
+
+
+## tip-profile | 최소 굵기·농도와 팁 모양 | 최소 최대 0압력 필압 둥근 사각 경도 끝 모양
+
+Tool input behavior → Tip images and minimum outputs에서 각 브러시의 최소 굵기·최소 농도를0~100%로 정합니다. Brush pressure에서 해당 축의 필압 연결을 켠 경우, 보정된 압력0의 출력이 최소값이고 압력1은 최대값입니다. 최소100%는 최대값과 같아져 필압에 따라 그 축이 줄지 않습니다. 두 최소값0%는 기존 동작입니다. 필압 연결을 끄면 그 축은 최대값을 사용합니다. 전체 획 농도·색의 알파·선 시작/끝의 가늘어짐은 별도이며 최소값으로 이를 넘어설 수 없습니다.
+
+Tool's owned tip, Owned round tip, Owned square tip 중 선택하고 독자 마스크 미리보기를 확인합니다. 사각 팁은 커서 윤곽에도 반영합니다. Tool properties → Hardness가 가장자리 부드러움이며0은 넓은 감쇠,100%는 단단한 중심과 경계입니다. Pixel pen은 경도에 관계없이 이진 경계입니다. 팁 선택은 외부 파일을 요구하지 않고 사용자 이미지 등록은 별도 기능입니다.
+
+Apply input behavior는 설정과 직전본을 저장하고 Cancel은 임시값을 버립니다. 로컬 브러시 프리셋에 포함하며 진행 중 획은 시작 때의 최소값과 팁을 유지합니다. .drawer는 획 결과와 고정 스타일을 함께 저장합니다.
+
+[브러시 필압 연결](local:pressure)
+[브러시 속성](local:tool-properties)
+[마커·번짐·픽셀 펜](local:extended-brushes)

@@ -123,6 +123,7 @@ pub(super) fn smoke_pressure() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let mut style = Style {
+                profile: Default::default(),
                 texture: Default::default(),
                 material: Default::default(),
                 opacity: 1.0,
