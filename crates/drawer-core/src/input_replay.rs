@@ -22,6 +22,12 @@ pub struct Sequence {
     pub size: f64,
     pub aspect: f64,
     pub angle: f64,
+    #[serde(default = "full")]
+    pub opacity: [f64; 4],
+    #[serde(default = "full")]
+    pub hardness: [f64; 4],
+    #[serde(default = "spacing")]
+    pub spacing: [f64; 4],
     pub smoothing: [f64; 4],
     #[serde(default)]
     pub mouse_pressure: [crate::mouse_pressure::Settings; 4],
@@ -35,6 +41,12 @@ pub struct Sequence {
     pub expected_checksum: Option<String>,
     pub pen_backend_available: bool,
     pub samples: Vec<Sample>,
+}
+fn full() -> [f64; 4] {
+    [1.0; 4]
+}
+fn spacing() -> [f64; 4] {
+    [0.15; 4]
 }
 impl Default for Sequence {
     fn default() -> Self {
@@ -53,6 +65,9 @@ impl Default for Sequence {
             size: 8.0,
             aspect: 1.0,
             angle: 0.0,
+            opacity: full(),
+            hardness: full(),
+            spacing: spacing(),
             smoothing: [0.0; 4],
             mouse_pressure: [Default::default(); 4],
             cursors: Default::default(),
@@ -94,6 +109,12 @@ impl Sequence {
             || !(0.05..=1.0).contains(&self.aspect)
             || !(0.0..=360.0).contains(&self.angle)
             || self.smoothing.iter().any(|v| !(0.0..=0.95).contains(v))
+            || self
+                .opacity
+                .iter()
+                .chain(&self.hardness)
+                .any(|v| !(0.0..=1.0).contains(v))
+            || self.spacing.iter().any(|v| !(0.01..=10.0).contains(v))
             || self.mouse_pressure.iter().any(|s| !s.valid())
             || !self.cursors.valid()
             || !self.pressure.valid()
@@ -187,6 +208,24 @@ impl Record {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn brush_parameters_roundtrip_legacy_defaults_and_invalid_numbers_reject() {
+        let s = super::Sequence::default();
+        let mut value = serde_json::to_value(&s).unwrap();
+        for key in ["opacity", "hardness", "spacing"] {
+            value.as_object_mut().unwrap().remove(key);
+        }
+        assert_eq!(serde_json::from_value::<super::Sequence>(value).unwrap(), s);
+        let mut bad = s.clone();
+        bad.spacing[1] = 0.0;
+        assert!(bad.validate().is_err());
+        bad = s.clone();
+        bad.opacity[3] = f64::NAN;
+        assert!(bad.validate().is_err());
+        bad = s;
+        bad.hardness[0] = 1.1;
+        assert!(bad.validate().is_err());
+    }
     use super::*;
     #[test]
     fn fixed_records_validate_pressure_jumps_missing_end_and_reject_reverse_time() {

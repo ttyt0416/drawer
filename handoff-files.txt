@@ -167,3 +167,5 @@ docs/process/brush-parameters.md
 
 crates/drawer-core/src/basic_brush.rs
 docs/process/basic-brushes.md
+
+docs/process/stroke-spacing.md

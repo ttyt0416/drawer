@@ -304,7 +304,7 @@ impl Replay {
         }
         let area = style.shape.size.min(doc.width as f64)
             * (style.shape.size * style.shape.aspect).min(doc.height as f64);
-        let work = area * (distance / (style.shape.size * style.spacing).max(1.0 / 1024.0) + 2.0);
+        let work = area * (distance / style.step(1.0) + 2.0);
         if work > 64.0 * 1024.0 * 1024.0 {
             return Err(
                 "Mouse reconstruction pixel-work budget exceeded; pending stroke cancelled".into(),

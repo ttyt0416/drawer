@@ -33,6 +33,10 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    /// Conservative minor-axis spacing also covers a thin tip across its narrow direction.
+    pub(crate) fn step(self, pressure_scale: f64) -> f64 {
+        (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
+    }
     pub fn valid(self) -> bool {
         self.shape.valid()
             && (0.0..=1.0).contains(&self.opacity)
@@ -70,6 +74,7 @@ pub struct Stroke {
     amounts: Vec<f64>,
     lookup: HashMap<usize, usize>,
     limit: usize,
+    pixel_work: u64,
 }
 impl Stroke {
     pub fn dab_count(&self) -> u32 {
@@ -306,6 +311,7 @@ impl Stroke {
             amounts: vec![],
             lookup: HashMap::new(),
             limit,
+            pixel_work: 0,
         })
     }
     fn check(&self, doc: &Document) -> Result<(), String> {
@@ -362,8 +368,7 @@ impl Stroke {
             } else {
                 1.0
             };
-            let step =
-                (self.style.shape.size * pressure_scale * self.style.spacing).max(1.0 / 1024.0);
+            let step = self.style.step(pressure_scale);
             if length > 1e-9 {
                 let radius = self.style.shape.size * 0.5 + 1.0;
                 if let Some([begin, end]) = clip(
@@ -372,7 +377,7 @@ impl Stroke {
                     [-radius, -radius],
                     [doc.width as f64 + radius, doc.height as f64 + radius],
                 ) {
-                    let first = step - self.remainder;
+                    let first = step - self.remainder.rem_euclid(step);
                     let start = ((begin * length - first) / step).ceil().max(0.0) as usize;
                     let finish = ((end * length - first) / step).floor();
                     if finish >= start as f64 {
@@ -528,6 +533,15 @@ impl Stroke {
                 .min(doc.height as f64 - 1.0)
                 .min((storage.offset[1] + storage.height as i64 - 1) as f64) as i64,
         ];
+        let work = if high[0] >= low[0] && high[1] >= low[1] {
+            (high[0] - low[0] + 1) as u64 * (high[1] - low[1] + 1) as u64
+        } else {
+            0
+        };
+        self.pixel_work = self.pixel_work.saturating_add(work);
+        if self.pixel_work > 64 * 1024 * 1024 {
+            return Err("Stroke pixel-work budget exceeded; pending stroke cancelled".into());
+        }
         let mut changed = false;
         use crate::mouse_pressure::Effect;
         let picked = self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64);
@@ -706,6 +720,65 @@ fn clip(from: Point, to: Point, min: Point, max: Point) -> Option<[f64; 2]> {
     Some([start, end])
 }
 
+/// Deterministic production-path check used by the installed application smoke run.
+pub fn verify_spacing() -> Result<(), String> {
+    use crate::document::{Background, CanvasSpec};
+    for tip in BrushTip::ALL {
+        for angle in [0.0, 37.0, 90.0] {
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 128,
+                    height: 64,
+                    dpi: 300.0,
+                    background: Background::Transparent,
+                },
+                131072,
+            )
+            .map_err(|e| e.to_string())?;
+            if tip == BrushTip::Eraser {
+                d.layers[0].pixels.fill([80, 90, 100, 255]);
+            }
+            let before = d.snapshot();
+            let style = Style {
+                shape: Shape {
+                    size: 20.0,
+                    aspect: 0.05,
+                    angle,
+                },
+                tip,
+                color: [40, 80, 120, 255],
+                opacity: 1.0,
+                hardness: 1.0,
+                spacing: 0.15,
+                smoothing: 0.0,
+                pressure: crate::pressure::Mapping {
+                    size: false,
+                    ..Default::default()
+                },
+            };
+            let mut stroke = Stroke::begin(&d, 0, style)?;
+            stroke.sample(&d, [4.5, 32.5])?;
+            stroke.sample(&d, [122.5, 32.5])?;
+            if !stroke.commit(&mut d)? {
+                return Err("Sparse stroke failed".into());
+            }
+            if !(5..122).all(|x| {
+                if tip == BrushTip::Eraser {
+                    d.composite_pixel(x, 32)[3] < 255
+                } else {
+                    d.composite_pixel(x, 32)[3] > 0
+                }
+            }) {
+                return Err(format!("Sparse thin-tip gaps: {tip:?}, {angle}"));
+            }
+            let after = d.snapshot();
+            if !d.undo() || d.snapshot() != before || !d.redo() || d.snapshot() != after {
+                return Err("Sparse stroke history diverged".into());
+            }
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -745,6 +818,87 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+    #[test]
+    fn sparse_fast_thin_tips_are_connected_and_replay_history_is_exact() {
+        verify_spacing().unwrap();
+    }
+    #[test]
+    fn curves_packet_boundaries_large_motion_pressure_phase_and_budget_are_bounded() {
+        fn draw(points: &[[f64; 2]]) -> Document {
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 128,
+                    height: 64,
+                    dpi: 300.0,
+                    background: Background::Transparent,
+                },
+                131072,
+            )
+            .unwrap();
+            let mut style = style(BrushTip::Pen);
+            style.shape.size = 4.0;
+            let mut stroke = Stroke::begin(&d, 0, style).unwrap();
+            for p in points {
+                stroke.sample(&d, *p).unwrap();
+            }
+            stroke.commit(&mut d).unwrap();
+            d
+        }
+        let sparse = [[4.5, 12.5], [50.5, 12.5], [95.5, 44.5], [122.5, 20.5]];
+        let mut dense = vec![sparse[0]];
+        for pair in sparse.windows(2) {
+            for n in 1..=32 {
+                let t = n as f64 / 32.0;
+                dense.push([
+                    pair[0][0] + (pair[1][0] - pair[0][0]) * t,
+                    pair[0][1] + (pair[1][1] - pair[0][1]) * t,
+                ]);
+            }
+        }
+        let a = draw(&sparse);
+        let b = draw(&dense);
+        assert!(a.snapshot() == b.snapshot());
+        for pair in sparse.windows(2) {
+            for n in 0..=200 {
+                let t = n as f64 / 200.0;
+                let p = [
+                    pair[0][0] + (pair[1][0] - pair[0][0]) * t,
+                    pair[0][1] + (pair[1][1] - pair[0][1]) * t,
+                ];
+                assert!(a.composite_pixel(p[0].floor() as u32, p[1].floor() as u32)[3] > 0);
+            }
+        }
+        let outside = draw(&[[-1e12, 32.5], [1e12, 32.5]]);
+        assert!((0..128).all(|x| outside.composite_pixel(x, 32)[3] > 0));
+        let mut d = doc();
+        let before = d.snapshot();
+        let mut st = style(BrushTip::Pen);
+        st.shape.size = 8.0;
+        st.pressure.size = true;
+        let mut stroke = Stroke::begin(&d, 0, st).unwrap();
+        stroke.sample_pressure(&d, [4.5, 6.5], 1.0).unwrap();
+        stroke.sample_pressure(&d, [5.6, 6.5], 1.0).unwrap();
+        stroke.sample_pressure(&d, [6.0, 6.5], 0.01).unwrap();
+        assert!(stroke.last_stamp.unwrap()[0] <= 6.0 + 1e-9);
+        assert!(stroke.remainder < st.step(0.01));
+        drop(stroke);
+        assert!(d.snapshot() == before);
+        let mut stroke = Stroke::begin(&d, 0, st).unwrap();
+        stroke.pixel_work = 64 * 1024 * 1024;
+        assert!(stroke.sample(&d, [10.5, 6.5]).is_err());
+        drop(stroke);
+        assert!(d.snapshot() == before);
+        assert_eq!(d.history_counts(), (0, 0));
+        // A short segment still receives its real endpoint once; repeated positions add no phantom tail.
+        let mut stroke = Stroke::begin(&d, 0, style(BrushTip::Pen)).unwrap();
+        stroke.sample(&d, [10.5, 6.5]).unwrap();
+        stroke.sample(&d, [10.55, 6.5]).unwrap();
+        stroke.sample(&d, [10.55, 6.5]).unwrap();
+        stroke.finish_sample(&d).unwrap();
+        assert_eq!(stroke.last_stamp, Some([10.55, 6.5]));
+        stroke.commit(&mut d).unwrap();
+        assert_eq!(d.history_counts(), (1, 0));
     }
     #[test]
     fn brush_parameters_validate_softness_spacing_opacity_and_short_stroke() {

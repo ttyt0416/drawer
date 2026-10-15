@@ -50,6 +50,9 @@ pub(super) fn run(
     app.panels.settings.brush_size = sequence.size;
     app.panels.settings.brush_aspect = sequence.aspect;
     app.panels.settings.brush_angle = sequence.angle;
+    app.panels.settings.brush_opacity = sequence.opacity;
+    app.panels.settings.brush_hardness = sequence.hardness;
+    app.panels.settings.brush_spacing = sequence.spacing;
     app.workspaces.store.current.input.smoothing = sequence.smoothing;
     app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
     app.workspaces.store.current.cursors = sequence.cursors;
@@ -319,6 +322,50 @@ pub(super) fn smoke_replay() -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, tiny_spec};
+    #[test]
+    fn sparse_thin_pen_mouse_curves_same_timestamps_and_frozen_parameters_replay() {
+        let cancel = AtomicBool::new(false);
+        let progress = AtomicUsize::new(0);
+        for mouse in [false, true] {
+            let mut s = Sequence {
+                size: 20.0,
+                aspect: 0.05,
+                angle: 90.0,
+                ..Default::default()
+            };
+            s.pressure.tools[0].size = false;
+            s.pressure.tools[0].opacity = false;
+            s.samples = vec![s.samples[0].clone(), s.samples[3].clone()];
+            s.samples[0].event.position = [4.5, 20.5];
+            s.samples[1].event.position = [58.5, 20.5];
+            for sample in &mut s.samples {
+                sample.event.pressure = Some(1.0);
+                if mouse {
+                    sample.event.source = drawer_core::pointer_input::Source::MOUSE;
+                    sample.event.pressure = None;
+                }
+            }
+            let a = run(&s, &cancel, &progress).unwrap();
+            assert!(a.record.passed);
+            assert!((5..58).all(|x| a.pixels[20 * 64 + x][3] > 0));
+            s.samples[1].micros = 0;
+            let b = run(&s, &cancel, &progress).unwrap();
+            assert!(b.record.passed);
+            assert_eq!(a.pixels, b.pixels);
+            s.opacity[0] = 0.0;
+            s.expected_strokes = 0;
+            let transparent = run(&s, &cancel, &progress).unwrap();
+            assert!(transparent.record.passed);
+            assert!(transparent.pixels.iter().all(|p| *p == [0; 4]));
+            s.opacity[0] = 0.5;
+            s.hardness[0] = 0.3;
+            s.spacing[0] = 0.2;
+            s.expected_strokes = 1;
+            let custom = run(&s, &cancel, &progress).unwrap();
+            assert!(custom.record.passed);
+            assert!(custom.pixels.iter().all(|p| p[3] <= 128));
+        }
+    }
     #[test]
     fn replay_repeats_actual_pixels_timestamp_groups_zero_half_full_and_missing_end() {
         smoke_replay().unwrap();

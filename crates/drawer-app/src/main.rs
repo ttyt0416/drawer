@@ -1194,6 +1194,10 @@ impl eframe::App for Drawer {
                     eprintln!("Keyboard precision: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = drawer_core::painting::verify_spacing() {
+                    eprintln!("Stroke spacing: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = drawer_core::basic_brush::verify_pixels() {
                     eprintln!("Basic brushes: {e}");
                     fail_smoke();
@@ -1261,7 +1265,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
