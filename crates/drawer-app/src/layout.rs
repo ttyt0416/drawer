@@ -440,6 +440,7 @@ impl Drawer {
                 && !self.acquisition.open
                 && !self.brush_presets.open
                 && !self.textures.modal();
+            canvas.filters = self.workspaces.store.current.input.filters;
             canvas.profiles = self.workspaces.store.current.input.profiles;
             canvas.smoothing = self.workspaces.store.current.input.smoothing;
             canvas.cursors = self.workspaces.store.current.cursors;

@@ -108,6 +108,7 @@ try {
     if ($smokeResult -notmatch 'textures_psd=true') { throw '브러시/종이 질감·PSD 베이크 시험 실패' }
     if ($smokeResult -notmatch 'extended_brushes=true' -or $smokeResult -notmatch 'embedded_tips=7') { throw '마커·번짐·픽셀 펜 실행 시험 실패' }
     if ($smokeResult -notmatch 'tip_profile=true') { throw '최소 굵기·농도/팁 모양 시험 실패' }
+    if ($smokeResult -notmatch 'stroke_filter=true') { throw '독립 위치/필압 평활 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

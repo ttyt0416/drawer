@@ -195,3 +195,7 @@ docs/process/extended-brushes.md
 crates/drawer-core/src/tip_profile.rs
 crates/drawer-app/src/tip_profile.rs
 docs/process/tip-profile.md
+
+crates/drawer-core/src/stroke_filter.rs
+crates/drawer-app/src/stroke_filter.rs
+docs/process/stroke-filter.md

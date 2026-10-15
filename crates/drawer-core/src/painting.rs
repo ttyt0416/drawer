@@ -16,6 +16,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 pub struct Style {
     #[serde(
         default,
+        skip_serializing_if = "crate::stroke_filter::Settings::is_default"
+    )]
+    pub filters: crate::stroke_filter::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::tip_profile::Settings::is_default"
     )]
     pub profile: crate::tip_profile::Settings,
@@ -58,7 +63,8 @@ impl Style {
         (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.profile.valid()
+        self.filters.valid()
+            && self.profile.valid()
             && self.shape.valid()
             && self.material.valid()
             && self.texture.valid()
@@ -89,6 +95,7 @@ pub struct Stroke {
     last: Option<Point>,
     last_stamp: Option<Point>,
     pressure: f64,
+    pressure_filter: crate::stroke_filter::Pressure,
     last_stamp_pressure: f64,
     scale: f64,
     last_scale: f64,
@@ -444,6 +451,7 @@ impl Stroke {
             last: None,
             last_stamp: None,
             pressure: 1.0,
+            pressure_filter: Default::default(),
             last_stamp_pressure: 1.0,
             scale: 1.0,
             last_scale: 1.0,
@@ -480,6 +488,23 @@ impl Stroke {
         point: Point,
         pressure: f64,
     ) -> Result<(), String> {
+        self.sample_pressure_inner(doc, point, pressure, false)
+    }
+    pub(crate) fn sample_processed_pressure(
+        &mut self,
+        doc: &Document,
+        point: Point,
+        pressure: f64,
+    ) -> Result<(), String> {
+        self.sample_pressure_inner(doc, point, pressure, true)
+    }
+    fn sample_pressure_inner(
+        &mut self,
+        doc: &Document,
+        point: Point,
+        pressure: f64,
+        processed: bool,
+    ) -> Result<(), String> {
         if self.diffused {
             return Err("A finalized wet stroke cannot accept more input".into());
         }
@@ -490,7 +515,15 @@ impl Stroke {
         if !point.iter().all(|n| n.is_finite() && n.abs() <= 1e12) {
             return Err("Invalid drawing coordinate".into());
         }
-        let Some((_, to)) = self.trace.receive(point, self.style.smoothing) else {
+        let pressure = if processed {
+            pressure
+        } else {
+            self.pressure_filter.receive(self.style.filters, pressure)?
+        };
+        let Some((_, to)) = self
+            .trace
+            .receive(point, self.style.filters.position(self.style.smoothing))
+        else {
             if ((self.pressure != pressure
                 && (self.style.pressure.size || self.style.pressure.opacity))
                 || self.last_stamp_angle != self.angle_offset
@@ -983,6 +1016,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                filters: Default::default(),
                 profile: Default::default(),
                 texture: Default::default(),
                 material: crate::brush_material::Settings {
@@ -1050,6 +1084,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),

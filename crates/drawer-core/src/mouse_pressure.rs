@@ -291,6 +291,20 @@ impl Replay {
     pub fn render(&self, doc: &Document, finalizing: bool) -> Result<Stroke, String> {
         self.render_cancel(doc, finalizing, || false)
     }
+    fn filtered_inputs(&self) -> Result<Vec<[f64; 2]>, String> {
+        let mut inputs = self.inputs.clone();
+        let mut pressure = crate::stroke_filter::Pressure::default();
+        if self.native_pressure {
+            for (n, input) in inputs.iter_mut().enumerate() {
+                input[0] = if self.clocks[n] {
+                    pressure.value().unwrap_or(input[0])
+                } else {
+                    pressure.receive(self.style.filters, input[0])?
+                };
+            }
+        }
+        Ok(inputs)
+    }
     pub fn render_cancel(
         &self,
         doc: &Document,
@@ -303,6 +317,7 @@ impl Replay {
         if doc.id != self.document || doc.revision != self.revision {
             return Err("The original drawing changed; mouse stroke cancelled".into());
         }
+        let inputs = self.filtered_inputs()?;
         let mut trace = Trace::default();
         let mut points = Vec::new();
         points
@@ -315,7 +330,10 @@ impl Replay {
                 return Err("Mouse reconstruction cancelled".into());
             }
             let point = trace
-                .receive(sample.point, self.style.smoothing)
+                .receive(
+                    sample.point,
+                    self.style.filters.position(self.style.smoothing),
+                )
                 .map(|(_, p)| p)
                 .or(last)
                 .unwrap_or(sample.point);
@@ -446,8 +464,8 @@ impl Replay {
                     } else {
                         1.0
                     };
-                    let previous_input = self.inputs[index.saturating_sub(1)];
-                    let current_input = self.inputs[index];
+                    let previous_input = inputs[index.saturating_sub(1)];
+                    let current_input = inputs[index];
                     let p = if self.native_pressure {
                         previous_input[0] + (current_input[0] - previous_input[0]) * t
                     } else {
@@ -459,7 +477,7 @@ impl Replay {
                             * t;
                     stroke.set_angle_offset((angle + 180.0).rem_euclid(360.0) - 180.0)?;
                     stroke.set_geometry_scale(self.ends.scale(d, distance, finalizing))?;
-                    stroke.sample_pressure(
+                    stroke.sample_processed_pressure(
                         doc,
                         [
                             from[0] + (point[0] - from[0]) * t,
@@ -469,13 +487,13 @@ impl Replay {
                     )?;
                 }
             } else {
-                stroke.set_angle_offset(self.inputs[index][1])?;
+                stroke.set_angle_offset(inputs[index][1])?;
                 stroke.set_geometry_scale(self.ends.scale(at, distance, finalizing))?;
-                stroke.sample_pressure(
+                stroke.sample_processed_pressure(
                     doc,
                     point,
                     if self.native_pressure {
-                        self.inputs[index][0]
+                        inputs[index][0]
                     } else {
                         self.settings.pressure(at, distance, finalizing, 1.0)
                     },
@@ -872,6 +890,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),

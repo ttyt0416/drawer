@@ -44,6 +44,8 @@ pub struct Sequence {
     pub textures: [crate::texture::Pattern; 7],
     #[serde(default, deserialize_with = "crate::brush_slots::read")]
     pub profiles: [crate::tip_profile::Settings; 7],
+    #[serde(default, deserialize_with = "crate::brush_slots::read")]
+    pub filters: [crate::stroke_filter::Settings; 7],
     #[serde(default)]
     #[serde(deserialize_with = "crate::brush_slots::read")]
     pub mouse_pressure: [crate::mouse_pressure::Settings; 7],
@@ -89,6 +91,7 @@ impl Default for Sequence {
             materials: crate::brush_slots::materials(),
             textures: [Default::default(); 7],
             profiles: [Default::default(); 7],
+            filters: [Default::default(); 7],
             mouse_pressure: [Default::default(); 7],
             cursors: Default::default(),
             color: [30, 80, 160, 255],
@@ -138,6 +141,7 @@ impl Sequence {
                 .chain(&self.hardness)
                 .any(|v| !(0.0..=1.0).contains(v))
             || self.spacing.iter().any(|v| !(0.01..=10.0).contains(v))
+            || self.filters.iter().any(|s| !s.valid())
             || self.profiles.iter().any(|s| !s.valid())
             || self.mouse_pressure.iter().any(|s| !s.valid())
             || !self.cursors.valid()

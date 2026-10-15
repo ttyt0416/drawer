@@ -72,3 +72,5 @@ pub mod brush_slots;
 pub mod extended_brushes;
 
 pub mod tip_profile;
+
+pub mod stroke_filter;

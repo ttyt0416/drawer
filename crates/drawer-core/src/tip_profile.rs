@@ -99,6 +99,7 @@ fn probe(
     )
     .map_err(|e| e.to_string())?;
     let style = Style {
+        filters: Default::default(),
         profile,
         texture: Default::default(),
         material: Default::default(),
@@ -214,6 +215,7 @@ mod tests {
         let zero = probe(Settings::default(), 0.0, 1.0).unwrap();
         let mut d = zero;
         let style = crate::painting::Style {
+            filters: Default::default(),
             profile: Settings::default(),
             texture: Default::default(),
             material: Default::default(),
@@ -240,6 +242,7 @@ mod tests {
         assert_eq!(d.composite_pixel(12, 12), [255; 4]);
         let mut empty = probe(Settings::default(), 0.0, 1.0).unwrap();
         let style = crate::painting::Style {
+            filters: Default::default(),
             profile: Settings {
                 minimum_size: 1.0,
                 minimum_opacity: 1.0,
@@ -258,6 +261,7 @@ mod tests {
     fn square_corner_outside_canvas_survives_segment_clipping() {
         let mut d = probe(Settings::default(), 0.0, 1.0).unwrap();
         let style = crate::painting::Style {
+            filters: Default::default(),
             profile: Settings {
                 image: Image::Square,
                 ..Default::default()
@@ -321,6 +325,7 @@ mod tests {
         );
         let mut d = probe(Settings::default(), 0.0, 1.0).unwrap();
         let style = crate::painting::Style {
+            filters: Default::default(),
             profile: p,
             texture: Default::default(),
             material: Default::default(),
@@ -444,6 +449,7 @@ mod tests {
                 }
             }
             let style = Style {
+                filters: Default::default(),
                 profile: Settings {
                     minimum_size: 1.0,
                     minimum_opacity: 1.0,

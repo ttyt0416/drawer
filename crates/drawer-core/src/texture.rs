@@ -155,6 +155,7 @@ mod tests {
                 ..Default::default()
             };
             let style = Style {
+                filters: Default::default(),
                 profile: Default::default(),
                 texture: p,
                 material: crate::brush_material::Settings {

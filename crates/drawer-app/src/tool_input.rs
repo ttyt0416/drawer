@@ -178,6 +178,7 @@ impl Drawer {
                     ui.label(tip.label());super::edit::number(ui,&mut draft.ends[n].start,0.0..=1e6,1.0," px start","modifier-tools");super::edit::number(ui,&mut draft.ends[n].end,0.0..=1e6,1.0," px end","modifier-tools");
                 });}
             });
+            ui.collapsing("Independent position and device pressure filters",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-filter",n),|ui|{ui.collapsing(tip.label(),|ui|super::stroke_filter::settings_ui(ui,&mut draft.filters[n]));});}});
             ui.collapsing("Tip images and minimum outputs",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-profile",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_profile::settings_ui(ui,&mut draft.profiles[n],tip));});}});
             ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::pattern_ui(ui,&mut draft.textures[n]));});}});
             ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
@@ -421,6 +422,11 @@ mod tests {
         let before = app.documents[0].snapshot();
         let baseline = app.capture_workspace();
         let mut draft = baseline.input;
+        draft.filters[0] = drawer_core::stroke_filter::Settings {
+            position_enabled: false,
+            pressure_enabled: true,
+            pressure_strength: 0.85,
+        };
         draft.profiles[0] = drawer_core::tip_profile::Settings {
             minimum_size: 0.4,
             minimum_opacity: 0.7,

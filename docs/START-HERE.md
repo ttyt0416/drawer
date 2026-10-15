@@ -89,3 +89,5 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 기본 도구는 일곱 개다. Marker(Y)는 같은 획 안에서 다시 지나가면 안료가 쌓이고, Smudge(U)는 현재 층의 색만 운반하며, Pixel pen(P)은 기본 크기1의 단단한1픽셀 경계를 그린다. 새 키는 새 설정의 기본값이며 기존 배정은 유지한다. 도구별 설정과 로컬 프리셋을 독립적으로 저장한다.
 
 Tool input behavior → Tip images and minimum outputs에서 브러시별 최소 굵기/농도와 독자 둥근/사각 팁을 선택한다. 최소100%는 압력0에서도 최대값이며 필압 연결은 Brush pressure에서 켠다. 가장자리 부드러움은 Tool properties의 Hardness다.
+
+Tool input behavior의 Independent position and device pressure filters에서 위치 보정과 장치 필압 평활을 따로 켠다. 필압 강도는 실제 입력 표본마다 한 번 적용하고 보정 곡선·최소 출력과 별도로 저장한다.

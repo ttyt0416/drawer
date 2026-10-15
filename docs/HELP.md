@@ -363,3 +363,16 @@ Apply input behavior는 설정과 직전본을 저장하고 Cancel은 임시값�
 [브러시 필압 연결](local:pressure)
 [브러시 속성](local:tool-properties)
 [마커·번짐·픽셀 펜](local:extended-brushes)
+
+
+## stroke-filter | 위치 보정·필압 평활 분리 | 안정화 smoothing jitter pressure 좌표 독립
+
+Tool input behavior → Independent position and device pressure filters에서 도구별 위치 보정과 장치 필압 평활을 각각 켭니다. 위치 강도는 위쪽 stabilization 값이며, 필압 강도는 별도0~0.95입니다. 위치 보정을 끄면 저장해 둔 위치 강도와 관계없이 입력 좌표를 사용합니다. 필압을 끄거나 강도0이면 장치 필압을 그대로 전달합니다.
+
+필압 평활은 실제 입력마다 한 번 적용한 뒤 Brush pressure의 보정 곡선·최소 굵기/농도로 이어집니다. 첫 입력은 원래 압력으로 시작합니다. 도장 수나 중간 시간 표본이 늘어도 필압 평활을 추가 적용하지 않습니다. 마우스의 필압 누락은 기존의 최대압력을 유지하며 Mouse virtual pressure의 거리/시간 곡선은 별도입니다.
+
+진행 중 획은 두 보정의 시작 설정을 유지하고 취소하면 필터 상태도 버립니다. 원시 입력 기록과 보정 곡선은 바뀌지 않습니다. 설정 적용/취소·직전본 복원·초기화·브러시 프리셋·문서의 고정 스타일에 보존합니다.
+
+[브러시 필압 연결](local:pressure)
+[최소 굵기·농도](local:tip-profile)
+[가상 입력 검증](local:input-replay)

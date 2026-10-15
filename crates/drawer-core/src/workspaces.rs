@@ -237,6 +237,7 @@ impl Scratchpad {
         d.layers[0].pixels.clone_from(&self.pixels);
         let v = crate::basic_brush::values(tip);
         let style = crate::painting::Style {
+            filters: Default::default(),
             profile,
             texture: Default::default(),
             material: crate::basic_brush::material(tip),

@@ -20,6 +20,7 @@ fn document() -> Result<Document, String> {
 fn style(tip: BrushTip) -> Style {
     let v = crate::basic_brush::values(tip);
     Style {
+        filters: Default::default(),
         profile: Default::default(),
         texture: Default::default(),
         material: crate::basic_brush::material(tip),

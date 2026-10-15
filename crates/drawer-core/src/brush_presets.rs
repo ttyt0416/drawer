@@ -55,6 +55,11 @@ pub struct Preset {
         skip_serializing_if = "crate::tip_profile::Settings::is_default"
     )]
     pub profile: crate::tip_profile::Settings,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::stroke_filter::Settings::is_default"
+    )]
+    pub filters: crate::stroke_filter::Settings,
 }
 impl Preset {
     pub fn validate(&self) -> Result<(), String> {
@@ -76,6 +81,7 @@ impl Preset {
             || !self.mouse.valid()
             || !self.material.valid()
             || !self.overlay.valid()
+            || !self.filters.valid()
             || !self.profile.valid()
         {
             return Err("Invalid brush preset values".into());
@@ -105,6 +111,7 @@ impl Preset {
             material: snapshot.input.materials[n],
             overlay: snapshot.input.textures[n],
             profile: snapshot.input.profiles[n],
+            filters: snapshot.input.filters[n],
         };
         p.validate()?;
         Ok(p)
@@ -145,6 +152,7 @@ impl Preset {
         next.input.materials[n] = self.material;
         next.input.textures[n] = self.overlay;
         next.input.profiles[n] = self.profile;
+        next.input.filters[n] = self.filters;
         next.tool = self.tip.name().into();
         if !next.valid() {
             return Err("Preset would create invalid workspace settings".into());

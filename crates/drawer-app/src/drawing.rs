@@ -81,6 +81,7 @@ pub(super) struct Drawing {
     pub materials: [drawer_core::brush_material::Settings; 7],
     pub textures: [drawer_core::texture::Pattern; 7],
     pub profiles: [drawer_core::tip_profile::Settings; 7],
+    pub filters: [drawer_core::stroke_filter::Settings; 7],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -593,6 +594,7 @@ impl Drawing {
             style = style.resolved();
             style.texture = self.textures[index];
             style.profile = self.profiles[index];
+            style.filters = self.filters[index];
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
@@ -616,6 +618,7 @@ impl Drawing {
                         || style.material.active()
                         || !style.texture.is_default()
                         || !style.profile.is_default()
+                        || !style.filters.is_default()
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -681,6 +684,7 @@ impl Drawing {
                         || style.material.active()
                         || !style.texture.is_default()
                         || !style.profile.is_default()
+                        || !style.filters.is_default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -746,6 +750,7 @@ impl Drawer {
         self.drawing.materials = self.workspaces.store.current.input.materials;
         self.drawing.textures = self.workspaces.store.current.input.textures;
         self.drawing.profiles = self.workspaces.store.current.input.profiles;
+        self.drawing.filters = self.workspaces.store.current.input.filters;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1087,6 +1092,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
             }
             let style = Style {
+                filters: Default::default(),
                 profile: Default::default(),
                 texture: Default::default(),
                 material: Default::default(),
@@ -1172,6 +1178,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        filters: Default::default(),
         profile: Default::default(),
         texture: Default::default(),
         material: Default::default(),
@@ -1219,6 +1226,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        filters: Default::default(),
         profile: Default::default(),
         texture: Default::default(),
         material: Default::default(),
@@ -1317,6 +1325,68 @@ mod tests {
         }
     }
 
+    #[test]
+    fn pressure_filter_is_frozen_in_one_history_and_cancel_drops_its_state() {
+        use drawer_core::{
+            pointer_input::{Event, Kind, Phase, Source},
+            stroke_filter::Settings,
+        };
+        let (ctx, mut app) = setup(1.0);
+        app.panels.settings.brush_size = 8.0;
+        app.workspaces.store.current.input.smoothing[0] = 0.8;
+        let filters = Settings {
+            position_enabled: false,
+            pressure_enabled: true,
+            pressure_strength: 0.75,
+        };
+        app.workspaces.store.current.input.filters[0] = filters;
+        app.workspaces.store.current.pressure.tools[0].size = true;
+        app.workspaces.store.current.pressure.tools[0].opacity = true;
+        let before = app.documents[0].snapshot();
+        let p = point(&ctx, &app, [10.5, 20.5]);
+        let q = point(&ctx, &app, [40.5, 20.5]);
+        let event = |phase, pos: egui::Pos2, pressure| Event {
+            source: Source {
+                kind: Kind::Pen,
+                device: 29,
+                contact: 1,
+            },
+            phase,
+            position: [pos.x as f64, pos.y as f64],
+            pressure: Some(pressure),
+            attributes: Default::default(),
+            origin: Default::default(),
+        };
+        app.drawing.virtual_events(
+            vec![event(Phase::Down, p, 0.2), event(Phase::Move, q, 0.8)],
+            true,
+        );
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!((app.drawing.active.as_ref().unwrap().stroke.shape().size - 2.8).abs() < 1e-10);
+        assert!(app.documents[0].snapshot() == before);
+        app.workspaces.store.current.input.filters[0] = Default::default();
+        app.drawing
+            .virtual_events(vec![event(Phase::Up, q, 0.2)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let d = &mut app.documents[0];
+        assert_eq!(d.scene.mouse_strokes[0].style.filters, filters);
+        assert_eq!(d.history_counts(), (1, 0));
+        let after = d.snapshot();
+        assert!(d.undo());
+        assert!(d.snapshot() == before);
+        assert!(d.redo());
+        assert!(d.snapshot() == after);
+        app.workspaces.store.current.input.filters[0] = filters;
+        app.drawing
+            .virtual_events(vec![event(Phase::Down, p, 0.8)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!((app.drawing.active.as_ref().unwrap().stroke.shape().size - 6.4).abs() < 1e-10);
+        app.drawing
+            .virtual_events(vec![event(Phase::Cancel, p, 0.8)], true);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(!app.drawing.pending());
+        assert!(app.documents[0].snapshot() == after);
+    }
     #[test]
     fn zero_pressure_floors_and_tip_shape_are_frozen_until_commit() {
         use drawer_core::{

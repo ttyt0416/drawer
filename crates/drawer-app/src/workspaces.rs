@@ -779,7 +779,8 @@ impl Drawer {
                                     profile: self.workspaces.store.current.input.profiles[n],
                                     color: self.references.session.workspace.color,
                                     size: self.panels.settings.brush_size,
-                                    smoothing: self.workspaces.store.current.input.smoothing[n],
+                                    smoothing: self.workspaces.store.current.input.filters[n]
+                                        .position(self.workspaces.store.current.input.smoothing[n]),
                                 });
                                 sample = Some(pos);
                             }

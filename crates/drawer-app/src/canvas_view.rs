@@ -27,6 +27,7 @@ pub struct CanvasView {
     pub cursors: drawer_core::brush_cursor::Settings,
     pub smoothing: [f64; 7],
     pub profiles: [drawer_core::tip_profile::Settings; 7],
+    pub filters: [drawer_core::stroke_filter::Settings; 7],
     pub cursor_trace: drawer_core::brush_cursor::Trace,
     pub measurement_mode: bool,
     pub measurement: Option<([f64; 2], [f64; 2])>,
@@ -95,6 +96,7 @@ impl CanvasView {
             cursors: Default::default(),
             smoothing: [0.0; 7],
             profiles: [Default::default(); 7],
+            filters: [Default::default(); 7],
             cursor_trace: Default::default(),
             measurement_mode: false,
             measurement: None,
@@ -337,6 +339,7 @@ impl CanvasView {
             .position(|t| *t == document.tool)
             .unwrap();
         let style = drawer_core::painting::Style {
+            filters: Default::default(),
             profile: Default::default(),
             texture: Default::default(),
             material: Default::default(),
@@ -498,7 +501,11 @@ impl CanvasView {
                 .position(|t| *t == cursor_tool)
                 .unwrap();
             let appearance = self.cursors.tools[n];
-            let strength = if self.working { self.smoothing[n] } else { 0.0 };
+            let strength = if self.working {
+                self.filters[n].position(self.smoothing[n])
+            } else {
+                0.0
+            };
             if let Some(stroke) = stroke {
                 self.cursor_trace = stroke.trace();
             } else {
