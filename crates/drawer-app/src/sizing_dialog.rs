@@ -64,6 +64,9 @@ impl Drop for SizingDialog {
     }
 }
 impl SizingDialog {
+    pub fn working(&self) -> bool {
+        self.job.is_some()
+    }
     fn start_job(&mut self, ctx: &egui::Context, budget: usize) -> Result<(), String> {
         let change = self.change()?;
         sizing::plan(&self.original, change, budget)?;

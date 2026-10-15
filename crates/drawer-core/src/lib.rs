@@ -28,6 +28,7 @@ pub mod storage;
 mod test_support;
 pub mod thumbnail;
 pub mod tool_input;
+pub mod ui_behavior;
 pub mod ui_scale;
 pub mod view;
 pub mod view_layout;

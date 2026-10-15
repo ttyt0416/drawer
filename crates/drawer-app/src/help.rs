@@ -75,7 +75,7 @@ if ui.button("About / 버전").clicked(){topic="version".into();p.query.clear();
             if !self.help.korean_font{ui.label("Korean system font unavailable. Search still accepts Korean; no font is downloaded.");}
             let found=help::search(&p.query,&self.capture_workspace());
             ui.columns(2,|columns|{
-                columns[0].set_width(200.0);egui::ScrollArea::vertical().id_salt("help-topics").max_height((ctx.content_rect().height()*0.7).max(100.0)).show(&mut columns[0],|ui|{
+                columns[0].set_width(200.0);egui::ScrollArea::vertical().scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).id_salt("help-topics").max_height((ctx.content_rect().height()*0.7).max(100.0)).show(&mut columns[0],|ui|{
                     if found.is_empty(){ui.label("검색 결과 없음 / No matches");}
                     for t in found{if ui.selectable_label(t.id==topic,t.title).clicked(){topic=t.id.into();}}
                 });
@@ -83,7 +83,7 @@ if ui.button("About / 버전").clicked(){topic="version".into();p.query.clear();
                 self.help.rendered_topic=Some(current.id.into());
                 columns[1].heading(current.title);
                 if current.id!=topic{columns[1].label("This saved topic is unavailable. Showing the local start page.");}
-                egui::ScrollArea::both().id_salt("help-body").max_height((ctx.content_rect().height()*0.6).max(100.0)).show(&mut columns[1],|ui|{
+                egui::ScrollArea::both().scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).id_salt("help-body").max_height((ctx.content_rect().height()*0.6).max(100.0)).show(&mut columns[1],|ui|{
                     if current.id=="version"{ui.label(format!("Drawer {} · Windows x64",help::VERSION));}
                     for line in current.body.lines(){
                         if let Some((label,target))=help::link(line){let r=ui.button(label);#[cfg(test)]{self.help.links.insert(target.into(),r.rect);}if r.clicked(){topic=target.into();}}
@@ -95,7 +95,7 @@ if ui.button("About / 버전").clicked(){topic="version".into();p.query.clear();
                     if current.id=="licenses"{
                         if self.help.notices.is_empty(){self.help.notices=help::NOTICES.lines().collect();}
                         let row=ui.text_style_height(&egui::TextStyle::Body)+ui.spacing().item_spacing.y;
-                        egui::ScrollArea::both().id_salt("help-notices").max_height(280.0).show_rows(ui,row,self.help.notices.len(),|ui,range|{for n in range{ui.add(egui::Label::new(self.help.notices[n]).wrap_mode(egui::TextWrapMode::Extend));}});
+                        egui::ScrollArea::both().scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).id_salt("help-notices").max_height(280.0).show_rows(ui,row,self.help.notices.len(),|ui,range|{for n in range{ui.add(egui::Label::new(self.help.notices[n]).wrap_mode(egui::TextWrapMode::Extend));}});
                     }
                 });
             });

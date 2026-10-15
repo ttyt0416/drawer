@@ -21,6 +21,7 @@ impl Drawer {
             || self.paste_dialog.is_some()
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
+            || self.ui_behavior.open
             || self.tool_input.open
             || self.controls.open
             || self.controls.radial.is_some()

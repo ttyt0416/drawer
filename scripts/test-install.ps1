@@ -73,6 +73,7 @@ try {
     if ($smokeResult -notmatch 'temporary_tool=true' -or $smokeResult -notmatch 'drag_threshold=true') { throw '임시 도구/드래그 임계값 설정 시작 시험 실패' }
     if ($smokeResult -notmatch 'local_help=true' -or $smokeResult -notmatch 'local_help_licenses=true' -or $smokeResult -notmatch 'local_korean_font=true') { throw '로컬 도움말/고지/한글 글꼴 시작 시험 실패' }
     foreach ($localHelpFile in 'HELP.md','IMAGE-IMPORT.md','MOVIE-IMPORT.md') { if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $localHelpFile))) { throw '로컬 도움말 배포 누락' } }
+    if ($smokeResult -notmatch 'panel_auto_hide=true' -or $smokeResult -notmatch 'local_power_release=true') { throw '패널 자동 숨김/절전 요청 해제 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_assets=true') { throw '브러시 커서 도구 소재 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'

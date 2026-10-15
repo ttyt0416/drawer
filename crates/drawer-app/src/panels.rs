@@ -163,6 +163,7 @@ impl Drawer {
             || self.movie_dialog.is_some()
             || self.revert_pending.is_some()
             || self.show_new_canvas
+            || self.ui_behavior.open
             || self.tool_input.open
             || self.controls.open
             || self.controls.radial.is_some()
@@ -189,6 +190,7 @@ impl Drawer {
     ) {
         let height = (ui.available_height() * 0.58).clamp(60.0, 360.0);
         egui::ScrollArea::vertical()
+            .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
             .id_salt(("workspace-panels", format!("{dock:?}")))
             .max_height(height)
             .show(ui, |ui| {
@@ -204,6 +206,7 @@ impl Drawer {
     }
     pub(super) fn show_panel(&mut self, ui: &mut egui::Ui, kind: Kind) {
         let cfg = self.panels.settings.panels[kind.index()];
+        let shown = self.panel_auto_hide(ui, kind);
         ui.push_id(kind.index(), |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.heading(kind.label());
@@ -222,6 +225,15 @@ impl Drawer {
                     }
                 });
             });
+            if !shown {
+                let reveal = ui.button("Show panel contents");
+                if reveal.clicked() || reveal.has_focus() {
+                    self.ui_behavior.hidden[kind.index()].reveal();
+                } else {
+                    self.ui_behavior.rectangles[kind.index()] = Some(ui.min_rect());
+                    return;
+                }
+            }
             if cfg.properties == Bar::Top {
                 self.panel_properties(ui, kind);
             }
@@ -301,6 +313,7 @@ impl Drawer {
                 self.panel_commands(ui, kind);
             }
             ui.separator();
+            self.ui_behavior.rectangles[kind.index()] = Some(ui.min_rect());
         });
     }
     fn panel_layers(&mut self, ui: &mut egui::Ui, kind: Kind) {
@@ -331,6 +344,7 @@ impl Drawer {
         }
         let row_height = cfg.thumbnail.size().max(22) as f32;
         egui::ScrollArea::vertical()
+            .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
             .id_salt("panel-rows")
             .max_height(140.0)
             .show_rows(ui, row_height, rows.len(), |ui, range| {

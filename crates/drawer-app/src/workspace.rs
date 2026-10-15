@@ -170,6 +170,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        let _awake = self.synchronous_power();
         let target = if path.exists() {
             path.canonicalize()
         } else {
@@ -230,7 +231,8 @@ impl Drawer {
             self.save_as(index)
         }
     }
-    pub(super) fn export_png_to(&self, index: usize, path: &Path) -> Result<(), String> {
+    pub(super) fn export_png_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        let _awake = self.synchronous_power();
         let target = if path.exists() {
             path.canonicalize()
         } else {
@@ -256,7 +258,7 @@ impl Drawer {
             .map_err(|e| e.to_string())
     }
     pub(super) fn export_from(
-        &self,
+        &mut self,
         index: usize,
         choose: impl FnOnce() -> Option<PathBuf>,
     ) -> Result<bool, String> {

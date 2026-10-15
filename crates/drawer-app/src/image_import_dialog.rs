@@ -55,6 +55,9 @@ fn job(
     Job { cancel, receiver }
 }
 impl ImportDialog {
+    pub fn working(&self) -> bool {
+        self.job.is_some()
+    }
     pub(super) fn start_page(&mut self, ctx: &egui::Context, budget: usize) {
         let Some(source) = self.source.clone() else {
             return;

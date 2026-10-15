@@ -247,6 +247,8 @@ pub struct Snapshot {
     pub input: crate::tool_input::Settings,
     #[serde(default)]
     pub help: crate::help::Preferences,
+    #[serde(default)]
+    pub behavior: crate::ui_behavior::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -267,6 +269,7 @@ impl Default for Snapshot {
             actions: Default::default(),
             input: Default::default(),
             help: Default::default(),
+            behavior: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -307,6 +310,7 @@ impl Snapshot {
             && self.interface.valid()
             && self.input.valid()
             && self.help.valid()
+            && self.behavior.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -369,6 +373,7 @@ impl Snapshot {
         if scope.other {
             next.input = incoming.input;
             next.help = incoming.help.clone();
+            next.behavior = incoming.behavior;
             next.interface = incoming.interface;
             next.interpolation = incoming.interpolation;
             next.aids = incoming.aids;

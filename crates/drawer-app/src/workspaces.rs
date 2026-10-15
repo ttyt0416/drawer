@@ -108,6 +108,9 @@ impl Workspaces {
     pub fn input_idle(&self) -> bool {
         self.keys.is_empty() && self.buttons.is_empty() && self.pad_point.is_none()
     }
+    pub fn painting(&self) -> bool {
+        self.pad_point.is_some()
+    }
     pub fn is_focused(&self) -> bool {
         self.focused
     }
@@ -264,7 +267,7 @@ impl Drawer {
         if self.workspaces.open && self.workspaces.staged.is_none() {
             let mut open = true;
             let mut action = None;
-            egui::Window::new("Workspaces").open(&mut open).vscroll(true).show(ctx, |ui| {
+            egui::Window::new("Workspaces").open(&mut open).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx, |ui| {
                 ui.label("Layout changes are saved locally. Named workspaces keep a separate saved layout.");
                 for kind in drawer_core::panels::Kind::ALL {
                     ui.push_id(kind.index(), |ui| {
@@ -400,6 +403,7 @@ impl Drawer {
                 .open(&mut open)
                 .collapsible(false)
                 .vscroll(true)
+                .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
                 .show(ctx, |ui| {
                     ui.label(
                         "Choose groups to apply. Current settings are backed up before applying.",
@@ -511,8 +515,15 @@ impl Drawer {
                                         p.position = [r.min.x as f64 * ppp, r.min.y as f64 * ppp];
                                     }
                                     if let Some(r) = i.viewport().inner_rect {
-                                        p.size = [r.width() as f64 * ppp, r.height() as f64 * ppp]
-                                            .map(|n| n.clamp(80.0, 4096.0));
+                                        let actual =
+                                            [r.width() as f64 * ppp, r.height() as f64 * ppp]
+                                                .map(|n| n.clamp(80.0, 4096.0));
+                                        p.size[0] = actual[0];
+                                        if !self.ui_behavior.hidden[index].collapsed
+                                            && self.ui_behavior.resize_skip[index] == 0
+                                        {
+                                            p.size[1] = actual[1];
+                                        }
                                     }
                                 });
                             }
@@ -521,12 +532,34 @@ impl Drawer {
                             self.panels.settings.panels[index].visible = false;
                         }
                         egui::CentralPanel::default().show(ui, |ui| {
-                            egui::ScrollArea::vertical().show(ui, |ui| {
-                                ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
-                                    self.show_panel(ui, kind)
-                                })
-                            });
+                            egui::ScrollArea::vertical()
+                                .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
+                                .show(ui, |ui| {
+                                    ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
+                                        self.show_panel(ui, kind)
+                                    })
+                                });
                         });
+                        let collapsed = self.ui_behavior.hidden[index].collapsed;
+                        if class != egui::ViewportClass::EmbeddedWindow {
+                            if collapsed {
+                                ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2(
+                                        (p.size[0] / ui.ctx().pixels_per_point() as f64) as f32,
+                                        80.0,
+                                    ),
+                                ));
+                                self.ui_behavior.resize_skip[index] = 2;
+                            } else if self.ui_behavior.resize_skip[index] > 0 {
+                                ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::vec2(
+                                        (p.size[0] / ui.ctx().pixels_per_point() as f64) as f32,
+                                        (p.size[1] / ui.ctx().pixels_per_point() as f64) as f32,
+                                    ),
+                                ));
+                                self.ui_behavior.resize_skip[index] -= 1;
+                            }
+                        }
                     },
                 );
                 // Header docking controls can change the dock while this window is open.
@@ -540,6 +573,7 @@ impl Drawer {
                     .default_size([260.0, 320.0])
                     .constrain(true)
                     .vscroll(true)
+                    .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
                     .show(ctx, |ui| {
                         ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
                             self.show_panel(ui, kind)
@@ -553,8 +587,18 @@ impl Drawer {
     }
     pub(super) fn scratchpad(&mut self, ctx: &egui::Context) {
         if !self.workspaces.store.current.scratchpad.visible {
+            self.workspaces.pad_point = None;
             return;
         }
+        let drawing = self.pending_close.is_none()
+            && self.sizing_dialog.is_none()
+            && self.import_dialog.is_none()
+            && self.movie_dialog.is_none()
+            && self.paste_dialog.is_none()
+            && self.revert_pending.is_none()
+            && !self.controls.open
+            && !self.tool_input.open
+            && !self.ui_behavior.open;
         let mut visible = true;
         egui::Window::new("Popup test painting")
             .open(&mut visible)
@@ -592,7 +636,8 @@ impl Drawer {
                 {
                     self.workspaces.pad_rect = Some(response.rect);
                 }
-                if self.workspaces.focused
+                if drawing
+                    && self.workspaces.focused
                     && response.is_pointer_button_down_on()
                     && let Some(pos) = response.interact_pointer_pos()
                 {

@@ -16,6 +16,8 @@ pub struct CanvasView {
     pub first_point: Option<(u64, [f64; 2])>,
     pub drag_pixels: f64,
     pub input_active: bool,
+    pub behavior: drawer_core::ui_behavior::Settings,
+    pub working: bool,
     pan_drag: Option<drawer_core::tool_input::Drag>,
     input_document: Option<u64>,
     input_blocked: bool,
@@ -61,6 +63,8 @@ impl CanvasView {
             first_point: None,
             drag_pixels: 4.0,
             input_active: true,
+            behavior: Default::default(),
+            working: false,
             pan_drag: None,
             input_document: None,
             input_blocked: false,
@@ -133,6 +137,7 @@ impl CanvasView {
                         .iter()
                         .any(|e| matches!(e, egui::Event::WindowFocused(false)))
             });
+        self.working = false;
         let before = document.view;
         let size = [document.width as f64, document.height as f64];
         let ppp = ui.ctx().pixels_per_point() as f64;
@@ -246,6 +251,32 @@ impl CanvasView {
         } else {
             self.pan_drag = None;
         }
+        self.working = input_active
+            && !self.area_zoom
+            && !ui.input(|i| i.key_down(egui::Key::Space))
+            && response.is_pointer_button_down_on()
+            && ui.input(|i| i.pointer.primary_down());
+        if self.working
+            && self.behavior.edge_pan
+            && !ui.input(|i| i.pointer.primary_pressed())
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let delta = drawer_core::ui_behavior::edge_delta(
+                [pos.x as f64, pos.y as f64],
+                drawer_core::scene::Rect {
+                    min: [rect.min.x as f64, rect.min.y as f64],
+                    max: [rect.max.x as f64, rect.max.y as f64],
+                },
+                ppp,
+                ui.input(|i| i.unstable_dt as f64),
+                self.behavior,
+            );
+            document.view.pan_by(delta);
+            if delta != [0.0; 2] {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(16));
+            }
+        }
         if response.hovered() && self.area_start.is_none() {
             let wheel = ui.input_mut(|input| std::mem::take(&mut input.smooth_scroll_delta).y);
             if wheel != 0.0
@@ -342,6 +373,7 @@ impl CanvasView {
             self.cursor_rect = None;
         }
         if input_active
+            && self.behavior.brush_cursor
             && (response.hovered() || response.dragged())
             && let Some(pos) = response
                 .hover_pos()

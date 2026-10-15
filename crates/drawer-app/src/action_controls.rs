@@ -340,6 +340,7 @@ impl Drawer {
                     .open(&mut open)
                     .constrain(true)
                     .vscroll(true)
+                    .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
                     .show(ctx, |ui| self.access_set(ui, &set));
                 if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                     self.controls.quick = None;
@@ -509,6 +510,7 @@ impl Drawer {
         egui::Window::new("Input and commands")
             .open(&mut open)
             .vscroll(true)
+            .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
             .default_width(520.0)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -576,6 +578,7 @@ impl Drawer {
                     }
                 });
                 egui::ScrollArea::vertical()
+                    .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
                     .id_salt("command-editor-body")
                     .max_height((ctx.content_rect().height() * 0.5).max(100.0))
                     .show(ui, |ui| match editor.page {
@@ -961,6 +964,7 @@ fn picker(ctx: &egui::Context, e: &mut Editor) {
     egui::Window::new("Choose command")
         .open(&mut open)
         .vscroll(true)
+        .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
         .show(ctx, |ui| {
             ui.label("Current assignment is selected. Only Confirm changes it.");
             ui.label(format!("Selected: {}", e.draft.actions.label(&p.selected)));
@@ -974,6 +978,7 @@ fn picker(ctx: &egui::Context, e: &mut Editor) {
                 cancel = ui.button("Cancel command choice").clicked();
             });
             egui::ScrollArea::vertical()
+                .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
                 .id_salt("command-picker-list")
                 .max_height(ctx.content_rect().height() * 0.5)
                 .show(ui, |ui| {

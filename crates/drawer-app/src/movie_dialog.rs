@@ -54,6 +54,9 @@ pub(super) struct MovieDialog {
     pub cancel_button: Option<egui::Rect>,
 }
 impl MovieDialog {
+    pub fn working(&self) -> bool {
+        self.job.is_some()
+    }
     fn options(&self) -> Result<Options, String> {
         Ok(Options {
             start: self
@@ -364,7 +367,7 @@ impl Drawer {
                         ui.label(format!("{} samples → {} timeline frames at {}/{} FPS",clip.cells.len(),mapping.len(),fps.numerator,fps.denominator));
                         if dialog.insert&&clip.fps!=fps {ui.label("Frame rates differ. Review the time mapping below before inserting.");}
                         if dialog.insert&&target.is_some_and(|t|mapping.last().unwrap().frame>=t.1) {ui.colored_label(egui::Color32::LIGHT_RED,"The insertion exceeds the timeline.");}
-                        egui::ScrollArea::vertical().max_height(100.0).show_rows(ui,ui.text_style_height(&egui::TextStyle::Body),mapping.len(),|ui,rows|{for index in rows {let row=mapping[index];ui.label(format!("Frame {} ← cell {} · source {:.6}s",row.frame+1,row.cell+1,clip.source_times[row.cell]));}});
+                        egui::ScrollArea::vertical().scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx())).max_height(100.0).show_rows(ui,ui.text_style_height(&egui::TextStyle::Body),mapping.len(),|ui,rows|{for index in rows {let row=mapping[index];ui.label(format!("Frame {} ← cell {} · source {:.6}s",row.frame+1,row.cell+1,clip.source_times[row.cell]));}});
                     },Err(e)=>{ui.colored_label(egui::Color32::LIGHT_RED,e);}
                 }
             }

@@ -16,3 +16,6 @@ workspace = true
 
 [dev-dependencies]
 tiff = "=0.11.3"
+
+[target.'cfg(windows)'.dependencies]
+keepawake = "=0.6.1"

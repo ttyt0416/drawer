@@ -96,3 +96,6 @@ crates/drawer-app/src/tool_input.rs
 docs/HELP.md
 crates/drawer-core/src/help.rs
 crates/drawer-app/src/help.rs
+crates/drawer-core/src/ui_behavior.rs
+crates/drawer-app/src/ui_behavior.rs
+docs/process/ui-behavior.md

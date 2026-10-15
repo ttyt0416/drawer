@@ -24,6 +24,7 @@ mod revert;
 mod size_fields;
 mod sizing_dialog;
 mod tool_input;
+mod ui_behavior;
 mod ui_scale;
 mod view_commands;
 mod workspace;
@@ -88,6 +89,7 @@ struct Drawer {
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
     help: help::Help,
+    ui_behavior: ui_behavior::Behavior,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -177,6 +179,7 @@ impl Drawer {
             controls: Default::default(),
             tool_input: Default::default(),
             help: help::Help::new(korean_font),
+            ui_behavior: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -350,11 +353,20 @@ impl Drawer {
             aspect: self.panels.settings.brush_aspect,
             angle: self.panels.settings.brush_angle,
         };
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("drawer-scrollbars"),
+                self.workspaces.store.current.behavior.scrollbars,
+            )
+        });
+        self.canvas_view.behavior = self.workspaces.store.current.behavior;
+        self.display.canvas.behavior = self.workspaces.store.current.behavior;
         self.canvas_view.input_active = self.workspaces.is_focused();
         self.canvas_view.drag_pixels = self.workspaces.store.current.input.drag_pixels;
         self.display.canvas.drag_pixels = self.workspaces.store.current.input.drag_pixels;
         self.canvas_view.filter = self.interpolation.view;
         self.display.canvas.filter = self.interpolation.view;
+        self.canvas_view.working = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_enabled_ui(
                 self.pending_close.is_none()
@@ -364,11 +376,13 @@ impl Drawer {
                     && self.movie_dialog.is_none()
                     && self.revert_pending.is_none()
                     && self.workspaces.staged.is_none()
+                    && !self.ui_behavior.open
                     && !self.tool_input.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
                     egui::ScrollArea::vertical()
+                        .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
                         .id_salt("document-commands")
                         .max_height((ui.available_height() * 0.5).clamp(100.0, 360.0))
                         .show(ui, |ui| {
@@ -404,6 +418,9 @@ impl Drawer {
                                 }
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
+                                }
+                                if ui.button("Panels, cursor and power").clicked() {
+                                    self.ui_behavior.open = true;
                                 }
                                 if ui.button("Tool input behavior").clicked() {
                                     self.tool_input.open = true;
@@ -483,6 +500,7 @@ impl Drawer {
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
+        self.behavior_settings(ui.ctx());
         self.help_window(ui.ctx());
         self.command_popups(ui.ctx());
         self.new_canvas_dialog(ui.ctx());
@@ -502,6 +520,7 @@ impl Drawer {
         self.panel_settings(ui.ctx());
         self.interface_settings(ui.ctx());
         self.persist_interface();
+        self.update_power();
         if let Err(e) = self.persist_workspace() {
             self.status = Some(e);
         }
@@ -573,6 +592,8 @@ impl eframe::App for Drawer {
                 self.workspaces.store.current.placements[0].dock =
                     drawer_core::workspaces::Dock::Floating;
                 self.open_help("licenses");
+                self.workspaces.store.current.behavior.auto_hide = true;
+                self.workspaces.store.current.behavior.hide_delay_ms = 0;
                 self.workspaces.store.current.scratchpad.visible = true;
                 self.workspaces.store.current.scratchpad.stroke(
                     [20.0, 20.0],
@@ -957,8 +978,17 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if let Err(e) = self.verify_native_power() {
+                    eprintln!("Power request: {e}");
+                    fail_smoke();
+                }
+                if !self.ui_behavior.hidden[0].collapsed
+                    || self.workspaces.store.current.placements[0].size[1] < 100.0
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
