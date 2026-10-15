@@ -5,6 +5,7 @@
 | 입력 | 현재 검증한 범위 | 변환 |
 |---|---|---|
 | PNG | 정지 RGBA8, 투명/반투명, RGB ICC | 알파와 숨겨진 RGB 보존, ICC는 sRGB로 변환 |
+| BMP (049) | WIA/로컬 RGB24 입력 | RGBA8 불투명 픽셀, 원본 보존·치수/메모리 제한 |
 | JPEG | 8비트 RGB, EXIF 방향 | 방향 적용 여부를 선택하고 크기/배치를 미리보기와 일치시킴 |
 | TIFF | 여러 페이지, Gray/RGB/RGBA 8/16비트, BlackIsZero Gray+alpha 8/16비트 | 페이지 선택, 16비트→8비트 반올림, 연관 알파→straight alpha, 방향 적용 |
 | TIFF ICC | RGB/회색조 프로필 | sRGB 변환, 알파 값 유지 |

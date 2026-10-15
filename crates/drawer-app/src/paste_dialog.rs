@@ -100,11 +100,20 @@ impl Drawer {
         ctx: &egui::Context,
         read: impl FnOnce() -> Result<ClipboardImage, String>,
     ) -> Result<(), String> {
+        self.begin_paste_reserved(ctx, read, 0)
+    }
+    pub(super) fn begin_paste_reserved(
+        &mut self,
+        ctx: &egui::Context,
+        read: impl FnOnce() -> Result<ClipboardImage, String>,
+        reserved: usize,
+    ) -> Result<(), String> {
         let index = self.active.ok_or("Open a document before pasting")?;
         let packet = read()?;
         let doc = &self.documents[index];
         let budget = DEFAULT_DOCUMENT_BUDGET
-            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
+            .saturating_sub(reserved);
         let offset = paste::center(doc, &packet.image);
         let state = paste::prepare(doc, &packet.image, offset, budget)?;
         let mut preview = Document::create(

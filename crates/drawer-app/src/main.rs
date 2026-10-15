@@ -7,6 +7,7 @@ use drawer_core::document::{
 use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
+mod acquisition;
 mod action_controls;
 mod aid_panel;
 mod canvas_view;
@@ -107,6 +108,7 @@ struct Drawer {
     native_mouse: Option<drawer_platform::Input>,
     pressure: pressure_settings::Editor,
     replay: input_replay::Editor,
+    acquisition: acquisition::Acquisition,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
@@ -214,6 +216,7 @@ impl Drawer {
             native_mouse: None,
             pressure: Default::default(),
             replay: Default::default(),
+            acquisition: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
@@ -455,6 +458,7 @@ impl Drawer {
                     && !self.native_input.open
                     && !self.pressure.open
                     && !self.replay.open
+                    && !self.acquisition.open
                     && !self.properties.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
@@ -522,6 +526,7 @@ impl Drawer {
         self.show_references(ui.ctx());
         self.show_aids(ui.ctx());
         self.show_import(ui.ctx());
+        self.acquisition_window(ui.ctx());
         self.show_display(ui.ctx());
         self.show_paste(ui.ctx());
         self.show_movie(ui.ctx());
@@ -1164,6 +1169,21 @@ impl eframe::App for Drawer {
                 if pointer_input::smoke_mapping().is_err() {
                     fail_smoke();
                 }
+                let acquisition_work = self
+                    .storage
+                    .as_ref()
+                    .unwrap()
+                    .root()
+                    .join("acquisition-work");
+                if let Err(error) = acquisition::smoke_pixels(&acquisition_work) {
+                    eprintln!("Acquisition pixels: {error}");
+                    fail_smoke();
+                }
+                #[cfg(windows)]
+                if let Err(error) = acquisition::smoke_broker(&acquisition_work) {
+                    eprintln!("Acquisition helper: {error}");
+                    fail_smoke();
+                }
                 #[cfg(windows)]
                 if self
                     .native_mouse
@@ -1196,7 +1216,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -1229,6 +1249,17 @@ fn fail_smoke() -> ! {
 fn main() -> eframe::Result {
     let mut args = std::env::args_os().skip(1);
     let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("--acquire-helper")) {
+        let result = args
+            .next()
+            .ok_or_else(|| "Missing acquisition directory".to_string())
+            .and_then(|p| acquisition::helper(&PathBuf::from(p)));
+        if let Err(error) = result {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     let (smoke_output, startup_paths) =
         if first.as_deref() == Some(std::ffi::OsStr::new("--smoke-test")) {
             (

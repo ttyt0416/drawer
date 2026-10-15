@@ -374,7 +374,10 @@ impl Drawer {
             }
             if crate::help::button(ui, "Image as new document…", "files").clicked()
                 && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("PNG / JPEG / TIFF", &["png", "jpg", "jpeg", "tif", "tiff"])
+                    .add_filter(
+                        "PNG / JPEG / TIFF / BMP",
+                        &["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+                    )
                     .pick_file()
             {
                 self.begin_import(ui.ctx(), &path);
@@ -387,6 +390,10 @@ impl Drawer {
                 self.status = Some(error);
             }
             self.recent_menu(ui);
+            if crate::help::button(ui, "Scanner / camera…", "acquisition").clicked() {
+                self.finish_stroke();
+                self.acquisition.open = true;
+            }
             self.view_menu(ui);
             self.local_file_menu(ui);
             if let Some(active) = self.active {

@@ -144,3 +144,8 @@ crates/drawer-platform/src/win.rs
 crates/drawer-platform/src/packets.rs
 crates/drawer-core/src/pen_controls.rs
 crates/drawer-core/src/tablet_mapping.rs
+crates/drawer-core/src/acquisition.rs
+crates/drawer-app/src/acquisition.rs
+crates/drawer-platform/src/acquire.rs
+crates/drawer-platform/src/child_job.rs
+docs/process/acquisition.md

@@ -71,6 +71,9 @@ pub struct ImportedPage {
     pub profile_applied: bool,
 }
 impl ImageSource {
+    pub fn encoded_snapshot(&self) -> Arc<Vec<u8>> {
+        self.bytes.clone()
+    }
     pub fn read(path: &Path, budget: usize, cancel: &AtomicBool) -> io::Result<Self> {
         checked(cancel)?;
         let path = path.canonicalize()?;
@@ -92,7 +95,7 @@ impl ImageSource {
         let format = image::guess_format(&bytes).map_err(|e| invalid(e.to_string()))?;
         let mut pages = Vec::new();
         match format {
-            ImageFormat::Png | ImageFormat::Jpeg => {
+            ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp => {
                 if format == ImageFormat::Png
                     && image::codecs::png::PngDecoder::with_limits(
                         Cursor::new(&bytes),
@@ -132,7 +135,7 @@ impl ImageSource {
             }
             _ => {
                 return Err(invalid(
-                    "Import supports PNG, JPEG and TIFF. Other formats are not yet supported.",
+                    "Import supports PNG, JPEG, TIFF and BMP. Other formats are not yet supported.",
                 ));
             }
         }
@@ -415,6 +418,29 @@ mod tests {
             .unwrap()
             .decode(page, orient, BUDGET, &cancel)
             .unwrap()
+    }
+    #[test]
+    fn bmp_device_image_decodes_with_bounds_and_preserves_original_bytes() {
+        let root = TempDir::new();
+        let path = root.0.join("scan.bmp");
+        let mut file = fs::File::create(&path).unwrap();
+        image::codecs::bmp::BmpEncoder::new(&mut file)
+            .encode(
+                &[10, 20, 30, 40, 50, 60],
+                2,
+                1,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
+        drop(file);
+        let before = fs::read(&path).unwrap();
+        let image = decode(&path, 0, true).image;
+        assert_eq!(image.pixels, vec![[10, 20, 30, 255], [40, 50, 60, 255]]);
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let mut huge = before;
+        huge[18..22].copy_from_slice(&100000i32.to_le_bytes());
+        fs::write(&path, huge).unwrap();
+        assert!(ImageSource::read(&path, BUDGET, &AtomicBool::new(false)).is_err());
     }
     #[test]
     fn png_alpha_profile_conversion_source_snapshot_and_native_roundtrip() {

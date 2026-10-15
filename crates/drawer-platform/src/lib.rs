@@ -150,7 +150,17 @@ mod packets;
 // Raw pointers, DLL and context lifetimes stay inside this UI-thread-only boundary.
 #[cfg(windows)]
 #[allow(unsafe_code)]
+mod acquire;
+#[cfg(windows)]
+#[allow(unsafe_code)]
 mod win;
+#[cfg(windows)]
+pub use acquire::{acquisition_capture, acquisition_list};
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod child_job;
+#[cfg(windows)]
+pub use child_job::acquisition_child_job;
 #[cfg(test)]
 mod tests {
     use super::*;

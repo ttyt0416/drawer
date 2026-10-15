@@ -122,7 +122,11 @@ impl Drawer {
         let image = read()?;
         self.add_image_document(image, "Clipboard image".into())
     }
-    fn add_image_document(&mut self, image: LocalImage, title: String) -> Result<(), String> {
+    pub(super) fn add_image_document(
+        &mut self,
+        image: LocalImage,
+        title: String,
+    ) -> Result<(), String> {
         let mut document = image
             .document(self.import_budget())
             .map_err(|e| e.to_string())?;
