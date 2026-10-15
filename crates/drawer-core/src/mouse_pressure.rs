@@ -596,6 +596,8 @@ impl crate::scene::Scene {
             && last.layer == record.layer
             && last.settings == record.settings
             && last.style == record.style
+            && last.ends == record.ends
+            && last.native_pressure == record.native_pressure
         {
             last.count = last
                 .count
@@ -618,6 +620,33 @@ impl crate::scene::Scene {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn metadata_compression_keeps_different_geometry_and_pressure_sources_separate() {
+        use super::*;
+        let mut scene = crate::scene::Scene::default();
+        let first = Metadata {
+            layer: 0,
+            settings: Settings::default(),
+            style: style(BrushTip::Pen),
+            count: 1,
+            ends: Default::default(),
+            native_pressure: false,
+        };
+        scene.append_mouse(first.clone()).unwrap();
+        let mut second = first;
+        second.ends.start = 9.0;
+        scene.append_mouse(second.clone()).unwrap();
+        let mut native = second;
+        native.native_pressure = true;
+        scene.append_mouse(native.clone()).unwrap();
+        scene.append_mouse(native).unwrap();
+        assert_eq!(scene.mouse_strokes.len(), 3);
+        assert_eq!(scene.mouse_strokes[0].ends.start, 0.0);
+        assert_eq!(scene.mouse_strokes[1].ends.start, 9.0);
+        assert!(!scene.mouse_strokes[1].native_pressure);
+        assert!(scene.mouse_strokes[2].native_pressure);
+        assert_eq!(scene.mouse_strokes[2].count, 2);
+    }
     #[test]
     fn smoothing_finishes_at_real_endpoint_and_preserves_raw_curve_pressure_tilt_and_cancel() {
         use super::*;
