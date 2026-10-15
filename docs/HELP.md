@@ -144,3 +144,9 @@ Dark/Light 테마와 도킹된 도구 패널의 좌/우 배치를 선택하고 I
 Open Tool input behavior to assign Ctrl, Shift or Alt to a temporary tool. Modifier tools always return to the previous tool when released, even before the short-key threshold. Letter tool keys still follow the configured hold threshold. Overlapping modifiers restore in press order.
 
 Shared shortcuts appear in the editor. Key chords, input fields, menus and dialogs take priority and suspend modifier tools until the modifier is released. Release and press again after closing a popup. Window focus loss cancels pending tool input. These assignments are local workspace preferences and do not add drawing history.
+
+## screen-mode | Simple and full screens | F12 panels screen mode 간단 전체 도구 화면
+
+The screen button switches between all panels and a simple drawing screen. F12 is the default shortcut on a new profile; assign Simple/full screen in Input and commands for an existing profile. Simple mode keeps document tabs, tools and canvas controls, and provides All tools and commands for the remaining controls. Floating tool panels and the navigator return to their previous layout when switching back.
+
+Screen mode is session-only. It preserves document contents, selections, tool choices, view values and pending previews. The screen button remains available while a preview disables drawing commands. Independently opened information, reference and test-painting windows remain usable.

@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 5] = [
+pub const EXTRA_COMMANDS: [&str; 6] = [
+    "screen-mode",
     "view-center",
     "view-reset",
     "new-canvas",
@@ -303,6 +304,7 @@ impl Settings {
             "redo" => "Redo",
             "view-center" => "Center view",
             "view-reset" => "Reset view",
+            "screen-mode" => "Simple/full screen",
             "new-canvas" => "New canvas",
             "test-painting" => "Popup test painting",
             "help" => "Local help",

@@ -12,6 +12,7 @@ pub struct CanvasView {
     pub view_notice: Option<String>,
     pub navigator: drawer_core::navigator_preferences::Preferences,
     pub navigator_generation: u64,
+    pub simple: bool,
     pub brush_shape: drawer_core::brush_cursor::Shape,
     pub first_point: Option<(u64, [f64; 2])>,
     pub drag_pixels: f64,
@@ -67,6 +68,7 @@ impl CanvasView {
             view_notice: None,
             navigator: Default::default(),
             navigator_generation: 0,
+            simple: false,
             brush_shape: Default::default(),
             first_point: None,
             drag_pixels: 4.0,
@@ -307,7 +309,11 @@ impl CanvasView {
             }
         }
         self.update_image(ui, document);
-        if self.navigator.visible {
+        #[cfg(test)]
+        {
+            self.navigator_rect = None;
+        }
+        if self.navigator.visible && !self.simple {
             if self.navigator.floating {
                 let mut open = true;
                 let response = egui::Window::new("Navigator")

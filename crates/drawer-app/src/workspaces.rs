@@ -790,7 +790,7 @@ pub(super) fn shortcut(
         };
         bindings.iter().find_map(|b| {
             if *repeat
-                && (b.command == "help"
+                && (["help", "screen-mode"].contains(&b.command.as_str())
                     || ["cycle-next:", "cycle-prev:", "quick:", "radial:"]
                         .iter()
                         .any(|prefix| b.command.starts_with(prefix)))

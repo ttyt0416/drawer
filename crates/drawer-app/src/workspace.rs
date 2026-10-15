@@ -422,6 +422,40 @@ impl Drawer {
                 }
             }
         });
+        self.document_tabs(ui);
+        if self.active.is_some() {
+            ui.horizontal_wrapped(|ui| {
+                use drawer_core::sizing::Change;
+                ui.label("Image:");
+                for (label, change) in [
+                    ("Flip left/right", Change::FlipHorizontal),
+                    ("Flip up/down", Change::FlipVertical),
+                    ("Rotate 90° right", Change::Rotate90 { clockwise: true }),
+                    ("Rotate 90° left", Change::Rotate90 { clockwise: false }),
+                ] {
+                    let button = ui.button(label);
+                    #[cfg(test)]
+                    {
+                        self.transform_buttons.insert(label, button.rect);
+                    }
+                    if button.clicked() {
+                        self.begin_transform(ui.ctx(), change);
+                    }
+                }
+                if ui.button("Export PNG…").clicked()
+                    && let Err(error) = self.export_from(self.active.unwrap(), || {
+                        rfd::FileDialog::new()
+                            .add_filter("PNG", &["png"])
+                            .set_file_name("drawing.png")
+                            .save_file()
+                    })
+                {
+                    self.status = Some(error);
+                }
+            });
+        }
+    }
+    pub(super) fn document_tabs(&mut self, ui: &mut egui::Ui) {
         let mut activate = None;
         let mut close = None;
         ui.horizontal_wrapped(|ui| {
@@ -460,37 +494,6 @@ impl Drawer {
         }
         if let Some(index) = close {
             self.request_close(index);
-        }
-        if self.active.is_some() {
-            ui.horizontal_wrapped(|ui| {
-                use drawer_core::sizing::Change;
-                ui.label("Image:");
-                for (label, change) in [
-                    ("Flip left/right", Change::FlipHorizontal),
-                    ("Flip up/down", Change::FlipVertical),
-                    ("Rotate 90° right", Change::Rotate90 { clockwise: true }),
-                    ("Rotate 90° left", Change::Rotate90 { clockwise: false }),
-                ] {
-                    let button = ui.button(label);
-                    #[cfg(test)]
-                    {
-                        self.transform_buttons.insert(label, button.rect);
-                    }
-                    if button.clicked() {
-                        self.begin_transform(ui.ctx(), change);
-                    }
-                }
-                if ui.button("Export PNG…").clicked()
-                    && let Err(error) = self.export_from(self.active.unwrap(), || {
-                        rfd::FileDialog::new()
-                            .add_filter("PNG", &["png"])
-                            .set_file_name("drawing.png")
-                            .save_file()
-                    })
-                {
-                    self.status = Some(error);
-                }
-            });
         }
     }
     pub(super) fn close_dialog(&mut self, ctx: &egui::Context) {

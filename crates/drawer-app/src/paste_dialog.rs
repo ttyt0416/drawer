@@ -205,7 +205,15 @@ impl Drawer {
         dialog.canvas.filter = self.interpolation.view;
         let mut accept = false;
         let mut cancel = false;
+        let mut switch_screen = false;
         egui::Modal::new(egui::Id::new("paste-layer")).show(ctx, |ui| {
+            let switch = super::screen_mode::preview_switch(ui, self.simple_view);
+            #[cfg(test)]
+            {
+                self.screen_button = Some(switch.rect);
+            }
+            switch_screen = switch.clicked();
+
             ui.heading("Place pasted image");
             ui.label("New layer · drag preview or edit position · pixels kept outside canvas");
             let mut offset = dialog.offset;
@@ -215,6 +223,7 @@ impl Drawer {
                 ui.label("Top");
                 ui.add(egui::DragValue::new(&mut offset[1]).range(-1_000_000_000..=1_000_000_000));
             });
+
             ui.horizontal(|ui| {
                 if ui.button("Center").clicked() {
                     let layer = dialog.preview.layers.last().unwrap().placement.unwrap();
@@ -277,6 +286,10 @@ impl Drawer {
                 }
             });
         });
+        if switch_screen {
+            self.simple_view = !self.simple_view;
+            self.canvas_view.cancel_input();
+        }
         if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.paste_dialog = None;
         } else if accept && let Err(error) = self.accept_paste() {

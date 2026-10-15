@@ -23,6 +23,7 @@ mod paste_dialog;
 mod quality;
 mod reference_pane;
 mod revert;
+mod screen_mode;
 mod size_fields;
 mod sizing_dialog;
 mod tool_input;
@@ -94,6 +95,12 @@ struct Drawer {
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
     information: information::Information,
+    simple_view: bool,
+    screen_modes_seen: u8,
+    #[cfg(test)]
+    screen_button: Option<egui::Rect>,
+    #[cfg(test)]
+    commands_button: Option<egui::Rect>,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -186,6 +193,12 @@ impl Drawer {
             ui_behavior: Default::default(),
             cursors: Default::default(),
             information: Default::default(),
+            simple_view: false,
+            screen_modes_seen: 0,
+            #[cfg(test)]
+            screen_button: None,
+            #[cfg(test)]
+            commands_button: None,
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -352,6 +365,9 @@ impl Drawer {
             ui.ctx().set_zoom_factor(self.interface.settings.zoom);
         }
         self.workspaces.input(ui.ctx());
+        self.screen_mode_inputs(ui.ctx());
+        self.canvas_view.simple = self.simple_view;
+        self.screen_modes_seen |= if self.simple_view { 1 } else { 2 };
         self.held_tool_inputs(ui.ctx());
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
@@ -381,6 +397,7 @@ impl Drawer {
         self.display.canvas.filter = self.interpolation.view;
         self.canvas_view.working = false;
         egui::CentralPanel::default().show(ui, |ui| {
+            self.screen_mode_controls(ui);
             ui.add_enabled_ui(
                 self.pending_close.is_none()
                     && self.sizing_dialog.is_none()
@@ -395,82 +412,39 @@ impl Drawer {
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
+                    if self.simple_view {
+                        let _menu = ui.menu_button("All tools and commands", |ui| {
+                            ui.set_min_width(500.0_f32.min(ui.ctx().content_rect().width() - 40.0));
+                            egui::ScrollArea::vertical()
+                                .id_salt("simple-all-commands")
+                                .max_height(420.0)
+                                .show(ui, |ui| {
+                                    ui.push_id("simple-commands", |ui| self.full_commands(ui));
+                                });
+                        });
+                        #[cfg(test)]
+                        {
+                            self.commands_button = Some(_menu.response.rect);
+                        }
+                        self.document_tabs(ui);
+                        ui.horizontal_wrapped(|ui| {
+                            for tip in BrushTip::ALL {
+                                if ui
+                                    .selectable_label(self.selected == tip, tip.name())
+                                    .clicked()
+                                {
+                                    self.set_tool(tip);
+                                }
+                            }
+                        });
+                        self.simple_canvas(ui);
+                        return;
+                    }
                     egui::ScrollArea::vertical()
                         .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
                         .id_salt("document-commands")
                         .max_height((ui.available_height() * 0.5).clamp(100.0, 360.0))
-                        .show(ui, |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.heading(APP_NAME);
-                                ui.label("Local drawing workspace");
-                                if ui.button("Help").clicked() {
-                                    self.open_help("welcome");
-                                }
-                                if ui.button("About").clicked() {
-                                    self.open_help("version");
-                                }
-                                let new_response = ui.button("New canvas");
-                                #[cfg(test)]
-                                {
-                                    self.new_button = Some(new_response.rect);
-                                }
-                                if new_response.clicked() {
-                                    self.new_canvas = NewCanvas::default();
-                                    self.show_new_canvas = true;
-                                }
-                                if ui.button("References").clicked() {
-                                    self.references.session.workspace.visible = true;
-                                }
-                                if ui.button("Canvas aids").clicked() {
-                                    self.aids.visible = true;
-                                }
-                                if ui.button("Display view").clicked() {
-                                    self.display.settings_open = true;
-                                }
-                                if ui.button("Image quality").clicked() {
-                                    self.show_interpolation = true;
-                                }
-                                if ui.button("Interface size").clicked() {
-                                    self.interface.open = true;
-                                }
-                                if ui.button("Information").clicked() {
-                                    self.workspaces.store.current.information.visible = true;
-                                }
-                                if ui.button("Cursor styles").clicked() {
-                                    self.cursors.open = true;
-                                }
-                                if ui.button("Panels, cursor and power").clicked() {
-                                    self.ui_behavior.open = true;
-                                }
-                                if ui.button("Tool input behavior").clicked() {
-                                    self.tool_input.open = true;
-                                }
-                                if ui.button("Input and commands").clicked() {
-                                    self.controls.open = true;
-                                }
-                                if ui.button("Workspaces").clicked() {
-                                    self.workspaces.open = true;
-                                }
-                                if ui.button("Test painting").clicked() {
-                                    self.workspaces.store.current.scratchpad.visible = true;
-                                }
-                                if ui.button("Panels").clicked() {
-                                    self.panels.open = true;
-                                }
-                                if ui.button("Navigator settings").clicked() {
-                                    self.show_navigator_settings = true;
-                                }
-                            });
-                            self.document_controls(ui);
-                            self.sizing_controls(ui);
-                            self.paste_controls(ui);
-                            self.movie_controls(ui);
-                            self.access_controls(ui);
-                            ui.separator();
-                            if let Some(status) = &self.status {
-                                ui.colored_label(egui::Color32::LIGHT_RED, status);
-                            }
-                        });
+                        .show(ui, |ui| self.full_commands(ui));
                     let right_docked = drawer_core::panels::Kind::ALL.iter().any(|k| {
                         self.panels.settings.panels[k.index()].visible
                             && self.workspaces.store.current.placements[k.index()].dock
@@ -517,7 +491,9 @@ impl Drawer {
         });
         self.capture_information();
         self.information_panel(ui.ctx());
-        self.floating_panels(ui.ctx());
+        if !self.simple_view {
+            self.floating_panels(ui.ctx());
+        }
         self.scratchpad(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
@@ -644,6 +620,7 @@ impl eframe::App for Drawer {
                     .unwrap();
             }
             if self.frames == 3 {
+                self.toggle_screen_mode();
                 self.workspaces.store.current.information.theme =
                     drawer_core::information::Theme::Light;
                 self.cancel_close();
@@ -654,10 +631,16 @@ impl eframe::App for Drawer {
             if self.frames == 4 {
                 self.smoke_start_sizing(ui.ctx());
             }
+            if self.frames == 5 {
+                self.toggle_screen_mode();
+            }
             if self.frames > 120 {
                 fail_smoke();
             }
             if self.frames >= 6 && self.sizing_dialog.is_none() {
+                if self.screen_modes_seen != 3 || self.simple_view {
+                    fail_smoke();
+                }
                 let validated = self.documents.len() == 2
                     && self.tabs.len() == 2
                     && self.pending_close.is_none()
@@ -1067,7 +1050,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

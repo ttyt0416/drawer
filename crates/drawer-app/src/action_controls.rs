@@ -114,6 +114,7 @@ impl Drawer {
                     self.show_new_canvas = true;
                 }
                 "help" => self.open_help("welcome"),
+                "screen-mode" => self.toggle_screen_mode(),
                 "test-painting" => self.workspaces.store.current.scratchpad.visible = true,
                 _ => {
                     if let Some(tip) = BrushTip::ALL.iter().find(|t| t.name() == command) {

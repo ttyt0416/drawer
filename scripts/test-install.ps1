@@ -78,6 +78,7 @@ try {
     if ($smokeResult -notmatch 'information_panel=true' -or $smokeResult -notmatch 'local_color_profile=true' -or $smokeResult -notmatch 'theme_settings=true') { throw '좌표/색 정보/테마 설정 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_assets=true') { throw '브러시 커서 도구 소재 시작 시험 실패' }
     if ($smokeResult -notmatch 'modifier_tools=true') { throw '수정키 임시 도구 설정 시험 실패' }
+    if ($smokeResult -notmatch 'screen_modes=true') { throw '간단/전체 화면 전환 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

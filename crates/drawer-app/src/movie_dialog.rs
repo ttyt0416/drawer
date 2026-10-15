@@ -333,7 +333,12 @@ impl Drawer {
         let mut accept = false;
         let mut decode = false;
         let mut choose = false;
+        let mut switch_screen = false;
         egui::Modal::new(egui::Id::new("movie-import")).show(ctx,|ui| {
+            let switch = super::screen_mode::preview_switch(ui, self.simple_view);
+            #[cfg(test)] { self.screen_button = Some(switch.rect); }
+            switch_screen = switch.clicked();
+
             ui.set_max_width(650.0);ui.heading(if dialog.insert {"Insert local movie into timeline"}else {"New animation from local movie"});
             ui.label(dialog.source.path.display().to_string());
             if let Some(decoder)=&dialog.decoder {ui.label(format!("Local codec: {}",decoder.ffmpeg.display()));}
@@ -344,6 +349,7 @@ impl Drawer {
                     for (name,value) in [("Start seconds",&mut dialog.start),("End seconds (inclusive)",&mut dialog.end),("Output width",&mut dialog.width),("Output height",&mut dialog.height),("Sampling FPS numerator",&mut dialog.fps),("FPS denominator",&mut dialog.denominator)] {ui.label(name);ui.text_edit_singleline(value);ui.end_row();}
                     if dialog.insert {ui.label("Insertion frame");ui.text_edit_singleline(&mut dialog.start_frame);ui.end_row();}
                 });
+
                 egui::ComboBox::from_id_salt("movie-interpolation").selected_text(dialog.filter.label()).show_ui(ui,|ui|{for filter in drawer_core::interpolation::Filter::ALL {ui.selectable_value(&mut dialog.filter,filter,filter.label());}});
                 ui.add_enabled_ui(info.has_audio,|ui|{ui.checkbox(&mut dialog.audio,"Import audio separately (48 kHz PCM)");});
                 if !info.has_audio {ui.label("This movie has no audio stream.");}
@@ -375,6 +381,10 @@ impl Drawer {
             if let Some(error)=&dialog.error {ui.colored_label(egui::Color32::LIGHT_RED,error);}
             ui.horizontal(|ui| {let a=ui.add_enabled(dialog.clip.is_some()&&dialog.job.is_none(),egui::Button::new(if dialog.insert {"Insert track"}else {"Create animation"}));accept=a.clicked();let c=ui.button("Cancel");cancel=c.clicked();#[cfg(test)] {dialog.accept_button=Some(a.rect);dialog.cancel_button=Some(c.rect);}});
         });
+        if switch_screen {
+            self.simple_view = !self.simple_view;
+            self.canvas_view.cancel_input();
+        }
         if before != dialog.options().ok() {
             dialog.job = None;
             dialog.clip = None;

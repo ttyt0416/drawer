@@ -214,7 +214,15 @@ impl Drawer {
         let mut import = false;
         let mut cancel = false;
         let mut changed = false;
+        let mut switch_screen = false;
         egui::Modal::new(egui::Id::new("import-image")).show(ctx, |ui| {
+            let switch = super::screen_mode::preview_switch(ui, self.simple_view);
+            #[cfg(test)]
+            {
+                self.screen_button = Some(switch.rect);
+            }
+            switch_screen = switch.clicked();
+
             ui.heading("Image as new document");
             ui.label("PNG / JPEG / TIFF · independent copy · source kept unchanged");
             if let Some(source) = &dialog.source {
@@ -315,6 +323,10 @@ impl Drawer {
                 }
             });
         });
+        if switch_screen {
+            self.simple_view = !self.simple_view;
+            self.canvas_view.cancel_input();
+        }
         if changed {
             dialog.start_page(ctx, budget);
         }

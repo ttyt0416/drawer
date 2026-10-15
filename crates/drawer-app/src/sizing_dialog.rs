@@ -301,6 +301,7 @@ impl Drawer {
         let mut cancel = false;
         let mut changed = false;
         egui::Modal::new(egui::Id::new("sizing-dialog")).show(ctx, |ui| {
+            self.screen_mode_controls(ui);
             ui.heading(dialog.mode.title());
             ui.label("Finish or cancel this change before saving the drawing.");
             ui.add_enabled_ui(dialog.job.is_none(), |ui| {

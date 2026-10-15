@@ -123,6 +123,7 @@ pub fn default_bindings() -> Vec<Binding> {
         ("Q", false, false, "quick:2"),
         ("R", false, false, "radial:4"),
         ("F1", false, false, "help"),
+        ("F12", false, false, "screen-mode"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {
