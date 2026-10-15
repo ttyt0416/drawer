@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "fa27de9d6796b22038f1369d110cd432414eaadc70f6fcc8345d7e7c278a3e60",
+  "cargo_lock_sha256": "defdfe919acad6a47b424bab7d3a9d7f3130b03fa0286b3b46bfefb871f25004",
   "libraries": [
     {
       "name": "accesskit",
@@ -1252,6 +1252,40 @@
         }
       ],
       "supplement_sources": []
+    },
+    {
+      "name": "michiu_guard",
+      "version": "0.0.3",
+      "source": "https://crates.io/crates/michiu_guard/0.0.3",
+      "repository": "https://github.com/eto0202/michiu",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "f8cc57bcd64cc17b922492663d3d328cdd75318bbac73dd1c66953768df4698c",
+      "notice_files": [
+        {
+          "name": "eto0202-michiu-6235158b40e8-LICENSE-MIT.txt",
+          "sha256": "0dd9dafc67f5b1f9e8df09e51a81bc9855394e410536fe42580609498678a259"
+        }
+      ],
+      "supplement_sources": [
+        "https://raw.githubusercontent.com/eto0202/michiu/6235158b40e8678ab7634152c7ea939da9bcbfbb/LICENSE-MIT"
+      ]
+    },
+    {
+      "name": "michiu_window",
+      "version": "0.0.3",
+      "source": "https://crates.io/crates/michiu_window/0.0.3",
+      "repository": "https://github.com/eto0202/michiu",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "1608b1fcb9d9b687fb40c24be28189194bff9a8f2685636fd8819e5c4550104a",
+      "notice_files": [
+        {
+          "name": "eto0202-michiu-6235158b40e8-LICENSE-MIT.txt",
+          "sha256": "0dd9dafc67f5b1f9e8df09e51a81bc9855394e410536fe42580609498678a259"
+        }
+      ],
+      "supplement_sources": [
+        "https://raw.githubusercontent.com/eto0202/michiu/6235158b40e8678ab7634152c7ea939da9bcbfbb/LICENSE-MIT"
+      ]
     },
     {
       "name": "miniz_oxide",
@@ -2551,6 +2585,21 @@
         {
           "name": "LICENSE",
           "sha256": "6dc0e068dcf3a5bc8e054205b85b7720e1d49265bbc64bf515d2cf79197df69a"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "winsafe",
+      "version": "0.0.29",
+      "source": "https://crates.io/crates/winsafe/0.0.29",
+      "repository": "https://github.com/rodrigocfd/winsafe",
+      "license": "MIT",
+      "crate_sha256": "9ef0ffc427f045c0cc9ebffd6f4f91153dcd2a1547b5c3c29ee3f541e16e95c6",
+      "notice_files": [
+        {
+          "name": "LICENSE.md",
+          "sha256": "3ee62f0338e87ec3b8c1730c9d2d1ccbb169b8b869924511681833599cfb8a3d"
         }
       ],
       "supplement_sources": []

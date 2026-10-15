@@ -31,6 +31,7 @@ struct Draft {
     text: String,
     error: Option<String>,
     composing: bool,
+    before_composition: Option<String>,
     action: Option<Action>,
 }
 #[derive(Clone, Copy)]
@@ -172,26 +173,60 @@ fn field_id(
             text: value.clone(),
             error: None,
             composing: false,
+            before_composition: None,
             action: None,
         });
     let focused = ui.memory(|m| m.has_focus(id) || m.had_focus_last_frame(id));
     events(ui.ctx(), id, &mut draft, clipboard(ui.ctx()));
     let mut cancel = false;
+    let mut cancel_composition = false;
     if focused {
         ui.input_mut(|i| {
             for e in &i.events {
                 if let egui::Event::Ime(ime) = e {
                     match ime {
-                        egui::ImeEvent::Preedit { text, .. } => draft.composing = !text.is_empty(),
-                        egui::ImeEvent::Commit(_) => draft.composing = false,
+                        egui::ImeEvent::Preedit { text, .. } => {
+                            if !text.is_empty() && !draft.composing {
+                                draft.before_composition = Some(draft.text.clone());
+                            }
+                            draft.composing = !text.is_empty();
+                        }
+                        egui::ImeEvent::Commit(_) => {
+                            draft.composing = false;
+                            draft.before_composition = None;
+                        }
                         _ => {}
                     }
                 }
             }
-            if !draft.composing {
+            if draft.composing {
+                cancel_composition = i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+                    || !i.focused
+                    || i.events
+                        .iter()
+                        .any(|e| matches!(e, egui::Event::WindowFocused(false)));
+                i.consume_key(egui::Modifiers::NONE, egui::Key::Enter);
+            } else {
                 cancel = i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
             }
         });
+    }
+    if cancel_composition {
+        draft.text = draft
+            .before_composition
+            .take()
+            .unwrap_or_else(|| draft.source.clone());
+        draft.composing = false;
+        if let Some(previous) = egui::TextEdit::load_state(ui.ctx(), id) {
+            let mut state = egui::text_edit::TextEditState::default();
+            state.set_undoer(previous.undoer());
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::one(
+                    egui::text::CCursor::new(draft.text.chars().count()),
+                )));
+            state.store(ui.ctx(), id);
+        }
     }
     let enter = focused && !draft.composing && ui.input(|i| i.key_pressed(egui::Key::Enter));
     if cancel {
@@ -205,7 +240,7 @@ fn field_id(
         .desired_width(120.0)
         .show(ui);
     out.response.flags.remove(egui::response::Flags::CHANGED);
-    if !cancel && !draft.composing && (enter || out.response.lost_focus()) {
+    if !cancel && !cancel_composition && !draft.composing && (enter || out.response.lost_focus()) {
         if rule.valid(&draft.text) {
             if *value != draft.text {
                 *value = draft.text.clone();
@@ -223,6 +258,9 @@ fn field_id(
             });
             out.response.request_focus();
         }
+    }
+    if cancel_composition && ui.input(|i| i.focused) {
+        out.response.request_focus();
     }
     out.response.context_menu(|ui| {
         for (label, action) in [
@@ -244,6 +282,12 @@ fn field_id(
     if let Some(error) = &draft.error {
         ui.colored_label(egui::Color32::LIGHT_RED, error);
     }
+    super::preferences::observe(
+        ui.ctx(),
+        &out.response,
+        !matches!(rule, Rule::Text),
+        draft.composing,
+    );
     super::help::tag(ui.ctx(), &out.response, topic);
     ui.ctx().data_mut(|d| d.insert_temp(state_id, draft));
     out.response.response
@@ -595,6 +639,78 @@ mod tests {
         select();
         assert_eq!(frame(vec![egui::Event::Paste("9".into())]).1, 7.0);
         assert_eq!(frame(vec![key(egui::Key::Escape, false, false)]).1, 7.0);
+    }
+    #[test]
+    fn ime_enter_escape_and_window_switch_never_force_number_or_parent_cancel() {
+        let ctx = egui::Context::default();
+        let mut value = "5".to_string();
+        let rule = Rule::Number {
+            min: 1.0,
+            max: 10.0,
+            integer: true,
+        };
+        run(&ctx, &mut value, rule, vec![], 0.0);
+        focus(&ctx, 1);
+        let preedit = || {
+            egui::Event::Ime(egui::ImeEvent::Preedit {
+                text: "가".into(),
+                active_range_chars: None,
+            })
+        };
+        run(&ctx, &mut value, rule, vec![preedit()], 1.0);
+        assert_eq!(value, "5");
+        assert!(draft(&ctx).composing);
+        assert!(!run(
+            &ctx,
+            &mut value,
+            rule,
+            vec![key(egui::Key::Enter, false, false)],
+            2.0
+        ));
+        assert!(draft(&ctx).composing);
+        assert!(!run(
+            &ctx,
+            &mut value,
+            rule,
+            vec![key(egui::Key::Escape, false, false)],
+            3.0
+        ));
+        assert_eq!(value, "5");
+        assert_eq!(draft(&ctx).text, "5");
+        assert!(!draft(&ctx).composing);
+        assert!(!ctx.input(|i| i.key_pressed(egui::Key::Escape)));
+        focus(&ctx, 1);
+        run(&ctx, &mut value, rule, vec![preedit()], 4.0);
+        run(
+            &ctx,
+            &mut value,
+            rule,
+            vec![egui::Event::WindowFocused(false)],
+            5.0,
+        );
+        assert_eq!(value, "5");
+        assert!(!draft(&ctx).composing);
+        let ctx = egui::Context::default();
+        let mut text = "base".to_string();
+        run(&ctx, &mut text, Rule::Text, vec![], 0.0);
+        focus(&ctx, 4);
+        run(
+            &ctx,
+            &mut text,
+            Rule::Text,
+            vec![egui::Event::Text("draft".into())],
+            1.0,
+        );
+        run(&ctx, &mut text, Rule::Text, vec![preedit()], 2.0);
+        run(
+            &ctx,
+            &mut text,
+            Rule::Text,
+            vec![key(egui::Key::Escape, false, false)],
+            3.0,
+        );
+        assert_eq!(text, "base");
+        assert_eq!(draft(&ctx).text, "draft");
     }
     #[test]
     fn numeric_pointer_drag_and_cancel_do_not_change_drawing_history() {

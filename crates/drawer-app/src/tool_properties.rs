@@ -8,6 +8,8 @@ struct Editor {
     properties: [bool; 4],
     kind: CopyKind,
     preview: Option<Preview>,
+    reset_preview: bool,
+    hide_reset: bool,
 }
 impl Editor {
     fn new(draft: Settings, source: Tool) -> Self {
@@ -19,6 +21,8 @@ impl Editor {
             properties: [true; 4],
             kind: CopyKind::Values,
             preview: None,
+            reset_preview: false,
+            hide_reset: false,
         }
     }
 }
@@ -184,10 +188,11 @@ impl Drawer {
             });
             let mut accept=false;let mut dismiss=false;
             if let Some(preview)=&editor.preview {
+                if editor.reset_preview {crate::help::checkbox(ui,&mut editor.hide_reset,"Do not show this reset confirmation again","preferences");}
                 ui.separator();ui.heading("Review property changes");egui::ScrollArea::vertical().id_salt("property-copy-preview").max_height(180.0).show(ui,|ui|{for line in &preview.reports{ui.label(line);}});
                 ui.horizontal(|ui|{let a=crate::help::button(ui,"Accept preview into draft","tool-properties");let c=crate::help::button(ui,"Cancel property copy","tool-properties");accept=a.clicked();dismiss=c.clicked();#[cfg(test)]{self.properties.accept_copy=Some(a.rect);self.properties.cancel_copy=Some(c.rect);}});
             }
-            if accept{editor.draft=editor.preview.take().unwrap().next;}else if dismiss{editor.preview=None;}
+            if accept{editor.draft=editor.preview.take().unwrap().next;if editor.reset_preview&&editor.hide_reset{self.workspaces.store.current.preferences.suppressed.insert(drawer_core::preferences::Confirmation::ResetProperties);}editor.reset_preview=false;editor.hide_reset=false;}else if dismiss{editor.preview=None;editor.reset_preview=false;editor.hide_reset=false;}
             ui.horizontal_wrapped(|ui|{for tool in Tool::ALL {crate::help::selectable(ui,editor.source==tool,tool.name(),"tool-properties").clicked().then(||editor.source=tool);}});
             if editor.draft.tools[&editor.source].is_empty(){ui.label("This tool has no shared brush properties; copies skip unsupported properties.");}
             for p in Property::ALL {if let Some(state)=editor.draft.tools.get_mut(&editor.source).unwrap().get_mut(&p) {ui.push_id(p.name(),|ui|{
@@ -202,10 +207,10 @@ impl Drawer {
             if crate::help::button(ui,"Preview property copy","tool-properties").clicked(){
                 let targets=Tool::ALL.into_iter().enumerate().filter_map(|(n,t)|(editor.scope==2 || (editor.scope==0&&t.group()==editor.source.group()) || (editor.scope==1&&editor.targets[n])).then_some(t)).collect::<Vec<_>>();
                 let properties=Property::ALL.into_iter().enumerate().filter_map(|(n,p)|editor.properties[n].then_some(p)).collect::<Vec<_>>();
-                match editor.draft.preview(editor.source,&targets,&properties,editor.kind){Ok(preview)=>editor.preview=Some(preview),Err(e)=>self.status=Some(e)}
+                match editor.draft.preview(editor.source,&targets,&properties,editor.kind){Ok(preview)=>{editor.preview=Some(preview);editor.reset_preview=false;},Err(e)=>self.status=Some(e)}
             }
             let reset=crate::help::button(ui,"Reset all tool properties…","tool-properties");#[cfg(test)]{self.properties.reset=Some(reset.rect);}
-            if reset.clicked(){editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}
+            if reset.clicked(){if self.workspaces.store.current.preferences.suppressed.contains(&drawer_core::preferences::Confirmation::ResetProperties){editor.draft=Settings::default();editor.preview=None;}else{editor.reset_preview=true;editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}}
             ui.horizontal_wrapped(|ui|{
                 if crate::help::button(ui,"Save local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().set_file_name("tool-properties.json").save_file() && let Err(e)=editor.draft.save(&path){self.status=Some(e.to_string());}
                 if crate::help::button(ui,"Read local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Tool property preset",&["json"]).pick_file(){match Settings::read(&path){Ok(s)=>{editor.draft=s;editor.preview=None;},Err(e)=>self.status=Some(e.to_string())}}

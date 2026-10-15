@@ -17,7 +17,10 @@ impl Drawer {
         self.canvas_view.cancel_input();
     }
     pub(super) fn screen_mode_inputs(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input() || !ctx.input(|i| i.focused) {
+        if super::preferences::composing(ctx)
+            || ctx.egui_wants_keyboard_input()
+            || !ctx.input(|i| i.focused)
+        {
             return;
         }
         let bindings = self
@@ -75,6 +78,12 @@ impl Drawer {
             ui.label("Local drawing workspace");
             if crate::help::button(ui, "Help", "screen-mode").clicked() {
                 self.open_help("welcome");
+            }
+            if crate::help::button(ui, "Offline tutorial", "preferences").clicked() {
+                self.open_tutorial();
+            }
+            if crate::help::button(ui, "Language, IME and confirmations", "preferences").clicked() {
+                self.preferences.open = true;
             }
             if crate::help::button(ui, "About", "screen-mode").clicked() {
                 self.open_help("version");

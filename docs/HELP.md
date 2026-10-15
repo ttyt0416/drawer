@@ -174,3 +174,29 @@ Tool properties에서 네 브러시의 크기·비율·각도·안정화를 각�
 선택한 속성의 값만 또는 표시 상태만 같은 도구군/선택한 도구/전체 도구에 복사합니다. 미리보기의 대상·전후 값·미지원 속성을 확인한 뒤 Accept preview into draft로 임시본에 반영하고 Apply로 저장합니다. Cancel property copy나 설정 창 Cancel은 전체 대상을 보존합니다. 스포이트/이동 도구에는 브러시 공통 속성을 새로 만들지 않습니다. 현재 네 브러시의 공통 범위는 같으며 대상 정의의 범위가 좁으면 제한된 값을 미리보기에 표시합니다.
 
 로컬 속성 프리셋 JSON 저장/읽기와 적용 전 자동 백업 복원을 제공합니다. 전체 초기화는 확인 미리보기를 거쳐 임시본에 반영하며 적용 전 설정은 백업으로 복구합니다. 도구 설정은 그림의 실행 취소와 분리됩니다. 스포이트/이동 도구 자체의 편집 기능은 해당 기능 항목에서 구현합니다.
+
+## preferences | 언어·IME·확인창 | 한글 영어 입력기 자동 전환 조합 복원 경고 확인창 전체 개별
+
+Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어와 입력란의 IME 유지·열기·닫기 옵션을 고릅니다. 기본값은 사용자 상태 유지입니다. 숫자 입력란은 유지/닫기만 선택할 수 있습니다. 옵션은 Drawer UI 스레드의 포커스 창에만 적용하고 입력 이탈·창 포커스 상실 때 진입 전 IME 열림 상태를 복원합니다. 입력 언어나 변환 모드 자체를 바꾸지 않습니다.
+
+조합 중에는 그림 단축키와 입력 Enter 확정을 억제합니다. Esc는 조합을 취소하며 입력 창은 유지합니다. 창 전환도 조합 문자열을 숫자로 확정하지 않습니다. 시스템이 상태 제어를 거부하면 이전 상태를 유지하고 이유를 표시합니다. IME에서 전달된 텍스트는 입력란의 세션에만 사용합니다.
+
+숨긴 도구 속성/도크 초기화 확인창은 목록에서 각각 복원하거나 Restore all confirmations로 모두 복원합니다. 문서의 미저장 변경을 묻는 저장 확인창은 항상 표시됩니다. 초기화 확인에서 Do not show again을 확정하면 그 안내만 숨깁니다.
+
+## tutorial-ko | 로컬 그리기 안내 | 튜토리얼 처음 마우스 로컬 문서 저장 펜
+
+1. New canvas에서 크기와 DPI를 정하고 새 문서를 만듭니다.
+2. B/N/E/W로 펜·연필·지우개·워시를 고르고 Test painting의 독립 영역에서 마우스로 시험합니다. 실제 문서 획 엔진은 해당 기능 항목에서 추가합니다.
+3. 휠로 확대하고 가운데 버튼 또는 Space+드래그로 보기만 이동합니다. 정보 창에서 두 점을 지정하면 문서 단위로 거리를 측정할 수 있습니다.
+4. Save as로 로컬 .drawer 문서를 저장하고 PNG 출력은 별도 사본으로 만듭니다. 여러 보기창은 같은 그림을 공유합니다.
+5. 입력란은 Enter/포커스 이동으로 확정하고 Esc로 편집을 취소합니다. 조합 중 Esc는 조합만 취소합니다. F1은 포커스 제어기의 로컬 설명을 엽니다.
+6. 펜 하드웨어 검증은 별도 단계입니다. 온라인 계정이나 클라우드 소재가 필요하지 않습니다.
+
+## tutorial-en | Offline drawing tutorial | tutorial beginner mouse pen local save
+
+1. Create a document with New canvas, dimensions and DPI.
+2. Choose Pen/Pencil/Eraser/Wash with the default B/N/E/W keys. Try mouse strokes in the independent Test painting area. The document stroke engine is added in its checklist item.
+3. Zoom with the wheel and pan with the middle button or Space+drag. The Information window measures two points in document units.
+4. Save a local .drawer document; PNG export creates a separate copy. Multiple views share one drawing.
+5. Commit field edits with Enter or focus change; Esc cancels an edit. During IME composition, Esc cancels composition only. F1 opens local context help.
+6. Physical pen validation is a separate step. No online account or cloud assets are required.

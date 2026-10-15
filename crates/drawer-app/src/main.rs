@@ -22,6 +22,7 @@ mod navigator_panel;
 mod new_canvas;
 mod panels;
 mod paste_dialog;
+mod preferences;
 mod quality;
 mod reference_pane;
 mod revert;
@@ -95,6 +96,7 @@ struct Drawer {
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
     properties: tool_properties::Properties,
+    preferences: preferences::Preferences,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
@@ -195,6 +197,7 @@ impl Drawer {
             controls: Default::default(),
             tool_input: Default::default(),
             properties: Default::default(),
+            preferences: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
@@ -376,6 +379,7 @@ impl Drawer {
         if ui.ctx().zoom_factor() != self.interface.settings.zoom {
             ui.ctx().set_zoom_factor(self.interface.settings.zoom);
         }
+        self.begin_input_preferences(ui.ctx());
         self.begin_context_help(ui.ctx());
         self.workspaces.input(ui.ctx());
         self.screen_mode_inputs(ui.ctx());
@@ -485,6 +489,7 @@ impl Drawer {
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
         self.property_settings(ui.ctx());
+        self.preference_settings(ui.ctx());
         self.behavior_settings(ui.ctx());
         self.cursor_settings(ui.ctx());
         self.command_popups(ui.ctx());
@@ -506,6 +511,7 @@ impl Drawer {
         self.interface_settings(ui.ctx());
         self.resolve_context_help(ui.ctx());
         self.help_window(ui.ctx());
+        self.update_input_preferences(ui.ctx());
         self.persist_interface();
         self.sync_tool_properties();
         self.update_power();
@@ -624,6 +630,11 @@ impl eframe::App for Drawer {
                 self.smoke_start_sizing(ui.ctx());
             }
             if self.frames == 5 {
+                // Give only this hidden smoke window an input context for the next-pass probe.
+                let probe_id = egui::Id::new("drawer-smoke-ime-probe");
+                ui.memory_mut(|m| m.request_focus(probe_id));
+                let mut probe = String::new();
+                ui.add(egui::TextEdit::singleline(&mut probe).id(probe_id));
                 self.workspaces.store.current.layout.titles = true;
                 self.workspaces.store.current.layout.arrangement =
                     drawer_core::layout::Arrangement::Tile;
@@ -633,6 +644,10 @@ impl eframe::App for Drawer {
                 fail_smoke();
             }
             if self.frames >= 6 && self.sizing_dialog.is_none() {
+                let native_ime = preferences::native_probe(frame).unwrap_or_else(|e| {
+                    eprintln!("IME probe: {e}");
+                    fail_smoke()
+                });
                 if self.layout.rendered_windows != self.tabs.len()
                     || !self.workspaces.store.current.layout.panel_locks[0].position
                 {
@@ -1063,7 +1078,7 @@ impl eframe::App for Drawer {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

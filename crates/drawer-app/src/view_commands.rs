@@ -14,7 +14,8 @@ impl Drawer {
         }
     }
     pub(super) fn view_shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input()
+        if super::preferences::composing(ctx)
+            || ctx.egui_wants_keyboard_input()
             || self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()

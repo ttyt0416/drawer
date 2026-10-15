@@ -10,6 +10,8 @@ pub(super) struct Layout {
     pub open: bool,
     pub generation: u64,
     draft: Option<Settings>,
+    confirm_reset: bool,
+    hide_reset: bool,
     popup: Option<Kind>,
     views: HashMap<u64, canvas_view::CanvasView>,
     pub rendered_windows: usize,
@@ -55,9 +57,51 @@ impl Drawer {
                         self.layout.cancel_button = Some(c.rect);
                     }
                     if crate::help::button(ui, "Reset layout draft", "workspace").clicked() {
-                        draft = Default::default();
+                        if self
+                            .workspaces
+                            .store
+                            .current
+                            .preferences
+                            .suppressed
+                            .contains(&drawer_core::preferences::Confirmation::ResetLayout)
+                        {
+                            draft = Default::default();
+                        } else {
+                            self.layout.confirm_reset = true;
+                        }
                     }
                 });
+                if self.layout.confirm_reset {
+                    ui.label(
+                        "Reset the layout draft? Apply is still required to change your workspace.",
+                    );
+                    crate::help::checkbox(
+                        ui,
+                        &mut self.layout.hide_reset,
+                        "Do not show this reset confirmation again",
+                        "preferences",
+                    );
+                    ui.horizontal(|ui| {
+                        if crate::help::button(ui, "Confirm layout draft reset", "preferences")
+                            .clicked()
+                        {
+                            draft = Default::default();
+                            self.layout.confirm_reset = false;
+                            if self.layout.hide_reset {
+                                self.workspaces
+                                    .store
+                                    .current
+                                    .preferences
+                                    .suppressed
+                                    .insert(drawer_core::preferences::Confirmation::ResetLayout);
+                            }
+                        }
+                        if crate::help::button(ui, "Keep layout draft", "preferences").clicked() {
+                            self.layout.confirm_reset = false;
+                            self.layout.hide_reset = false;
+                        }
+                    });
+                }
                 crate::help::checkbox(ui, &mut draft.titles, "Show title bars", "workspace");
                 crate::help::checkbox(ui, &mut draft.menu, "Show command menu line", "workspace");
                 ui.label(
@@ -116,6 +160,8 @@ impl Drawer {
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.layout.open = false;
             self.layout.draft = None;
+            self.layout.confirm_reset = false;
+            self.layout.hide_reset = false;
         } else if apply {
             let mut snapshot = self.capture_workspace();
             snapshot.layout = draft.clone();

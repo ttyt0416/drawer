@@ -171,6 +171,7 @@ impl Drawer {
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
             || ctx.egui_wants_keyboard_input()
+            || super::preferences::composing(ctx)
             || self.controls.quick.is_some()
             || egui::Popup::is_any_open(ctx)
     }
@@ -259,6 +260,12 @@ impl Drawer {
                             };
                             let response =
                                 crate::help::selectable(ui, self.selected == tip, label, "tools");
+                            response
+                                .clone()
+                                .on_hover_text(super::preferences::tool_hint(
+                                    self.workspaces.store.current.preferences.language,
+                                    tip,
+                                ));
                             response.widget_info(|| {
                                 egui::WidgetInfo::selected(
                                     egui::WidgetType::SelectableLabel,

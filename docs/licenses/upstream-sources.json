@@ -102,5 +102,16 @@
     "source": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
     "path": "docs/licenses/upstream/aclysma-profiling-8271551172eb-LICENSE-APACHE.txt",
     "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551"
+  },
+  {
+    "repository": "eto0202/michiu",
+    "revision": "6235158b40e8678ab7634152c7ea939da9bcbfbb",
+    "packages": [
+      "michiu_guard",
+      "michiu_window"
+    ],
+    "source": "https://raw.githubusercontent.com/eto0202/michiu/6235158b40e8678ab7634152c7ea939da9bcbfbb/LICENSE-MIT",
+    "path": "docs/licenses/upstream/eto0202-michiu-6235158b40e8-LICENSE-MIT.txt",
+    "sha256": "0dd9dafc67f5b1f9e8df09e51a81bc9855394e410536fe42580609498678a259"
   }
 ]

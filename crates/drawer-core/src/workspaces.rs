@@ -258,6 +258,8 @@ pub struct Snapshot {
     pub layout: crate::layout::Settings,
     #[serde(default)]
     pub properties: Option<crate::tool_properties::Settings>,
+    #[serde(default)]
+    pub preferences: crate::preferences::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
     pub aids: crate::aids::AidPreferences,
@@ -283,6 +285,7 @@ impl Default for Snapshot {
             information: Default::default(),
             layout: Default::default(),
             properties: None,
+            preferences: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
             aids: Default::default(),
@@ -327,6 +330,7 @@ impl Snapshot {
             && self.cursors.valid()
             && self.information.valid()
             && self.layout.valid()
+            && self.preferences.valid()
             && self.properties.as_ref().is_none_or(|s| s.valid())
             && self.aids.valid()
             && self.interpolation.version == 1
@@ -389,6 +393,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.preferences = incoming.preferences.clone();
             next.properties = incoming.properties.clone();
             next.input = incoming.input;
             next.help = incoming.help.clone();

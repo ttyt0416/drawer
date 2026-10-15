@@ -603,8 +603,12 @@ dependencies = [
  "drawer-core",
  "eframe",
  "keepawake",
+ "michiu_window",
+ "raw-window-handle",
  "rfd",
  "tiff",
+ "windows",
+ "winsafe",
 ]
 
 [[package]]
@@ -1389,6 +1393,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "michiu_guard"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8cc57bcd64cc17b922492663d3d328cdd75318bbac73dd1c66953768df4698c"
+
+[[package]]
+name = "michiu_window"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1608b1fcb9d9b687fb40c24be28189194bff9a8f2685636fd8819e5c4550104a"
+dependencies = [
+ "michiu_guard",
+ "raw-window-handle",
+ "thiserror 2.0.21",
+ "tracing",
+ "windows",
+ "windows-core",
 ]
 
 [[package]]
@@ -3116,6 +3140,12 @@ checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ef0ffc427f045c0cc9ebffd6f4f91153dcd2a1547b5c3c29ee3f541e16e95c6"
 
 [[package]]
 name = "x11rb"
