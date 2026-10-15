@@ -35,6 +35,7 @@ pub fn restore_values(settings: &mut Settings, tip: BrushTip) -> Result<(), Stri
 pub fn restore_input(snapshot: &mut Snapshot, tip: BrushTip) {
     let n = BrushTip::ALL.iter().position(|t| *t == tip).unwrap();
     snapshot.input.smoothing[n] = 0.0;
+    snapshot.input.ends[n] = Default::default();
     snapshot.input.mouse_pressure[n] = Default::default();
     snapshot.pressure.tools[n] = Default::default();
 }

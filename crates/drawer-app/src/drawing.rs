@@ -77,6 +77,7 @@ pub(super) struct Drawing {
     pub hardness: Option<[f64; 4]>,
     pub spacing: Option<[f64; 4]>,
     pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
+    pub ends: [drawer_core::stroke_ends::Settings; 4],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -352,10 +353,14 @@ impl Drawing {
                     s.last_timer = s.last_timer.max(micros);
                 }
                 s.mouse_dirty = true;
-                mouse.push(drawer_core::mouse_pressure::Sample {
-                    point: s.projection.point(pos),
-                    micros,
-                })
+                mouse.push_input(
+                    drawer_core::mouse_pressure::Sample {
+                        point: s.projection.point(pos),
+                        micros,
+                    },
+                    pressure,
+                    angle,
+                )
             } else {
                 s.stroke.set_angle_offset(angle).and_then(|_| {
                     s.stroke
@@ -593,19 +598,35 @@ impl Drawing {
                     let to = projection.point(pos);
                     style.smoothing = 0.0;
                     let config = self.mouse_settings[index];
-                    if event.source.kind == drawer_core::pointer_input::Kind::Mouse
-                        && config.active()
-                    {
-                        if config.effect == drawer_core::mouse_pressure::Effect::Spray {
+                    let virtual_mouse = event.source.kind
+                        == drawer_core::pointer_input::Kind::Mouse
+                        && config.active();
+                    if virtual_mouse || self.ends[index].active() {
+                        if virtual_mouse
+                            && config.effect == drawer_core::mouse_pressure::Effect::Spray
+                        {
                             return Err("Timed spray needs a held stroke; select another mouse behavior to connect a line".into());
                         }
-                        let mut replay =
-                            drawer_core::mouse_pressure::Replay::begin(doc, layer, style, config)?;
+                        let mut replay = drawer_core::mouse_pressure::Replay::begin(
+                            doc,
+                            layer,
+                            style,
+                            if virtual_mouse {
+                                config
+                            } else {
+                                Default::default()
+                            },
+                        )?
+                        .configure_input(self.ends[index], !virtual_mouse)?;
                         for point in [from, to] {
-                            replay.push(drawer_core::mouse_pressure::Sample {
-                                point,
-                                micros: None,
-                            })?;
+                            replay.push_input(
+                                drawer_core::mouse_pressure::Sample {
+                                    point,
+                                    micros: None,
+                                },
+                                event.pressure_value(),
+                                0.0,
+                            )?;
                         }
                         if replay
                             .render_cancel(doc, true, || {
@@ -636,25 +657,33 @@ impl Drawing {
             {
                 Ok(stroke) => {
                     let config = self.mouse_settings[index];
-                    let mouse = if event.source.kind == drawer_core::pointer_input::Kind::Mouse
-                        && config.active()
-                    {
-                        match drawer_core::mouse_pressure::Replay::begin(
-                            doc,
-                            layer.unwrap(),
-                            style,
-                            config,
-                        ) {
-                            Ok(mouse) => Some(mouse),
-                            Err(e) => {
-                                self.error = Some(e);
-                                self.cancel();
-                                continue;
+                    let virtual_mouse = event.source.kind
+                        == drawer_core::pointer_input::Kind::Mouse
+                        && config.active();
+                    let mouse =
+                        if virtual_mouse || style.smoothing > 0.0 || self.ends[index].active() {
+                            match drawer_core::mouse_pressure::Replay::begin(
+                                doc,
+                                layer.unwrap(),
+                                style,
+                                if virtual_mouse {
+                                    config
+                                } else {
+                                    Default::default()
+                                },
+                            )
+                            .and_then(|r| r.configure_input(self.ends[index], !virtual_mouse))
+                            {
+                                Ok(mouse) => Some(mouse),
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    self.cancel();
+                                    continue;
+                                }
                             }
-                        }
-                    } else {
-                        None
-                    };
+                        } else {
+                            None
+                        };
                     self.last_source = Some(event.source);
                     self.active = Some(Session {
                         stroke,
@@ -693,6 +722,7 @@ impl Drawer {
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
+        self.drawing.ends = self.workspaces.store.current.input.ends;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1250,6 +1280,76 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn native_geometry_pressure_and_stabilization_are_frozen_and_escape_cancels() {
+        use drawer_core::pointer_input::{Event, Kind, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        app.panels.settings.brush_size = 8.0;
+        app.workspaces.store.current.input.smoothing[0] = 0.8;
+        let ends = drawer_core::stroke_ends::Settings {
+            start: 6.0,
+            end: 12.0,
+        };
+        app.workspaces.store.current.input.ends[0] = ends;
+        let p = point(&ctx, &app, [10.5, 20.5]);
+        let q = point(&ctx, &app, [40.5, 20.5]);
+        let source = Source {
+            kind: Kind::Pen,
+            device: 3,
+            contact: 9,
+        };
+        let event = |phase, pos: egui::Pos2| Event {
+            source,
+            phase,
+            position: [pos.x as f64, pos.y as f64],
+            pressure: Some(0.5),
+            attributes: Default::default(),
+            origin: Default::default(),
+        };
+        let before = app.documents[0].snapshot();
+        app.drawing.incoming = vec![event(Phase::Down, p)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(
+            app.drawing
+                .active
+                .as_ref()
+                .unwrap()
+                .mouse
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .ends,
+            ends
+        );
+        app.workspaces.store.current.input.ends[0] = Default::default();
+        app.workspaces.store.current.input.smoothing[0] = 0.0;
+        app.drawing.incoming = vec![event(Phase::Move, q), event(Phase::Up, q)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        let record = &app.documents[0].scene.mouse_strokes[0];
+        assert_eq!(record.ends, ends);
+        assert_eq!(record.style.smoothing, 0.8);
+        assert!(record.native_pressure);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(app.documents[0].undo());
+        assert!(app.documents[0].snapshot() == before);
+        app.workspaces.store.current.input.ends[0] = ends;
+        app.drawing.incoming = vec![event(Phase::Down, p), event(Phase::Move, q)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        assert!(!app.drawing.pending());
+        assert!(app.documents[0].snapshot() == before);
     }
     #[test]
     fn brush_parameters_freeze_on_down_and_zero_opacity_has_no_history() {

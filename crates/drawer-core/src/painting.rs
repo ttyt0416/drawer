@@ -66,6 +66,9 @@ pub struct Stroke {
     last_stamp: Option<Point>,
     pressure: f64,
     last_stamp_pressure: f64,
+    scale: f64,
+    last_scale: f64,
+    last_stamp_scale: f64,
     angle_offset: f64,
     last_stamp_angle: f64,
     remainder: f64,
@@ -77,6 +80,13 @@ pub struct Stroke {
     pixel_work: u64,
 }
 impl Stroke {
+    pub fn set_geometry_scale(&mut self, scale: f64) -> Result<(), String> {
+        if !(0.0..=1.0).contains(&scale) {
+            return Err("Invalid stroke geometry scale".into());
+        }
+        self.scale = scale;
+        Ok(())
+    }
     pub fn dab_count(&self) -> u32 {
         self.dabs
     }
@@ -125,7 +135,7 @@ impl Stroke {
         {
             return Err("Invalid timed dab".into());
         }
-        self.stamp(doc, point, pressure)?;
+        self.stamp(doc, point, pressure, self.scale)?;
         self.last = Some(anchor);
         self.pressure = pressure;
         self.direct = true;
@@ -303,6 +313,9 @@ impl Stroke {
             last_stamp: None,
             pressure: 1.0,
             last_stamp_pressure: 1.0,
+            scale: 1.0,
+            last_scale: 1.0,
+            last_stamp_scale: 1.0,
             angle_offset: 0.0,
             last_stamp_angle: 0.0,
             remainder: 0.0,
@@ -348,12 +361,14 @@ impl Stroke {
         let Some((_, to)) = self.trace.receive(point, self.style.smoothing) else {
             if ((self.pressure != pressure
                 && (self.style.pressure.size || self.style.pressure.opacity))
-                || self.last_stamp_angle != self.angle_offset)
+                || self.last_stamp_angle != self.angle_offset
+                || self.last_stamp_scale != self.scale)
                 && let Some(last) = self.last
             {
-                self.stamp(doc, last, pressure)?;
+                self.stamp(doc, last, pressure, self.scale)?;
             }
             self.pressure = pressure;
+            self.last_scale = self.scale;
             return Ok(());
         };
         if let Some(from) = self.last {
@@ -368,7 +383,9 @@ impl Stroke {
             } else {
                 1.0
             };
-            let step = self.style.step(pressure_scale);
+            let step = self
+                .style
+                .step(pressure_scale * self.last_scale.min(self.scale));
             if length > 1e-9 {
                 let radius = self.style.shape.size * 0.5 + 1.0;
                 if let Some([begin, end]) = clip(
@@ -391,20 +408,23 @@ impl Stroke {
                                 doc,
                                 [from[0] + delta[0] * t, from[1] + delta[1] * t],
                                 self.pressure + (pressure - self.pressure) * t,
+                                self.last_scale + (self.scale - self.last_scale) * t,
                             )?;
                         }
                     }
                 }
                 self.remainder = (self.remainder + length).rem_euclid(step);
-            } else if self.pressure != pressure
-                && (self.style.pressure.size || self.style.pressure.opacity)
+            } else if (self.pressure != pressure
+                && (self.style.pressure.size || self.style.pressure.opacity))
+                || self.last_scale != self.scale
             {
-                self.stamp(doc, to, pressure)?;
+                self.stamp(doc, to, pressure, self.scale)?;
             }
         } else {
-            self.stamp(doc, to, pressure)?;
+            self.stamp(doc, to, pressure, self.scale)?;
         }
         self.last = Some(to);
+        self.last_scale = self.scale;
         self.pressure = pressure;
         Ok(())
     }
@@ -418,9 +438,10 @@ impl Stroke {
                     || (self.last_stamp_pressure != self.pressure
                         && (self.style.pressure.size || self.style.pressure.opacity))
                     || self.last_stamp_angle != self.angle_offset
+                    || self.last_stamp_scale != self.scale
             })
         {
-            self.stamp(doc, last, self.pressure)?;
+            self.stamp(doc, last, self.pressure, self.scale)?;
         }
         Ok(())
     }
@@ -470,6 +491,7 @@ impl Stroke {
     pub fn shape(&self) -> Shape {
         let mut shape = self.style.shape;
         shape.angle += self.angle_offset;
+        shape.size *= self.scale;
         if self.style.pressure.size {
             shape.size *= self
                 .style
@@ -480,18 +502,30 @@ impl Stroke {
         }
         shape
     }
+    pub(crate) fn restore_input_trace(&mut self, trace: Trace, smoothing: f64) {
+        self.trace = trace;
+        self.style.smoothing = smoothing;
+    }
     pub fn trace(&self) -> Trace {
         self.trace.clone()
     }
     pub fn changed_pixels(&self) -> usize {
         self.changes.len()
     }
-    fn stamp(&mut self, doc: &Document, center: Point, pressure: f64) -> Result<(), String> {
+    fn stamp(
+        &mut self,
+        doc: &Document,
+        center: Point,
+        pressure: f64,
+        scale: f64,
+    ) -> Result<(), String> {
         self.last_stamp = Some(center);
         self.last_stamp_pressure = pressure;
+        self.last_stamp_scale = scale;
         self.last_stamp_angle = self.angle_offset;
         let pressure = self.style.pressure.response.map(pressure)?;
         let mut shape = self.style.shape;
+        shape.size *= scale;
         shape.angle += self.angle_offset;
         if self.style.pressure.size {
             shape.size *= pressure;

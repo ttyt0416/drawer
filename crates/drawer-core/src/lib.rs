@@ -55,3 +55,5 @@ pub mod tablet_mapping;
 pub mod touch;
 
 pub mod basic_brush;
+
+pub mod stroke_ends;

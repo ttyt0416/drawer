@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 9;
+const VERSION: u32 = 10;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -323,6 +323,58 @@ mod tests {
             16,
         )
         .unwrap()
+    }
+    #[test]
+    fn frozen_geometry_native_pressure_roundtrip_and_version_nine_defaults() {
+        let root = TempDir::new();
+        let path = root.0.join("geometry.drawer");
+        let mut d = sample();
+        d.scene.mouse_strokes.push(crate::mouse_pressure::Metadata {
+            layer: 0,
+            settings: Default::default(),
+            style: crate::painting::Style {
+                shape: Default::default(),
+                tip: crate::assets::BrushTip::Pen,
+                color: [40, 80, 120, 255],
+                opacity: 0.5,
+                hardness: 0.3,
+                spacing: 0.2,
+                smoothing: 0.8,
+                pressure: Default::default(),
+            },
+            count: 1,
+            ends: crate::stroke_ends::Settings {
+                start: 2.0,
+                end: 3.0,
+            },
+            native_pressure: true,
+        });
+        save(&mut d, &path).unwrap();
+        assert!(open(&path, 4096).unwrap().snapshot() == d.snapshot());
+        let bytes = fs::read(&path).unwrap();
+        let offset = 32 + 4 + d.layers[0].name.len() + 4 + 4 + 8 + d.layers[0].pixels.len() * 4;
+        let length = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes[offset + 4..offset + 4 + length]).unwrap();
+        for record in value["mouse_strokes"].as_array_mut().unwrap() {
+            record.as_object_mut().unwrap().remove("ends");
+            record.as_object_mut().unwrap().remove("native_pressure");
+        }
+        let old_json = serde_json::to_vec(&value).unwrap();
+        let mut legacy = bytes[..offset].to_vec();
+        legacy.extend_from_slice(&(old_json.len() as u32).to_le_bytes());
+        legacy.extend_from_slice(&old_json);
+        legacy.extend_from_slice(&bytes[offset + 4 + length..]);
+        legacy[8..12].copy_from_slice(&9u32.to_le_bytes());
+        fs::write(&path, legacy).unwrap();
+        let reopened = open(&path, 4096).unwrap();
+        assert_eq!(reopened.layers, d.layers);
+        assert_eq!(
+            reopened.scene.mouse_strokes[0].style,
+            d.scene.mouse_strokes[0].style
+        );
+        assert_eq!(reopened.scene.mouse_strokes[0].ends, Default::default());
+        assert!(!reopened.scene.mouse_strokes[0].native_pressure);
     }
     #[test]
     fn native_round_trip_preserves_layers_and_failed_save_keeps_previous_file() {

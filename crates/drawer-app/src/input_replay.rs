@@ -54,6 +54,7 @@ pub(super) fn run(
     app.panels.settings.brush_hardness = sequence.hardness;
     app.panels.settings.brush_spacing = sequence.spacing;
     app.workspaces.store.current.input.smoothing = sequence.smoothing;
+    app.workspaces.store.current.input.ends = sequence.ends;
     app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
     app.workspaces.store.current.cursors = sequence.cursors;
     app.references.session.workspace.color = sequence.color;
@@ -295,6 +296,49 @@ impl Drawer {
     }
 }
 
+pub(super) fn smoke_ends() -> Result<(), String> {
+    let cancel = AtomicBool::new(false);
+    let progress = AtomicUsize::new(0);
+    let mut s = Sequence::default();
+    s.smoothing[0] = 0.95;
+    s.ends[0] = drawer_core::stroke_ends::Settings {
+        start: 8.0,
+        end: 8.0,
+    };
+    s.pressure.tools[0].size = false;
+    s.pressure.tools[0].opacity = true;
+    s.samples = vec![s.samples[0].clone(), s.samples[3].clone()];
+    for sample in &mut s.samples {
+        sample.event.pressure = Some(0.5);
+    }
+    let a = run(&s, &cancel, &progress)?;
+    if !a.record.passed || a.pixels[20 * 64 + 40][3] != 128 || a.pixels[20 * 64 + 58][3] != 0 {
+        return Err("Smoothed native-pressure geometry endpoint/opacity failed".into());
+    }
+    for mode in drawer_core::brush_cursor::Mode::ALL {
+        s.cursors.tools[0].mode = mode;
+        s.cursors.tools[0].prediction = true;
+        let b = run(&s, &cancel, &progress)?;
+        if !b.record.passed || b.pixels != a.pixels {
+            return Err("Raw/corrected/predicted cursor changed geometry pixels".into());
+        }
+    }
+    let mut dot = s.clone();
+    dot.samples[1].event.position = dot.samples[0].event.position;
+    let p = dot.samples[0].event.position;
+    let d = run(&dot, &cancel, &progress)?;
+    if !d.record.passed || d.pixels[p[1].floor() as usize * 64 + p[0].floor() as usize][3] != 128 {
+        return Err("Tapered single click vanished".into());
+    }
+    let mut missing = s;
+    missing.samples.pop();
+    missing.expected_strokes = 0;
+    let m = run(&missing, &cancel, &progress)?;
+    if !m.record.passed || !m.record.incomplete_cancelled {
+        return Err("Pending geometry stroke was committed on focus loss".into());
+    }
+    Ok(())
+}
 pub(super) fn smoke_replay() -> Result<(), String> {
     let cancel = AtomicBool::new(false);
     let progress = AtomicUsize::new(0);
@@ -322,6 +366,10 @@ pub(super) fn smoke_replay() -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, tiny_spec};
+    #[test]
+    fn smoothed_tapered_native_replay_click_end_cursor_and_missing_release() {
+        smoke_ends().unwrap();
+    }
     #[test]
     fn sparse_thin_pen_mouse_curves_same_timestamps_and_frozen_parameters_replay() {
         let cancel = AtomicBool::new(false);

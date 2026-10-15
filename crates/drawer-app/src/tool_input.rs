@@ -7,6 +7,10 @@ pub(super) struct ToolInput {
     draft: Option<Settings>,
     modifiers: [bool; 3],
     blocked: [bool; 3],
+    #[cfg(test)]
+    apply_button: Option<egui::Rect>,
+    #[cfg(test)]
+    cancel_button: Option<egui::Rect>,
 }
 impl Drawer {
     fn runtime_tool(&mut self, tool: BrushTip, document: Option<u64>) {
@@ -161,10 +165,19 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
+        let mut layer = None;
         egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).vscroll(true).show(ctx,|ui|{
+            layer=Some(ui.layer_id());
+            ui.horizontal(|ui|{let a=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior"));let c=crate::help::button(ui,"Cancel input behavior","modifier-tools");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.tool_input.apply_button=Some(a.rect);self.tool_input.cancel_button=Some(c.rect);}});
             super::edit::slider(ui,&mut draft.hold_millis,0..=5000,"Temporary tool threshold (ms)","modifier-tools");
             super::edit::slider(ui,&mut draft.drag_pixels,0.0..=64.0,"Drag threshold (screen pixels)","modifier-tools");
             for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.label()),"modifier-tools");}
+            ui.collapsing("Stroke start / end geometry — all drawing devices",|ui| {
+                ui.label("Distance in document pixels; 0 disables that end. Position stabilization and real pressure remain independent.");
+                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-ends",n),|ui| {
+                    ui.label(tip.label());super::edit::number(ui,&mut draft.ends[n].start,0.0..=1e6,1.0," px start","modifier-tools");super::edit::number(ui,&mut draft.ends[n].end,0.0..=1e6,1.0," px end","modifier-tools");
+                });}
+            });
             ui.collapsing("Mouse virtual pressure",|ui| {
                 for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.label(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}
             });
@@ -182,13 +195,19 @@ impl Drawer {
             }
             ui.label("Input fields, menus and dialogs take priority. After suspension, release the modifier before using it again.");
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
-            ui.horizontal_wrapped(|ui|{apply=crate::help::button(ui,"Apply input behavior","modifier-tools").clicked();cancel=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,"Reset draft","modifier-tools").clicked(){draft=Default::default();}
-                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>draft=s.input,Err(e)=>self.status=Some(e.to_string())}}
+            ui.horizontal_wrapped(|ui|{apply|=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior")).clicked();cancel|=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,"Reset draft","modifier-tools").clicked(){draft=Default::default();super::edit::discard_layer(ctx,ui.layer_id());}
+                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>{draft=s.input;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
             });
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if let Some(layer) = layer {
+                super::edit::discard_layer(ctx, layer);
+            }
             self.tool_input.open = false;
             self.tool_input.draft = None;
+        } else if apply && layer.is_some_and(|layer| super::edit::invalid_layer(ctx, layer)) {
+            self.status = Some("Finish or cancel the invalid numeric input before applying".into());
+            self.tool_input.draft = Some(draft);
         } else if apply {
             let mut s = self.capture_workspace();
             s.input = draft;
@@ -212,6 +231,9 @@ impl Drawer {
                 None,
             ) {
                 Ok(()) => {
+                    if let Some(layer) = layer {
+                        super::edit::discard_layer(ctx, layer);
+                    }
                     self.tool_input.open = false;
                     self.tool_input.draft = None;
                 }
@@ -381,6 +403,49 @@ mod tests {
         assert_eq!(restarted.selected, BrushTip::Pen);
         assert_eq!(app.documents[0].snapshot(), before);
         assert_eq!(app.documents[0].history_counts(), history);
+    }
+    #[test]
+    fn stabilization_and_geometry_settings_cancel_apply_backup_restart_without_drawing() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, 0.0, vec![]);
+        let before = app.documents[0].snapshot();
+        let baseline = app.capture_workspace();
+        let mut draft = baseline.input;
+        draft.smoothing[0] = 0.95;
+        draft.ends[0] = drawer_core::stroke_ends::Settings {
+            start: 9.0,
+            end: 17.0,
+        };
+        app.tool_input.open = true;
+        app.tool_input.draft = Some(draft);
+        frame(&ctx, &mut app, 1.0, vec![]);
+        frame(&ctx, &mut app, 1.1, vec![]);
+        let rect = app.tool_input.cancel_button.unwrap();
+        crate::tests::click(&ctx, &mut app, rect);
+        assert_eq!(app.capture_workspace(), baseline);
+        app.tool_input.open = true;
+        app.tool_input.draft = Some(draft);
+        frame(&ctx, &mut app, 2.0, vec![]);
+        frame(&ctx, &mut app, 2.1, vec![]);
+        let rect = app.tool_input.apply_button.unwrap();
+        crate::tests::click(&ctx, &mut app, rect);
+        assert!(!app.tool_input.open);
+        assert_eq!(app.workspaces.store.current.input, draft);
+        let backup = drawer_core::workspaces::Snapshot::read(
+            &storage.root().join("settings/workspace-before-apply.json"),
+        )
+        .unwrap();
+        assert_eq!(backup.input, baseline.input);
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.workspaces.store.current.input, draft);
+        assert!(app.documents[0].snapshot() == before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
     #[test]
     fn timed_tool_keys_release_together_focus_loss_overlap_and_restart() {

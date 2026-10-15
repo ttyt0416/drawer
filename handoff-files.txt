@@ -169,3 +169,6 @@ crates/drawer-core/src/basic_brush.rs
 docs/process/basic-brushes.md
 
 docs/process/stroke-spacing.md
+
+crates/drawer-core/src/stroke_ends.rs
+docs/process/stroke-ends.md

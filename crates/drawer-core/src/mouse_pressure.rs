@@ -127,10 +127,19 @@ pub struct Metadata {
     pub settings: Settings,
     pub style: Style,
     pub count: u32,
+    #[serde(default)]
+    pub ends: crate::stroke_ends::Settings,
+    #[serde(default)]
+    pub native_pressure: bool,
 }
 impl Metadata {
     pub fn valid(&self) -> bool {
-        self.layer < 256 && self.settings.valid() && self.style.valid() && self.count > 0
+        self.layer < 256
+            && self.settings.valid()
+            && self.style.valid()
+            && self.count > 0
+            && self.ends.valid()
+            && (!self.native_pressure || !self.settings.active())
     }
 }
 pub struct Replay {
@@ -142,6 +151,9 @@ pub struct Replay {
     samples: Vec<Sample>,
     clocks: Vec<bool>,
     budget: usize,
+    ends: crate::stroke_ends::Settings,
+    native_pressure: bool,
+    inputs: Vec<[f64; 2]>,
 }
 impl Replay {
     pub fn begin(
@@ -178,7 +190,30 @@ impl Replay {
             samples: vec![],
             clocks: vec![],
             budget,
+            ends: Default::default(),
+            native_pressure: false,
+            inputs: vec![],
         })
+    }
+    pub fn configure_input(
+        mut self,
+        ends: crate::stroke_ends::Settings,
+        native_pressure: bool,
+    ) -> Result<Self, String> {
+        if !ends.valid() || (native_pressure && self.settings.active()) {
+            return Err("Native pressure must stay independent of mouse virtual pressure".into());
+        }
+        self.ends = ends;
+        self.native_pressure = native_pressure;
+        Ok(self)
+    }
+    pub fn push_input(&mut self, sample: Sample, pressure: f64, angle: f64) -> Result<(), String> {
+        if !(0.0..=1.0).contains(&pressure) || !angle.is_finite() || angle.abs() > 360.0 {
+            return Err("Invalid native stroke pressure/angle".into());
+        }
+        self.push(sample)?;
+        *self.inputs.last_mut().unwrap() = [pressure, angle];
+        Ok(())
     }
     pub fn push(&mut self, sample: Sample) -> Result<(), String> {
         self.push_sample(sample, false)
@@ -201,6 +236,10 @@ impl Replay {
         self.clocks
             .try_reserve(1)
             .map_err(|_| "Mouse clock recording allocation failed")?;
+        self.inputs
+            .try_reserve(1)
+            .map_err(|_| "Stroke attribute recording allocation failed")?;
+        self.inputs.push([1.0, 0.0]);
         self.samples.push(sample);
         self.clocks.push(clock);
         Ok(())
@@ -220,6 +259,12 @@ impl Replay {
             result
         });
         let mut n = 0;
+        self.inputs.retain(|_| {
+            let result = keep[n];
+            n += 1;
+            result
+        });
+        let mut n = 0;
         self.clocks.retain(|_| {
             let result = keep[n];
             n += 1;
@@ -232,6 +277,8 @@ impl Replay {
             settings: self.settings,
             style: self.style,
             count: 1,
+            ends: self.ends,
+            native_pressure: self.native_pressure,
         }
     }
     pub fn samples(&self) -> &[Sample] {
@@ -271,6 +318,12 @@ impl Replay {
                 .map(|(_, p)| p)
                 .or(last)
                 .unwrap_or(sample.point);
+            // Release catches the filter up to the actual final sample, never prediction.
+            let point = if finalizing && n + 1 == self.samples.len() {
+                sample.point
+            } else {
+                point
+            };
             if let Some(previous) = last {
                 distance += (point[0] - previous[0]).hypot(point[1] - previous[1]);
             }
@@ -293,6 +346,7 @@ impl Replay {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;
         }
         if style.color[3] == 0 || style.opacity == 0.0 {
+            stroke.restore_input_trace(trace, self.style.smoothing);
             return Ok(stroke);
         }
         if self.settings.effect == Effect::Spray {
@@ -300,6 +354,7 @@ impl Replay {
             if cancel() {
                 return Err("Timed mouse spray cancelled".into());
             }
+            stroke.restore_input_trace(trace, self.style.smoothing);
             return Ok(stroke);
         }
         let area = style.shape.size.min(doc.width as f64)
@@ -312,7 +367,7 @@ impl Replay {
         }
         let mut previous: Option<(Point, f64, Option<u64>)> = None;
         let mut steps = 0usize;
-        for (point, at, micros) in points {
+        for (index, (point, at, micros)) in points.into_iter().enumerate() {
             if let Some((from, start, time)) = previous {
                 let speed = if self.settings.speed {
                     match (time, micros) {
@@ -353,6 +408,20 @@ impl Replay {
                     positions.sort_by(f64::total_cmp);
                     positions.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
                 }
+                if self.ends.active() && length > 1e-9 {
+                    for n in 0..=4 {
+                        for knot in [
+                            self.ends.start * n as f64 / 4.0,
+                            distance - self.ends.end * n as f64 / 4.0,
+                        ] {
+                            if knot > start && knot < at {
+                                positions.push(knot);
+                            }
+                        }
+                    }
+                    positions.sort_by(f64::total_cmp);
+                    positions.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+                }
                 steps = steps.saturating_add(positions.len().saturating_sub(count));
                 if steps > 262144 {
                     return Err(
@@ -369,20 +438,39 @@ impl Replay {
                     } else {
                         1.0
                     };
+                    let previous_input = self.inputs[index.saturating_sub(1)];
+                    let current_input = self.inputs[index];
+                    let p = if self.native_pressure {
+                        previous_input[0] + (current_input[0] - previous_input[0]) * t
+                    } else {
+                        self.settings.pressure(d, distance, finalizing, speed)
+                    };
+                    let angle = previous_input[1]
+                        + ((current_input[1] - previous_input[1] + 180.0).rem_euclid(360.0)
+                            - 180.0)
+                            * t;
+                    stroke.set_angle_offset((angle + 180.0).rem_euclid(360.0) - 180.0)?;
+                    stroke.set_geometry_scale(self.ends.scale(d, distance, finalizing))?;
                     stroke.sample_pressure(
                         doc,
                         [
                             from[0] + (point[0] - from[0]) * t,
                             from[1] + (point[1] - from[1]) * t,
                         ],
-                        self.settings.pressure(d, distance, finalizing, speed),
+                        p,
                     )?;
                 }
             } else {
+                stroke.set_angle_offset(self.inputs[index][1])?;
+                stroke.set_geometry_scale(self.ends.scale(at, distance, finalizing))?;
                 stroke.sample_pressure(
                     doc,
                     point,
-                    self.settings.pressure(at, distance, finalizing, 1.0),
+                    if self.native_pressure {
+                        self.inputs[index][0]
+                    } else {
+                        self.settings.pressure(at, distance, finalizing, 1.0)
+                    },
                 )?;
             }
             previous = Some((point, at, micros));
@@ -394,6 +482,7 @@ impl Replay {
         if cancel() {
             return Err("Mouse reconstruction cancelled before publication".into());
         }
+        stroke.restore_input_trace(trace, self.style.smoothing);
         Ok(stroke)
     }
     fn spray(
@@ -424,6 +513,8 @@ impl Replay {
                 return Err("Timed spray work budget exceeded; pending stroke cancelled".into());
             }
             let pressure = self.settings.pressure(distance, total, finalizing, speed);
+            let geometry = self.ends.scale(distance, total, finalizing);
+            stroke.set_geometry_scale(geometry)?;
             let scale = if self.style.pressure.size {
                 self.style.pressure.response.map(pressure)?
             } else {
@@ -435,6 +526,7 @@ impl Replay {
                 let radius = self.style.shape.size
                     * 0.5
                     * scale
+                    * geometry
                     * random(self.settings.seed, key * 2).sqrt();
                 let angle = std::f64::consts::TAU * random(self.settings.seed, key * 2 + 1);
                 let x = radius * angle.cos();
@@ -526,6 +618,71 @@ impl crate::scene::Scene {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn smoothing_finishes_at_real_endpoint_and_preserves_raw_curve_pressure_tilt_and_cancel() {
+        use super::*;
+        let d = doc();
+        let before = d.snapshot();
+        let mut st = style(BrushTip::Pen);
+        st.smoothing = 0.95;
+        st.shape.size = 4.0;
+        st.pressure.size = false;
+        st.pressure.opacity = true;
+        let mut r = Replay::begin(&d, 0, st, Default::default())
+            .unwrap()
+            .configure_input(Default::default(), true)
+            .unwrap();
+        for (point, p, angle) in [
+            ([5.5, 20.5], 0.5, 170.0),
+            ([40.5, 20.5], 0.5, -170.0),
+            ([40.5, 20.5], 0.0, -170.0),
+        ] {
+            r.push_input(
+                Sample {
+                    point,
+                    micros: None,
+                },
+                p,
+                angle,
+            )
+            .unwrap();
+        }
+        let preview = r.render(&d, false).unwrap();
+        assert_eq!(preview.trace().raw, Some([40.5, 20.5]));
+        assert_ne!(preview.trace().raw, preview.trace().corrected);
+        assert_eq!(preview.style().smoothing, 0.95);
+        let final_stroke = r.render(&d, true).unwrap();
+        let mut result = d;
+        final_stroke
+            .commit_mouse(&mut result, r.metadata())
+            .unwrap();
+        assert!(result.composite_pixel(30, 20)[3] > 0);
+        assert_eq!(result.composite_pixel(45, 20)[3], 0);
+        assert_eq!(r.inputs, vec![[0.5, 170.0], [0.5, -170.0], [0.0, -170.0]]);
+        let mut legacy = serde_json::to_value(r.metadata()).unwrap();
+        legacy.as_object_mut().unwrap().remove("ends");
+        legacy.as_object_mut().unwrap().remove("native_pressure");
+        let m: Metadata = serde_json::from_value(legacy).unwrap();
+        assert!(!m.native_pressure);
+        assert_eq!(m.ends, Default::default());
+        assert!(result.undo());
+        assert!(result.snapshot() == before);
+        assert!(r.render_cancel(&result, true, || true).is_err());
+        assert!(
+            Replay::begin(
+                &result,
+                0,
+                st,
+                Settings {
+                    enabled: true,
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .configure_input(Default::default(), true)
+            .is_err()
+        );
+    }
     use super::*;
     #[test]
     fn all_materials_reconstruct_from_original_and_wet_finish_is_applied_once() {

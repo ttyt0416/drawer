@@ -8,6 +8,8 @@ pub struct Settings {
     pub drag_pixels: f64,
     #[serde(default)]
     pub smoothing: [f64; 4],
+    #[serde(default)]
+    pub ends: [crate::stroke_ends::Settings; 4],
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
@@ -21,6 +23,7 @@ impl Default for Settings {
             hold_millis: 300,
             drag_pixels: 4.0,
             smoothing: [0.0; 4],
+            ends: [Default::default(); 4],
             modifiers: [None; 3],
             mouse_pressure: [Default::default(); 4],
         }
@@ -29,6 +32,7 @@ impl Default for Settings {
 impl Settings {
     pub fn valid(self) -> bool {
         self.version == 1
+            && self.ends.iter().all(|s| s.valid())
             && self.mouse_pressure.iter().all(|s| s.valid())
             && self.hold_millis <= 5000
             && (0.0..=64.0).contains(&self.drag_pixels)
