@@ -33,6 +33,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                     position: [pos.x as f64, pos.y as f64],
                     pressure: force.map(|p| p as f64),
                     attributes: Default::default(),
+                    origin: Default::default(),
                 });
                 if matches!(phase, Phase::Down | Phase::Move)
                     && matches!(raw.get(n+1),Some(egui::Event::PointerMoved(p)) if *p==pos)
@@ -56,6 +57,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                 position: [p.x as f64, p.y as f64],
                 pressure: None,
                 attributes: Default::default(),
+                origin: Default::default(),
             }),
             egui::Event::PointerButton {
                 pos,
@@ -68,6 +70,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                 position: [pos.x as f64, pos.y as f64],
                 pressure: None,
                 attributes: Default::default(),
+                origin: Default::default(),
             }),
             egui::Event::PointerGone => result.push(Event {
                 source,
@@ -75,6 +78,7 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
                 position: [0.0; 2],
                 pressure: None,
                 attributes: Default::default(),
+                origin: Default::default(),
             }),
             _ => {}
         }
@@ -110,6 +114,16 @@ pub(super) struct Native {
     com: Option<winsafe::guard::CoUninitializeGuard>,
 }
 impl Native {
+    pub fn connected(&self) -> bool {
+        #[cfg(windows)]
+        {
+            self.manager.is_some()
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    }
     pub fn attach(&mut self, cc: &eframe::CreationContext<'_>) {
         #[cfg(windows)]
         {
@@ -191,6 +205,7 @@ impl Native {
                             position: [0.0; 2],
                             pressure: None,
                             attributes: Default::default(),
+                            origin: Default::default(),
                         });
                     }
                     continue;
@@ -263,6 +278,7 @@ impl Native {
                                     button: s.buttons_supported.then_some(!s.buttons.is_empty()),
                                 }
                                 .normalized(),
+                                origin: Default::default(),
                             };
                             if event.valid() && output.len() < 65536 {
                                 output.push(event);

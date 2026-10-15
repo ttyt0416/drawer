@@ -28,6 +28,26 @@ pub enum Phase {
     Up,
     Cancel,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Origin {
+    #[default]
+    Unmarked,
+    PenCompatibility,
+    TouchCompatibility,
+}
+/// Documented Windows message signature, not a coordinate/time heuristic.
+pub fn origin_from_extra(value: u64) -> Origin {
+    if value & 0xffff_ff00 != 0xff51_5700 {
+        Origin::Unmarked
+    } else if value & 0x80 != 0 {
+        Origin::TouchCompatibility
+    } else {
+        Origin::PenCompatibility
+    }
+}
+pub fn drawing_event_allowed(event: Event, pen_backend: bool) -> bool {
+    !(event.source.kind == Kind::Mouse && event.origin == Origin::PenCompatibility && pen_backend)
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Attributes {
@@ -93,6 +113,8 @@ pub struct Event {
     pub pressure: Option<f64>,
     #[serde(default)]
     pub attributes: Attributes,
+    #[serde(default)]
+    pub origin: Origin,
 }
 impl Event {
     pub fn valid(self) -> bool {
@@ -198,6 +220,37 @@ impl Ownership {
 mod tests {
     use super::*;
     #[test]
+    fn os_origin_only_suppresses_pen_promotions_when_native_pen_is_available() {
+        for id in 0..128 {
+            assert_eq!(
+                origin_from_extra(0xff51_5700 | id),
+                Origin::PenCompatibility
+            );
+            assert_eq!(
+                origin_from_extra(0xffff_ffff_ff51_5700 | id),
+                Origin::PenCompatibility
+            );
+            assert_eq!(
+                origin_from_extra(0xff51_5780 | id),
+                Origin::TouchCompatibility
+            );
+        }
+        for value in [0, 1, 0xff51_5600, 0xffff_ffff] {
+            assert_eq!(origin_from_extra(value), Origin::Unmarked);
+        }
+        let mut e = event(Source::MOUSE, Phase::Down);
+        e.origin = Origin::PenCompatibility;
+        assert!(!drawing_event_allowed(e, true));
+        assert!(drawing_event_allowed(e, false));
+        e.origin = Origin::Unmarked;
+        assert!(drawing_event_allowed(e, true));
+        // A close time/position and device ID are never used to reject real mice.
+        for phase in [Phase::Down, Phase::Move, Phase::Up, Phase::Cancel] {
+            e.phase = phase;
+            assert!(drawing_event_allowed(e, true));
+        }
+    }
+    #[test]
     fn optional_pen_attributes_normalize_tilt_and_do_not_change_other_kinds() {
         use crate::assets::BrushTip;
         let a = Attributes {
@@ -249,6 +302,7 @@ mod tests {
             position: [1.0, 2.0],
             pressure: None,
             attributes: Default::default(),
+            origin: Default::default(),
         }
     }
     #[test]

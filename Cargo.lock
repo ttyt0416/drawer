@@ -601,6 +601,7 @@ dependencies = [
  "arboard",
  "clipboard-win",
  "drawer-core",
+ "drawer-platform",
  "eframe",
  "keepawake",
  "michiu_window",
@@ -623,6 +624,16 @@ dependencies = [
  "serde_json",
  "tiff",
  "ttf-parser",
+]
+
+[[package]]
+name = "drawer-platform"
+version = "0.1.0"
+dependencies = [
+ "drawer-core",
+ "raw-window-handle",
+ "windows 0.62.2",
+ "winit",
 ]
 
 [[package]]

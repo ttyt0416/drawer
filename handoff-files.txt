@@ -153,3 +153,7 @@ vendor/octotablet/src/platform/wl/tool_impl.rs
 vendor/octotablet/src/tablet.rs
 vendor/octotablet/src/tool.rs
 vendor/octotablet/src/util.rs
+
+crates/drawer-platform/Cargo.toml
+crates/drawer-platform/src/lib.rs
+docs/process/windows-input-boundary.md

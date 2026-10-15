@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/xtask", "crates/drawer-core", "crates/drawer-app"]
+members = ["crates/xtask", "crates/drawer-core", "crates/drawer-app", "crates/drawer-platform"]
 resolver = "3"
 exclude = ["vendor/octotablet"]
 

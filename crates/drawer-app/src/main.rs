@@ -102,6 +102,8 @@ struct Drawer {
     preferences: preferences::Preferences,
     drawing: drawing::Drawing,
     native_input: pointer_input::Native,
+    #[cfg(windows)]
+    native_mouse: Option<drawer_platform::Input>,
     pressure: pressure_settings::Editor,
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
@@ -206,6 +208,8 @@ impl Drawer {
             preferences: Default::default(),
             drawing: Default::default(),
             native_input: Default::default(),
+            #[cfg(windows)]
+            native_mouse: None,
             pressure: Default::default(),
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
@@ -1143,12 +1147,21 @@ impl eframe::App for Drawer {
                 if drawing::smoke_attributes().is_err() {
                     fail_smoke();
                 }
+                #[cfg(windows)]
+                if self
+                    .native_mouse
+                    .as_ref()
+                    .is_none_or(|input| !input.attached())
+                    || drawing::smoke_dedup().is_err()
+                {
+                    fail_smoke();
+                }
                 let native_pen = &self.native_input.report;
                 if native_pen.is_empty() {
                     fail_smoke();
                 }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nnative_pen={native_pen}\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\nmodifier_tools=true\nscreen_modes=true\ncontext_input=true\nlayout_windows=true\ntool_property_settings=true\nime_backend={native_ime}\nmouse_painting=true\npointer_settings=true\npressure_mapping=true\npressure_curve=true\nsynthetic_pen_attributes=true\nmouse_origin_backend=true\nsynthetic_pen_dedup=true\nnative_pen={native_pen}\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),
@@ -1202,7 +1215,14 @@ fn main() -> eframe::Result {
                     .collect::<Vec<_>>(),
             )
         };
+    #[cfg(windows)]
+    let native_mouse = drawer_platform::Input::default();
     let options = eframe::NativeOptions {
+        #[cfg(windows)]
+        event_loop_builder: Some(Box::new({
+            let native = native_mouse.clone();
+            move |builder| native.install(builder)
+        })),
         viewport: egui::ViewportBuilder::default()
             .with_title(APP_NAME)
             .with_inner_size([1100.0, 760.0])
@@ -1222,6 +1242,13 @@ fn main() -> eframe::Result {
             let mut app = Drawer::new(&cc.egui_ctx, smoke_output)
                 .with_storage(UserStorage::from_environment()?);
             app.native_input.attach(cc);
+            #[cfg(windows)]
+            if let Some(window) = cc.winit_window() {
+                match native_mouse.attach(window.as_ref()) {
+                    Ok(()) => app.native_mouse = Some(native_mouse),
+                    Err(e) => app.status = Some(e),
+                }
+            }
             for path in startup_paths {
                 if let Err(e) = app.open_path(&path) {
                     app.status = Some(format!("Cannot open {}: {e}", path.display()));

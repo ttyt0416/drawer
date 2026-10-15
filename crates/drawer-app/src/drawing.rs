@@ -61,6 +61,9 @@ pub(super) struct Drawing {
     ownership: drawer_core::pointer_input::Ownership,
     events: Vec<(drawer_core::pointer_input::Event, bool)>,
     pub incoming: Vec<drawer_core::pointer_input::Event>,
+    pub gui: Option<Vec<drawer_core::pointer_input::Event>>,
+    pub pen_available: bool,
+    native_mouse: bool,
     pub settings: drawer_core::pointer_input::Settings,
     pub pressure: drawer_core::pressure::Settings,
     pub last_source: Option<drawer_core::pointer_input::Source>,
@@ -93,7 +96,12 @@ impl Drawing {
         self.events = self
             .incoming
             .drain(..)
-            .chain(crate::pointer_input::gui_events(ctx))
+            .chain(
+                self.gui
+                    .take()
+                    .unwrap_or_else(|| crate::pointer_input::gui_events(ctx)),
+            )
+            .filter(|e| drawer_core::pointer_input::drawing_event_allowed(*e, self.pen_available))
             .map(|e| (e, false))
             .collect();
     }
@@ -217,10 +225,11 @@ impl Drawing {
             };
             self.receive(n, doc);
         }
-        if self
-            .ownership
-            .owner()
-            .is_some_and(|s| s.kind == drawer_core::pointer_input::Kind::Mouse)
+        if !self.native_mouse
+            && self
+                .ownership
+                .owner()
+                .is_some_and(|s| s.kind == drawer_core::pointer_input::Kind::Mouse)
             && ctx.input(|i| !i.pointer.primary_down())
         {
             self.cancel();
@@ -334,6 +343,20 @@ impl Drawer {
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
         self.native_input.pump(ctx, &mut self.drawing.incoming);
+        #[cfg(windows)]
+        if let Some(native) = &self.native_mouse {
+            self.drawing.native_mouse = true;
+            self.drawing.pen_available = self.native_input.connected();
+            match native.drain(ctx.pixels_per_point() as f64) {
+                Ok(events) => self.drawing.gui = Some(events),
+                Err(error) => {
+                    self.drawing.cancel();
+                    self.drawing.incoming.clear();
+                    self.drawing.gui = Some(vec![]);
+                    self.status = Some(error);
+                }
+            }
+        }
         self.drawing.prepare(ctx);
         if self.tool_shortcuts_blocked(ctx) {
             self.finish_stroke();
@@ -347,6 +370,26 @@ impl Drawer {
     }
 }
 
+pub(super) fn smoke_dedup() -> Result<(), String> {
+    use drawer_core::pointer_input::{Event, Origin, Phase, Source, drawing_event_allowed};
+    let make = |phase, origin| Event {
+        source: Source::MOUSE,
+        phase,
+        position: [5.5, 5.5],
+        pressure: None,
+        attributes: Default::default(),
+        origin,
+    };
+    for phase in [Phase::Down, Phase::Move, Phase::Up, Phase::Cancel] {
+        if drawing_event_allowed(make(phase, Origin::PenCompatibility), true)
+            || !drawing_event_allowed(make(phase, Origin::Unmarked), true)
+            || !drawing_event_allowed(make(phase, Origin::PenCompatibility), false)
+        {
+            return Err("Synthetic promotion filter failed".into());
+        }
+    }
+    Ok(())
+}
 pub(super) fn smoke_attributes() -> Result<(), String> {
     use drawer_core::{
         brush_cursor::Shape,
@@ -520,6 +563,7 @@ mod tests {
             position: [pos.x as f64, pos.y as f64],
             pressure: Some(0.5),
             attributes: Default::default(),
+            origin: Default::default(),
         };
         app.workspaces.store.current.pointer.pen.stabilization = Some(0.4);
         app.drawing.incoming = vec![event(pen, Phase::Down, p)];
@@ -610,6 +654,7 @@ mod tests {
                 position: [p.x as f64, p.y as f64],
                 pressure: Some(pressure),
                 attributes: Default::default(),
+                origin: Default::default(),
             };
             app.drawing.incoming = vec![event(Phase::Down)];
             frame(&ctx, &mut app, 1.0, vec![]);
@@ -676,6 +721,7 @@ mod tests {
             position: [p.x as f64, p.y as f64],
             pressure: Some(1.0),
             attributes,
+            origin: Default::default(),
         };
         let mut a = Attributes {
             tilt: Some([0.5, 0.0]),
@@ -763,6 +809,81 @@ mod tests {
                 assert!(screen[0] > origin[0]);
                 assert!((screen[1] - origin[1]).abs() < 1e-6);
             }
+        }
+    }
+    #[test]
+    fn promoted_mouse_before_during_after_pen_matches_pen_only_and_real_mouse_is_kept() {
+        use drawer_core::pointer_input::{Event, Kind, Origin, Phase, Source};
+        let mut expected = None;
+        for mixed in [false, true] {
+            let (ctx, mut app) = setup(1.0);
+            app.drawing.pen_available = true;
+            app.workspaces.store.current.pressure.tools[0].size = false;
+            app.workspaces.store.current.pressure.tools[0].opacity = true;
+            let p = point(&ctx, &app, [10.5, 20.5]);
+            let q = point(&ctx, &app, [40.5, 20.5]);
+            let pen = Source {
+                kind: Kind::Pen,
+                device: 301,
+                contact: 78,
+            };
+            let event = |source, phase, pos: egui::Pos2, origin| Event {
+                source,
+                phase,
+                position: [pos.x as f64, pos.y as f64],
+                pressure: Some(0.5),
+                attributes: Default::default(),
+                origin,
+            };
+            let mut events = vec![
+                event(pen, Phase::Down, p, Origin::Unmarked),
+                event(pen, Phase::Move, q, Origin::Unmarked),
+                event(pen, Phase::Up, q, Origin::Unmarked),
+            ];
+            if mixed {
+                events.insert(
+                    0,
+                    event(Source::MOUSE, Phase::Down, p, Origin::PenCompatibility),
+                );
+                events.insert(
+                    2,
+                    event(Source::MOUSE, Phase::Move, q, Origin::PenCompatibility),
+                );
+                events.push(event(Source::MOUSE, Phase::Up, q, Origin::PenCompatibility));
+                events.push(event(
+                    Source::MOUSE,
+                    Phase::Down,
+                    q,
+                    Origin::PenCompatibility,
+                ));
+                events.push(event(Source::MOUSE, Phase::Up, q, Origin::PenCompatibility));
+            }
+            app.drawing.incoming = events;
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert_eq!(app.documents[0].history_counts(), (1, 0));
+            if let Some(expected) = &expected {
+                assert!(&app.documents[0].layers[0].pixels == expected);
+            } else {
+                expected = Some(app.documents[0].layers[0].pixels.clone());
+            }
+            assert_eq!(app.documents[0].composite_pixel(40, 20)[3], 128);
+            // Same position, immediately following the pen: its OS origin is a real mouse.
+            app.drawing.gui = Some(vec![
+                event(Source::MOUSE, Phase::Down, q, Origin::Unmarked),
+                event(Source::MOUSE, Phase::Up, q, Origin::Unmarked),
+            ]);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert_eq!(app.documents[0].history_counts(), (2, 0));
+            assert_eq!(app.documents[0].composite_pixel(40, 20)[3], 255);
+            // A failed/unavailable native pen provider retains compatible mouse fallback.
+            app.drawing.pen_available = false;
+            let r = point(&ctx, &app, [20.5, 30.5]);
+            app.drawing.gui = Some(vec![
+                event(Source::MOUSE, Phase::Down, r, Origin::PenCompatibility),
+                event(Source::MOUSE, Phase::Up, r, Origin::PenCompatibility),
+            ]);
+            frame(&ctx, &mut app, 1.0, vec![]);
+            assert_eq!(app.documents[0].history_counts(), (3, 0));
         }
     }
     #[test]
