@@ -11,7 +11,8 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Style {
     pub shape: Shape,
     pub tip: BrushTip,
@@ -20,7 +21,7 @@ pub struct Style {
     pub pressure: crate::pressure::Mapping,
 }
 impl Style {
-    fn valid(self) -> bool {
+    pub fn valid(self) -> bool {
         self.shape.valid()
             && self.shape.angle.abs() <= 1e12
             && (0.0..=0.95).contains(&self.smoothing)
@@ -33,6 +34,13 @@ pub struct Stroke {
     revision: u64,
     pub preview_revision: u64,
     nonce: u64,
+    seed: u32,
+    effect: crate::mouse_pressure::Effect,
+    strength: f64,
+    carried: Option<[u8; 4]>,
+    direct: bool,
+    diffused: bool,
+    dabs: u32,
     style: Style,
     trace: Trace,
     last: Option<Point>,
@@ -49,6 +57,183 @@ pub struct Stroke {
     limit: usize,
 }
 impl Stroke {
+    pub fn dab_count(&self) -> u32 {
+        self.dabs
+    }
+    fn candidate(&self, doc: &Document, x: i64, y: i64) -> [u8; 4] {
+        if x < 0 || y < 0 || x >= doc.width as i64 || y >= doc.height as i64 {
+            return [0; 4];
+        }
+        let layer = &doc.layers[self.layer];
+        layer
+            .pixel_index(doc.width, doc.height, x, y)
+            .map_or([0; 4], |offset| {
+                self.lookup
+                    .get(&offset)
+                    .map_or(layer.pixels[offset], |n| self.changes[*n].after)
+            })
+    }
+    pub fn material(
+        &mut self,
+        doc: &Document,
+        effect: crate::mouse_pressure::Effect,
+        strength: f64,
+        point: Point,
+    ) -> Result<(), String> {
+        self.check(doc)?;
+        if !(0.0..=1.0).contains(&strength) || point.iter().any(|v| !v.is_finite()) {
+            return Err("Invalid stroke material".into());
+        }
+        self.effect = effect;
+        self.strength = strength;
+        self.carried = Some(self.candidate(doc, point[0].floor() as i64, point[1].floor() as i64));
+        Ok(())
+    }
+    pub fn direct_dab(
+        &mut self,
+        doc: &Document,
+        point: Point,
+        anchor: Point,
+        pressure: f64,
+    ) -> Result<(), String> {
+        self.check(doc)?;
+        if !(0.0..=1.0).contains(&pressure)
+            || point
+                .iter()
+                .chain(anchor.iter())
+                .any(|v| !v.is_finite() || v.abs() > 1e12)
+        {
+            return Err("Invalid timed dab".into());
+        }
+        self.stamp(doc, point, pressure)?;
+        self.last = Some(anchor);
+        self.pressure = pressure;
+        self.direct = true;
+        self.dabs += 1;
+        Ok(())
+    }
+    pub fn diffuse(
+        &mut self,
+        doc: &Document,
+        strength: f64,
+        cancel: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        if self.diffused {
+            return Ok(());
+        }
+        self.check(doc)?;
+        self.finish_sample(doc)?;
+        if !(0.0..=1.0).contains(&strength) {
+            return Err("Invalid final diffusion".into());
+        }
+        if self.changes.is_empty() || strength == 0.0 {
+            self.diffused = true;
+            self.direct = true;
+            return Ok(());
+        }
+        let layer = &doc.layers[self.layer];
+        let extent = layer.extent(doc.width, doc.height);
+        let mut positions = std::collections::HashSet::new();
+        for change in &self.changes {
+            let x = change.offset % extent.width as usize;
+            let y = change.offset / extent.width as usize;
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let px = extent.offset[0] + x as i64 + dx;
+                    let py = extent.offset[1] + y as i64 + dy;
+                    if px < 0 || py < 0 || px >= doc.width as i64 || py >= doc.height as i64 {
+                        continue;
+                    }
+                    if let Some(offset) = layer.pixel_index(doc.width, doc.height, px, py) {
+                        if !positions.contains(&offset) && positions.len() >= self.limit {
+                            return Err("Final diffusion exceeds stroke memory budget".into());
+                        }
+                        positions.try_reserve(1).map_err(|e| e.to_string())?;
+                        positions.insert(offset);
+                    }
+                }
+            }
+        }
+        let mut positions: Vec<_> = positions.into_iter().collect();
+        positions.sort_unstable();
+        let mut changes = Vec::new();
+        changes
+            .try_reserve_exact(positions.len())
+            .map_err(|e| e.to_string())?;
+        for (n, offset) in positions.into_iter().enumerate() {
+            if n % 256 == 0 && cancel() {
+                return Err("Mouse final diffusion cancelled".into());
+            }
+            let x = extent.offset[0] + (offset % extent.width as usize) as i64;
+            let y = extent.offset[1] + (offset / extent.width as usize) as i64;
+            let mut rgb = [0.0; 3];
+            let mut alpha = 0.0;
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let p = self.candidate(doc, x + dx, y + dy);
+                    let a = p[3] as f64 / 255.0;
+                    alpha += a;
+                    for channel in 0..3 {
+                        rgb[channel] += p[channel] as f64 * a;
+                    }
+                }
+            }
+            let average = if alpha > 0.0 {
+                [
+                    (rgb[0] / alpha).round() as u8,
+                    (rgb[1] / alpha).round() as u8,
+                    (rgb[2] / alpha).round() as u8,
+                    (alpha / 9.0 * 255.0).round() as u8,
+                ]
+            } else {
+                [0; 4]
+            };
+            let original = layer.pixels[offset];
+            let current = self.candidate(doc, x, y);
+            let after = mix(
+                current,
+                average,
+                strength
+                    * doc
+                        .scene
+                        .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
+                        as f64
+                    / 255.0,
+            );
+            if original != after {
+                changes.push(PixelChange {
+                    offset,
+                    before: original,
+                    after,
+                });
+            }
+        }
+        self.lookup.clear();
+        self.lookup
+            .try_reserve(changes.len())
+            .map_err(|e| e.to_string())?;
+        self.unmasked.clear();
+        self.amounts.clear();
+        self.unmasked
+            .try_reserve(changes.len())
+            .map_err(|e| e.to_string())?;
+        self.amounts
+            .try_reserve(changes.len())
+            .map_err(|e| e.to_string())?;
+        for (n, change) in changes.iter().enumerate() {
+            self.lookup.insert(change.offset, n);
+            self.unmasked.push(change.after);
+            self.amounts.push(0.0);
+        }
+        self.changes = changes;
+        self.diffused = true;
+        self.direct = true;
+        self.preview_revision += 1;
+        Ok(())
+    }
+    pub fn set_seed(&mut self, seed: u32) {
+        self.seed = seed;
+    }
     pub fn anchor(&self) -> Option<(usize, BrushTip, Point)> {
         self.last.map(|point| (self.layer, self.style.tip, point))
     }
@@ -85,6 +270,13 @@ impl Stroke {
             revision: doc.revision,
             preview_revision: 0,
             nonce: NEXT_STROKE.fetch_add(1, Ordering::Relaxed),
+            seed: 0,
+            effect: crate::mouse_pressure::Effect::Normal,
+            strength: 0.5,
+            carried: None,
+            direct: false,
+            diffused: false,
+            dabs: 0,
             style,
             trace: Default::default(),
             last: None,
@@ -122,6 +314,9 @@ impl Stroke {
         point: Point,
         pressure: f64,
     ) -> Result<(), String> {
+        if self.diffused {
+            return Err("A finalized wet stroke cannot accept more input".into());
+        }
         self.check(doc)?;
         if !(0.0..=1.0).contains(&pressure) {
             return Err("Invalid normalized pressure".into());
@@ -194,6 +389,9 @@ impl Stroke {
         Ok(())
     }
     pub fn finish_sample(&mut self, doc: &Document) -> Result<(), String> {
+        if self.direct {
+            return self.check(doc);
+        }
         if let Some(last) = self.last
             && self.last_stamp.is_none_or(|p| {
                 (last[0] - p[0]).hypot(last[1] - p[1]) > 1e-7
@@ -211,6 +409,16 @@ impl Stroke {
         self.finish_sample(doc)?;
         let Self { layer, changes, .. } = self;
         doc.commit_pixel_changes(layer, changes)
+    }
+    pub fn commit_mouse(
+        mut self,
+        doc: &mut Document,
+        metadata: crate::mouse_pressure::Metadata,
+    ) -> Result<bool, String> {
+        self.check(doc)?;
+        self.finish_sample(doc)?;
+        let Self { layer, changes, .. } = self;
+        doc.commit_mouse_changes(layer, changes, metadata)
     }
     pub fn pixel(
         &self,
@@ -306,6 +514,17 @@ impl Stroke {
                 .min((storage.offset[1] + storage.height as i64 - 1) as f64) as i64,
         ];
         let mut changed = false;
+        use crate::mouse_pressure::Effect;
+        let picked = self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64);
+        let paint_color = match self.effect {
+            Effect::Blend => mix(self.style.color, picked, self.strength),
+            Effect::Smudge => {
+                let carried = self.carried.unwrap_or(picked);
+                self.carried = Some(mix(carried, picked, self.strength));
+                carried
+            }
+            _ => self.style.color,
+        };
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
                 let point = [x as f64 + 0.5, y as f64 + 0.5];
@@ -324,11 +543,20 @@ impl Stroke {
                 let amount = match self.style.tip {
                     BrushTip::Pen | BrushTip::Eraser => coverage,
                     BrushTip::Pencil => {
-                        let grain = ((x.rem_euclid(23) * 17
-                            + y.rem_euclid(23) * 31
-                            + x.rem_euclid(23) * y.rem_euclid(23) * 7)
-                            .rem_euclid(23)) as f64
-                            / 22.0;
+                        let grain = if self.seed == 0 {
+                            ((x.rem_euclid(23) * 17
+                                + y.rem_euclid(23) * 31
+                                + x.rem_euclid(23) * y.rem_euclid(23) * 7)
+                                .rem_euclid(23)) as f64
+                                / 22.0
+                        } else {
+                            let mut hash = (x as u64).wrapping_mul(0x9e3779b97f4a7c15)
+                                ^ (y as u64).rotate_left(31)
+                                ^ self.seed as u64;
+                            hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+                            hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d049bb133111eb);
+                            ((hash ^ (hash >> 31)) % 23) as f64 / 22.0
+                        };
                         coverage * (0.4 + 0.6 * grain)
                     }
                     BrushTip::Wash => {
@@ -361,7 +589,7 @@ impl Stroke {
                         (base[3] as f64 * (1.0 - amount)).round() as u8,
                     ]
                 } else {
-                    over(base, self.style.color, amount)
+                    over(base, paint_color, amount)
                 };
                 let result = mix(original, next, mask as f64 / 255.0);
                 if old.is_none() && result == original {

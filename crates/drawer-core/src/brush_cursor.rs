@@ -133,7 +133,8 @@ impl Trace {
         }
     }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Shape {
     pub size: f64,
     pub aspect: f64,

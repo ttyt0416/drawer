@@ -11,6 +11,8 @@ pub struct Settings {
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
+    #[serde(default)]
+    pub mouse_pressure: [crate::mouse_pressure::Settings; 4],
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -20,12 +22,14 @@ impl Default for Settings {
             drag_pixels: 4.0,
             smoothing: [0.0; 4],
             modifiers: [None; 3],
+            mouse_pressure: [Default::default(); 4],
         }
     }
 }
 impl Settings {
     pub fn valid(self) -> bool {
         self.version == 1
+            && self.mouse_pressure.iter().all(|s| s.valid())
             && self.hold_millis <= 5000
             && (0.0..=64.0).contains(&self.drag_pixels)
             && self.smoothing.iter().all(|s| (0.0..=0.95).contains(s))

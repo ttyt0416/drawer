@@ -140,7 +140,7 @@ impl Dial {
         };
         result.report = match result.open() {
             Ok(supported) => format!(
-                "Windows dial adapter attached; OS reports connected wheel: {supported}. Physical device validation pending."
+                "Windows dial adapter attached; OS wheel support: {supported}. Physical device validation pending."
             ),
             Err(e) => {
                 if let Ok(mut q) = result.queue.lock() {

@@ -85,6 +85,9 @@ pub struct Attributes {
     /// Explicit native touch-batch identity, not a timestamp grouping heuristic.
     #[serde(default)]
     pub touch_frame: Option<u64>,
+    /// Reported event clock, used only for explicitly enabled mouse speed response.
+    #[serde(default)]
+    pub time_micros: Option<u64>,
 }
 impl Attributes {
     pub fn normalized(self) -> Self {
@@ -158,7 +161,10 @@ impl Event {
         if self.source.kind == Kind::Pen {
             self.attributes.normalized()
         } else {
-            Attributes::default()
+            Attributes {
+                time_micros: self.attributes.time_micros,
+                ..Default::default()
+            }
         }
     }
     pub fn valid(self) -> bool {
@@ -298,6 +304,7 @@ mod tests {
         e.pressure = Some(0.5);
         assert_eq!(e.pressure_value(), 0.5);
         e.attributes = Attributes {
+            time_micros: None,
             tilt: Some([0.5, 0.3]),
             eraser: Some(true),
             button: Some(true),
@@ -347,6 +354,7 @@ mod tests {
     fn optional_pen_attributes_normalize_tilt_and_do_not_change_other_kinds() {
         use crate::assets::BrushTip;
         let a = Attributes {
+            time_micros: None,
             tilt: Some([99.0, -99.0]),
             eraser: Some(true),
             button: Some(true),

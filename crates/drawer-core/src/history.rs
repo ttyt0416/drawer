@@ -10,6 +10,7 @@ enum EditKind {
     Pixels {
         layer: usize,
         changes: Vec<PixelChange>,
+        scene: Option<(Box<crate::scene::Scene>, Box<crate::scene::Scene>)>,
     },
     Pixel {
         layer: usize,
@@ -35,8 +36,12 @@ struct Edit {
 impl Edit {
     fn bytes(&self) -> usize {
         match &self.kind {
-            EditKind::Pixels { changes, .. } => {
-                changes.len() * std::mem::size_of::<PixelChange>() + std::mem::size_of::<Self>()
+            EditKind::Pixels { changes, scene, .. } => {
+                changes.len() * std::mem::size_of::<PixelChange>()
+                    + std::mem::size_of::<Self>()
+                    + scene
+                        .as_ref()
+                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
             }
             EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
             EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
@@ -81,15 +86,43 @@ impl Document {
     pub(crate) fn commit_pixel_changes(
         &mut self,
         layer: usize,
+        changes: Vec<PixelChange>,
+    ) -> Result<bool, String> {
+        self.commit_pixel_scene(layer, changes, None)
+    }
+    pub(crate) fn commit_mouse_changes(
+        &mut self,
+        layer: usize,
+        changes: Vec<PixelChange>,
+        metadata: crate::mouse_pressure::Metadata,
+    ) -> Result<bool, String> {
+        if changes.iter().all(|p| p.before == p.after) {
+            return Ok(false);
+        }
+        if metadata.layer != layer {
+            return Err("Frozen stroke layer mismatch".into());
+        }
+        let mut scene = self.scene.clone();
+        scene.append_mouse(metadata)?;
+        self.commit_pixel_scene(layer, changes, Some(scene))
+    }
+    fn commit_pixel_scene(
+        &mut self,
+        layer: usize,
         mut changes: Vec<PixelChange>,
+        after_scene: Option<crate::scene::Scene>,
     ) -> Result<bool, String> {
         changes.retain(|p| p.before != p.after);
         if changes.is_empty() {
             return Ok(false);
         }
         changes.shrink_to_fit();
-        let bytes =
-            changes.len() * std::mem::size_of::<PixelChange>() + std::mem::size_of::<Edit>();
+        let scene = after_scene.map(|after| (Box::new(self.scene.clone()), Box::new(after)));
+        let bytes = changes.len() * std::mem::size_of::<PixelChange>()
+            + std::mem::size_of::<Edit>()
+            + scene
+                .as_ref()
+                .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes());
         if bytes > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
             || bytes + self.resident_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET
         {
@@ -111,7 +144,14 @@ impl Document {
         for p in &changes {
             raster.pixels[p.offset] = p.after;
         }
-        self.history.push(EditKind::Pixels { layer, changes });
+        if let Some((_, after)) = &scene {
+            self.scene = after.as_ref().clone();
+        }
+        self.history.push(EditKind::Pixels {
+            layer,
+            changes,
+            scene,
+        });
         self.history_changed();
         Ok(true)
     }
@@ -245,9 +285,16 @@ impl Document {
             return false;
         };
         match &edit.kind {
-            EditKind::Pixels { layer, changes } => {
+            EditKind::Pixels {
+                layer,
+                changes,
+                scene,
+            } => {
                 for p in changes {
                     self.layers[*layer].pixels[p.offset] = p.before;
+                }
+                if let Some((before, _)) = scene {
+                    self.scene = before.as_ref().clone();
                 }
             }
             EditKind::Pixel {
@@ -269,9 +316,16 @@ impl Document {
             return false;
         };
         match &edit.kind {
-            EditKind::Pixels { layer, changes } => {
+            EditKind::Pixels {
+                layer,
+                changes,
+                scene,
+            } => {
                 for p in changes {
                     self.layers[*layer].pixels[p.offset] = p.after;
+                }
+                if let Some((_, after)) = scene {
+                    self.scene = after.as_ref().clone();
                 }
             }
             EditKind::Pixel {

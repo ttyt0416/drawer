@@ -48,6 +48,10 @@ pub(super) struct PaintInput<'a> {
 }
 struct Session {
     stroke: Stroke,
+    mouse: Option<drawer_core::mouse_pressure::Replay>,
+    mouse_dirty: bool,
+    clock: Option<(u64, f64)>,
+    last_timer: u64,
     view: u64,
     projection: Projection,
     last_screen: egui::Pos2,
@@ -57,6 +61,8 @@ struct Session {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub cancel_check: Option<Box<dyn Fn() -> bool>>,
+    frame_time: f64,
     active: Option<Session>,
     ownership: drawer_core::pointer_input::Ownership,
     events: Vec<(drawer_core::touch::Effect, bool)>,
@@ -68,6 +74,7 @@ pub(super) struct Drawing {
     pub mode: super::precision::Mode,
     pub connect_line: bool,
     pub opacity: Option<[f64; 4]>,
+    pub mouse_settings: [drawer_core::mouse_pressure::Settings; 4],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -222,9 +229,29 @@ impl Drawing {
             self.commit_session(s, doc);
         }
     }
-    fn commit_session(&mut self, session: Session, doc: &mut Document) {
+    fn commit_session(&mut self, mut session: Session, doc: &mut Document) {
+        if let Some(mouse) = &session.mouse {
+            match mouse.render_cancel(doc, true, || {
+                self.cancel_check.as_ref().is_some_and(|f| f())
+            }) {
+                Ok(stroke) => session.stroke = stroke,
+                Err(e) => {
+                    self.error = Some(e);
+                    return;
+                }
+            }
+        }
         let anchor = session.stroke.anchor();
-        match session.stroke.commit(doc) {
+        if self.cancel_check.as_ref().is_some_and(|f| f()) {
+            self.error = Some("Stroke cancelled before commit".into());
+            return;
+        }
+        let result = if let Some(mouse) = session.mouse {
+            session.stroke.commit_mouse(doc, mouse.metadata())
+        } else {
+            session.stroke.commit(doc)
+        };
+        match result {
             Ok(true) => {
                 if let Some((layer, tip, point)) = anchor {
                     self.remember(doc.id, layer, tip, point);
@@ -232,6 +259,62 @@ impl Drawing {
             }
             Ok(false) => {}
             Err(e) => self.error = Some(e),
+        }
+    }
+    fn refresh_mouse(&mut self, doc: &Document) {
+        let cancel = &self.cancel_check;
+        if let Some(session) = &mut self.active
+            && session.stroke.document == doc.id
+            && session.mouse_dirty
+            && let Some(mouse) = &session.mouse
+        {
+            match mouse.render_cancel(doc, false, || cancel.as_ref().is_some_and(|f| f())) {
+                Ok(stroke) => {
+                    session.stroke = stroke;
+                    session.mouse_dirty = false;
+                }
+                Err(e) => {
+                    self.error = Some(e);
+                    self.cancel();
+                }
+            }
+        }
+    }
+    fn advance_clock(&mut self, ctx: &egui::Context) {
+        let result = (|| -> Result<(), String> {
+            let Some(s) = &mut self.active else {
+                return Ok(());
+            };
+            let Some(mouse) = &mut s.mouse else {
+                return Ok(());
+            };
+            let Some(period) = mouse.spray_period() else {
+                return Ok(());
+            };
+            ctx.request_repaint_after(std::time::Duration::from_micros(period.max(16000) as u64));
+            let Some((micros, frame)) = s.clock else {
+                return Ok(());
+            };
+            if !self.frame_time.is_finite() || self.frame_time < frame {
+                return Ok(());
+            }
+            let elapsed = ((self.frame_time - frame) * 1e6).round() as u64;
+            let now = micros
+                .checked_add(elapsed)
+                .ok_or("Mouse spray frame clock overflow")?;
+            if now.saturating_sub(s.last_timer) >= period as u64 {
+                mouse.push_clock(drawer_core::mouse_pressure::Sample {
+                    point: s.projection.point(s.last_screen),
+                    micros: Some(now),
+                })?;
+                s.last_timer = now;
+                s.mouse_dirty = true;
+            }
+            Ok(())
+        })();
+        if let Err(e) = result {
+            self.error = Some(e);
+            self.cancel();
         }
     }
     fn remember(&mut self, id: u64, layer: usize, tip: BrushTip, point: Point) {
@@ -257,10 +340,27 @@ impl Drawing {
             } else {
                 0.0
             };
-            if let Err(e) = s.stroke.set_angle_offset(angle).and_then(|_| {
-                s.stroke
-                    .sample_pressure(doc, s.projection.point(pos), pressure)
-            }) {
+            let result = if let Some(mouse) = &mut s.mouse {
+                let micros = attributes.time_micros.or_else(|| {
+                    (self.frame_time.is_finite() && self.frame_time >= 0.0)
+                        .then_some((self.frame_time * 1e6) as u64)
+                });
+                if let Some(micros) = micros {
+                    s.clock = Some((micros, self.frame_time));
+                    s.last_timer = s.last_timer.max(micros);
+                }
+                s.mouse_dirty = true;
+                mouse.push(drawer_core::mouse_pressure::Sample {
+                    point: s.projection.point(pos),
+                    micros,
+                })
+            } else {
+                s.stroke.set_angle_offset(angle).and_then(|_| {
+                    s.stroke
+                        .sample_pressure(doc, s.projection.point(pos), pressure)
+                })
+            };
+            if let Err(e) = result {
                 self.error = Some(e);
                 self.cancel();
             }
@@ -281,6 +381,11 @@ impl Drawing {
                 event.pen_attributes(),
             ),
             Decision::Finish => {
+                if let Some(end) = event.attributes.time_micros
+                    && let Some(mouse) = self.active.as_mut().and_then(|s| s.mouse.as_mut())
+                {
+                    mouse.trim_clocks(end);
+                }
                 self.sample(
                     doc,
                     egui::pos2(event.position[0] as f32, event.position[1] as f32),
@@ -342,6 +447,7 @@ impl Drawing {
             };
             self.receive(n, doc);
         }
+        self.advance_clock(ctx);
         if !self.native_mouse
             && self
                 .ownership
@@ -483,6 +589,31 @@ impl Drawing {
                         .ok_or("Draw a starting stroke with this tool on this layer first")?;
                     let to = projection.point(pos);
                     style.smoothing = 0.0;
+                    let config = self.mouse_settings[index];
+                    if event.source.kind == drawer_core::pointer_input::Kind::Mouse
+                        && config.active()
+                    {
+                        if config.effect == drawer_core::mouse_pressure::Effect::Spray {
+                            return Err("Timed spray needs a held stroke; select another mouse behavior to connect a line".into());
+                        }
+                        let mut replay =
+                            drawer_core::mouse_pressure::Replay::begin(doc, layer, style, config)?;
+                        for point in [from, to] {
+                            replay.push(drawer_core::mouse_pressure::Sample {
+                                point,
+                                micros: None,
+                            })?;
+                        }
+                        if replay
+                            .render_cancel(doc, true, || {
+                                self.cancel_check.as_ref().is_some_and(|f| f())
+                            })?
+                            .commit_mouse(doc, replay.metadata())?
+                        {
+                            self.remember(doc.id, layer, style.tip, to);
+                        }
+                        return Ok(());
+                    }
                     let mut stroke = Stroke::begin(doc, layer, style)?;
                     stroke.sample(doc, from)?;
                     stroke.sample(doc, to)?;
@@ -501,9 +632,33 @@ impl Drawing {
                 .and_then(|layer| Stroke::begin(doc, layer, style))
             {
                 Ok(stroke) => {
+                    let config = self.mouse_settings[index];
+                    let mouse = if event.source.kind == drawer_core::pointer_input::Kind::Mouse
+                        && config.active()
+                    {
+                        match drawer_core::mouse_pressure::Replay::begin(
+                            doc,
+                            layer.unwrap(),
+                            style,
+                            config,
+                        ) {
+                            Ok(mouse) => Some(mouse),
+                            Err(e) => {
+                                self.error = Some(e);
+                                self.cancel();
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     self.last_source = Some(event.source);
                     self.active = Some(Session {
                         stroke,
+                        mouse,
+                        mouse_dirty: false,
+                        clock: None,
+                        last_timer: 0,
                         view,
                         projection,
                         last_screen: pos,
@@ -521,6 +676,7 @@ impl Drawing {
                 }
             }
         }
+        self.refresh_mouse(doc);
     }
 }
 impl Drawer {
@@ -532,6 +688,8 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.drawing.frame_time = ctx.input(|i| i.time);
+        self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing
             .endpoints
@@ -920,6 +1078,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
         pointer_input::{Attributes, Kind, PenFeatures},
     };
     let a = Attributes {
+        time_micros: None,
         tilt: Some([0.0, 0.5]),
         eraser: Some(true),
         button: Some(false),
@@ -1381,6 +1540,7 @@ mod tests {
             origin: Default::default(),
         };
         let mut a = Attributes {
+            time_micros: None,
             tilt: Some([0.5, 0.0]),
             eraser: Some(true),
             button: None,

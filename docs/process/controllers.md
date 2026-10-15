@@ -19,3 +19,5 @@ Primary API contracts:
 - [ButtonClicked and OS hold menu](https://learn.microsoft.com/en-us/uwp/api/windows.ui.input.radialcontroller.buttonclicked)
 - [ControlLost](https://learn.microsoft.com/en-us/uwp/api/windows.ui.input.radialcontroller.controllost)
 - [IsSupported](https://learn.microsoft.com/en-us/uwp/api/windows.ui.input.radialcontroller.issupported)
+
+IsSupported reports OS wheel support, not physical device connection. The displayed status uses that meaning; device presence and physical interaction are not inferred from it. See the IsSupported contract linked above.

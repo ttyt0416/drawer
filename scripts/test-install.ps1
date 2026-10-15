@@ -98,6 +98,7 @@ try {
     if ($smokeResult -notmatch 'touch_gestures=true') { throw '터치 제스처/펜 우선/포커스 취소 시험 실패' }
     if ($smokeResult -notmatch 'controller_replay=true' -or $smokeResult -notmatch 'native_dial=.+') { throw '다이얼 명령/네이티브 상태 시작 시험 실패' }
     if ($smokeResult -notmatch 'keyboard_precision=true') { throw '키보드 이동/직선/농도/도구 전환 픽셀 시험 실패' }
+    if ($smokeResult -notmatch 'mouse_virtual_pressure=true') { throw '마우스 가상 필압/재계산/예측 분리 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

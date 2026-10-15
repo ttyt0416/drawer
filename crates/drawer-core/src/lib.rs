@@ -14,6 +14,7 @@ pub mod image_import;
 pub mod information;
 pub mod input_replay;
 pub mod interpolation;
+pub mod mouse_pressure;
 pub mod movie;
 pub mod navigator;
 pub mod navigator_preferences;

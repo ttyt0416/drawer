@@ -158,3 +158,6 @@ docs/process/controllers.md
 crates/drawer-core/src/precision.rs
 crates/drawer-app/src/precision.rs
 docs/process/precision.md
+crates/drawer-core/src/mouse_pressure.rs
+crates/drawer-app/src/mouse_pressure.rs
+docs/process/mouse-pressure.md

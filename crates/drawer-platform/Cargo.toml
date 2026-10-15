@@ -10,7 +10,7 @@ drawer-core = { path = "../drawer-core" }
 [target.'cfg(windows)'.dependencies]
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06"] }
 raw-window-handle = "=0.6.2"
-windows = { version = "=0.62.2", features = ["UI_Input", "Foundation", "Win32_UI_Input_Radial", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_Pointer", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_Devices_ImageAcquisition", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_WinRT", "Devices_Enumeration", "Media_Capture", "Media_MediaProperties", "Storage_Streams", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_Touch", "Win32_UI_Shell"] }
+windows = { version = "=0.62.2", features = ["UI_Input", "Foundation", "Win32_UI_Input_Radial", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_Pointer", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_Devices_ImageAcquisition", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_System_WinRT", "Devices_Enumeration", "Media_Capture", "Media_MediaProperties", "Storage_Streams", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_Touch", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 
 [lints.rust]
 unsafe_code = "deny"

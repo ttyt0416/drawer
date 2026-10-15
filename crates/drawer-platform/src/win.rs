@@ -9,10 +9,11 @@ use windows::{
         Graphics::Gdi::ScreenToClient,
         System::LibraryLoader::{GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW},
         UI::{
+            Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE},
             Input::Pointer::{POINTER_INFO, POINTER_PEN_INFO},
             WindowsAndMessaging::{
-                GetMessageExtraInfo, GetSystemMetrics, MSG, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-                SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+                GetForegroundWindow, GetMessageExtraInfo, GetSystemMetrics, MSG,
+                SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
             },
         },
     },
@@ -246,6 +247,7 @@ impl Pointer {
                 )?,
                 pressure: (mask & 1 != 0).then_some((p.pressure as f64 / 1024.0).clamp(0.0, 1.0)),
                 attributes: Attributes {
+                    time_micros: None,
                     tilt: (mask & 12 == 12)
                         .then_some([(p.tiltX as f64).to_radians(), (p.tiltY as f64).to_radians()]),
                     eraser: Some(p.penFlags & 6 != 0),
@@ -575,6 +577,18 @@ impl Driver {
     }
 }
 impl Input {
+    pub fn cancel_requested(&self) -> bool {
+        let window = self.state.try_borrow().map_or(0, |s| s.window);
+        if window == 0 {
+            return false;
+        }
+        // SAFETY: read-only own-foreground check and Escape state. No characters
+        // from other apps are read; retained owner keeps this HWND alive.
+        unsafe {
+            GetForegroundWindow() != HWND(window as *mut _)
+                || GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0
+        }
+    }
     pub fn client_origin(&self) -> Option<[f64; 2]> {
         let s = self.state.borrow();
         let p = s.owner.as_ref()?.inner_position().ok()?;
@@ -683,7 +697,13 @@ impl Input {
                 }
                 // SAFETY: no caller pointers; current UI-thread message metadata.
                 let extra = unsafe { GetMessageExtraInfo() }.0 as u64;
+                let before = s.queue.len();
                 s.record(window, m.message, m.wParam.0, m.lParam.0, extra);
+                if s.queue.len() > before
+                    && let Some(event) = s.queue.back_mut()
+                {
+                    event.attributes.time_micros = Some(m.time as u64 * 1000);
+                }
                 let result = s.driver.as_mut().map(|d| {
                     if m.message == 8 {
                         d.focus(false)

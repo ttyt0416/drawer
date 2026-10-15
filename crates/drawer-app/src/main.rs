@@ -20,6 +20,7 @@ mod image_import_dialog;
 mod information;
 mod input_replay;
 mod layout;
+mod mouse_pressure;
 mod movie_dialog;
 mod navigator_panel;
 mod new_canvas;
@@ -1190,6 +1191,10 @@ impl eframe::App for Drawer {
                     eprintln!("Keyboard precision: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = mouse_pressure::smoke() {
+                    eprintln!("Mouse pressure reconstruction: {e}");
+                    fail_smoke();
+                }
                 let acquisition_work = self
                     .storage
                     .as_ref()
@@ -1245,7 +1250,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -1335,7 +1340,12 @@ fn main() -> eframe::Result {
             if let Some(window) = cc.winit_window() {
                 app.native_dial = Some(drawer_platform::Dial::new(window));
                 match native_mouse.attach(window) {
-                    Ok(()) => app.native_mouse = Some(native_mouse),
+                    Ok(()) => {
+                        let cancel = native_mouse.clone();
+                        app.drawing.cancel_check =
+                            Some(Box::new(move || cancel.cancel_requested()));
+                        app.native_mouse = Some(native_mouse);
+                    }
                     Err(e) => app.status = Some(e),
                 }
             }

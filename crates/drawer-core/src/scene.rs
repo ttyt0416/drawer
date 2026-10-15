@@ -193,6 +193,8 @@ pub struct Scene {
     /// Document-space translation, independent of page object transforms.
     #[serde(default)]
     pub selection_translation: Point,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mouse_strokes: Vec<crate::mouse_pressure::Metadata>,
     pub guides: Vec<[Point; 2]>,
     pub camera: Option<Camera>,
     pub worlds: Vec<WorldMesh>,
@@ -200,6 +202,11 @@ pub struct Scene {
 impl Scene {
     pub fn valid(&self) -> bool {
         self.transform.valid()
+            && self.mouse_strokes.len() <= 4096
+            && self
+                .mouse_strokes
+                .iter()
+                .all(crate::mouse_pressure::Metadata::valid)
             && self
                 .selection_translation
                 .iter()
@@ -280,6 +287,7 @@ impl Scene {
                 m.runs.len() * std::mem::size_of::<crate::selection::Run>()
             })
             + usize::from(self.camera.is_some()) * 64
+            + self.mouse_strokes.len() * std::mem::size_of::<crate::mouse_pressure::Metadata>()
     }
     pub fn physical_points(&self, original_pixels: f64, dpi: f64) -> Point {
         [

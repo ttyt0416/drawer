@@ -51,6 +51,8 @@ pub(super) fn run(
     app.panels.settings.brush_aspect = sequence.aspect;
     app.panels.settings.brush_angle = sequence.angle;
     app.workspaces.store.current.input.smoothing = sequence.smoothing;
+    app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
+    app.workspaces.store.current.cursors = sequence.cursors;
     app.references.session.workspace.color = sequence.color;
     app.workspaces.store.current.pressure = sequence.pressure;
     app.workspaces.store.current.pointer = sequence.pointer;
@@ -74,6 +76,7 @@ pub(super) fn run(
         while n < sequence.samples.len() && sequence.samples[n].micros == micros && events.len() < 8
         {
             let mut event = sequence.samples[n].event;
+            event.attributes.time_micros = Some(sequence.samples[n].micros);
             event.position = app.documents[0].view.document_to_screen(
                 event.position,
                 [sequence.width as f64, sequence.height as f64],
@@ -245,6 +248,7 @@ impl Drawer {
                     if crate::help::button(ui,"Pressure 0 / jump / half / end","input-replay").clicked(){self.replay.sequence=Sequence::default();}
                     if crate::help::button(ui,"Missing end","input-replay").clicked(){let mut s=Sequence::default();s.samples.pop();s.expected_strokes=0;self.replay.sequence=s;}
                     if crate::help::button(ui,"Tablet area sample","input-replay").clicked(){let mut s=Sequence::default();s.pointer.mapping.enabled=true;for sample in &mut s.samples {sample.event.attributes.tablet=Some([0.5;2]);}self.replay.sequence=s;}
+                    if crate::help::button(ui,"Mouse start/end pressure","input-replay").clicked(){let mut s=Sequence::default();s.mouse_pressure[0].enabled=true;for sample in &mut s.samples {sample.event.source=drawer_core::pointer_input::Source::MOUSE;sample.event.pressure=None;}s.pen_backend_available=false;self.replay.sequence=s;}
                     if crate::help::button(ui,"Reverse time (invalid)","input-replay").clicked(){let mut s=Sequence::default();s.samples[1].micros=5000;self.replay.sequence=s;}
                 });
                 if crate::help::button(ui,"Use current brush settings in record","input-replay").clicked() {
@@ -252,6 +256,8 @@ impl Drawer {
                     s.tool=self.selected;s.size=self.panels.settings.brush_size;s.aspect=self.panels.settings.brush_aspect;s.angle=self.panels.settings.brush_angle;
                     s.color=self.references.session.workspace.color;s.pressure=self.workspaces.store.current.pressure;s.pointer=self.workspaces.store.current.pointer;
                     s.smoothing=self.workspaces.store.current.input.smoothing;s.expected_checksum=None;
+                    s.mouse_pressure=self.workspaces.store.current.input.mouse_pressure;
+                    s.cursors=self.workspaces.store.current.cursors;
                 }
                 ui.label(format!("{}×{} · {:?} · {} events · expected {} strokes",self.replay.sequence.width,self.replay.sequence.height,self.replay.sequence.tool,self.replay.sequence.samples.len(),self.replay.sequence.expected_strokes));
                 ui.label("Local input JSON path");if super::edit::text(ui,&mut self.replay.path,"input-replay").changed(){self.replay.replace=false;}

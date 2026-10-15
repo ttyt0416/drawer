@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 7;
+const VERSION: u32 = 8;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -411,6 +411,18 @@ mod tests {
         assert!(!legacy.layers[0].locked);
         assert_eq!(legacy.layers[0].pixels, doc.layers[0].pixels);
         assert_eq!(legacy.scene.selection_translation, [1.0, 10.0]);
+    }
+    #[test]
+    fn version_seven_without_mouse_records_preserves_existing_lock_and_geometry() {
+        let root = TempDir::new();
+        let path = root.0.join("version7.drawer");
+        let mut doc = sample();
+        doc.layers[0].locked = true;
+        save(&mut doc, &path).unwrap();
+        let mut bytes = fs::read(&path).unwrap();
+        bytes[8..12].copy_from_slice(&7u32.to_le_bytes());
+        fs::write(&path, bytes).unwrap();
+        assert!(open(&path, 16).unwrap().snapshot() == doc.snapshot());
     }
     #[test]
     fn version_two_geometry_without_grid_loads_with_default_grid() {

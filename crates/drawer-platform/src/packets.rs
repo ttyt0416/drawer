@@ -139,6 +139,7 @@ pub fn attributes(p: &Packet, axes: Option<[Axis; 3]>) -> Attributes {
         ])
     });
     Attributes {
+        time_micros: None,
         tilt,
         eraser: p.status.map(|s| s & 0x10 != 0),
         button: Some(p.buttons != 0),

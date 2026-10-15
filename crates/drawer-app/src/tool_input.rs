@@ -161,10 +161,13 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).show(ctx,|ui|{
+        egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).vscroll(true).show(ctx,|ui|{
             super::edit::slider(ui,&mut draft.hold_millis,0..=5000,"Temporary tool threshold (ms)","modifier-tools");
             super::edit::slider(ui,&mut draft.drag_pixels,0.0..=64.0,"Drag threshold (screen pixels)","modifier-tools");
             for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.name()),"modifier-tools");}
+            ui.collapsing("Mouse virtual pressure",|ui| {
+                for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.name(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}
+            });
             ui.separator();
             ui.label("Hold a modifier to use its tool; release always restores the previous tool.");
             for (n, label) in ["Ctrl", "Shift", "Alt"].into_iter().enumerate() {
