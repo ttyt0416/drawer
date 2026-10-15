@@ -108,6 +108,7 @@ pub fn prepare(
     }
     let mut state = document.snapshot();
     state.layers.push(RasterLayer {
+        locked: false,
         name: "Pasted image".into(),
         pixels: image.pixels.clone(),
         placement: Some(placement),

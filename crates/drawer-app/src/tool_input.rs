@@ -133,6 +133,11 @@ impl Drawer {
         tip: BrushTip,
         repeat: bool,
     ) {
+        if !repeat {
+            self.precision.finish();
+            self.drawing.mode = super::precision::Mode::Paint;
+            self.drawing.connect_line = false;
+        }
         let id = self.active.map(|n| self.documents[n].id);
         if let Some(tool) = self.tool_input.controller.press(
             key.name(),

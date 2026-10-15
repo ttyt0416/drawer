@@ -399,7 +399,12 @@ impl Drawer {
     }
     fn panel_properties(&mut self, ui: &mut egui::Ui, kind: Kind) {
         match kind {
-            Kind::Brush => self.tool_property_controls(ui),
+            Kind::Brush => {
+                ui.collapsing("Keyboard editing", |ui| self.precision_controls(ui));
+                ui.add_enabled_ui(self.drawing.mode == super::precision::Mode::Paint, |ui| {
+                    self.tool_property_controls(ui)
+                });
+            }
             Kind::Color => {
                 let [r, g, b, a] = self.references.session.workspace.color;
                 ui.label(format!("#{r:02X}{g:02X}{b:02X}{a:02X}"));
@@ -430,6 +435,19 @@ impl Drawer {
                             }),
                     };
                     ui.label(label.unwrap_or_else(|| "Selected item unavailable".into()));
+                    if let Target::Raster(layer) = target
+                        && let Some(raster) = self.documents[n].layers.get(layer)
+                    {
+                        let mut locked = raster.locked;
+                        if ui.checkbox(&mut locked, "Lock raster layer").changed() {
+                            self.finish_stroke();
+                            let mut state = self.documents[n].snapshot();
+                            state.layers[layer].locked = locked;
+                            if let Err(e) = self.documents[n].commit_state(state) {
+                                self.status = Some(e);
+                            }
+                        }
+                    }
                 }
             }
         }

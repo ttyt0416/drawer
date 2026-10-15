@@ -49,6 +49,9 @@ pub struct Stroke {
     limit: usize,
 }
 impl Stroke {
+    pub fn anchor(&self) -> Option<(usize, BrushTip, Point)> {
+        self.last.map(|point| (self.layer, self.style.tip, point))
+    }
     pub fn begin(doc: &Document, layer: usize, style: Style) -> Result<Self, String> {
         Self::with_budget(doc, layer, style, DEFAULT_DOCUMENT_BUDGET / 4)
     }
@@ -58,11 +61,14 @@ impl Stroke {
         style: Style,
         budget: usize,
     ) -> Result<Self, String> {
+        if doc.layers.get(layer).is_some_and(|l| l.locked) {
+            return Err("The raster layer is locked".into());
+        }
         if !style.valid()
             || doc
                 .layers
                 .get(layer)
-                .is_none_or(|l| !l.valid(doc.width, doc.height))
+                .is_none_or(|l| l.locked || !l.valid(doc.width, doc.height))
         {
             return Err("Choose a valid raster layer and brush".into());
         }
@@ -101,7 +107,7 @@ impl Stroke {
             || doc
                 .layers
                 .get(self.layer)
-                .is_none_or(|l| !l.valid(doc.width, doc.height))
+                .is_none_or(|l| l.locked || !l.valid(doc.width, doc.height))
         {
             return Err("The drawing changed; pending stroke discarded".into());
         }
@@ -303,11 +309,7 @@ impl Stroke {
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
                 let point = [x as f64 + 0.5, y as f64 + 0.5];
-                let mask = doc
-                    .scene
-                    .selection_mask
-                    .as_ref()
-                    .map_or(255, |m| m.coverage(point));
+                let mask = doc.scene.selection_coverage(point);
                 if mask == 0 {
                     continue;
                 }

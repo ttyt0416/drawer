@@ -190,6 +190,9 @@ pub struct Scene {
     pub selection: Option<Rect>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection_mask: Option<crate::selection::Mask>,
+    /// Document-space translation, independent of page object transforms.
+    #[serde(default)]
+    pub selection_translation: Point,
     pub guides: Vec<[Point; 2]>,
     pub camera: Option<Camera>,
     pub worlds: Vec<WorldMesh>,
@@ -197,6 +200,10 @@ pub struct Scene {
 impl Scene {
     pub fn valid(&self) -> bool {
         self.transform.valid()
+            && self
+                .selection_translation
+                .iter()
+                .all(|v| v.is_finite() && v.abs() <= 1e9)
             && self.grid.valid()
             && self.clips.len() <= 4096
             && self.clips.iter().flatten().flatten().all(|v| v.is_finite())

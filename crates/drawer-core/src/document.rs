@@ -42,6 +42,7 @@ impl std::error::Error for CreateError {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RasterLayer {
+    pub locked: bool,
     pub name: String,
     pub pixels: Vec<[u8; 4]>,
     pub placement: Option<PlacedRaster>,
@@ -146,6 +147,7 @@ impl Document {
             height: spec.height,
             dpi: spec.dpi,
             layers: vec![RasterLayer {
+                locked: false,
                 name: "Layer 1".into(),
                 pixels,
                 placement: None,
@@ -254,6 +256,7 @@ mod tests {
         let mut document = Document::create(spec(), 4).unwrap();
         document.layers[0].pixels[0] = [255, 0, 0, 128];
         document.layers.push(RasterLayer {
+            locked: false,
             name: "Top".into(),
             pixels: vec![[0, 0, 255, 128]],
             placement: None,

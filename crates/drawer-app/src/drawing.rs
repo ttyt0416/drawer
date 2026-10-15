@@ -65,6 +65,11 @@ pub(super) struct Drawing {
     pub pen_available: bool,
     native_mouse: bool,
     pub settings: drawer_core::pointer_input::Settings,
+    pub mode: super::precision::Mode,
+    pub connect_line: bool,
+    pub opacity: Option<[f64; 4]>,
+    pub picked: Option<[u8; 4]>,
+    endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
     pub last_source: Option<drawer_core::pointer_input::Source>,
     pub last_attributes: drawer_core::pointer_input::Attributes,
@@ -205,9 +210,7 @@ impl Drawing {
                 .iter_mut()
                 .find(|d| d.id == session.stroke.document)
             {
-                if let Err(e) = session.stroke.commit(doc) {
-                    self.error = Some(e);
-                }
+                self.commit_session(session, doc);
             } else {
                 self.error = Some("The drawing was closed; pending stroke discarded".into());
             }
@@ -215,11 +218,27 @@ impl Drawing {
     }
     fn finish_document(&mut self, doc: &mut Document) {
         self.ownership.clear();
-        if let Some(s) = self.active.take()
-            && let Err(e) = s.stroke.commit(doc)
-        {
-            self.error = Some(e);
+        if let Some(s) = self.active.take() {
+            self.commit_session(s, doc);
         }
+    }
+    fn commit_session(&mut self, session: Session, doc: &mut Document) {
+        let anchor = session.stroke.anchor();
+        match session.stroke.commit(doc) {
+            Ok(true) => {
+                if let Some((layer, tip, point)) = anchor {
+                    self.remember(doc.id, layer, tip, point);
+                }
+            }
+            Ok(false) => {}
+            Err(e) => self.error = Some(e),
+        }
+    }
+    fn remember(&mut self, id: u64, layer: usize, tip: BrushTip, point: Point) {
+        if self.endpoints.len() >= 4096 && !self.endpoints.contains_key(&(id, layer, tip)) {
+            self.endpoints.clear();
+        }
+        self.endpoints.insert((id, layer, tip), point);
     }
     fn sample(
         &mut self,
@@ -413,6 +432,22 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
+            if self.mode != super::precision::Mode::Paint {
+                if self.mode == super::precision::Mode::Eyedropper {
+                    let point = projection.point(pos);
+                    if point[0] >= 0.0
+                        && point[1] >= 0.0
+                        && point[0] < doc.width as f64
+                        && point[1] < doc.height as f64
+                    {
+                        self.picked = Some(
+                            doc.composite_pixel(point[0].floor() as u32, point[1].floor() as u32),
+                        );
+                    }
+                }
+                self.ownership.clear();
+                continue;
+            }
             let current_tip = style.tip;
             style.tip =
                 self.settings
@@ -430,6 +465,36 @@ impl Drawing {
                 .and_then(|s| s.stabilization)
             {
                 style.smoothing = value;
+            }
+            let index = BrushTip::ALL
+                .iter()
+                .position(|tip| *tip == style.tip)
+                .unwrap();
+            style.color[3] =
+                (style.color[3] as f64 * self.opacity.unwrap_or([1.0; 4])[index]).round() as u8;
+            if self.connect_line {
+                self.ownership.clear();
+                self.connect_line = false;
+                let result = (|| -> Result<(), String> {
+                    let layer = layer.ok_or("Select a raster layer to connect a line")?;
+                    let from = *self
+                        .endpoints
+                        .get(&(doc.id, layer, style.tip))
+                        .ok_or("Draw a starting stroke with this tool on this layer first")?;
+                    let to = projection.point(pos);
+                    style.smoothing = 0.0;
+                    let mut stroke = Stroke::begin(doc, layer, style)?;
+                    stroke.sample(doc, from)?;
+                    stroke.sample(doc, to)?;
+                    if stroke.commit(doc)? {
+                        self.remember(doc.id, layer, style.tip, to);
+                    }
+                    Ok(())
+                })();
+                if let Err(e) = result {
+                    self.error = Some(e);
+                }
+                continue;
             }
             match layer
                 .ok_or_else(|| "Select a raster layer to paint".to_string())
@@ -460,12 +525,20 @@ impl Drawing {
 }
 impl Drawer {
     pub(super) fn finish_stroke(&mut self) {
+        self.precision.finish();
         self.drawing.finish(&mut self.documents);
         if let Some(e) = self.drawing.error.take() {
             self.status = Some(e);
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.drawing.opacity = Some(self.panels.settings.brush_opacity);
+        self.drawing
+            .endpoints
+            .retain(|(id, _, _), _| self.documents.iter().any(|d| d.id == *id));
+        if let Some(color) = self.drawing.picked.take() {
+            self.references.session.workspace.color = color;
+        }
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
         let target_view = self

@@ -958,7 +958,7 @@ impl CanvasView {
         scale: f64,
     ) {
         let map = |point| {
-            let p = document.scene.transform.map(point);
+            let p = document.scene.selection_point(point);
             egui::pos2(
                 paper.min.x + (p[0] * scale) as f32,
                 paper.min.y + (p[1] * scale) as f32,

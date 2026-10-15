@@ -6,7 +6,23 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 10] = [
+pub const EXTRA_COMMANDS: [&str; 26] = [
+    "opacity-up",
+    "opacity-down",
+    "opacity-0",
+    "opacity-10",
+    "opacity-20",
+    "opacity-30",
+    "opacity-40",
+    "opacity-50",
+    "opacity-60",
+    "opacity-70",
+    "opacity-80",
+    "opacity-90",
+    "opacity-100",
+    "connect-line",
+    "Eyedropper",
+    "Move",
     "brush-grow",
     "brush-shrink",
     "zoom-in",
@@ -320,6 +336,10 @@ impl Settings {
             "brush-shrink" => "Decrease brush size",
             "zoom-in" => "Zoom in",
             "zoom-out" => "Zoom out",
+            "connect-line" => "Connect last stroke to next click",
+            "opacity-up" => "Increase brush opacity",
+            "opacity-down" => "Decrease brush opacity",
+            c if c.starts_with("opacity-") => return format!("Brush opacity — {}%", &c[8..]),
             other => other,
         }
         .into()

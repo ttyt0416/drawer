@@ -155,3 +155,6 @@ docs/process/touch.md
 crates/drawer-core/src/controller.rs
 crates/drawer-platform/src/dial.rs
 docs/process/controllers.md
+crates/drawer-core/src/precision.rs
+crates/drawer-app/src/precision.rs
+docs/process/precision.md

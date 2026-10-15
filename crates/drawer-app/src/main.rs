@@ -26,6 +26,7 @@ mod new_canvas;
 mod panels;
 mod paste_dialog;
 mod pointer_input;
+mod precision;
 mod preferences;
 mod pressure_settings;
 mod quality;
@@ -103,6 +104,7 @@ struct Drawer {
     properties: tool_properties::Properties,
     preferences: preferences::Preferences,
     drawing: drawing::Drawing,
+    precision: precision::Precision,
     native_input: pointer_input::Native,
     #[cfg(windows)]
     native_mouse: Option<drawer_platform::Input>,
@@ -213,6 +215,7 @@ impl Drawer {
             properties: Default::default(),
             preferences: Default::default(),
             drawing: Default::default(),
+            precision: Default::default(),
             native_input: Default::default(),
             #[cfg(windows)]
             native_mouse: None,
@@ -416,7 +419,9 @@ impl Drawer {
         self.observe_scale(ui.ctx());
         self.view_shortcuts(ui.ctx());
         self.basic_shortcuts(ui.ctx());
+        self.precision_inputs(ui.ctx());
         self.direct_actions(ui.ctx());
+        self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.sync_tool_properties();
         self.canvas_view.brush_shape = drawer_core::brush_cursor::Shape {
             size: self.panels.settings.brush_size,
@@ -1181,6 +1186,10 @@ impl eframe::App for Drawer {
                     eprintln!("Controller replay: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = precision::smoke() {
+                    eprintln!("Keyboard precision: {e}");
+                    fail_smoke();
+                }
                 let acquisition_work = self
                     .storage
                     .as_ref()
@@ -1236,7 +1245,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -3580,6 +3589,7 @@ mod tests {
             .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
         let mut doc = movie_clip().document(1000000).unwrap();
         doc.layers.push(drawer_core::document::RasterLayer {
+            locked: false,
             name: "Outside".into(),
             placement: Some(drawer_core::document::PlacedRaster {
                 width: 2,
@@ -3996,6 +4006,8 @@ mod tests {
                     );
                     let (id, point) = app.canvas_view.first_point.unwrap();
                     assert_eq!(id, app.documents[0].id);
+                    // DPI-dependent panel reflow can change the receiving rectangle.
+                    let viewport = app.canvas_view.viewport.unwrap();
                     let mapped = app.documents[0].view.document_to_screen(
                         point,
                         [400.0, 300.0],

@@ -340,6 +340,7 @@ pub(super) fn number<T: egui::emath::Numeric>(
             response.surrender_focus();
         }
         if response.dragged() {
+            let speed = precision_step(speed, ui.input(|i| i.modifiers.ctrl), T::INTEGRAL);
             let n = (value.to_f64() + response.drag_delta().x as f64 * speed)
                 .clamp(*range.start(), *range.end());
             let next = T::from_f64(if T::INTEGRAL { n.round() } else { n });
@@ -362,12 +363,31 @@ pub(super) fn slider<T: egui::emath::Numeric>(
 ) -> egui::Response {
     let min = range.start().to_f64();
     let max = range.end().to_f64();
+    let step = precision_step(
+        if T::INTEGRAL { 1.0 } else { 0.01 },
+        ui.input(|i| i.modifiers.ctrl),
+        T::INTEGRAL,
+    );
     ui.horizontal(|ui| {
+        let before = value.to_f64();
         let a = ui.add(
             egui::Slider::new(value, range)
                 .show_value(false)
                 .text(label.into()),
         );
+        if ui.input(|i| i.modifiers.ctrl) && a.is_pointer_button_down_on() {
+            let delta = ui.input(|i| i.pointer.delta().x) as f64;
+            let movement = delta * (max - min) / ui.spacing().slider_width.max(1.0) as f64 * 0.1;
+            *value = T::from_f64((before + (movement / step).round() * step).clamp(min, max));
+        } else if ui.input(|i| i.modifiers.ctrl) && a.has_focus() {
+            let direction = ui.input(|i| {
+                i.num_presses(egui::Key::ArrowRight) as i32
+                    - i.num_presses(egui::Key::ArrowLeft) as i32
+            });
+            if direction != 0 {
+                *value = T::from_f64((before + direction as f64 * step).clamp(min, max));
+            }
+        }
         super::help::tag(ui.ctx(), &a, topic);
         let b = number(
             ui,
@@ -381,10 +401,97 @@ pub(super) fn slider<T: egui::emath::Numeric>(
     })
     .inner
 }
+fn precision_step(base: f64, fine: bool, integer: bool) -> f64 {
+    let step = base * if fine { 0.1 } else { 1.0 };
+    if integer { step.max(1.0) } else { step }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fine_increment_is_one_tenth_and_unfocused_slider_does_not_round_saved_values() {
+        assert_eq!(precision_step(1.0, true, false), 0.1);
+        assert_eq!(precision_step(0.01, true, false), 0.001);
+        assert_eq!(precision_step(1.0, true, true), 1.0);
+        let ctx = egui::Context::default();
+        let mut value = 0.703123;
+        for fine in [false, true] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    events: vec![egui::Event::ModifiersChanged(if fine {
+                        egui::Modifiers::CTRL
+                    } else {
+                        egui::Modifiers::NONE
+                    })],
+                    ..Default::default()
+                },
+                |ui| {
+                    slider(ui, &mut value, 0.0..=0.95, "Precision", "tool-properties");
+                },
+            );
+            output.textures_delta.clear();
+            assert_eq!(value, 0.703123);
+        }
+    }
+    #[test]
+    fn ctrl_slider_drag_changes_value_more_slowly_through_the_real_widget() {
+        fn draw(ctx: &egui::Context, value: &mut f64, events: Vec<egui::Event>) -> egui::Rect {
+            let mut rect = egui::Rect::NOTHING;
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(400.0, 200.0),
+                    )),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    rect = slider(ui, value, 0.0..=100.0, "", "tool-properties").rect;
+                },
+            );
+            output.textures_delta.clear();
+            rect
+        }
+        let mut movement = Vec::new();
+        for fine in [false, true] {
+            let ctx = egui::Context::default();
+            let mut value = 50.0;
+            let rect = draw(&ctx, &mut value, vec![]);
+            let pos = egui::pos2(rect.left() + 50.0, rect.center().y);
+            let modifiers = if fine {
+                egui::Modifiers::CTRL
+            } else {
+                egui::Modifiers::NONE
+            };
+            draw(
+                &ctx,
+                &mut value,
+                vec![
+                    egui::Event::ModifiersChanged(modifiers),
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers,
+                    },
+                ],
+            );
+            let before = value;
+            draw(
+                &ctx,
+                &mut value,
+                vec![egui::Event::PointerMoved(pos + egui::vec2(20.0, 0.0))],
+            );
+            movement.push(value - before);
+        }
+        assert!(
+            movement[0] > 10.0 && movement[1] > 0.0 && movement[1] < movement[0] * 0.15,
+            "{movement:?}"
+        );
+    }
     use egui::text::{CCursor, CCursorRange};
     fn run(
         ctx: &egui::Context,

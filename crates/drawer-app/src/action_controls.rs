@@ -143,6 +143,14 @@ pub(super) struct Controls {
 }
 impl Drawer {
     pub(super) fn command_reason(&self, command: &str) -> Option<String> {
+        if (command.starts_with("opacity-")
+            || ["brush-grow", "brush-shrink", "connect-line"].contains(&command))
+            && self.drawing.mode != super::precision::Mode::Paint
+        {
+            return Some(
+                "This tool does not support brush size, opacity or connecting strokes".into(),
+            );
+        }
         if !self.workspaces.store.current.actions.has_command(command) {
             return Some(format!("Command unavailable: {command}"));
         }
@@ -180,13 +188,39 @@ impl Drawer {
         let result = (|| -> Result<(), String> {
             match command {
                 "brush-grow" | "brush-shrink" => {
+                    let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size
-                        * if command == "brush-grow" {
-                            1.1
-                        } else {
-                            1.0 / 1.1
-                        })
+                        + if command == "brush-grow" { step } else { -step })
                     .clamp(0.1, 4096.0);
+                }
+                "Move" | "Eyedropper" => {
+                    self.drawing.mode = if command == "Move" {
+                        super::precision::Mode::Move
+                    } else {
+                        super::precision::Mode::Eyedropper
+                    };
+                    self.drawing.connect_line = false;
+                }
+                "connect-line" => {
+                    self.drawing.connect_line = !self.drawing.connect_line;
+                    self.status=Some("Click a canvas point to connect from this tool's last stroke; Escape cancels".into());
+                }
+                c if c.starts_with("opacity-") => {
+                    let n = BrushTip::ALL
+                        .iter()
+                        .position(|tip| *tip == self.selected)
+                        .unwrap();
+                    let opacity = &mut self.panels.settings.brush_opacity[n];
+                    *opacity = match c {
+                        "opacity-up" => (*opacity + 0.1).min(1.0),
+                        "opacity-down" => (*opacity - 0.1).max(0.0),
+                        _ => {
+                            c[8..]
+                                .parse::<f64>()
+                                .map_err(|_| "Invalid opacity command")?
+                                / 100.0
+                        }
+                    };
                 }
                 "zoom-in" | "zoom-out" => {
                     if let Some(n) = self.active {
@@ -838,7 +872,7 @@ fn edit_bindings(ui: &mut egui::Ui, e: &mut Editor) {
     let mut pick = None;
     for (n, b) in e.draft.bindings.iter_mut().enumerate() {
         ui.push_id(n,|ui|ui.horizontal_wrapped(|ui|{
-        super::edit::text(ui,&mut b.key,"shortcuts").on_hover_text("Key name: A–Z, 0–9, F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");crate::help::checkbox(ui,&mut b.ctrl,"Ctrl","shortcuts");crate::help::checkbox(ui,&mut b.shift,"Shift","shortcuts");crate::help::checkbox(ui,&mut b.alt,"Alt","shortcuts");if crate::help::button(ui,e.draft.actions.label(&b.command),"shortcuts").clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
+        super::edit::text(ui,&mut b.key,"shortcuts").on_hover_text("Key name: A–Z, 0–9, [, ], F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");crate::help::checkbox(ui,&mut b.ctrl,"Ctrl","shortcuts");crate::help::checkbox(ui,&mut b.shift,"Shift","shortcuts");crate::help::checkbox(ui,&mut b.alt,"Alt","shortcuts");if crate::help::button(ui,e.draft.actions.label(&b.command),"shortcuts").clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
 if ui.small_button("Remove").clicked(){remove=Some(n);}
     }));
     }

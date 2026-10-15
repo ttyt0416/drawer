@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -125,6 +125,15 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         } else {
             None
         };
+        let locked = if version >= 7 {
+            match read_u32(&mut reader)? {
+                0 => false,
+                1 => true,
+                _ => return Err(invalid("Invalid layer lock tag")),
+            }
+        } else {
+            false
+        };
         let extent = placement.unwrap_or(PlacedRaster {
             width,
             height,
@@ -154,6 +163,7 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
             }
         }
         document.layers.push(RasterLayer {
+            locked,
             name,
             pixels,
             placement,
@@ -267,6 +277,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
             } else {
                 writer.write_all(&0u32.to_le_bytes())?;
             }
+            writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
             writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
             for chunk in layer.pixels.chunks(4096) {
                 let mut buffer = [0u8; 16384];
@@ -321,6 +332,7 @@ mod tests {
         document.layers[0].name = "원본 레이어".into();
         document.edit_pixel(0, 1, 0, [20, 40, 60, 255]);
         document.layers.push(RasterLayer {
+            locked: false,
             name: "Second".into(),
             pixels: vec![[0; 4]; 2],
             placement: None,
@@ -371,7 +383,7 @@ mod tests {
         save(&mut doc, &path).unwrap();
         let mut bytes = fs::read(&path).unwrap();
         let placement = 32 + 4 + doc.layers[0].name.len();
-        bytes.drain(placement..placement + 4);
+        bytes.drain(placement..placement + 8);
         bytes[8..12].copy_from_slice(&1u32.to_le_bytes());
         bytes.truncate(32 + 4 + "Layer 1".len() + 8 + 8);
         fs::write(&path, &bytes).unwrap();
@@ -382,6 +394,25 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), bytes);
     }
     #[test]
+    fn layer_locks_selection_translation_round_trip_and_version_six_is_unlocked() {
+        let root = TempDir::new();
+        let path = root.0.join("locked.drawer");
+        let mut doc = sample();
+        doc.layers[0].locked = true;
+        doc.scene.selection_translation = [1.0, 10.0];
+        save(&mut doc, &path).unwrap();
+        assert!(open(&path, 16).unwrap().snapshot() == doc.snapshot());
+        let mut bytes = fs::read(&path).unwrap();
+        let tag = 32 + 4 + doc.layers[0].name.len() + 4;
+        bytes.drain(tag..tag + 4);
+        bytes[8..12].copy_from_slice(&6u32.to_le_bytes());
+        fs::write(&path, bytes).unwrap();
+        let legacy = open(&path, 16).unwrap();
+        assert!(!legacy.layers[0].locked);
+        assert_eq!(legacy.layers[0].pixels, doc.layers[0].pixels);
+        assert_eq!(legacy.scene.selection_translation, [1.0, 10.0]);
+    }
+    #[test]
     fn version_two_geometry_without_grid_loads_with_default_grid() {
         let root = TempDir::new();
         let path = root.0.join("legacy2.drawer");
@@ -389,7 +420,7 @@ mod tests {
         save(&mut doc, &path).unwrap();
         let mut bytes = fs::read(&path).unwrap();
         let placement = 32 + 4 + doc.layers[0].name.len();
-        bytes.drain(placement..placement + 4);
+        bytes.drain(placement..placement + 8);
         let offset = 32 + 4 + doc.layers[0].name.len() + 8 + doc.layers[0].pixels.len() * 4;
         let mut scene = serde_json::to_value(&doc.scene).unwrap();
         scene.as_object_mut().unwrap().remove("grid");

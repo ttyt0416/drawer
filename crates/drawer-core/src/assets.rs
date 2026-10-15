@@ -1,6 +1,6 @@
 pub const APP_NAME: &str = "Drawer";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BrushTip {
     Pen,
     Pencil,

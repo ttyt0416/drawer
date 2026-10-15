@@ -124,6 +124,23 @@ pub fn default_bindings() -> Vec<Binding> {
         ("R", false, false, "radial:4"),
         ("F1", false, false, "help"),
         ("F12", false, false, "screen-mode"),
+        ("[", false, false, "brush-shrink"),
+        ("]", false, false, "brush-grow"),
+        ("[", false, true, "opacity-down"),
+        ("]", false, true, "opacity-up"),
+        ("1", false, false, "opacity-10"),
+        ("2", false, false, "opacity-20"),
+        ("3", false, false, "opacity-30"),
+        ("4", false, false, "opacity-40"),
+        ("5", false, false, "opacity-50"),
+        ("6", false, false, "opacity-60"),
+        ("7", false, false, "opacity-70"),
+        ("8", false, false, "opacity-80"),
+        ("9", false, false, "opacity-90"),
+        ("0", false, false, "opacity-100"),
+        ("L", false, false, "connect-line"),
+        ("I", false, false, "Eyedropper"),
+        ("M", false, false, "Move"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {
@@ -418,6 +435,7 @@ impl Snapshot {
             next.color = incoming.color;
             next.scratchpad = incoming.scratchpad.clone();
             next.panels.brush_size = incoming.panels.brush_size;
+            next.panels.brush_opacity = incoming.panels.brush_opacity;
             next.panels.brush_aspect = incoming.panels.brush_aspect;
             next.panels.brush_angle = incoming.panels.brush_angle;
         }
@@ -462,6 +480,8 @@ pub fn supported_key(key: &str) -> bool {
         && (key.as_bytes()[0].is_ascii_uppercase() || key.as_bytes()[0].is_ascii_digit()))
         || [
             "ArrowUp",
+            "[",
+            "]",
             "ArrowRight",
             "ArrowDown",
             "ArrowLeft",

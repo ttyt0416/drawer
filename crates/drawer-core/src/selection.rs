@@ -1,6 +1,37 @@
 use crate::scene::Point;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+impl crate::scene::Scene {
+    pub fn selection_coverage(&self, point: Point) -> u8 {
+        let p = self.transform.inverse().map([
+            point[0] - self.selection_translation[0],
+            point[1] - self.selection_translation[1],
+        ]);
+        if let Some(mask) = &self.selection_mask {
+            mask.coverage(p)
+        } else if let Some(r) = self.selection {
+            if p[0] >= r.min[0] && p[0] < r.max[0] && p[1] >= r.min[1] && p[1] < r.max[1] {
+                255
+            } else {
+                0
+            }
+        } else {
+            255
+        }
+    }
+    pub fn selection_empty(&self) -> bool {
+        self.selection_mask
+            .as_ref()
+            .map_or(self.selection.is_none(), |m| m.runs.is_empty())
+    }
+    pub fn selection_point(&self, point: Point) -> Point {
+        let p = self.transform.map(point);
+        [
+            p[0] + self.selection_translation[0],
+            p[1] + self.selection_translation[1],
+        ]
+    }
+}
 
 /// Non-overlapping horizontal coverage runs in the scene's original pixel coordinates.
 /// None means unrestricted selection; Some with no runs is an explicit empty selection.

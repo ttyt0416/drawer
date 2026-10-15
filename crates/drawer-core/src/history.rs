@@ -27,6 +27,7 @@ enum EditKind {
     },
 }
 struct Edit {
+    group: Option<u64>,
     kind: EditKind,
     from: u64,
     to: u64,
@@ -60,6 +61,7 @@ impl History {
     fn push(&mut self, kind: EditKind) {
         self.next += 1;
         let edit = Edit {
+            group: None,
             kind,
             from: self.current,
             to: self.next,
@@ -97,6 +99,9 @@ impl Document {
             .layers
             .get_mut(layer)
             .ok_or("Raster layer no longer exists")?;
+        if raster.locked {
+            return Err("The raster layer is locked".into());
+        }
         if changes
             .iter()
             .any(|p| raster.pixels.get(p.offset) != Some(&p.before))
@@ -139,6 +144,9 @@ impl Document {
         let Some(layer_data) = self.layers.get_mut(layer) else {
             return false;
         };
+        if layer_data.locked {
+            return false;
+        }
         let Some(offset) = layer_data.pixel_index(self.width, self.height, x as i64, y as i64)
         else {
             return false;
@@ -158,6 +166,13 @@ impl Document {
         true
     }
     pub fn commit_state(&mut self, after: DocumentState) -> Result<bool, String> {
+        self.commit_state_group(after, None)
+    }
+    pub(crate) fn commit_state_group(
+        &mut self,
+        after: DocumentState,
+        group: Option<u64>,
+    ) -> Result<bool, String> {
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
             || !(1..=crate::document::MAX_DIMENSION).contains(&after.height)
             || !after.dpi.is_finite()
@@ -182,10 +197,33 @@ impl Document {
             return Ok(false);
         }
         after.restore(self);
+        if group.is_some()
+            && self.history.redo.is_empty()
+            && self.history.saved != Some(self.history.current)
+            && let Some(last) = self.history.undo.last_mut()
+            && last.group == group
+            && last.to == self.history.current
+            && let EditKind::State {
+                before: original,
+                after: previous,
+            } = &mut last.kind
+        {
+            if **original == after {
+                let edit = self.history.undo.pop().unwrap();
+                self.history.current = edit.from;
+            } else {
+                **previous = after;
+            }
+            self.history_changed();
+            return Ok(true);
+        }
         self.history.push(EditKind::State {
             before: Box::new(before),
             after: Box::new(after),
         });
+        if let Some(last) = self.history.undo.last_mut() {
+            last.group = group;
+        }
         self.history_changed();
         Ok(true)
     }

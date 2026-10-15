@@ -255,6 +255,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
         );
         for cell in animation.tracks.iter().flat_map(|t| &t.cells) {
             let layer = RasterLayer {
+                locked: false,
                 name: cell.name.clone(),
                 pixels: Vec::new(),
                 placement: Some(PlacedRaster {
@@ -458,6 +459,7 @@ pub fn prepare(
             }
         }
         result.layers.push(RasterLayer {
+            locked: layer.locked,
             name: layer.name.clone(),
             pixels,
             placement: None,
@@ -492,6 +494,7 @@ pub fn prepare(
                 dpi: source.dpi,
                 layers: vec![RasterLayer {
                     name: cell.name.clone(),
+                    locked: false,
                     pixels: cell.pixels.as_ref().clone(),
                     placement: Some(PlacedRaster {
                         width: cell.width,
@@ -525,6 +528,9 @@ pub fn prepare(
         );
     }
     result.scene.transform = result.scene.transform.then(transform);
+    let translation = transform.map(source.scene.selection_translation);
+    let origin = transform.map([0.0; 2]);
+    result.scene.selection_translation = [translation[0] - origin[0], translation[1] - origin[1]];
     if !result.scene.valid() {
         return Err("The resulting geometry exceeds the supported coordinate range.".into());
     }

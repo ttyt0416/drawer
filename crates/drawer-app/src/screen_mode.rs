@@ -159,6 +159,11 @@ impl Drawer {
         self.movie_controls(ui);
         self.access_controls(ui);
         ui.separator();
+        ui.label(format!(
+            "Keyboard target: {} · {:?} · arrows 1px / Shift 10px",
+            self.precision.target.label(),
+            self.drawing.mode
+        ));
         if let Some(status) = &self.status {
             ui.colored_label(egui::Color32::LIGHT_RED, status);
         }
