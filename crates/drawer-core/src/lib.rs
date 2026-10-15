@@ -53,3 +53,5 @@ pub mod precision;
 pub mod pressure;
 pub mod tablet_mapping;
 pub mod touch;
+
+pub mod basic_brush;

@@ -53,7 +53,7 @@ impl Panels {
                     }
                 }
                 ctx.load_texture(
-                    format!("{} stroke preview", tip.name()),
+                    format!("{} stroke preview", tip.label()),
                     egui::ColorImage::new([64, 20], pixels),
                     egui::TextureOptions::LINEAR,
                 )
@@ -256,7 +256,7 @@ impl Drawer {
                             let label = if cfg.names {
                                 format!(
                                     "{}  {}",
-                                    tip.name(),
+                                    tip.label(),
                                     self.workspaces.command_label(tip.name())
                                 )
                             } else {
@@ -275,12 +275,12 @@ impl Drawer {
                                     egui::WidgetType::SelectableLabel,
                                     ui.is_enabled(),
                                     self.selected == tip,
-                                    tip.name(),
+                                    tip.label(),
                                 )
                             });
                             let response = response.on_hover_text(format!(
                                 "{} ({})",
-                                tip.name(),
+                                tip.label(),
                                 self.workspaces.command_label(tip.name())
                             ));
                             let mut clicked = response.clicked();
@@ -291,7 +291,7 @@ impl Drawer {
                                             .fit_to_exact_size(egui::vec2(16.0, 16.0))
                                             .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text(tip.name())
+                                    .on_hover_text(tip.label())
                                     .clicked();
                             }
                             if cfg.strokes {
@@ -301,7 +301,7 @@ impl Drawer {
                                             .fit_to_exact_size(egui::vec2(64.0, 20.0))
                                             .sense(egui::Sense::click()),
                                     )
-                                    .on_hover_text(tip.name())
+                                    .on_hover_text(tip.label())
                                     .clicked();
                             }
                             if clicked {
@@ -459,10 +459,10 @@ impl Drawer {
                     if ui
                         .small_button(format!(
                             "{} {}",
-                            tip.name(),
+                            tip.label(),
                             self.workspaces.command_label(tip.name())
                         ))
-                        .on_hover_text(tip.name())
+                        .on_hover_text(tip.label())
                         .clicked()
                     {
                         self.set_tool(tip);

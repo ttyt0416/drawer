@@ -144,6 +144,8 @@ struct Editor {
     preview: Option<Preview>,
     reset_preview: bool,
     hide_reset: bool,
+    factory: std::collections::HashSet<BrushTip>,
+    pending_factory: Option<BrushTip>,
 }
 impl Editor {
     fn new(draft: Settings, source: Tool) -> Self {
@@ -157,6 +159,8 @@ impl Editor {
             preview: None,
             reset_preview: false,
             hide_reset: false,
+            factory: Default::default(),
+            pending_factory: None,
         }
     }
 }
@@ -175,6 +179,8 @@ pub(super) struct Properties {
     cancel_copy: Option<egui::Rect>,
     #[cfg(test)]
     reset: Option<egui::Rect>,
+    #[cfg(test)]
+    factory_reset: Option<egui::Rect>,
 }
 fn migrated(app: &Drawer) -> Settings {
     let mut settings = Settings::default();
@@ -361,7 +367,7 @@ impl Drawer {
                 ui.separator();ui.heading("Review property changes");egui::ScrollArea::vertical().id_salt("property-copy-preview").max_height(180.0).show(ui,|ui|{for line in &preview.reports{ui.label(line);}});
                 ui.horizontal(|ui|{let a=crate::help::button(ui,"Accept preview into draft","tool-properties");let c=crate::help::button(ui,"Cancel property copy","tool-properties");accept=a.clicked();dismiss=c.clicked();#[cfg(test)]{self.properties.accept_copy=Some(a.rect);self.properties.cancel_copy=Some(c.rect);}});
             }
-            if accept{editor.draft=editor.preview.take().unwrap().next;super::edit::discard_layer(ctx,ui.layer_id());if editor.reset_preview&&editor.hide_reset{self.workspaces.store.current.preferences.suppressed.insert(drawer_core::preferences::Confirmation::ResetProperties);}editor.reset_preview=false;editor.hide_reset=false;}else if dismiss{editor.preview=None;editor.reset_preview=false;editor.hide_reset=false;}
+            if accept{if let Some(tip)=editor.pending_factory.take(){editor.factory.insert(tip);}editor.draft=editor.preview.take().unwrap().next;super::edit::discard_layer(ctx,ui.layer_id());if editor.reset_preview&&editor.hide_reset{self.workspaces.store.current.preferences.suppressed.insert(drawer_core::preferences::Confirmation::ResetProperties);}editor.reset_preview=false;editor.hide_reset=false;}else if dismiss{editor.pending_factory=None;editor.preview=None;editor.reset_preview=false;editor.hide_reset=false;}
             ui.horizontal_wrapped(|ui|{for tool in Tool::ALL {if crate::help::selectable(ui,editor.source==tool,tool.name(),"tool-properties").clicked(){super::edit::discard_layer(ctx,ui.layer_id());editor.source=tool;}}});
             if editor.draft.tools[&editor.source].is_empty(){ui.label("This tool has no shared brush properties; copies skip unsupported properties.");}
             for p in Property::ALL {if let Some(state)=editor.draft.tools.get_mut(&editor.source).unwrap().get_mut(&p) {ui.push_id(p.name(),|ui|{
@@ -380,14 +386,24 @@ impl Drawer {
             if ui.add_enabled(!pending,egui::Button::new("Preview property copy")).clicked(){
                 let targets=Tool::ALL.into_iter().enumerate().filter_map(|(n,t)|(editor.scope==2 || (editor.scope==0&&t.group()==editor.source.group()) || (editor.scope==1&&editor.targets[n])).then_some(t)).collect::<Vec<_>>();
                 let properties=Property::ALL.into_iter().enumerate().filter_map(|(n,p)|editor.properties[n].then_some(p)).collect::<Vec<_>>();
-                match editor.draft.preview(editor.source,&targets,&properties,editor.kind){Ok(preview)=>{editor.preview=Some(preview);editor.reset_preview=false;},Err(e)=>self.status=Some(e)}
+                match editor.draft.preview(editor.source,&targets,&properties,editor.kind){Ok(preview)=>{editor.preview=Some(preview);editor.pending_factory=None;editor.reset_preview=false;},Err(e)=>self.status=Some(e)}
+            }
+            let factory_reset=ui.add_enabled(!pending,egui::Button::new("Preview current basic brush reset…"));#[cfg(test)]{self.properties.factory_reset=Some(factory_reset.rect);}
+            if factory_reset.clicked(){
+                if let Some(tip)=BrushTip::ALL.into_iter().find(|t|Tool::brush(*t)==editor.source){
+                    let mut next=editor.draft.clone();
+                    match drawer_core::basic_brush::restore_values(&mut next,tip){
+                        Ok(())=>{editor.preview=Some(Preview{next,reports:vec![format!("Restore {} factory values, pressure mapping and mouse dynamics? Other brushes, presentation and drawing stay unchanged. Apply is required.",tip.label())]});editor.pending_factory=Some(tip);editor.reset_preview=false;},
+                        Err(e)=>self.status=Some(e),
+                    }
+                }else{self.status=Some("This tool has no basic brush preset".into());}
             }
             let reset=crate::help::button(ui,"Reset all tool properties…","tool-properties");#[cfg(test)]{self.properties.reset=Some(reset.rect);}
-            if reset.clicked(){if self.workspaces.store.current.preferences.suppressed.contains(&drawer_core::preferences::Confirmation::ResetProperties){editor.draft=Settings::default();editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());}else{editor.reset_preview=true;editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}}
+            if reset.clicked(){editor.pending_factory=None;if self.workspaces.store.current.preferences.suppressed.contains(&drawer_core::preferences::Confirmation::ResetProperties){editor.draft=Settings::default();editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());}else{editor.reset_preview=true;editor.preview=Some(Preview{next:Settings::default(),reports:vec!["Reset all tool values and property presentation? Accept only to replace the draft.".into()]});}}
             ui.horizontal_wrapped(|ui|{
                 if ui.add_enabled(!pending,egui::Button::new("Save local property preset…")).clicked() && let Some(path)=rfd::FileDialog::new().set_file_name("tool-properties.json").save_file() && let Err(e)=editor.draft.save(&path){self.status=Some(e.to_string());}
-                if crate::help::button(ui,"Read local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Tool property preset",&["json"]).pick_file(){match Settings::read(&path){Ok(s)=>{editor.draft=s;editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
-                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore before-apply properties")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>if let Some(mut properties)=s.properties{properties.upgrade(s.panels.brush_opacity,s.panels.brush_hardness,s.panels.brush_spacing);editor.draft=properties;editor.preview=None;super::edit::discard_layer(ctx,ui.layer_id());}else{self.status=Some("The backup predates per-tool properties".into());},Err(e)=>self.status=Some(e.to_string())}}
+                if crate::help::button(ui,"Read local property preset…","tool-properties").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Tool property preset",&["json"]).pick_file(){match Settings::read(&path){Ok(s)=>{editor.draft=s;editor.preview=None;editor.factory.clear();editor.pending_factory=None;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
+                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Restore before-apply properties")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>if let Some(mut properties)=s.properties{properties.upgrade(s.panels.brush_opacity,s.panels.brush_hardness,s.panels.brush_spacing);editor.draft=properties;editor.preview=None;editor.factory.clear();editor.pending_factory=None;super::edit::discard_layer(ctx,ui.layer_id());}else{self.status=Some("The backup predates per-tool properties".into());},Err(e)=>self.status=Some(e.to_string())}}
             });
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -403,6 +419,9 @@ impl Drawer {
         } else if apply {
             let mut snapshot = self.capture_workspace();
             snapshot.properties = Some(editor.draft.clone());
+            for tip in &editor.factory {
+                drawer_core::basic_brush::restore_input(&mut snapshot, *tip);
+            }
             snapshot.input.smoothing = BrushTip::ALL
                 .map(|tip| editor.draft.tools[&Tool::brush(tip)][&Property::Stabilization].value);
             self.stage_workspace(snapshot, self.workspaces.store.active.clone());
@@ -440,6 +459,103 @@ mod tests {
     #[test]
     fn canonical_units_and_slider_number_keys_use_the_same_increment() {
         smoke().unwrap();
+    }
+    #[test]
+    fn factory_preview_cancel_apply_backup_restart_preserves_other_brush_and_drawing() {
+        let root = TestDirectory::new();
+        let storage = UserStorage::at(root.0.join("user")).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        app.set_tool(BrushTip::Wash);
+        frame(&ctx, &mut app, vec![]);
+        app.panels.settings.brush_size = 90.0;
+        app.workspaces.store.current.input.mouse_pressure[3].enabled = true;
+        app.workspaces.store.current.input.mouse_pressure[0].enabled = true;
+        app.workspaces.store.current.pressure.tools[3].opacity = true;
+        frame(&ctx, &mut app, vec![]);
+        let baseline = app.capture_workspace();
+        let doc = app.documents[0].snapshot();
+        let dirty = app.documents[0].dirty;
+        let mut factory = baseline.properties.clone().unwrap();
+        drawer_core::basic_brush::restore_values(&mut factory, BrushTip::Wash).unwrap();
+        let editor = || {
+            let mut e = Editor::new(baseline.properties.clone().unwrap(), Tool::Wash);
+            e.pending_factory = Some(BrushTip::Wash);
+            e.preview = Some(Preview {
+                next: factory.clone(),
+                reports: vec!["Restore Airbrush factory values and dynamics".into()],
+            });
+            e
+        };
+        app.properties.open = true;
+        app.properties.editor = Some(editor());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.properties.cancel_copy.unwrap();
+        click(&ctx, &mut app, rect);
+        assert_eq!(app.capture_workspace(), baseline);
+        assert!(
+            app.properties
+                .editor
+                .as_ref()
+                .unwrap()
+                .pending_factory
+                .is_none()
+        );
+        app.properties.editor = Some(editor());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.properties.accept_copy.unwrap();
+        click(&ctx, &mut app, rect);
+        assert!(
+            app.properties
+                .editor
+                .as_ref()
+                .unwrap()
+                .factory
+                .contains(&BrushTip::Wash)
+        );
+        let rect = app.properties.cancel.unwrap();
+        click(&ctx, &mut app, rect);
+        assert_eq!(app.capture_workspace(), baseline);
+        app.properties.open = true;
+        app.properties.editor = Some(editor());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.properties.accept_copy.unwrap();
+        click(&ctx, &mut app, rect);
+        frame(&ctx, &mut app, vec![]);
+        let rect = app.properties.apply.unwrap();
+        click(&ctx, &mut app, rect);
+        assert_eq!(app.panels.settings.brush_size, 12.0);
+        assert_eq!(app.panels.settings.brush_opacity[3], 0.6);
+        assert!(!app.workspaces.store.current.input.mouse_pressure[3].enabled);
+        assert!(app.workspaces.store.current.input.mouse_pressure[0].enabled);
+        assert!(!app.workspaces.store.current.pressure.tools[3].opacity);
+        assert_eq!(
+            app.workspaces
+                .store
+                .current
+                .properties
+                .as_ref()
+                .unwrap()
+                .tools[&Tool::Pen],
+            baseline.properties.as_ref().unwrap().tools[&Tool::Pen]
+        );
+        let backup = drawer_core::workspaces::Snapshot::read(
+            &storage.root().join("settings/workspace-before-apply.json"),
+        )
+        .unwrap();
+        assert_eq!(backup, baseline);
+        let restarted = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
+        assert_eq!(restarted.panels.settings.brush_size, 12.0);
+        assert!(!restarted.workspaces.store.current.input.mouse_pressure[3].enabled);
+        assert!(app.documents[0].snapshot() == doc);
+        assert_eq!(app.documents[0].dirty, dirty);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
     #[test]
     fn values_switch_per_tool_and_display_state_preset_restart_preserve_document() {

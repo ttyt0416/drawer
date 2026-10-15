@@ -52,7 +52,7 @@ Canvas aids에서 단위와 눈금, 격자, 가이드 표시를 선택합니다.
 
 ## tools | 도구·시험 칠하기 | 브러시 붓 연필 지우개 워시 필압 펜 마우스 커서 색
 
-Brushes는 Pen, Pencil, Eraser, Wash 팁과 현재 크기·타원 비율·팁 회전을 표시합니다. 커서는 보기 회전/반전/화면 배율을 반영한 외곽과 도구 아이콘입니다.
+Brushes는 Pen, Pencil, Eraser, Airbrush 팁과 현재 크기·타원 비율·팁 회전을 표시합니다. 커서는 보기 회전/반전/화면 배율을 반영한 외곽과 도구 아이콘입니다.
 Test painting은 문서와 분리된 시험 영역입니다. 현재 도구·크기·색으로 드래그해 칠하고 Eraser로 지웁니다. 내용과 표시 상태는 로컬 저장되며 문서 Undo에 포함되지 않습니다.
 펜 하드웨어 검증은 별도이며 마우스로 시험할 수 있습니다.
 Tool input behavior에서 임시 도구 유지 시간과 실제 화면 픽셀의 드래그 거리를 선택합니다. 짧은 도구 키는 선택 유지, 기본 300ms 이상 누른 키는 놓으면 이전 도구로 돌아옵니다. 포커스/문서 변경은 유지 입력을 끝냅니다.
@@ -177,6 +177,8 @@ Tool properties에서 네 브러시의 크기·비율·각도·안정화·불투
 
 크기는 0.1~4096 문서 픽셀, 불투명도·경도는 0~100%, 간격은 브러시 지름의 0.01~10배입니다. 경도 0은 부드러운 가장자리, 100%는 단단한 가장자리입니다. 불투명도는 한 획 전체에 적용하므로 같은 획의 팁이 겹쳐도 지정 농도를 넘지 않으며 0은 픽셀·이력 불변입니다. 크기 단위 px/mm/in은 활성 문서 DPI로 변환하며 실제 크기는 픽셀로 저장합니다. 슬라이더 옆 숫자를 클릭해 직접 입력하고 Enter/포커스 이동으로 확정합니다. 숫자 위/아래, 슬라이더 왼쪽/오른쪽 키는 같은 단위 증분을 사용하며 Ctrl은 1/10입니다. 잘못된 문자·NaN·무한대·범위 밖 값은 마지막 정상값을 유지하고 오류를 표시하며 적용/복사/저장을 막습니다. Esc는 해당 미확정 입력만 버리고 설정 창 Cancel은 임시본 전체를 버립니다.
 
+Preview current basic brush reset는 선택한 기본 브러시의 값과 필압·마우스 동작을 미리보기 후 임시본에 복원합니다. Accept 후 Apply해야 로컬 저장하며 Cancel은 이전 설정을 유지합니다. 다른 브러시·색·보기·그림 이력은 유지하고 속성의 표시/숨김과 조작 방식도 보존합니다. 적용 전 백업에서 복구할 수 있습니다. 기본 Pen은 단단한 원, Pencil은 결정적 입자, Airbrush는 부드러운 세제곱 감쇠에 농도 60%·경도 0·간격 10%, Eraser는 층 알파를 제거합니다. Airbrush는 겹친 팁/별도 획으로 누적되며 정지 시간 분사는 입력 동작의 Timed spray 옵션으로 선택합니다.
+
 ## preferences | 언어·IME·확인창 | 한글 영어 입력기 자동 전환 조합 복원 경고 확인창 전체 개별
 
 Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어와 입력란의 IME 유지·열기·닫기 옵션을 고릅니다. 기본값은 사용자 상태 유지입니다. 숫자 입력란은 유지/닫기만 선택할 수 있습니다. 옵션은 Drawer UI 스레드의 포커스 창에만 적용하고 입력 이탈·창 포커스 상실 때 진입 전 IME 열림 상태를 복원합니다. 입력 언어나 변환 모드 자체를 바꾸지 않습니다.
@@ -197,7 +199,7 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 ## tutorial-en | Offline drawing tutorial | tutorial beginner mouse pen local save
 
 1. Create a document with New canvas, dimensions and DPI.
-2. Choose Pen/Pencil/Eraser/Wash with the default B/N/E/W keys. Draw on the canvas with the left mouse button. Release to commit one stroke; Undo restores it in one step. Eraser removes alpha. Test painting is a separate practice area.
+2. Choose Pen/Pencil/Eraser/Airbrush with the default B/N/E/W keys. Draw on the canvas with the left mouse button. Release to commit one stroke; Undo restores it in one step. Eraser removes alpha. Test painting is a separate practice area.
 3. Zoom with the wheel and pan with the middle button or Space+drag. The Information window measures two points in document units.
 4. Save a local .drawer document; PNG export creates a separate copy. Multiple views share one drawing.
 5. Commit field edits with Enter or focus change; Esc cancels an edit. During IME composition, Esc cancels composition only. F1 opens local context help.

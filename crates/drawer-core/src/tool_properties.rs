@@ -29,7 +29,7 @@ impl Tool {
             Self::Pen => "Pen",
             Self::Pencil => "Pencil",
             Self::Eraser => "Eraser",
-            Self::Wash => "Wash",
+            Self::Wash => "Airbrush",
             Self::Eyedropper => "Eyedropper",
             Self::Move => "Move",
         }
@@ -139,13 +139,7 @@ impl Default for Settings {
                                 (
                                     p,
                                     State {
-                                        value: match p {
-                                            Property::Size => 12.0,
-                                            Property::Aspect => 1.0,
-                                            Property::Opacity | Property::Hardness => 1.0,
-                                            Property::Spacing => 0.15,
-                                            _ => 0.0,
-                                        },
+                                        value: crate::basic_brush::value(t, p),
                                         visible: true,
                                         control: if matches!(
                                             p,

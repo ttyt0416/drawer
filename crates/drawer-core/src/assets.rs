@@ -18,6 +18,13 @@ impl BrushTip {
             Self::Wash => "Wash",
         }
     }
+    /// Display names can evolve without changing saved command/preset IDs.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Wash => "Airbrush",
+            _ => self.name(),
+        }
+    }
     pub fn mask(self, size: usize) -> Vec<u8> {
         assert!((2..=256).contains(&size));
         let mut pixels = Vec::with_capacity(size * size);

@@ -44,7 +44,10 @@ pub enum Item {
 impl Item {
     pub fn label(&self) -> String {
         match self {
-            Self::Command(s) | Self::Tool(s) => s.clone(),
+            Self::Command(s) | Self::Tool(s) => BrushTip::ALL
+                .into_iter()
+                .find(|t| t.name() == s)
+                .map_or_else(|| s.clone(), |t| t.label().into()),
             Self::Color(c) => format!("#{:02X}{:02X}{:02X} · alpha {}", c[0], c[1], c[2], c[3]),
             Self::Separator => "Separator".into(),
         }
@@ -322,6 +325,7 @@ impl Settings {
             }
         }
         match command {
+            "Wash" => "Airbrush",
             "save" => "Save",
             "save-as" => "Save as",
             "undo" => "Undo",

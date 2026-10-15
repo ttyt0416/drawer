@@ -509,7 +509,7 @@ mod tests {
             0.3,
             vec![key(egui::Key::Num5, false, false, false)],
         );
-        assert_eq!(app.panels.settings.brush_opacity, [0.5, 1.0, 1.0, 1.0]);
+        assert_eq!(app.panels.settings.brush_opacity, [0.5, 1.0, 1.0, 0.6]);
         app.panels.settings.brush_size = 0.1;
         app.execute_command(&ctx, "brush-shrink");
         assert_eq!(app.panels.settings.brush_size, 0.1);
@@ -550,7 +550,7 @@ mod tests {
         app.set_tool(BrushTip::Pencil);
         app.execute_command(&ctx, "opacity-70");
         app.persist_workspace().unwrap();
-        assert_eq!(app.panels.settings.brush_opacity, [0.3, 0.7, 1.0, 1.0]);
+        assert_eq!(app.panels.settings.brush_opacity, [0.3, 0.7, 1.0, 0.6]);
         assert!(app.documents[0].snapshot() == before);
         assert_eq!(app.documents[0].history_counts(), (0, 0));
         let restarted = Drawer::new(&egui::Context::default(), None)
@@ -597,6 +597,9 @@ mod tests {
         }
         assert!(app.documents[0].snapshot() == before);
         assert_eq!(app.documents[0].history_counts(), (0, 0));
-        assert_eq!(app.panels.settings.brush_opacity, [1.0; 4]);
+        assert_eq!(
+            app.panels.settings.brush_opacity,
+            drawer_core::panels::Settings::default().brush_opacity
+        );
     }
 }

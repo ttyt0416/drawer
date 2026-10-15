@@ -164,3 +164,6 @@ docs/process/mouse-pressure.md
 
 crates/drawer-core/src/numeric.rs
 docs/process/brush-parameters.md
+
+crates/drawer-core/src/basic_brush.rs
+docs/process/basic-brushes.md

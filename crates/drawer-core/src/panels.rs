@@ -132,9 +132,9 @@ impl Default for Settings {
             version: 1,
             panels: [Panel::default(); 4],
             brush_size: 12.0,
-            brush_opacity: [1.0; 4],
-            brush_hardness: [1.0; 4],
-            brush_spacing: [0.15; 4],
+            brush_opacity: [1.0, 1.0, 1.0, 0.6],
+            brush_hardness: [1.0, 1.0, 1.0, 0.0],
+            brush_spacing: [0.15, 0.15, 0.15, 0.1],
             brush_aspect: 1.0,
             brush_angle: 0.0,
         }

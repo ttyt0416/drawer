@@ -29,7 +29,7 @@ impl Drawer {
             #[cfg(test)] {self.pressure.buttons=[Some(a.rect),Some(c.rect)];}
             ui.separator();
             ui.horizontal(|ui| {for (n,tip) in BrushTip::ALL.into_iter().enumerate() {
-                if crate::help::selectable(ui,self.pressure.tool==n,tip.name(),"pressure").clicked(){self.pressure.tool=n;}
+                if crate::help::selectable(ui,self.pressure.tool==n,tip.label(),"pressure").clicked(){self.pressure.tool=n;}
             }});
             let mapping=&mut draft.tools[self.pressure.tool];
             crate::help::checkbox(ui,&mut mapping.size,"Pressure controls size","pressure");
@@ -70,7 +70,7 @@ impl Drawer {
             }
             if crate::help::button(ui,"Reset pressure draft","pressure").clicked(){draft=Settings::default();}
             for (tip,m) in BrushTip::ALL.into_iter().zip(draft.tools) {
-                if let Some(error)=m.response.error(){ui.colored_label(egui::Color32::YELLOW,format!("{}: {error}",tip.name()));}
+                if let Some(error)=m.response.error(){ui.colored_label(egui::Color32::YELLOW,format!("{}: {error}",tip.label()));}
             }
 
         });

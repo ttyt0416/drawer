@@ -164,16 +164,16 @@ impl Drawer {
         egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).vscroll(true).show(ctx,|ui|{
             super::edit::slider(ui,&mut draft.hold_millis,0..=5000,"Temporary tool threshold (ms)","modifier-tools");
             super::edit::slider(ui,&mut draft.drag_pixels,0.0..=64.0,"Drag threshold (screen pixels)","modifier-tools");
-            for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.name()),"modifier-tools");}
+            for (n,tip) in BrushTip::ALL.iter().enumerate(){super::edit::slider(ui,&mut draft.smoothing[n],0.0..=0.95,format!("{} stabilization",tip.label()),"modifier-tools");}
             ui.collapsing("Mouse virtual pressure",|ui| {
-                for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.name(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}
+                for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.label(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}
             });
             ui.separator();
             ui.label("Hold a modifier to use its tool; release always restores the previous tool.");
             for (n, label) in ["Ctrl", "Shift", "Alt"].into_iter().enumerate() {
-                egui::ComboBox::from_id_salt(("modifier-tool",n)).selected_text(format!("{label}: {}",draft.modifiers[n].map_or("Unassigned",|t|t.name()))).show_ui(ui,|ui|{
+                egui::ComboBox::from_id_salt(("modifier-tool",n)).selected_text(format!("{label}: {}",draft.modifiers[n].map_or("Unassigned",|t|t.label()))).show_ui(ui,|ui|{
                     ui.selectable_value(&mut draft.modifiers[n], None,"Unassigned");
-                    for tip in BrushTip::ALL { ui.selectable_value(&mut draft.modifiers[n],Some(tip),tip.name()); }
+                    for tip in BrushTip::ALL { ui.selectable_value(&mut draft.modifiers[n],Some(tip),tip.label()); }
                 });
                 if draft.modifiers[n].is_some() {
                     let shared = self.workspaces.store.current.bindings.iter().filter(|b| [b.ctrl,b.shift,b.alt][n]).map(|b|b.label()).collect::<Vec<_>>();

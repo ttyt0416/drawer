@@ -212,11 +212,15 @@ pub(super) fn tool_hint(language: Language, tip: BrushTip) -> &'static str {
         (Language::Korean, BrushTip::Eraser) => {
             "지우개: 투명하게 지웁니다. E는 기본 선택 키입니다."
         }
-        (Language::Korean, BrushTip::Wash) => "워시: 부드럽고 반투명한 팁. W는 기본 선택 키입니다.",
+        (Language::Korean, BrushTip::Wash) => {
+            "에어브러시: 부드럽게 누적되는 반투명 팁. W는 기본 선택 키입니다."
+        }
         (Language::English, BrushTip::Pen) => "Pen: crisp edge. Default tool key B.",
         (Language::English, BrushTip::Pencil) => "Pencil: grainy tip. Default tool key N.",
         (Language::English, BrushTip::Eraser) => "Eraser: removes opacity. Default tool key E.",
-        (Language::English, BrushTip::Wash) => "Wash: soft translucent tip. Default tool key W.",
+        (Language::English, BrushTip::Wash) => {
+            "Airbrush: soft translucent buildup. Default tool key W."
+        }
     }
 }
 

@@ -44,7 +44,7 @@ Windows 64비트에서 `Drawer.exe`를 실행한다. 기본 도구와 글꼴을 
 
 `Movie` 메뉴는 로컬 영상으로 새 애니메이션을 만들거나 현재 애니메이션에 별도 트랙으로 삽입한다. 로컬 FFmpeg/FFprobe 7.1이 필요하며 찾지 못하면 `Choose local FFmpeg…`로 지정한다. 앱은 코덱을 내려받지 않는다. 시간 범위·FPS·크기·보간·오디오 선택 뒤 `Decode range and preview`에서 셀과 프레임 대응을 확인하고 확정한다. 오디오는 채널 수를 유지한 48 kHz PCM이다. 취소는 원래 그림을 유지하고 삽입은 Undo 한 번으로 제거한다. 문서 위의 Frame으로 확인 프레임을 바꾼다. 지원 변형과 자원 제한은 [로컬 영상 지원](process/movie-import.md)에 기록했다.
 
-`Panels`에서 Brushes/Color/Layers/Timeline 표시를 선택하고 썸네일 없음·크기·전체 그림/내용 범위·체커, 도구 아이콘/이름/획 미리보기, 속성/명령막대 위치를 바꾼다. `Animation tracks only`는 타임라인 목록만 줄이며 숨겨진 선택과 그림을 유지한다. `Restore all panels`, 설정 Undo/Redo와 직전본 복원을 제공한다. 저장 Ctrl+S, 다른 이름 저장 Ctrl+Shift+S, 취소 Ctrl+Z, 다시 실행 Ctrl+Y 또는 Ctrl+Shift+Z, Pen/Pencil/Eraser/Wash는 B/N/E/W다. 문자 입력 중에는 도구 키가 실행되지 않는다.
+`Panels`에서 Brushes/Color/Layers/Timeline 표시를 선택하고 썸네일 없음·크기·전체 그림/내용 범위·체커, 도구 아이콘/이름/획 미리보기, 속성/명령막대 위치를 바꾼다. `Animation tracks only`는 타임라인 목록만 줄이며 숨겨진 선택과 그림을 유지한다. `Restore all panels`, 설정 Undo/Redo와 직전본 복원을 제공한다. 저장 Ctrl+S, 다른 이름 저장 Ctrl+Shift+S, 취소 Ctrl+Z, 다시 실행 Ctrl+Y 또는 Ctrl+Shift+Z, Pen/Pencil/Eraser/Airbrush는 B/N/E/W다. 문자 입력 중에는 도구 키가 실행되지 않는다.
 
 화면 배율은 모니터에 맞춰 자동 조절한다. `Interface size`는 추가로 50–200% 크기를 선택하며 설정 되돌리기·초기화·직전본 복원을 제공한다. 모니터/인터페이스 배율을 바꿔도 그림의 픽셀 배율과 보기 중심을 유지한다.
 
