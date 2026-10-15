@@ -398,6 +398,7 @@ impl Snapshot {
             next.bindings = incoming.bindings.clone();
             next.actions.cycles = incoming.actions.cycles.clone();
             next.actions.devices = incoming.actions.devices.clone();
+            next.actions.controller = incoming.actions.controller;
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {

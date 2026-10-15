@@ -171,7 +171,12 @@ pub use acquire::{acquisition_capture, acquisition_list};
 #[allow(unsafe_code)]
 mod child_job;
 #[cfg(windows)]
+#[allow(unsafe_code)]
+mod dial;
+#[cfg(windows)]
 pub use child_job::acquisition_child_job;
+#[cfg(windows)]
+pub use dial::Dial;
 #[cfg(test)]
 mod tests {
     use super::*;

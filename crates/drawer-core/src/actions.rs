@@ -6,7 +6,11 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 6] = [
+pub const EXTRA_COMMANDS: [&str; 10] = [
+    "brush-grow",
+    "brush-shrink",
+    "zoom-in",
+    "zoom-out",
     "screen-mode",
     "view-center",
     "view-reset",
@@ -132,6 +136,8 @@ pub struct Settings {
     pub access: Vec<AccessSet>,
     pub radials: Vec<Radial>,
     pub devices: Vec<DeviceBinding>,
+    #[serde(default)]
+    pub controller: crate::controller::Settings,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -182,6 +188,7 @@ impl Default for Settings {
                     .collect(),
             }],
             devices: Vec::new(),
+            controller: Default::default(),
         }
     }
 }
@@ -197,6 +204,7 @@ impl Settings {
         let mut names = HashSet::new();
         let mut devices = HashSet::new();
         self.version == 1
+            && self.controller.valid()
             && self.next_id > 0
             && self.cycles.len() <= 32
             && self.access.len() <= 32
@@ -308,6 +316,10 @@ impl Settings {
             "new-canvas" => "New canvas",
             "test-painting" => "Popup test painting",
             "help" => "Local help",
+            "brush-grow" => "Increase brush size",
+            "brush-shrink" => "Decrease brush size",
+            "zoom-in" => "Zoom in",
+            "zoom-out" => "Zoom out",
             other => other,
         }
         .into()
@@ -351,7 +363,10 @@ impl Settings {
                     d.device, d.action, d.command
                 ));
             }
-            if d.device != "pointer" || !["extra-1", "extra-2"].contains(&d.action.as_str()) {
+            if !((d.device == "pointer" && ["extra-1", "extra-2"].contains(&d.action.as_str()))
+                || (d.device == crate::controller::DEVICE
+                    && crate::controller::ACTIONS.contains(&d.action.as_str())))
+            {
                 missing.push(format!("{} / {}: adapter action unavailable here; test the command with a keyboard assignment",d.device,d.action));
             }
         }

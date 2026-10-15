@@ -152,3 +152,6 @@ docs/process/acquisition.md
 crates/drawer-core/src/touch.rs
 crates/drawer-platform/src/touch.rs
 docs/process/touch.md
+crates/drawer-core/src/controller.rs
+crates/drawer-platform/src/dial.rs
+docs/process/controllers.md

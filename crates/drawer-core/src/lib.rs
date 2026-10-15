@@ -4,6 +4,7 @@ pub mod animation;
 pub mod assets;
 pub mod brush_cursor;
 pub mod canvas_size;
+pub mod controller;
 pub mod display_view;
 pub mod document;
 pub mod files;

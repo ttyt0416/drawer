@@ -16,6 +16,99 @@ struct Picker {
     target: Target,
     selected: String,
 }
+pub(super) fn smoke_controller() -> Result<(), String> {
+    use drawer_core::controller::{DEVICE, Event, Kind};
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.create_canvas(CanvasSpec {
+        width: 4,
+        height: 4,
+        dpi: 300.0,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    let frame = |app: &mut Drawer, events: Vec<Event>| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1100.0, 760.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                app.controller_actions(ui.ctx(), &events);
+                app.show(ui);
+            },
+        );
+        output.textures_delta.clear();
+    };
+    frame(&mut app, vec![]);
+    frame(&mut app, vec![]);
+    let before = app.documents[0].snapshot();
+    let dirty = app.documents[0].dirty;
+    app.workspaces.store.current.actions.devices = vec![
+        actions::DeviceBinding {
+            device: DEVICE.into(),
+            action: "clockwise".into(),
+            command: "brush-grow".into(),
+        },
+        actions::DeviceBinding {
+            device: DEVICE.into(),
+            action: "counterclockwise".into(),
+            command: "zoom-out".into(),
+        },
+        actions::DeviceBinding {
+            device: DEVICE.into(),
+            action: "click".into(),
+            command: "cycle-next:1".into(),
+        },
+    ];
+    let initial_size = app.panels.settings.brush_size;
+    let event = |serial, kind| Event { serial, kind };
+    frame(
+        &mut app,
+        vec![event(1, Kind::Acquired), event(2, Kind::Rotation(15.0))],
+    );
+    if (app.panels.settings.brush_size - initial_size * 1.1).abs() > 1e-9 {
+        return Err("Dial did not adjust the live tool property".into());
+    }
+    frame(&mut app, vec![event(3, Kind::Rotation(-15.0))]);
+    if (app.documents[0].view.zoom - 1.0 / 1.1).abs() > 1e-9 {
+        return Err("Dial zoom command did not reach the view".into());
+    }
+    frame(&mut app, vec![event(4, Kind::Click), event(4, Kind::Click)]);
+    if app.selected != BrushTip::Pencil {
+        return Err("Dial click duplicated or tool switch failed".into());
+    }
+    frame(&mut app, vec![event(5, Kind::Lost), event(6, Kind::Click)]);
+    if app.selected != BrushTip::Pencil {
+        return Err("Lost controller executed an action".into());
+    }
+    frame(
+        &mut app,
+        vec![event(7, Kind::Acquired), event(8, Kind::Rotation(14.0))],
+    );
+    app.controls.open = true;
+    frame(
+        &mut app,
+        vec![event(9, Kind::Rotation(15.0)), event(10, Kind::Click)],
+    );
+    app.controls.open = false;
+    app.controls.editor = None;
+    let size = app.panels.settings.brush_size;
+    frame(&mut app, vec![event(11, Kind::Rotation(1.0))]);
+    if size != app.panels.settings.brush_size || app.selected != BrushTip::Pencil {
+        return Err("Modal input leaked or retained a dial fraction".into());
+    }
+    if app.documents[0].snapshot() != before
+        || app.documents[0].history_counts() != (0, 0)
+        || app.documents[0].dirty != dirty
+    {
+        return Err("Dial view/tool controls changed drawing pixels or history".into());
+    }
+    Ok(())
+}
 #[derive(Default)]
 struct Editor {
     draft: Snapshot,
@@ -37,6 +130,8 @@ pub(super) struct Controls {
     pointer_down: HashSet<usize>,
     devices: actions::DeviceEvents,
     token: u64,
+    controller: drawer_core::controller::Controller,
+    controller_assignments: Vec<actions::DeviceBinding>,
     #[cfg(test)]
     pub radial_center: Option<egui::Pos2>,
     #[cfg(test)]
@@ -52,7 +147,9 @@ impl Drawer {
             return Some(format!("Command unavailable: {command}"));
         }
         match command {
-            "save" | "save-as" | "view-center" | "view-reset" if self.active.is_none() => {
+            "save" | "save-as" | "view-center" | "view-reset" | "zoom-in" | "zoom-out"
+                if self.active.is_none() =>
+            {
                 Some("Open a document first".into())
             }
             "undo"
@@ -82,6 +179,22 @@ impl Drawer {
         }
         let result = (|| -> Result<(), String> {
             match command {
+                "brush-grow" | "brush-shrink" => {
+                    self.panels.settings.brush_size = (self.panels.settings.brush_size
+                        * if command == "brush-grow" {
+                            1.1
+                        } else {
+                            1.0 / 1.1
+                        })
+                    .clamp(0.1, 4096.0);
+                }
+                "zoom-in" | "zoom-out" => {
+                    if let Some(n) = self.active {
+                        self.documents[n].view.zoom = (self.documents[n].view.zoom
+                            * if command == "zoom-in" { 1.1 } else { 1.0 / 1.1 })
+                        .clamp(0.01, 64.0);
+                    }
+                }
                 "save" => {
                     if let Some(n) = self.active {
                         self.save_document(n)?;
@@ -168,6 +281,16 @@ impl Drawer {
         }
     }
     pub(super) fn direct_actions(&mut self, ctx: &egui::Context) {
+        #[cfg(windows)]
+        if let Some(dial) = &mut self.native_dial {
+            match dial.drain(ctx.input(|i| i.focused)) {
+                Ok(events) => self.controller_actions(ctx, &events),
+                Err(error) => {
+                    self.controls.controller.reset();
+                    self.status = Some(error);
+                }
+            }
+        }
         let events = ctx.input(|i| i.events.clone());
         let mut commands = Vec::new();
         for event in events {
@@ -215,6 +338,50 @@ impl Drawer {
             for c in commands {
                 self.execute_command(ctx, &c);
             }
+        }
+    }
+    fn controller_actions(
+        &mut self,
+        ctx: &egui::Context,
+        events: &[drawer_core::controller::Event],
+    ) {
+        let allowed = self.workspaces.is_focused()
+            && ctx.input(|i| i.focused)
+            && !self.tool_shortcuts_blocked(ctx);
+        let settings = &self.workspaces.store.current.actions;
+        // Reassignment cannot carry an old partial rotation into a new command.
+        let assignments: Vec<_> = settings
+            .devices
+            .iter()
+            .filter(|d| d.device == drawer_core::controller::DEVICE)
+            .cloned()
+            .collect();
+        let changed = assignments != self.controls.controller_assignments;
+        self.controls.controller_assignments = assignments;
+        if changed {
+            self.controls
+                .controller
+                .actions(settings.controller, &[], false);
+        }
+        let actions = self
+            .controls
+            .controller
+            .actions(settings.controller, events, allowed);
+        let commands: Vec<_> = actions
+            .into_iter()
+            .filter_map(|action| {
+                settings
+                    .devices
+                    .iter()
+                    .find(|d| d.device == drawer_core::controller::DEVICE && d.action == action)
+                    .map(|d| d.command.clone())
+            })
+            .collect();
+        for command in commands {
+            if self.tool_shortcuts_blocked(ctx) {
+                break;
+            }
+            self.execute_command(ctx, &command);
         }
     }
     fn access_set(&mut self, ui: &mut egui::Ui, set: &AccessSet) {
@@ -499,6 +666,7 @@ impl Drawer {
         result
     }
     pub(super) fn command_settings(&mut self, ctx: &egui::Context) {
+        let mut retry_dial = false;
         if self.controls.open && self.controls.editor.is_none() {
             self.controls.editor = Some(Editor {
                 draft: self.capture_workspace(),
@@ -521,6 +689,11 @@ impl Drawer {
             .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
             .default_width(520.0)
             .show(ctx, |ui| {
+                #[cfg(windows)]
+                if let Some(dial) = &self.native_dial {
+                    ui.label(dial.report());
+                    retry_dial = ui.button("Retry Windows dial adapter").clicked();
+                }
                 ui.horizontal_wrapped(|ui| {
                     for (n, label) in [
                         "Shortcuts",
@@ -611,6 +784,13 @@ impl Drawer {
                     ui.colored_label(egui::Color32::YELLOW, report);
                 }
             });
+        if retry_dial {
+            #[cfg(windows)]
+            if let Some(dial) = &mut self.native_dial {
+                dial.retry();
+                self.controls.controller.reset();
+            }
+        }
         if import
             && let Some(path) = rfd::FileDialog::new()
                 .add_filter("Local commands", &["json"])
@@ -936,7 +1116,39 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
 }
 fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
     let labels = e.draft.actions.clone();
-    ui.label("The pointer adapter exposes Extra1 / Extra2 buttons. Assign named actions from a device adapter; keyboard assignments provide the same command for testing. Physical device validation is pending.");
+    ui.label("Pointer: extra-1 / extra-2. Windows wheel: windows-radial / clockwise, counterclockwise, click. Select Drawer in the OS wheel menu. Keyboard assignments use the same commands. Physical device validation pending.");
+    ui.checkbox(
+        &mut e.draft.actions.controller.enabled,
+        "Enable assigned Windows dial actions",
+    );
+    ui.horizontal(|ui| {
+        ui.label("Degrees per command step");
+        ui.add(
+            egui::DragValue::new(&mut e.draft.actions.controller.degrees_per_step)
+                .range(1.0..=180.0),
+        );
+    });
+    if ui.button("Add default dial bindings").clicked() {
+        for (action, command) in [
+            ("clockwise", "brush-grow"),
+            ("counterclockwise", "brush-shrink"),
+            ("click", "cycle-next:1"),
+        ] {
+            if !e
+                .draft
+                .actions
+                .devices
+                .iter()
+                .any(|d| d.device == drawer_core::controller::DEVICE && d.action == action)
+            {
+                e.draft.actions.devices.push(actions::DeviceBinding {
+                    device: drawer_core::controller::DEVICE.into(),
+                    action: action.into(),
+                    command: command.into(),
+                });
+            }
+        }
+    }
     let mut pick = None;
     let mut remove = None;
     for (n, d) in e.draft.actions.devices.iter_mut().enumerate() {
@@ -1065,6 +1277,62 @@ mod tests {
         }
     }
     #[test]
+    fn controller_replay_applies_live_brush_zoom_tool_modal_and_duplicate_rules() {
+        smoke_controller().unwrap();
+    }
+    #[test]
+    fn keyboard_equivalence_unknown_removed_bindings_and_reassignment_clear_fraction() {
+        use drawer_core::controller::{DEVICE, Event, Kind};
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let before = app.documents[0].snapshot();
+        let binding = actions::DeviceBinding {
+            device: DEVICE.into(),
+            action: "clockwise".into(),
+            command: "zoom-in".into(),
+        };
+        app.workspaces.store.current.actions.devices.push(binding);
+        app.workspaces.store.current.bindings.push(Binding {
+            key: "F3".into(),
+            ctrl: false,
+            shift: false,
+            alt: false,
+            command: "zoom-in".into(),
+        });
+        let e = |serial, kind| Event { serial, kind };
+        app.controller_actions(&ctx, &[e(1, Kind::Acquired), e(2, Kind::Rotation(15.0))]);
+        let wheel_zoom = app.documents[0].view.zoom;
+        app.documents[0].view.zoom = 1.0;
+        frame(&ctx, &mut app, vec![key(egui::Key::F3, true)]);
+        assert_eq!(app.documents[0].view.zoom, wheel_zoom);
+        frame(&ctx, &mut app, vec![key(egui::Key::F3, false)]);
+        app.controller_actions(&ctx, &[e(3, Kind::Rotation(14.0))]);
+        app.workspaces.store.current.actions.devices[0].command = "zoom-out".into();
+        app.controller_actions(&ctx, &[e(4, Kind::Rotation(1.0))]);
+        assert_eq!(app.documents[0].view.zoom, wheel_zoom);
+        app.workspaces.store.current.actions.devices.clear();
+        app.controller_actions(&ctx, &[e(5, Kind::Rotation(360.0)), e(6, Kind::Click)]);
+        assert_eq!(app.documents[0].view.zoom, wheel_zoom);
+        app.workspaces
+            .store
+            .current
+            .actions
+            .devices
+            .push(actions::DeviceBinding {
+                device: DEVICE.into(),
+                action: "unsupported-air-gesture".into(),
+                command: "zoom-in".into(),
+            });
+        assert!(!app.workspaces.store.current.actions.missing().is_empty());
+        app.controller_actions(&ctx, &[e(7, Kind::Rotation(360.0)), e(8, Kind::Click)]);
+        assert_eq!(app.documents[0].view.zoom, wheel_zoom);
+        assert!(app.documents[0].snapshot() == before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+    }
+    #[test]
     fn command_picker_confirms_only_draft_and_cancel_restores_assignments() {
         let ctx = egui::Context::default();
         let mut app = Drawer::new(&ctx, None);
@@ -1136,6 +1404,12 @@ mod tests {
         let document = app.documents[0].snapshot();
         let mut draft = app.capture_workspace();
         draft.bindings[5].key = "F2".into();
+        draft.actions.controller.degrees_per_step = 7.5;
+        draft.actions.devices.push(actions::DeviceBinding {
+            device: drawer_core::controller::DEVICE.into(),
+            action: "clockwise".into(),
+            command: "zoom-in".into(),
+        });
         draft.actions.cycles[0].tools = vec!["Pen".into(), "deleted-preset".into(), "Wash".into()];
         draft.actions.devices.push(actions::DeviceBinding {
             device: "pointer".into(),
@@ -1187,6 +1461,14 @@ mod tests {
             .actions
             .cycles
             .clear();
+        app.controls
+            .editor
+            .as_mut()
+            .unwrap()
+            .draft
+            .actions
+            .controller
+            .enabled = false;
         frame(&ctx, &mut app, vec![]);
         let cancel = app.controls.cancel_button.unwrap();
         click(&ctx, &mut app, cancel);

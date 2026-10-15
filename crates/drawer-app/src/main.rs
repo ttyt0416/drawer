@@ -106,6 +106,8 @@ struct Drawer {
     native_input: pointer_input::Native,
     #[cfg(windows)]
     native_mouse: Option<drawer_platform::Input>,
+    #[cfg(windows)]
+    native_dial: Option<drawer_platform::Dial>,
     pressure: pressure_settings::Editor,
     replay: input_replay::Editor,
     acquisition: acquisition::Acquisition,
@@ -214,6 +216,8 @@ impl Drawer {
             native_input: Default::default(),
             #[cfg(windows)]
             native_mouse: None,
+            #[cfg(windows)]
+            native_dial: None,
             pressure: Default::default(),
             replay: Default::default(),
             acquisition: Default::default(),
@@ -1173,6 +1177,10 @@ impl eframe::App for Drawer {
                     eprintln!("Touch pipeline: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = action_controls::smoke_controller() {
+                    eprintln!("Controller replay: {e}");
+                    fail_smoke();
+                }
                 let acquisition_work = self
                     .storage
                     .as_ref()
@@ -1208,6 +1216,14 @@ impl eframe::App for Drawer {
                 #[cfg(not(windows))]
                 let backend_check = "not available on this target";
                 let native_pen = &self.native_input.report;
+                #[cfg(windows)]
+                let native_dial = self
+                    .native_dial
+                    .as_ref()
+                    .map(|dial| dial.report())
+                    .unwrap_or("not attached");
+                #[cfg(not(windows))]
+                let native_dial = "not available on this target";
                 if native_pen.is_empty() {
                     fail_smoke();
                 }
@@ -1220,7 +1236,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -1308,6 +1324,7 @@ fn main() -> eframe::Result {
                 .with_storage(UserStorage::from_environment()?);
             #[cfg(windows)]
             if let Some(window) = cc.winit_window() {
+                app.native_dial = Some(drawer_platform::Dial::new(window));
                 match native_mouse.attach(window) {
                     Ok(()) => app.native_mouse = Some(native_mouse),
                     Err(e) => app.status = Some(e),
