@@ -172,3 +172,7 @@ docs/process/stroke-spacing.md
 
 crates/drawer-core/src/stroke_ends.rs
 docs/process/stroke-ends.md
+
+crates/drawer-core/src/brush_presets.rs
+crates/drawer-app/src/brush_presets.rs
+docs/process/brush-presets.md

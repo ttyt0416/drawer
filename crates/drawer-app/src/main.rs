@@ -10,6 +10,7 @@ use std::{path::PathBuf, sync::Arc};
 mod acquisition;
 mod action_controls;
 mod aid_panel;
+mod brush_presets;
 mod canvas_view;
 mod cursor_settings;
 mod display_pane;
@@ -103,6 +104,7 @@ struct Drawer {
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
     properties: tool_properties::Properties,
+    brush_presets: brush_presets::Presets,
     preferences: preferences::Preferences,
     drawing: drawing::Drawing,
     precision: precision::Precision,
@@ -214,6 +216,7 @@ impl Drawer {
             controls: Default::default(),
             tool_input: Default::default(),
             properties: Default::default(),
+            brush_presets: Default::default(),
             preferences: Default::default(),
             drawing: Default::default(),
             precision: Default::default(),
@@ -473,6 +476,7 @@ impl Drawer {
                     && !self.replay.open
                     && !self.acquisition.open
                     && !self.properties.open
+                    && !self.brush_presets.open
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
@@ -529,6 +533,7 @@ impl Drawer {
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
         self.property_settings(ui.ctx());
+        self.brush_presets_window(ui.ctx());
         self.preference_settings(ui.ctx());
         self.behavior_settings(ui.ctx());
         self.cursor_settings(ui.ctx());
@@ -1200,6 +1205,10 @@ impl eframe::App for Drawer {
                     eprintln!("Stroke endings: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = brush_presets::smoke() {
+                    eprintln!("Local brush presets: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = drawer_core::painting::verify_spacing() {
                     eprintln!("Stroke spacing: {e}");
                     fail_smoke();
@@ -1271,7 +1280,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

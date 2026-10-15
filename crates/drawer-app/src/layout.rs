@@ -436,7 +436,8 @@ impl Drawer {
             canvas.filter = self.interpolation.view;
             canvas.simple = true;
             canvas.compact_controls = true;
-            canvas.input_active = self.workspaces.is_focused() && !self.acquisition.open;
+            canvas.input_active =
+                self.workspaces.is_focused() && !self.acquisition.open && !self.brush_presets.open;
             canvas.smoothing = self.workspaces.store.current.input.smoothing;
             canvas.cursors = self.workspaces.store.current.cursors;
             canvas.behavior = self.workspaces.store.current.behavior;

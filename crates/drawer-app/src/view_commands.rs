@@ -29,6 +29,7 @@ impl Drawer {
             || self.pressure.open
             || self.replay.open
             || self.properties.open
+            || self.brush_presets.open
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()

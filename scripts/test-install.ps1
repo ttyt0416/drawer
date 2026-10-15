@@ -98,6 +98,7 @@ try {
     if ($smokeResult -notmatch 'touch_gestures=true') { throw '터치 제스처/펜 우선/포커스 취소 시험 실패' }
     if ($smokeResult -notmatch 'controller_replay=true' -or $smokeResult -notmatch 'native_dial=.+') { throw '다이얼 명령/네이티브 상태 시작 시험 실패' }
     if ($smokeResult -notmatch 'keyboard_precision=true') { throw '키보드 이동/직선/농도/도구 전환 픽셀 시험 실패' }
+    if ($smokeResult -notmatch 'brush_presets=true') { throw '로컬 브러시 프리셋/크기 목록 시험 실패' }
     if ($smokeResult -notmatch 'stroke_ends=true') { throw '선 보정/시작·끝/실제 필압 분리 시험 실패' }
     if ($smokeResult -notmatch 'stroke_spacing=true') { throw '빠른 획/납작한 팁 보간 시험 실패' }
     if ($smokeResult -notmatch 'basic_brushes=true') { throw '기본 브러시/누적/이력 시험 실패' }

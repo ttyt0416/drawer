@@ -330,6 +330,7 @@ impl Drawer {
                 .size_unit,
             dpi,
         );
+        self.quick_brush_sizes(ui);
         if crate::help::button(ui, "Configure tool properties", "tool-properties").clicked() {
             self.properties.open = true;
         }

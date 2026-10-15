@@ -280,6 +280,8 @@ pub struct Snapshot {
     #[serde(default)]
     pub properties: Option<crate::tool_properties::Settings>,
     #[serde(default)]
+    pub brushes: crate::brush_presets::Book,
+    #[serde(default)]
     pub preferences: crate::preferences::Settings,
     pub interface: crate::ui_scale::Settings,
     pub interpolation: crate::interpolation::Settings,
@@ -308,6 +310,7 @@ impl Default for Snapshot {
             information: Default::default(),
             layout: Default::default(),
             properties: None,
+            brushes: Default::default(),
             preferences: Default::default(),
             interface: Default::default(),
             interpolation: Default::default(),
@@ -357,6 +360,7 @@ impl Snapshot {
             && self.layout.valid()
             && self.preferences.valid()
             && self.properties.as_ref().is_none_or(|s| s.valid())
+            && self.brushes.valid()
             && self.aids.valid()
             && self.interpolation.version == 1
             && self.actions.valid()
@@ -421,6 +425,7 @@ impl Snapshot {
         if scope.other {
             next.preferences = incoming.preferences.clone();
             next.properties = incoming.properties.clone();
+            next.brushes = incoming.brushes.clone();
             next.input = incoming.input;
             next.pointer = incoming.pointer;
             next.pressure = incoming.pressure;

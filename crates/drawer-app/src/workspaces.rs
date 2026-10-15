@@ -606,9 +606,11 @@ impl Drawer {
                             egui::ScrollArea::vertical()
                                 .scroll_bar_visibility(crate::ui_behavior::scroll(ui.ctx()))
                                 .show(ui, |ui| {
-                                    ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
-                                        self.show_panel(ui, kind)
-                                    })
+                                    ui.add_enabled_ui(
+                                        self.workspaces.staged.is_none()
+                                            && !self.brush_presets.open,
+                                        |ui| self.show_panel(ui, kind),
+                                    )
                                 });
                         });
                         let collapsed = self.ui_behavior.hidden[index].collapsed;
@@ -656,9 +658,10 @@ impl Drawer {
                     .vscroll(true)
                     .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
                     .show(ctx, |ui| {
-                        ui.add_enabled_ui(self.workspaces.staged.is_none(), |ui| {
-                            self.show_panel(ui, kind)
-                        })
+                        ui.add_enabled_ui(
+                            self.workspaces.staged.is_none() && !self.brush_presets.open,
+                            |ui| self.show_panel(ui, kind),
+                        )
                     });
                 if let Some(r) = response {
                     let ppp = ctx.pixels_per_point() as f64;
@@ -702,6 +705,7 @@ impl Drawer {
             && !self.replay.open
             && !self.acquisition.open
             && !self.properties.open
+            && !self.brush_presets.open
             && !self.ui_behavior.open;
         let mut visible = true;
         egui::Window::new("Popup test painting")
