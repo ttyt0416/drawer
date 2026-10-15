@@ -132,27 +132,6 @@ crates/drawer-core/src/pressure.rs
 crates/drawer-app/src/pressure_settings.rs
 
 docs/licenses/patched-sources.json
-vendor/octotablet/build.rs
-vendor/octotablet/Cargo.toml
-vendor/octotablet/LICENSE.txt
-vendor/octotablet/PATCHES.md
-vendor/octotablet/README.md
-vendor/octotablet/src/axis.rs
-vendor/octotablet/src/builder.rs
-vendor/octotablet/src/events/mod.rs
-vendor/octotablet/src/events/raw.rs
-vendor/octotablet/src/lib.rs
-vendor/octotablet/src/pad.rs
-vendor/octotablet/src/platform/ink/com_impl.rs
-vendor/octotablet/src/platform/ink/mod.rs
-vendor/octotablet/src/platform/ink/packet.rs
-vendor/octotablet/src/platform/mod.rs
-vendor/octotablet/src/platform/wl/mod.rs
-vendor/octotablet/src/platform/wl/pad_impl.rs
-vendor/octotablet/src/platform/wl/tool_impl.rs
-vendor/octotablet/src/tablet.rs
-vendor/octotablet/src/tool.rs
-vendor/octotablet/src/util.rs
 
 crates/drawer-platform/Cargo.toml
 crates/drawer-platform/src/lib.rs
@@ -161,3 +140,5 @@ docs/process/windows-input-boundary.md
 crates/drawer-core/src/input_replay.rs
 crates/drawer-app/src/input_replay.rs
 docs/process/input-replay.md
+crates/drawer-platform/src/win.rs
+crates/drawer-platform/src/packets.rs

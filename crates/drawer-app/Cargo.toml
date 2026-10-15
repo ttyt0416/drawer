@@ -22,7 +22,6 @@ drawer-platform = { path = "../drawer-platform" }
 keepawake = "=0.6.1"
 
 michiu_window = "=0.0.3"
-winsafe = { version = "=0.0.29", features = ["user", "ole"] }
+winsafe = { version = "=0.0.29", features = ["user"] }
 windows = { version = "=0.62.2", features = ["Win32_Foundation"] }
 raw-window-handle = "=0.6.2"
-octotablet = { version = "=0.1.0", default-features = false, features = ["windows-ink"] }

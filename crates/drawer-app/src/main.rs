@@ -1167,6 +1167,16 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                #[cfg(windows)]
+                let backend_check =
+                    match pointer_input::smoke_backends(self.native_mouse.as_ref().unwrap()) {
+                        Ok(report) => report,
+                        Err(_) => {
+                            fail_smoke();
+                        }
+                    };
+                #[cfg(not(windows))]
+                let backend_check = "not available on this target";
                 let native_pen = &self.native_input.report;
                 if native_pen.is_empty() {
                     fail_smoke();
@@ -1178,6 +1188,9 @@ impl eframe::App for Drawer {
                     self.documents.len(),
                     self.tabs.len(),
                     validated,
+                );
+                let report = format!(
+                    "{report}backend_switching=true\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -1252,10 +1265,9 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             let mut app = Drawer::new(&cc.egui_ctx, smoke_output)
                 .with_storage(UserStorage::from_environment()?);
-            app.native_input.attach(cc);
             #[cfg(windows)]
             if let Some(window) = cc.winit_window() {
-                match native_mouse.attach(window.as_ref()) {
+                match native_mouse.attach(window) {
                     Ok(()) => app.native_mouse = Some(native_mouse),
                     Err(e) => app.status = Some(e),
                 }

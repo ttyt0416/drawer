@@ -344,11 +344,24 @@ impl Drawer {
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
-        self.native_input.pump(ctx, &mut self.drawing.incoming);
+        let preferred = self.drawing.settings.backend;
+        let changed = self.native_input.applied != Some(preferred)
+            || std::mem::take(&mut self.native_input.retry);
+        if changed {
+            self.finish_stroke();
+            self.drawing.incoming.clear();
+            self.native_input.applied = Some(preferred);
+        }
         #[cfg(windows)]
         if let Some(native) = &self.native_mouse {
+            if changed {
+                native.configure(preferred);
+            }
+            native.set_focus(ctx.input(|i| i.focused));
+            self.native_input.report = native.report();
             self.drawing.native_mouse = true;
-            self.drawing.pen_available = self.native_input.connected();
+            self.drawing.pen_available =
+                native.effective() != drawer_core::pointer_input::Backend::Mouse;
             match native.drain(ctx.pixels_per_point() as f64) {
                 Ok(events) => self.drawing.gui = Some(events),
                 Err(error) => {
@@ -611,6 +624,48 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn backend_change_and_retry_finish_pending_stroke_once_and_discard_old_input() {
+        use drawer_core::pointer_input::{Backend, Event, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        let p = point(&ctx, &app, [20.5, 20.5]);
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![egui::Event::PointerMoved(p), button(p, true)],
+        );
+        assert!(app.drawing.pending());
+        app.workspaces.store.current.pointer.backend = Backend::Wintab;
+        app.drawing.incoming = vec![Event {
+            source: Source::MOUSE,
+            phase: Phase::Down,
+            position: [p.x as f64, p.y as f64],
+            pressure: None,
+            attributes: Default::default(),
+            origin: Default::default(),
+        }];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(!app.drawing.pending());
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        let before = app.documents[0].snapshot();
+        frame(&ctx, &mut app, 1.0, vec![button(p, false)]);
+        assert!(app.documents[0].snapshot() == before);
+        let q = point(&ctx, &app, [25.5, 25.5]);
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![egui::Event::PointerMoved(q), button(q, true)],
+        );
+        assert!(app.drawing.pending());
+        app.native_input.retry = true;
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(!app.drawing.pending());
+        assert_eq!(app.documents[0].history_counts(), (2, 0));
+        frame(&ctx, &mut app, 1.0, vec![button(q, false)]);
+        assert_eq!(app.documents[0].history_counts(), (2, 0));
     }
     #[test]
     fn pen_mouse_interleaving_keeps_device_owner_and_one_event_one_stroke() {

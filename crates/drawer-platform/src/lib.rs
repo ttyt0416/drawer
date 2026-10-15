@@ -1,10 +1,9 @@
 //! The small OS boundary. Safe consumers never receive raw message pointers.
 #![deny(unsafe_code)]
-use drawer_core::pointer_input::{Event, Kind, Origin, Phase, Source, origin_from_extra};
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
+use drawer_core::pointer_input::{
+    Backend, Event, Kind, Origin, Phase, Source, backend_candidates, origin_from_extra,
 };
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 const LIMIT: usize = 65536;
 #[derive(Default)]
 struct State {
@@ -13,6 +12,15 @@ struct State {
     overflow: bool,
     blocked: bool,
     down: [bool; 3],
+    requested: Option<Backend>,
+    effective: Backend,
+    report: String,
+    failure: Option<String>,
+    #[cfg(windows)]
+    driver: Option<win::Driver>,
+    // Last: release native context and DLL before the window's owner.
+    #[cfg(windows)]
+    owner: Option<std::sync::Arc<winit::window::Window>>,
 }
 impl State {
     fn record(&mut self, window: isize, message: u32, wparam: usize, lparam: isize, extra: u64) {
@@ -80,7 +88,7 @@ impl State {
 }
 #[derive(Clone, Default)]
 pub struct Input {
-    state: Arc<Mutex<State>>,
+    state: Rc<RefCell<State>>,
 }
 impl Input {
     pub fn drain(&self, pixels_per_point: f64) -> Result<Vec<Event>, String> {
@@ -89,8 +97,12 @@ impl Input {
         }
         let mut state = self
             .state
-            .lock()
+            .try_borrow_mut()
             .map_err(|_| "Native input queue unavailable")?;
+        if let Some(error) = state.failure.take() {
+            state.queue.clear();
+            return Err(error);
+        }
         if std::mem::take(&mut state.overflow) {
             state.queue.clear();
             return Err("Native input overflow; pending stroke cancelled".into());
@@ -105,79 +117,80 @@ impl Input {
             .collect())
     }
     pub fn attached(&self) -> bool {
-        self.state.lock().is_ok_and(|s| s.window != 0)
+        self.state.try_borrow().is_ok_and(|s| s.window != 0)
+    }
+    pub fn requested(&self) -> Option<Backend> {
+        self.state.borrow().requested
+    }
+    pub fn effective(&self) -> Backend {
+        self.state.borrow().effective
+    }
+    pub fn report(&self) -> String {
+        self.state.borrow().report.clone()
     }
 }
-// These two FFI operations are the sole exception to the application's unsafe
-// prohibition. The module owns the winit callback and exposes a safe queue API.
+/// Only a successfully initialized backend is retained. Mouse needs no pen driver.
+fn select<T>(
+    preferred: Backend,
+    mut attempt: impl FnMut(Backend) -> Result<T, String>,
+) -> (Backend, Option<T>, String) {
+    let mut reasons = Vec::new();
+    for &candidate in backend_candidates(preferred) {
+        if candidate == Backend::Mouse {
+            return (candidate, None, reasons.join("; "));
+        }
+        match attempt(candidate) {
+            Ok(driver) => return (candidate, Some(driver), reasons.join("; ")),
+            Err(e) => reasons.push(format!("{candidate:?}: {e}")),
+        }
+    }
+    unreachable!("Every candidate list ends with Mouse")
+}
+mod packets;
+// Raw pointers, DLL and context lifetimes stay inside this UI-thread-only boundary.
 #[cfg(windows)]
 #[allow(unsafe_code)]
-mod win {
-    use super::*;
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use windows::Win32::UI::WindowsAndMessaging::{GetMessageExtraInfo, MSG};
-    use winit::{event_loop::EventLoopBuilder, platform::windows::EventLoopBuilderExtWindows};
-    impl Input {
-        pub fn attach(&self, window: &impl HasWindowHandle) -> Result<(), String> {
-            let RawWindowHandle::Win32(handle) =
-                window.window_handle().map_err(|e| e.to_string())?.as_raw()
-            else {
-                return Err("Expected a Win32 window".into());
-            };
-            let mut s = self
-                .state
-                .lock()
-                .map_err(|_| "Native input queue unavailable")?;
-            s.window = handle.hwnd.get();
-            s.queue.clear();
-            s.overflow = false;
-            s.blocked = false;
-            s.down = [false; 3];
-            Ok(())
-        }
-        pub fn install<T: 'static>(&self, builder: &mut EventLoopBuilder<T>) {
-            let input = self.clone();
-            builder.with_msg_hook(move |pointer| {
-                if pointer.is_null() {
-                    return false;
-                }
-                // SAFETY: winit invokes this callback immediately before dispatch
-                // with a live MSG pointer (its documented with_msg_hook contract).
-                // The reference is never stored or allowed to escape this call.
-                let message = unsafe { &*pointer.cast::<MSG>() };
-                let Ok(mut s) = input.state.lock() else {
-                    return false;
-                };
-                let window = message.hwnd.0 as isize;
-                if window != s.window
-                    || s.window == 0
-                    || !matches!(message.message, 0x200 | 0x201 | 0x202 | 0x203 | 0x215 | 0x8)
-                {
-                    return false;
-                }
-                // SAFETY: this parameterless User32 query reads only the current
-                // UI thread's message metadata. It dereferences no caller memory.
-                let extra = unsafe { GetMessageExtraInfo() }.0 as u64;
-                s.record(
-                    window,
-                    message.message,
-                    message.wParam.0,
-                    message.lParam.0,
-                    extra,
-                );
-                false // UI and winit still receive every message.
-            });
-        }
-    }
-}
+mod win;
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
+    fn failed_initialization_falls_back_without_opening_parallel_drivers() {
+        let mut tried = Vec::new();
+        let (effective, driver, reason) = select(Backend::Wintab, |b| {
+            tried.push(b);
+            if b == Backend::Wintab {
+                Err("not installed".into())
+            } else {
+                Ok(17)
+            }
+        });
+        assert_eq!(tried, vec![Backend::Wintab, Backend::Pointer]);
+        assert_eq!(effective, Backend::Pointer);
+        assert_eq!(driver, Some(17));
+        assert!(reason.contains("not installed"));
+        let (effective, driver, reason) =
+            select::<()>(Backend::Wintab, |_| Err("initialization failed".into()));
+        assert_eq!(effective, Backend::Mouse);
+        assert!(driver.is_none());
+        assert!(reason.contains("Pointer"));
+        let (_, driver, _) = select::<()>(Backend::Mouse, |_| {
+            panic!("Mouse must not open a pen driver")
+        });
+        assert!(driver.is_none());
+        let mut count = 0;
+        let (effective, _, _) = select(Backend::Pointer, |_| {
+            count += 1;
+            Ok(())
+        });
+        assert_eq!(effective, Backend::Pointer);
+        assert_eq!(count, 1);
+    }
+    #[test]
     fn promoted_pen_release_does_not_release_real_mouse_and_missing_up_cancels() {
         let input = Input::default();
         {
-            let mut s = input.state.lock().unwrap();
+            let mut s = input.state.borrow_mut();
             s.window = 1;
             s.record(1, 0x201, 1, 0, 0);
             s.record(1, 0x201, 1, 0, 0xff51_5701);
@@ -194,7 +207,7 @@ mod tests {
     fn own_window_signed_coordinates_order_origin_and_drain_scaling() {
         let input = Input::default();
         {
-            let mut s = input.state.lock().unwrap();
+            let mut s = input.state.borrow_mut();
             s.window = 17;
             s.record(18, 0x201, 0, 0, 0);
             s.record(17, 0x100, 0, 0, 0);
@@ -222,7 +235,7 @@ mod tests {
     fn queue_overflow_discards_contact_until_release_without_growing_memory() {
         let input = Input::default();
         {
-            let mut s = input.state.lock().unwrap();
+            let mut s = input.state.borrow_mut();
             s.window = 1;
             for _ in 0..=LIMIT {
                 s.record(1, 0x200, 0, 0, 0);
@@ -235,7 +248,7 @@ mod tests {
         }
         assert!(input.drain(1.0).is_err());
         {
-            let mut s = input.state.lock().unwrap();
+            let mut s = input.state.borrow_mut();
             s.record(1, 0x201, 0, 0, 0);
             s.record(1, 0x202, 0, 0, 0);
         }

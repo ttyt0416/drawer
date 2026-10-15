@@ -7,6 +7,24 @@ pub enum Kind {
     Touch,
     Unknown,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Backend {
+    #[default]
+    Pointer,
+    Wintab,
+    Mouse,
+}
+impl Backend {
+    pub const ALL: [Self; 3] = [Self::Pointer, Self::Wintab, Self::Mouse];
+}
+/// Only one candidate is active. A failed preference falls through in order.
+pub fn backend_candidates(preferred: Backend) -> &'static [Backend] {
+    match preferred {
+        Backend::Wintab => &[Backend::Wintab, Backend::Pointer, Backend::Mouse],
+        Backend::Pointer => &[Backend::Pointer, Backend::Mouse],
+        Backend::Mouse => &[Backend::Mouse],
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub kind: Kind,
@@ -160,6 +178,8 @@ pub struct Settings {
     pub pen: DeviceSettings,
     #[serde(default)]
     pub features: PenFeatures,
+    #[serde(default)]
+    pub backend: Backend,
 }
 impl Settings {
     pub fn valid(self) -> bool {

@@ -86,217 +86,15 @@ pub(super) fn gui_events(ctx: &egui::Context) -> Vec<Event> {
     }
     result
 }
-#[cfg(windows)]
-struct ToolState {
-    device: u64,
-    pose: Option<octotablet::axis::Pose>,
-    phase: Option<Phase>,
-    contact: u64,
-    down: bool,
-    buttons: std::collections::HashSet<octotablet::tool::ButtonID>,
-    buttons_supported: bool,
-}
 #[derive(Default)]
 pub(super) struct Native {
-    // Drop the manager (and its window reference) before uninitializing COM.
-    #[cfg(windows)]
-    manager: Option<octotablet::Manager>,
-    #[cfg(windows)]
-    tools: std::collections::HashMap<octotablet::tool::ID, ToolState>,
-    #[cfg(windows)]
-    next: u64,
     pub report: String,
     pub open: bool,
     draft: Option<Settings>,
+    pub applied: Option<drawer_core::pointer_input::Backend>,
+    pub retry: bool,
     #[cfg(test)]
     buttons: [Option<egui::Rect>; 2],
-    #[cfg(windows)]
-    com: Option<winsafe::guard::CoUninitializeGuard>,
-}
-impl Native {
-    pub fn connected(&self) -> bool {
-        #[cfg(windows)]
-        {
-            self.manager.is_some()
-        }
-        #[cfg(not(windows))]
-        {
-            false
-        }
-    }
-    pub fn attach(&mut self, cc: &eframe::CreationContext<'_>) {
-        #[cfg(windows)]
-        {
-            let Some(window) = cc.winit_window() else {
-                return;
-            };
-            match winsafe::CoInitializeEx(
-                winsafe::co::COINIT::APARTMENTTHREADED | winsafe::co::COINIT::DISABLE_OLE1DDE,
-            ) {
-                Ok(guard) => self.com = Some(guard),
-                Err(e) => {
-                    self.report =
-                        format!("Pen initialization unavailable: {e}; mouse remains available");
-                    return;
-                }
-            }
-            // This version's builder panics on a native provider failure. Keep mouse
-            // input usable rather than letting that optional provider abort the app.
-            let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                octotablet::Builder::new()
-                    .emulate_tool_from_mouse(false)
-                    .build_shared(window)
-            }));
-            match built {
-                Ok(Ok(manager)) => {
-                    self.manager = Some(manager);
-                    self.report = "Windows Ink connected; physical pen validation pending".into();
-                }
-                Ok(Err(e)) => {
-                    self.report = format!("Pen provider unavailable: {e}; mouse remains available")
-                }
-                Err(_) => {
-                    self.report =
-                        "Pen provider declined initialization; mouse remains available".into()
-                }
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = cc;
-            self.report =
-                "Native pen backend unavailable on this build; mouse remains available".into();
-        }
-    }
-    pub fn pump(&mut self, ctx: &egui::Context, output: &mut Vec<Event>) {
-        #[cfg(windows)]
-        {
-            use octotablet::{
-                events::{Event as Raw, ToolEvent},
-                tool::Type,
-            };
-            let Some(manager) = &mut self.manager else {
-                return;
-            };
-            let Ok(events) = manager.pump();
-            for raw in events {
-                let Raw::Tool { tool, event } = raw else {
-                    continue;
-                };
-                let kind = match tool.tool_type {
-                    Some(
-                        Type::Pen | Type::Pencil | Type::Brush | Type::Eraser | Type::Airbrush,
-                    ) => Kind::Pen,
-                    Some(Type::Finger) => Kind::Touch,
-                    _ => Kind::Unknown,
-                };
-                let id = tool.id();
-                if matches!(event, ToolEvent::Removed) {
-                    if let Some(s) = self.tools.remove(&id)
-                        && s.down
-                    {
-                        output.push(Event {
-                            source: Source {
-                                kind,
-                                device: s.device,
-                                contact: s.contact,
-                            },
-                            phase: Phase::Cancel,
-                            position: [0.0; 2],
-                            pressure: None,
-                            attributes: Default::default(),
-                            origin: Default::default(),
-                        });
-                    }
-                    continue;
-                }
-                if !self.tools.contains_key(&id) && self.tools.len() >= 256 {
-                    continue;
-                }
-                let s = self.tools.entry(id).or_insert_with(|| {
-                    self.next += 1;
-                    ToolState {
-                        device: self.next,
-                        pose: None,
-                        phase: None,
-                        contact: 0,
-                        down: false,
-                        buttons: Default::default(),
-                        buttons_supported: false,
-                    }
-                });
-                match event {
-                    ToolEvent::Button { button_id, pressed } => {
-                        s.buttons_supported = true;
-                        if pressed {
-                            s.buttons.insert(button_id);
-                        } else {
-                            s.buttons.remove(&button_id);
-                        }
-                    }
-                    ToolEvent::Down => {
-                        self.next += 1;
-                        s.contact = self.next;
-                        s.phase = Some(Phase::Down);
-                        s.down = true;
-                    }
-                    ToolEvent::Up => {
-                        s.phase = Some(Phase::Up);
-                        s.down = false;
-                    }
-                    ToolEvent::Pose(pose) => s.pose = Some(pose),
-                    ToolEvent::Out => {
-                        s.buttons.clear();
-                        if s.down {
-                            s.phase = Some(Phase::Cancel);
-                            s.down = false;
-                        }
-                    }
-                    ToolEvent::Frame(_) => {
-                        let phase = s.phase.take().or(s.down.then_some(Phase::Move));
-                        if let (Some(phase), Some(pose)) = (phase, s.pose) {
-                            // octotablet reports native logical pixels; egui can apply an additional zoom.
-                            let zoom = ctx.zoom_factor() as f64;
-                            let event = Event {
-                                source: Source {
-                                    kind,
-                                    device: s.device,
-                                    contact: s.contact,
-                                },
-                                phase,
-                                position: pose.position.map(|p| p as f64 / zoom),
-                                pressure: pose.pressure.get().map(|p| p as f64),
-                                attributes: drawer_core::pointer_input::Attributes {
-                                    tilt: pose.tilt.map(|v| v.map(|n| n as f64)),
-                                    eraser: match tool.tool_type {
-                                        Some(Type::Eraser) => Some(true),
-                                        Some(
-                                            Type::Pen | Type::Pencil | Type::Brush | Type::Airbrush,
-                                        ) => Some(false),
-                                        _ => None,
-                                    },
-                                    button: s.buttons_supported.then_some(!s.buttons.is_empty()),
-                                }
-                                .normalized(),
-                                origin: Default::default(),
-                            };
-                            if event.valid() && output.len() < 65536 {
-                                output.push(event);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if ctx.input(|i| i.focused) {
-                ctx.request_repaint_after(std::time::Duration::from_millis(8));
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (ctx, output);
-        }
-    }
 }
 impl Drawer {
     pub(super) fn pointer_settings(&mut self, ctx: &egui::Context) {
@@ -312,6 +110,11 @@ impl Drawer {
         let mut cancel = false;
         egui::Window::new("Mouse and pen input").open(&mut open).show(ctx,|ui| {
             ui.label(&self.native_input.report);
+            egui::ComboBox::from_label("Pen input backend").selected_text(format!("{:?}",draft.backend)).show_ui(ui,|ui| {
+                for backend in drawer_core::pointer_input::Backend::ALL {ui.selectable_value(&mut draft.backend,backend,format!("{backend:?}"));}
+            });
+            if crate::help::button(ui,"Retry current backend","pointer-input").clicked(){self.native_input.retry=true;}
+            ui.label("One pen backend is active. Wintab requires a locally installed driver. Lift the pen after switching or regaining focus.");
             ui.label("The first drawing contact owns a stroke until release or cancellation.");
             crate::help::checkbox(ui,&mut draft.features.tilt_angle,"Use supported pen tilt for tip angle","pointer-input");
             crate::help::checkbox(ui,&mut draft.features.eraser,"Start inverted pen strokes as eraser","pointer-input");
@@ -365,6 +168,25 @@ impl Drawer {
     }
 }
 
+#[cfg(windows)]
+pub(super) fn smoke_backends(input: &drawer_platform::Input) -> Result<String, String> {
+    use drawer_core::pointer_input::Backend;
+    input.configure(Backend::Wintab);
+    let wintab = input.report();
+    if input.requested() != Some(Backend::Wintab) {
+        return Err("Backend preference lost".into());
+    }
+    input.configure(Backend::Mouse);
+    if input.effective() != Backend::Mouse {
+        return Err("Mouse backend did not release pen provider".into());
+    }
+    input.configure(Backend::Pointer);
+    if input.effective() != Backend::Pointer {
+        return Err(input.report());
+    }
+    Ok(wintab)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,6 +200,7 @@ mod tests {
         let before = app.documents[0].snapshot();
         let initial = app.workspaces.store.current.pointer;
         let mut next = initial;
+        next.backend = drawer_core::pointer_input::Backend::Wintab;
         next.mouse.enabled = false;
         next.pen.stabilization = Some(0.7);
         next.features.tilt_angle = true;

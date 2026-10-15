@@ -91,6 +91,7 @@ try {
     if ($smokeResult -notmatch 'mouse_origin_backend=true' -or $smokeResult -notmatch 'synthetic_pen_dedup=true') { throw '마우스 출처 경로/중복 제거 시작 시험 실패' }
     if ($smokeResult -notmatch 'missing_pen_properties=true') { throw '필압/기울기 누락 기본 브러시 시작 시험 실패' }
     if ($smokeResult -notmatch 'virtual_input_replay=true') { throw '가상 입력 재생/재현성/취소 시작 시험 실패' }
+    if ($smokeResult -notmatch 'backend_switching=true' -or $smokeResult -notmatch 'wintab_initialization=Requested Wintab; active (Wintab|Pointer|Mouse)') { throw 'Pointer/Wintab/마우스 전환 및 복귀 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {
