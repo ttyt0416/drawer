@@ -83,6 +83,7 @@ pub(super) struct Drawing {
     pub profiles: [drawer_core::tip_profile::Settings; 7],
     pub filters: [drawer_core::stroke_filter::Settings; 7],
     pub sequences: [drawer_core::tip_sequence::Settings; 7],
+    pub dynamics: [drawer_core::brush_dynamics::Settings; 7],
     pub picked: Option<[u8; 4]>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
@@ -361,13 +362,17 @@ impl Drawing {
                     s.last_timer = s.last_timer.max(micros);
                 }
                 s.mouse_dirty = true;
-                mouse.push_input(
+                mouse.push_dynamic(
                     drawer_core::mouse_pressure::Sample {
                         point: s.projection.point(pos),
                         micros,
                     },
                     pressure,
                     angle,
+                    drawer_core::brush_dynamics::Input::from_tilt(
+                        s.last_attributes.tilt,
+                        s.projection.tilt_angle(s.last_attributes.tilt),
+                    ),
                 )
             } else {
                 s.stroke.set_angle_offset(angle).and_then(|_| {
@@ -597,6 +602,7 @@ impl Drawing {
             style.profile = self.profiles[index];
             style.filters = self.filters[index];
             style.sequence = self.sequences[index];
+            style.dynamics = self.dynamics[index];
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
@@ -622,6 +628,7 @@ impl Drawing {
                         || !style.profile.is_default()
                         || !style.filters.is_default()
                         || !style.sequence.is_default()
+                        || !style.dynamics.is_default()
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -640,13 +647,17 @@ impl Drawing {
                         )?
                         .configure_input(self.ends[index], !virtual_mouse)?;
                         for point in [from, to] {
-                            replay.push_input(
+                            replay.push_dynamic(
                                 drawer_core::mouse_pressure::Sample {
                                     point,
                                     micros: None,
                                 },
                                 event.pressure_value(),
                                 0.0,
+                                drawer_core::brush_dynamics::Input::from_tilt(
+                                    event.pen_attributes().tilt,
+                                    projection.tilt_angle(event.pen_attributes().tilt),
+                                ),
                             )?;
                         }
                         if replay
@@ -689,6 +700,7 @@ impl Drawing {
                         || !style.profile.is_default()
                         || !style.filters.is_default()
                         || !style.sequence.is_default()
+                        || !style.dynamics.is_default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -756,6 +768,7 @@ impl Drawer {
         self.drawing.profiles = self.workspaces.store.current.input.profiles;
         self.drawing.filters = self.workspaces.store.current.input.filters;
         self.drawing.sequences = self.workspaces.store.current.input.sequences;
+        self.drawing.dynamics = self.workspaces.store.current.input.dynamics;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1097,6 +1110,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
             }
             let style = Style {
+                dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),
@@ -1184,6 +1198,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),
         profile: Default::default(),
@@ -1233,6 +1248,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),
         profile: Default::default(),

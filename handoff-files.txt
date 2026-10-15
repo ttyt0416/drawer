@@ -204,3 +204,7 @@ crates/drawer-core/src/tip_sequence.rs
 crates/drawer-core/src/color_mix.rs
 crates/drawer-app/src/tip_sequence.rs
 docs/process/tip-sequence.md
+
+crates/drawer-core/src/brush_dynamics.rs
+crates/drawer-app/src/brush_dynamics.rs
+docs/process/brush-dynamics.md

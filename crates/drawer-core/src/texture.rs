@@ -155,6 +155,7 @@ mod tests {
                 ..Default::default()
             };
             let style = Style {
+                dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),

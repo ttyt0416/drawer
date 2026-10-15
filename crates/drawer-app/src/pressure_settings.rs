@@ -123,6 +123,7 @@ pub(super) fn smoke_pressure() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
             let mut style = Style {
+                dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),

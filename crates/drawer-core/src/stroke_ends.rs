@@ -102,6 +102,7 @@ pub fn verify() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),
         profile: Default::default(),
@@ -284,6 +285,7 @@ mod method_tests {
             )
             .unwrap();
             let style = Style {
+                dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),

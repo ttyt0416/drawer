@@ -53,6 +53,7 @@ impl Pressure {
 
 fn style() -> crate::painting::Style {
     crate::painting::Style {
+        dynamics: Default::default(),
         sequence: Default::default(),
         filters: Default::default(),
         profile: Default::default(),

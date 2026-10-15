@@ -16,6 +16,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 pub struct Style {
     #[serde(
         default,
+        skip_serializing_if = "crate::brush_dynamics::Settings::is_default"
+    )]
+    pub dynamics: crate::brush_dynamics::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::tip_sequence::Settings::is_default"
     )]
     pub sequence: crate::tip_sequence::Settings,
@@ -74,7 +79,8 @@ impl Style {
         (self.shape.size * self.shape.aspect * self.spacing * pressure_scale).max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.sequence.valid()
+        self.dynamics.valid()
+            && self.sequence.valid()
             && self.filters.valid()
             && self.profile.valid()
             && self.shape.valid()
@@ -108,6 +114,11 @@ pub struct Stroke {
     last_stamp: Option<Point>,
     pressure: f64,
     pressure_filter: crate::stroke_filter::Pressure,
+    dynamics: crate::brush_dynamics::Input,
+    last_dynamics: crate::brush_dynamics::Input,
+    heading: Option<f64>,
+    particle: Option<Point>,
+    dynamic_index: u64,
     sequence: crate::tip_sequence::Sequence,
     mask_tip: BrushTip,
     last_stamp_pressure: f64,
@@ -131,6 +142,43 @@ impl Stroke {
         }
         self.scale = scale;
         Ok(())
+    }
+    pub fn set_dynamic_input(&mut self, input: crate::brush_dynamics::Input) -> Result<(), String> {
+        if !input.valid() {
+            return Err("Invalid brush dynamic input".into());
+        }
+        self.dynamics = input;
+        Ok(())
+    }
+    fn rotation(&self) -> f64 {
+        self.style.dynamics.angle(
+            self.heading,
+            self.dynamics,
+            self.particle,
+            self.angle_offset,
+        )
+    }
+    fn dynamic_size(&self, pressure: f64, index: u64) -> Result<f64, String> {
+        let base = self.style.shape.size
+            * if self.style.pressure.size {
+                self.style
+                    .profile
+                    .size(self.style.pressure.response.map(pressure)?)
+            } else {
+                1.0
+            };
+        Ok(self
+            .style
+            .dynamics
+            .size(base, pressure, self.dynamics, index))
+    }
+    fn heading_to(&mut self, point: Point) {
+        if let Some(from) = self.last {
+            let delta = [point[0] - from[0], point[1] - from[1]];
+            if delta[0].hypot(delta[1]) > 1e-9 {
+                self.heading = Some(delta[1].atan2(delta[0]).to_degrees());
+            }
+        }
     }
     pub fn dab_count(&self) -> u32 {
         self.dabs
@@ -288,6 +336,8 @@ impl Stroke {
         {
             return Err("Invalid timed dab".into());
         }
+        self.heading_to(anchor);
+        self.particle = Some([anchor[0] - point[0], anchor[1] - point[1]]);
         self.stamp(doc, point, pressure, self.scale)?;
         self.last = Some(anchor);
         self.pressure = pressure;
@@ -486,6 +536,11 @@ impl Stroke {
             last_stamp: None,
             pressure: 1.0,
             pressure_filter: Default::default(),
+            dynamics: Default::default(),
+            last_dynamics: Default::default(),
+            heading: None,
+            particle: None,
+            dynamic_index: 0,
             sequence: Default::default(),
             mask_tip: style.tip,
             last_stamp_pressure: 1.0,
@@ -561,9 +616,12 @@ impl Stroke {
             .receive(point, self.style.filters.position(self.style.smoothing))
         else {
             if ((self.pressure != pressure
-                && (self.style.pressure.size || self.style.pressure.opacity))
-                || self.last_stamp_angle != self.angle_offset
-                || self.last_stamp_scale != self.scale)
+                && (self.style.pressure.size
+                    || self.style.pressure.opacity
+                    || self.style.dynamics.pressure.enabled))
+                || self.last_stamp_angle != self.rotation()
+                || self.last_stamp_scale != self.scale
+                || (!self.style.dynamics.is_default() && self.last_dynamics != self.dynamics))
                 && let Some(last) = self.last
             {
                 self.stamp(doc, last, pressure, self.scale)?;
@@ -572,6 +630,8 @@ impl Stroke {
             self.last_scale = self.scale;
             return Ok(());
         };
+        self.heading_to(to);
+        self.particle = None;
         if let Some(from) = self.last {
             let delta = [to[0] - from[0], to[1] - from[1]];
             let length = delta[0].hypot(delta[1]);
@@ -587,11 +647,23 @@ impl Stroke {
             } else {
                 1.0
             };
-            let step = self
-                .style
-                .step(pressure_scale * self.last_scale.min(self.scale));
+            let step = if self.style.dynamics.is_default() {
+                self.style
+                    .step(pressure_scale * self.last_scale.min(self.scale))
+            } else if self.style.dynamics.spacing_with_size {
+                let size = self
+                    .dynamic_size(self.pressure, self.dynamic_index)?
+                    .min(self.dynamic_size(pressure, self.dynamic_index)?);
+                (size
+                    * self.style.shape.aspect
+                    * self.style.spacing
+                    * self.last_scale.min(self.scale))
+                .max(1.0 / 1024.0)
+            } else {
+                self.style.step(1.0)
+            };
             if length > 1e-9 {
-                let radius = self.style.shape.size
+                let radius = self.style.shape.size.max(self.style.dynamics.minimum_size)
                     * 0.5
                     * if self.style.sequence.enabled || self.style.profile.square(self.style.tip) {
                         1.0 + self.style.shape.aspect
@@ -626,7 +698,9 @@ impl Stroke {
                 }
                 self.remainder = (self.remainder + length).rem_euclid(step);
             } else if (self.pressure != pressure
-                && (self.style.pressure.size || self.style.pressure.opacity))
+                && (self.style.pressure.size
+                    || self.style.pressure.opacity
+                    || self.style.dynamics.pressure.enabled))
                 || self.last_scale != self.scale
             {
                 self.stamp(doc, to, pressure, self.scale)?;
@@ -647,8 +721,10 @@ impl Stroke {
             && self.last_stamp.is_none_or(|p| {
                 (last[0] - p[0]).hypot(last[1] - p[1]) > 1e-7
                     || (self.last_stamp_pressure != self.pressure
-                        && (self.style.pressure.size || self.style.pressure.opacity))
-                    || self.last_stamp_angle != self.angle_offset
+                        && (self.style.pressure.size
+                            || self.style.pressure.opacity
+                            || self.style.dynamics.pressure.enabled))
+                    || self.last_stamp_angle != self.rotation()
                     || self.last_stamp_scale != self.scale
             })
         {
@@ -706,17 +782,11 @@ impl Stroke {
     }
     pub fn shape(&self) -> Shape {
         let mut shape = self.style.shape;
-        shape.angle += self.angle_offset;
-        shape.size *= self.scale;
-        if self.style.pressure.size {
-            shape.size *= self.style.profile.size(
-                self.style
-                    .pressure
-                    .response
-                    .map(self.pressure)
-                    .unwrap_or(0.0),
-            );
-        }
+        shape.angle += self.rotation();
+        shape.size = self
+            .dynamic_size(self.pressure, self.dynamic_index.saturating_sub(1))
+            .unwrap_or(0.0)
+            * self.scale;
         shape
     }
     pub(crate) fn restore_input_trace(&mut self, trace: Trace, smoothing: f64) {
@@ -736,17 +806,19 @@ impl Stroke {
         pressure: f64,
         scale: f64,
     ) -> Result<(), String> {
+        if !self.style.dynamics.is_default() && self.dynamic_index >= 262144 {
+            return Err("Brush dynamics dab-work budget exceeded; pending stroke cancelled".into());
+        }
         self.last_stamp = Some(center);
         self.last_stamp_pressure = pressure;
         self.last_stamp_scale = scale;
-        self.last_stamp_angle = self.angle_offset;
-        let pressure = self.style.pressure.response.map(pressure)?;
+        self.last_stamp_angle = self.rotation();
+        self.last_dynamics = self.dynamics;
         let mut shape = self.style.shape;
-        shape.size *= scale;
-        shape.angle += self.angle_offset;
-        if self.style.pressure.size {
-            shape.size *= self.style.profile.size(pressure);
-        }
+        shape.size = self.dynamic_size(pressure, self.dynamic_index)? * scale;
+        shape.angle += self.rotation();
+        self.dynamic_index = self.dynamic_index.saturating_add(1);
+        let pressure = self.style.pressure.response.map(pressure)?;
         let opacity = if self.style.pressure.opacity {
             self.style.profile.opacity(pressure)
         } else {
@@ -1109,6 +1181,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                dynamics: Default::default(),
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Default::default(),
@@ -1178,6 +1251,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            dynamics: Default::default(),
             sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),

@@ -24,6 +24,8 @@ pub struct Settings {
     pub filters: [crate::stroke_filter::Settings; 7],
     #[serde(default, deserialize_with = "crate::brush_slots::read")]
     pub sequences: [crate::tip_sequence::Settings; 7],
+    #[serde(default, deserialize_with = "crate::brush_slots::read")]
+    pub dynamics: [crate::brush_dynamics::Settings; 7],
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
@@ -44,6 +46,7 @@ impl Default for Settings {
             profiles: [Default::default(); 7],
             filters: [Default::default(); 7],
             sequences: [Default::default(); 7],
+            dynamics: [Default::default(); 7],
             modifiers: [None; 3],
             mouse_pressure: [Default::default(); 7],
         }
@@ -55,6 +58,7 @@ impl Settings {
             && self.ends.iter().all(|s| s.valid())
             && self.materials.iter().all(|s| s.valid())
             && self.sequences.iter().all(|s| s.valid())
+            && self.dynamics.iter().all(|s| s.valid())
             && self.filters.iter().all(|s| s.valid())
             && self.profiles.iter().all(|s| s.valid())
             && self.textures.iter().all(|s| s.valid())

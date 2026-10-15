@@ -154,6 +154,7 @@ pub struct Replay {
     ends: crate::stroke_ends::Settings,
     native_pressure: bool,
     inputs: Vec<[f64; 2]>,
+    dynamic_inputs: Vec<crate::brush_dynamics::Input>,
 }
 impl Replay {
     pub fn begin(
@@ -194,6 +195,7 @@ impl Replay {
             ends: Default::default(),
             native_pressure: false,
             inputs: vec![],
+            dynamic_inputs: vec![],
         })
     }
     pub fn configure_input(
@@ -209,11 +211,26 @@ impl Replay {
         Ok(self)
     }
     pub fn push_input(&mut self, sample: Sample, pressure: f64, angle: f64) -> Result<(), String> {
-        if !(0.0..=1.0).contains(&pressure) || !angle.is_finite() || angle.abs() > 360.0 {
-            return Err("Invalid native stroke pressure/angle".into());
+        self.push_dynamic(sample, pressure, angle, Default::default())
+    }
+    pub fn push_dynamic(
+        &mut self,
+        sample: Sample,
+        pressure: f64,
+        angle: f64,
+        mut input: crate::brush_dynamics::Input,
+    ) -> Result<(), String> {
+        if !(0.0..=1.0).contains(&pressure)
+            || !angle.is_finite()
+            || angle.abs() > 360.0
+            || !input.valid()
+        {
+            return Err("Invalid native stroke pressure/angle/dynamics".into());
         }
         self.push(sample)?;
+        input.speed = self.dynamic_inputs.last().unwrap().speed;
         *self.inputs.last_mut().unwrap() = [pressure, angle];
+        *self.dynamic_inputs.last_mut().unwrap() = input;
         Ok(())
     }
     pub fn push(&mut self, sample: Sample) -> Result<(), String> {
@@ -240,6 +257,33 @@ impl Replay {
         self.inputs
             .try_reserve(1)
             .map_err(|_| "Stroke attribute recording allocation failed")?;
+        self.dynamic_inputs
+            .try_reserve(1)
+            .map_err(|_| "Brush dynamic input allocation failed")?;
+        let input = if clock {
+            self.dynamic_inputs.last().copied().unwrap_or_default()
+        } else {
+            let previous = self
+                .samples
+                .iter()
+                .zip(&self.clocks)
+                .rev()
+                .find(|(_, clock)| !**clock)
+                .map(|(sample, _)| sample);
+            let speed = previous.and_then(|p| match (p.micros, sample.micros) {
+                (Some(a), Some(b)) if b > a => Some(
+                    ((sample.point[0] - p.point[0]).hypot(sample.point[1] - p.point[1])
+                        / ((b - a) as f64 / 1e6))
+                        .min(1e18),
+                ),
+                _ => None,
+            });
+            crate::brush_dynamics::Input {
+                speed,
+                ..Default::default()
+            }
+        };
+        self.dynamic_inputs.push(input);
         self.inputs.push([1.0, 0.0]);
         self.samples.push(sample);
         self.clocks.push(clock);
@@ -261,6 +305,12 @@ impl Replay {
         });
         let mut n = 0;
         self.inputs.retain(|_| {
+            let result = keep[n];
+            n += 1;
+            result
+        });
+        let mut n = 0;
+        self.dynamic_inputs.retain(|_| {
             let result = keep[n];
             n += 1;
             result
@@ -480,6 +530,10 @@ impl Replay {
                         + ((current_input[1] - previous_input[1] + 180.0).rem_euclid(360.0)
                             - 180.0)
                             * t;
+                    let mut input = self.dynamic_inputs[index.saturating_sub(1)]
+                        .interpolate(self.dynamic_inputs[index], t);
+                    input.speed = self.dynamic_inputs[index].speed;
+                    stroke.set_dynamic_input(input)?;
                     stroke.set_angle_offset((angle + 180.0).rem_euclid(360.0) - 180.0)?;
                     stroke.set_geometry_scale(self.ends.scale(d, distance, finalizing))?;
                     stroke.sample_processed_pressure(
@@ -492,6 +546,7 @@ impl Replay {
                     )?;
                 }
             } else {
+                stroke.set_dynamic_input(self.dynamic_inputs[index])?;
                 stroke.set_angle_offset(inputs[index][1])?;
                 stroke.set_geometry_scale(self.ends.scale(at, distance, finalizing))?;
                 stroke.sample_processed_pressure(
@@ -532,7 +587,12 @@ impl Replay {
         let period = self.settings.spray_period_micros as u64;
         let mut next = period;
         let mut tick = 0u64;
-        let mut emit = |point: Point, distance: f64, speed: f64, tick: u64| -> Result<(), String> {
+        let mut emit = |point: Point,
+                        distance: f64,
+                        speed: f64,
+                        tick: u64,
+                        input: crate::brush_dynamics::Input|
+         -> Result<(), String> {
             if cancel() {
                 return Err("Timed mouse spray cancelled".into());
             }
@@ -543,6 +603,7 @@ impl Replay {
             if count > 262144 || area * count as f64 > 64.0 * 1024.0 * 1024.0 {
                 return Err("Timed spray work budget exceeded; pending stroke cancelled".into());
             }
+            stroke.set_dynamic_input(input)?;
             let pressure = self.settings.pressure(distance, total, finalizing, speed);
             let geometry = self.ends.scale(distance, total, finalizing);
             stroke.set_geometry_scale(geometry)?;
@@ -553,7 +614,9 @@ impl Replay {
             } else {
                 1.0
             };
-            let (sin, cos) = self.style.shape.angle.to_radians().sin_cos();
+            let (sin, cos) = (self.style.shape.angle + self.style.dynamics.scatter_angle)
+                .to_radians()
+                .sin_cos();
             for n in 0..self.settings.spray_dabs {
                 let key = tick * self.settings.spray_dabs as u64 + n as u64;
                 let radius = self.style.shape.size
@@ -573,8 +636,8 @@ impl Replay {
             }
             Ok(())
         };
-        emit(first, first_distance, 1.0, tick)?;
-        for pair in points.windows(2) {
+        emit(first, first_distance, 1.0, tick, self.dynamic_inputs[0])?;
+        for (index, pair) in points.windows(2).enumerate() {
             let (from, d0, _) = pair[0];
             let (to, d1, time) = pair[1];
             let dt = match (clock, time) {
@@ -607,6 +670,12 @@ impl Replay {
                     d0 + (d1 - d0) * t,
                     speed,
                     tick,
+                    {
+                        let mut input = self.dynamic_inputs[index]
+                            .interpolate(self.dynamic_inputs[index + 1], t);
+                        input.speed = self.dynamic_inputs[index + 1].speed;
+                        input
+                    },
                 )?;
                 next = next.checked_add(period).ok_or("Spray clock limit")?;
             }
@@ -895,6 +964,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            dynamics: Default::default(),
             sequence: Default::default(),
             filters: Default::default(),
             profile: Default::default(),
@@ -1151,5 +1221,137 @@ mod tests {
                 .is_err()
         );
         assert!(d.snapshot() == before);
+    }
+}
+
+#[cfg(test)]
+mod dynamics_tests {
+    use super::*;
+    #[test]
+    fn real_velocity_excludes_clocks_missing_time_uses_fallback_and_bad_input_is_atomic() {
+        let d = Document::create(
+            crate::document::CanvasSpec {
+                width: 48,
+                height: 24,
+                dpi: 300.0,
+                background: crate::document::Background::Transparent,
+            },
+            65536,
+        )
+        .unwrap();
+        let style = Style {
+            dynamics: crate::brush_dynamics::Settings {
+                speed: crate::brush_dynamics::Curve {
+                    enabled: true,
+                    maximum: 1000.0,
+                    missing: 0.5,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            sequence: Default::default(),
+            filters: Default::default(),
+            profile: Default::default(),
+            texture: Default::default(),
+            material: Default::default(),
+            shape: crate::brush_cursor::Shape {
+                size: 8.0,
+                aspect: 1.0,
+                angle: 0.0,
+            },
+            tip: crate::assets::BrushTip::Pen,
+            color: [255; 4],
+            opacity: 1.0,
+            hardness: 1.0,
+            spacing: 0.5,
+            smoothing: 0.0,
+            pressure: crate::pressure::Mapping {
+                size: false,
+                opacity: false,
+                ..Default::default()
+            },
+        };
+        let make = |clock| {
+            let mut r = Replay::begin(&d, 0, style, Default::default())
+                .unwrap()
+                .configure_input(Default::default(), true)
+                .unwrap();
+            r.push_input(
+                Sample {
+                    point: [5.5, 12.5],
+                    micros: Some(0),
+                },
+                1.0,
+                0.0,
+            )
+            .unwrap();
+            if clock {
+                r.push_clock(Sample {
+                    point: [5.5, 12.5],
+                    micros: Some(10000),
+                })
+                .unwrap();
+            }
+            r.push_input(
+                Sample {
+                    point: [25.5, 12.5],
+                    micros: Some(40000),
+                },
+                1.0,
+                0.0,
+            )
+            .unwrap();
+            r
+        };
+        let mut a = make(false);
+        let b = make(true);
+        assert_eq!(a.dynamic_inputs[1].speed, Some(500.0));
+        assert_eq!(b.dynamic_inputs[2].speed, Some(500.0));
+        // Compare pending pixels without cloning the document identity/revision.
+        let sa = a.render(&d, true).unwrap();
+        let sb = b.render(&d, true).unwrap();
+        for y in 0..24 {
+            for x in 0..48 {
+                assert_eq!(
+                    sa.pixel(&d, 0, &d.layers[0], x, y),
+                    sb.pixel(&d, 0, &d.layers[0], x, y)
+                );
+            }
+        }
+        let n = a.samples.len();
+        assert!(
+            a.push_dynamic(
+                Sample {
+                    point: [30.5, 12.5],
+                    micros: Some(60000)
+                },
+                1.0,
+                0.0,
+                crate::brush_dynamics::Input {
+                    tilt: Some(f64::NAN),
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(a.samples.len(), n);
+        a.push_input(
+            Sample {
+                point: [30.5, 12.5],
+                micros: None,
+            },
+            1.0,
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(a.dynamic_inputs.last().unwrap().speed, None);
+        a.push_clock(Sample {
+            point: [30.5, 12.5],
+            micros: Some(100000),
+        })
+        .unwrap();
+        a.trim_clocks(80000);
+        assert_eq!(a.dynamic_inputs.len(), a.samples.len());
+        assert_eq!(a.clocks.len(), a.samples.len());
     }
 }

@@ -3,6 +3,7 @@ use drawer_core::workspaces::{self, Dock, Placement, Scope, Snapshot, Store};
 use std::collections::HashSet;
 
 struct PadPaint {
+    last_input: Option<([f64; 2], u64)>,
     document: Document,
     stroke: drawer_core::painting::Stroke,
 }
@@ -23,7 +24,31 @@ impl PadPaint {
         style.shape.size = style.shape.size.clamp(0.1, 64.0);
         let stroke =
             drawer_core::painting::Stroke::with_budget(&document, 0, style, pixels.len() * 128)?;
-        Ok(Self { document, stroke })
+        Ok(Self {
+            last_input: None,
+            document,
+            stroke,
+        })
+    }
+    fn sample(&mut self, point: [f64; 2], micros: u64) -> Result<(), String> {
+        let speed = self.last_input.and_then(|(p, t)| {
+            if micros > t {
+                Some(
+                    ((point[0] - p[0]).hypot(point[1] - p[1]) / ((micros - t) as f64 / 1e6))
+                        .min(1e18),
+                )
+            } else {
+                None
+            }
+        });
+        self.stroke
+            .set_dynamic_input(drawer_core::brush_dynamics::Input {
+                speed,
+                ..Default::default()
+            })?;
+        self.stroke.sample_pressure(&self.document, point, 1.0)?;
+        self.last_input = Some((point, micros));
+        Ok(())
     }
     fn preview(&self) -> Vec<[u8; 4]> {
         let d = &self.document;
@@ -832,6 +857,7 @@ impl Drawer {
                                     .position(|t| *t == self.selected)
                                     .unwrap();
                                 let style = drawer_core::painting::Style {
+                                    dynamics: self.workspaces.store.current.input.dynamics[n],
                                     sequence: self.workspaces.store.current.input.sequences[n],
                                     filters: self.workspaces.store.current.input.filters[n],
                                     profile: self.workspaces.store.current.input.profiles[n],
@@ -892,7 +918,8 @@ impl Drawer {
                                 (pos.x - response.rect.min.x) as f64 / 3.0,
                                 (pos.y - response.rect.min.y) as f64 / 3.0,
                             ];
-                            match paint.stroke.sample_pressure(&paint.document, point, 1.0) {
+                            match paint.sample(point, ctx.input(|i| (i.time.max(0.0) * 1e6) as u64))
+                            {
                                 Ok(()) => {
                                     self.workspaces.pad_trace = paint.stroke.trace();
                                     self.workspaces.pad_point = self.workspaces.pad_trace.corrected;
