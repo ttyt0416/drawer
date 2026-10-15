@@ -84,6 +84,7 @@ try {
     if ($smokeResult -notmatch 'tool_property_settings=true') { throw '도구별 속성 설정 시작 시험 실패' }
     if ($smokeResult -notmatch 'ime_backend=(toggle-and-restore|provider-declined-state-preserved)') { throw '자체 창 IME 상태 복원 시험 실패' }
     if ($smokeResult -notmatch 'mouse_painting=true') { throw '마우스 획/지우개/취소 시작 시험 실패' }
+    if ($smokeResult -notmatch 'pointer_settings=true' -or $smokeResult -notmatch 'native_pen=.+') { throw '장치별 입력 설정/네이티브 초기화 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {

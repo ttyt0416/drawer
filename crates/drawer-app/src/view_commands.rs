@@ -25,6 +25,7 @@ impl Drawer {
             || self.cursors.open
             || self.ui_behavior.open
             || self.tool_input.open
+            || self.native_input.open
             || self.properties.open
             || self.controls.open
             || self.controls.radial.is_some()

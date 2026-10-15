@@ -42,3 +42,4 @@ pub mod tool_properties;
 pub mod preferences;
 
 pub mod painting;
+pub mod pointer_input;

@@ -697,6 +697,7 @@ impl Drawer {
             && self.revert_pending.is_none()
             && !self.controls.open
             && !self.tool_input.open
+            && !self.native_input.open
             && !self.properties.open
             && !self.ui_behavior.open;
         let mut visible = true;

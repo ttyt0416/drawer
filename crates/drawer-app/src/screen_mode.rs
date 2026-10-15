@@ -125,6 +125,9 @@ impl Drawer {
             if crate::help::button(ui, "Tool input behavior", "screen-mode").clicked() {
                 self.tool_input.open = true;
             }
+            if crate::help::button(ui, "Mouse and pen input", "pointer-input").clicked() {
+                self.native_input.open = true;
+            }
             if crate::help::button(ui, "Input and commands", "screen-mode").clicked() {
                 self.controls.open = true;
             }

@@ -34,10 +34,16 @@ struct Session {
     stroke: Stroke,
     view: u64,
     projection: Projection,
+    last_screen: egui::Pos2,
 }
 #[derive(Default)]
 pub(super) struct Drawing {
     active: Option<Session>,
+    ownership: drawer_core::pointer_input::Ownership,
+    events: Vec<(drawer_core::pointer_input::Event, bool)>,
+    pub incoming: Vec<drawer_core::pointer_input::Event>,
+    pub settings: drawer_core::pointer_input::Settings,
+    pub last_source: Option<drawer_core::pointer_input::Source>,
     pub error: Option<String>,
 }
 impl Drawing {
@@ -58,7 +64,20 @@ impl Drawing {
             .filter(|s| s.stroke.document == document)
             .map(|s| &s.stroke)
     }
+    fn cancel(&mut self) {
+        self.active = None;
+        self.ownership.clear();
+    }
+    pub fn prepare(&mut self, ctx: &egui::Context) {
+        self.events = self
+            .incoming
+            .drain(..)
+            .chain(crate::pointer_input::gui_events(ctx))
+            .map(|e| (e, false))
+            .collect();
+    }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.ownership.clear();
         if let Some(session) = self.active.take() {
             if let Some(doc) = documents
                 .iter_mut()
@@ -73,6 +92,7 @@ impl Drawing {
         }
     }
     fn finish_document(&mut self, doc: &mut Document) {
+        self.ownership.clear();
         if let Some(s) = self.active.take()
             && let Err(e) = s.stroke.commit(doc)
         {
@@ -80,63 +100,83 @@ impl Drawing {
         }
     }
     fn sample(&mut self, doc: &Document, pos: egui::Pos2) {
-        if let Some(s) = &mut self.active
-            && let Err(e) = s.stroke.sample(doc, s.projection.point(pos))
-        {
-            self.error = Some(e);
-            self.active = None;
+        if let Some(s) = &mut self.active {
+            s.last_screen = pos;
+            if let Err(e) = s.stroke.sample(doc, s.projection.point(pos)) {
+                self.error = Some(e);
+                self.cancel();
+            }
+        }
+    }
+    fn receive(&mut self, index: usize, doc: &mut Document) {
+        use drawer_core::pointer_input::Decision;
+        let event = self.events[index].0;
+        self.events[index].1 = true;
+        match self.ownership.receive(event, self.settings) {
+            Decision::Sample => self.sample(
+                doc,
+                egui::pos2(event.position[0] as f32, event.position[1] as f32),
+            ),
+            Decision::Finish => {
+                self.sample(
+                    doc,
+                    egui::pos2(event.position[0] as f32, event.position[1] as f32),
+                );
+                self.finish_document(doc);
+            }
+            Decision::Cancel => self.cancel(),
+            Decision::Busy => {
+                self.error =
+                    Some("Another device owns the stroke; release and press again to draw".into())
+            }
+            _ => {}
         }
     }
     pub fn advance(&mut self, ctx: &egui::Context, documents: &mut [Document]) {
+        if ctx.input(|i| {
+            !i.focused
+                || i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::WindowFocused(false)))
+        }) {
+            self.cancel();
+            self.events.clear();
+            return;
+        }
         if self
             .active
             .as_ref()
             .is_some_and(|s| (s.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8)
         {
             self.finish(documents);
+            self.events.clear();
             return;
         }
-        for event in ctx.input(|i| i.events.clone()) {
+        if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.cancel();
+            self.events.clear();
+            ctx.input_mut(|i| {
+                i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
+            });
+            return;
+        }
+        for n in 0..self.events.len() {
             let Some(id) = self.active.as_ref().map(|s| s.stroke.document) else {
                 break;
             };
             let Some(doc) = documents.iter_mut().find(|d| d.id == id) else {
-                self.active = None;
+                self.cancel();
                 break;
             };
-            match event {
-                egui::Event::PointerMoved(pos) => self.sample(doc, pos),
-                egui::Event::PointerButton {
-                    pos,
-                    button: egui::PointerButton::Primary,
-                    pressed: false,
-                    ..
-                } => {
-                    self.sample(doc, pos);
-                    self.finish_document(doc);
-                }
-                egui::Event::PointerButton {
-                    button: egui::PointerButton::Primary,
-                    pressed: true,
-                    ..
-                }
-                | egui::Event::PointerGone
-                | egui::Event::WindowFocused(false) => self.active = None,
-                egui::Event::Key {
-                    key: egui::Key::Escape,
-                    pressed: true,
-                    ..
-                } => {
-                    self.active = None;
-                    ctx.input_mut(|i| {
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
-                    });
-                }
-                _ => {}
-            }
+            self.receive(n, doc);
         }
-        if ctx.input(|i| !i.focused || !i.pointer.primary_down()) {
-            self.active = None;
+        if self
+            .ownership
+            .owner()
+            .is_some_and(|s| s.kind == drawer_core::pointer_input::Kind::Mouse)
+            && ctx.input(|i| !i.pointer.primary_down())
+        {
+            self.cancel();
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -150,6 +190,7 @@ impl Drawing {
         style: Style,
         enabled: bool,
     ) {
+        use drawer_core::pointer_input::{Decision, Phase};
         let rect = response.rect;
         let projection = Projection {
             view: doc.view,
@@ -157,61 +198,65 @@ impl Drawing {
             center: [rect.center().x as f64, rect.center().y as f64],
             ppp: ui.ctx().pixels_per_point() as f64,
         };
-        // Event positions are authoritative even when a complete fast drag arrives
-        // in one frame and egui's final pointer position is outside the canvas.
-        let started = self.active.is_none() && enabled;
-        if started {
-            for event in ui.input(|i| i.events.clone()) {
-                match event {
-                    egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed: true,
-                        ..
-                    } if rect.contains(pos)
-                        && ui.clip_rect().contains(pos)
-                        && ui.ctx().layer_id_at(pos) == Some(response.layer_id) =>
-                    {
-                        self.finish_document(doc);
-                        match layer
-                            .ok_or_else(|| "Select a raster layer to paint".to_string())
-                            .and_then(|layer| Stroke::begin(doc, layer, style))
-                        {
-                            Ok(stroke) => {
-                                self.active = Some(Session {
-                                    stroke,
-                                    view,
-                                    projection,
-                                });
-                                self.sample(doc, pos);
-                            }
-                            Err(e) => self.error = Some(e),
-                        }
-                    }
-                    egui::Event::PointerMoved(pos) => self.sample(doc, pos),
-                    egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed: false,
-                        ..
-                    } => {
-                        self.sample(doc, pos);
-                        self.finish_document(doc);
-                    }
-                    egui::Event::PointerGone | egui::Event::WindowFocused(false) => {
-                        self.active = None;
-                    }
-                    _ => {}
-                }
-            }
-        } else if let Some(s) = &mut self.active
+        if let Some(s) = &mut self.active
             && s.stroke.document == doc.id
             && s.view == view
             && s.projection != projection
         {
             s.projection = projection;
-            if let Some(pos) = ui.input(|i| i.pointer.latest_pos()) {
-                self.sample(doc, pos);
+            let pos = s.last_screen;
+            self.sample(doc, pos);
+        }
+        for n in 0..self.events.len() {
+            if self.events[n].1 {
+                continue;
+            }
+            let event = self.events[n].0;
+            if self.pending() {
+                if self.active_view() == Some(view) {
+                    self.receive(n, doc);
+                }
+                continue;
+            }
+            let pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
+            if !enabled
+                || event.phase != Phase::Down
+                || !rect.contains(pos)
+                || !ui.clip_rect().contains(pos)
+                || ui.ctx().layer_id_at(pos) != Some(response.layer_id)
+            {
+                continue;
+            }
+            self.events[n].1 = true;
+            if self.ownership.receive(event, self.settings) != Decision::Begin {
+                continue;
+            }
+            let mut style = style;
+            if let Some(value) = self
+                .settings
+                .for_kind(event.source.kind)
+                .and_then(|s| s.stabilization)
+            {
+                style.smoothing = value;
+            }
+            match layer
+                .ok_or_else(|| "Select a raster layer to paint".to_string())
+                .and_then(|layer| Stroke::begin(doc, layer, style))
+            {
+                Ok(stroke) => {
+                    self.last_source = Some(event.source);
+                    self.active = Some(Session {
+                        stroke,
+                        view,
+                        projection,
+                        last_screen: pos,
+                    });
+                    self.sample(doc, pos);
+                }
+                Err(e) => {
+                    self.error = Some(e);
+                    self.cancel();
+                }
             }
         }
     }
@@ -224,6 +269,9 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.drawing.settings = self.workspaces.store.current.pointer;
+        self.native_input.pump(ctx, &mut self.drawing.incoming);
+        self.drawing.prepare(ctx);
         if self.tool_shortcuts_blocked(ctx) {
             self.finish_stroke();
         } else {
@@ -339,6 +387,86 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         }
+    }
+    #[test]
+    fn pen_mouse_interleaving_keeps_device_owner_and_one_event_one_stroke() {
+        use drawer_core::pointer_input::{Event, Kind, Phase, Source};
+        let (ctx, mut app) = setup(1.0);
+        let pen = Source {
+            kind: Kind::Pen,
+            device: 73,
+            contact: 81,
+        };
+        let p = point(&ctx, &app, [10.5, 20.5]);
+        let q = point(&ctx, &app, [40.5, 20.5]);
+        let event = |source, phase, pos: egui::Pos2| Event {
+            source,
+            phase,
+            position: [pos.x as f64, pos.y as f64],
+            pressure: Some(0.5),
+        };
+        app.workspaces.store.current.pointer.pen.stabilization = Some(0.4);
+        app.drawing.incoming = vec![event(pen, Phase::Down, p)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(app.drawing.last_source, Some(pen));
+        assert_eq!(
+            app.drawing
+                .active
+                .as_ref()
+                .unwrap()
+                .stroke
+                .style()
+                .smoothing,
+            0.4
+        );
+        app.workspaces.store.current.pointer.pen.stabilization = None;
+        app.drawing.incoming = vec![
+            event(Source::MOUSE, Phase::Down, q),
+            event(Source::MOUSE, Phase::Move, q),
+            event(Source::MOUSE, Phase::Up, q),
+            event(pen, Phase::Move, q),
+        ];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(app.drawing.pending());
+        assert_eq!(app.drawing.ownership.owner(), Some(pen));
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        app.drawing.incoming = vec![event(pen, Phase::Up, q)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert_eq!(app.documents[0].history_counts(), (1, 0));
+        assert!(app.status.as_ref().unwrap().contains("Another device"));
+        // A new actual mouse press works immediately after the pen is lifted.
+        let m = point(&ctx, &app, [20.5, 30.5]);
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![
+                egui::Event::PointerMoved(m),
+                button(m, true),
+                button(m, false),
+            ],
+        );
+        assert_eq!(app.drawing.last_source, Some(Source::MOUSE));
+        assert_eq!(app.documents[0].history_counts(), (2, 0));
+        let painted = app.documents[0].snapshot();
+        app.drawing.incoming = vec![event(pen, Phase::Move, q), event(pen, Phase::Up, q)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(app.documents[0].snapshot() == painted);
+        app.drawing.incoming = vec![event(pen, Phase::Down, p), event(pen, Phase::Cancel, p)];
+        frame(&ctx, &mut app, 1.0, vec![]);
+        assert!(app.documents[0].snapshot() == painted);
+        app.workspaces.store.current.pointer.mouse.enabled = false;
+        frame(
+            &ctx,
+            &mut app,
+            1.0,
+            vec![
+                egui::Event::PointerMoved(m),
+                button(m, true),
+                button(m, false),
+            ],
+        );
+        assert!(app.documents[0].snapshot() == painted);
     }
     #[test]
     fn mouse_fast_drag_preview_one_undo_eraser_and_view_coordinates() {
