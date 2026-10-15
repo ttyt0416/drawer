@@ -10,6 +10,7 @@ pub mod files;
 pub mod help;
 mod history;
 pub mod image_import;
+pub mod information;
 pub mod interpolation;
 pub mod movie;
 pub mod navigator;

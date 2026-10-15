@@ -100,3 +100,5 @@ crates/drawer-core/src/ui_behavior.rs
 crates/drawer-app/src/ui_behavior.rs
 docs/process/ui-behavior.md
 crates/drawer-app/src/cursor_settings.rs
+crates/drawer-core/src/information.rs
+crates/drawer-app/src/information.rs

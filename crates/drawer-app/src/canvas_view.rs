@@ -21,6 +21,8 @@ pub struct CanvasView {
     pub cursors: drawer_core::brush_cursor::Settings,
     pub smoothing: [f64; 4],
     pub cursor_trace: drawer_core::brush_cursor::Trace,
+    pub measurement_mode: bool,
+    pub measurement: Option<([f64; 2], [f64; 2])>,
     pan_drag: Option<drawer_core::tool_input::Drag>,
     input_document: Option<u64>,
     input_blocked: bool,
@@ -74,6 +76,8 @@ impl CanvasView {
             cursors: Default::default(),
             smoothing: [0.0; 4],
             cursor_trace: Default::default(),
+            measurement_mode: false,
+            measurement: None,
             pan_drag: None,
             input_document: None,
             input_blocked: false,
@@ -261,7 +265,8 @@ impl CanvasView {
         } else {
             self.pan_drag = None;
         }
-        self.working = input_active
+        self.working = !self.measurement_mode
+            && input_active
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
             && response.is_pointer_button_down_on()
@@ -356,6 +361,18 @@ impl CanvasView {
                     [outline[i], outline[(i + 1) % 4]],
                     egui::Stroke::new(2.0, egui::Color32::YELLOW),
                 );
+            }
+        }
+        if let Some((start, end)) = self.measurement {
+            let project = |p: [f64; 2]| {
+                let q = document.view.document_to_screen(p, size, center, ppp);
+                egui::pos2(q[0] as f32, q[1] as f32)
+            };
+            let a = project(start);
+            let b = project(end);
+            painter.line_segment([a, b], egui::Stroke::new(1.5, egui::Color32::LIGHT_BLUE));
+            for p in [a, b] {
+                painter.circle_stroke(p, 3.0, egui::Stroke::new(1.5, egui::Color32::LIGHT_BLUE));
             }
         }
         self.paint_aids(ui, document, rect, aids, ppp);

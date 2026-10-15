@@ -14,6 +14,7 @@ mod cursor_settings;
 mod display_pane;
 mod help;
 mod image_import_dialog;
+mod information;
 mod movie_dialog;
 mod navigator_panel;
 mod new_canvas;
@@ -92,6 +93,7 @@ struct Drawer {
     help: help::Help,
     ui_behavior: ui_behavior::Behavior,
     cursors: cursor_settings::Cursors,
+    information: information::Information,
     #[cfg(test)]
     new_button: Option<egui::Rect>,
     #[cfg(test)]
@@ -183,6 +185,7 @@ impl Drawer {
             help: help::Help::new(korean_font),
             ui_behavior: Default::default(),
             cursors: Default::default(),
+            information: Default::default(),
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -342,6 +345,9 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.apply_theme(ui.ctx());
+        self.canvas_view.measurement_mode = self.measurement_active();
+        self.canvas_view.measurement = self.measurement_line();
         if ui.ctx().zoom_factor() != self.interface.settings.zoom {
             ui.ctx().set_zoom_factor(self.interface.settings.zoom);
         }
@@ -427,6 +433,9 @@ impl Drawer {
                                 if ui.button("Interface size").clicked() {
                                     self.interface.open = true;
                                 }
+                                if ui.button("Information").clicked() {
+                                    self.workspaces.store.current.information.visible = true;
+                                }
                                 if ui.button("Cursor styles").clicked() {
                                     self.cursors.open = true;
                                 }
@@ -506,6 +515,8 @@ impl Drawer {
                 },
             );
         });
+        self.capture_information();
+        self.information_panel(ui.ctx());
         self.floating_panels(ui.ctx());
         self.scratchpad(ui.ctx());
         self.workspace_settings(ui.ctx());
@@ -611,6 +622,8 @@ impl eframe::App for Drawer {
                 self.workspaces.store.current.cursors.tools[0].prediction = true;
                 self.workspaces.store.current.cursors.tools[0].minimum_pixels = 4.0;
                 self.workspaces.store.current.input.smoothing[0] = 0.6;
+                self.workspaces.store.current.information.visible = true;
+                self.workspaces.store.current.information.cmyk = true;
                 self.workspaces.store.current.scratchpad.visible = true;
                 self.workspaces.store.current.scratchpad.stroke(
                     [20.0, 20.0],
@@ -631,6 +644,8 @@ impl eframe::App for Drawer {
                     .unwrap();
             }
             if self.frames == 3 {
+                self.workspaces.store.current.information.theme =
+                    drawer_core::information::Theme::Light;
                 self.cancel_close();
                 self.select_tab(0);
                 self.begin_sizing(sizing_dialog::Mode::Dpi);
@@ -1020,8 +1035,32 @@ impl eframe::App for Drawer {
                 {
                     fail_smoke();
                 }
+                if !self.information.shown
+                    || ui.ctx().theme() != egui::Theme::Light
+                    || self
+                        .information
+                        .profile_error
+                        .as_ref()
+                        .is_none_or(|e| !e.contains("No CMYK"))
+                {
+                    fail_smoke();
+                }
+                let mut information_settings = self.workspaces.store.current.information.clone();
+                information_settings.unit = drawer_core::information::Unit::Millimeters;
+                information_settings.side = drawer_core::information::Side::Right;
+                self.apply_information(information_settings.clone(), true)
+                    .unwrap();
+                if drawer_core::workspaces::Store::load(self.storage.as_ref().unwrap())
+                    .unwrap()
+                    .unwrap()
+                    .current
+                    .information
+                    != information_settings
+                {
+                    fail_smoke();
+                }
                 let report = format!(
-                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\n",
+                    "app={APP_NAME}\nframes={}\ntools=Pen,Pencil,Eraser,Wash\nembedded_tips={}\ncanvases={}\nviews={}\nclose_cancel={}\nsizing_dpi=true\nsizing_undo=true\nreference_copy=true\nreference_document=true\ngrid_guide_undo=true\nprint_size_view=true\nclipboard_document=true\nsave_as_export=true\nrecent_restart=true\nimage_decode=true\nnative_display_view=true\nmonitor_inventory=true\ncanvas_presets=true\nsigned_edges_undo=true\npaste_layer_undo=true\npaste_native_reopen=true\ninterpolation_view=true\ninterpolation_settings=true\nview_layout=true\nnavigator_settings=true\nrevert_saved=true\nmovie_decoder_missing=true\nanimation_native=true\npanel_settings=true\ninterface_settings=true\ncursor_assets=true\nworkspace_settings=true\nnative_floating_panels=true\npopup_test_painting=true\ncommand_settings=true\ntool_cycle=true\nradial_settings=true\ndevice_action_profile=true\ntemporary_tool=true\ndrag_threshold=true\nlocal_help=true\nlocal_help_licenses=true\nlocal_korean_font=true\npanel_auto_hide=true\nlocal_power_release=true\ncursor_modes=true\ninformation_panel=true\nlocal_color_profile=true\ntheme_settings=true\n",
                     self.frames,
                     self.previews.len(),
                     self.documents.len(),

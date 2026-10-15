@@ -75,6 +75,7 @@ try {
     foreach ($localHelpFile in 'HELP.md','IMAGE-IMPORT.md','MOVIE-IMPORT.md') { if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $localHelpFile))) { throw '로컬 도움말 배포 누락' } }
     if ($smokeResult -notmatch 'panel_auto_hide=true' -or $smokeResult -notmatch 'local_power_release=true') { throw '패널 자동 숨김/절전 요청 해제 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_modes=true') { throw '원시/보정/예측 커서 설정 재열기 시작 시험 실패' }
+    if ($smokeResult -notmatch 'information_panel=true' -or $smokeResult -notmatch 'local_color_profile=true' -or $smokeResult -notmatch 'theme_settings=true') { throw '좌표/색 정보/테마 설정 시작 시험 실패' }
     if ($smokeResult -notmatch 'cursor_assets=true') { throw '브러시 커서 도구 소재 시작 시험 실패' }
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
