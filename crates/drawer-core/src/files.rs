@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 19;
+const VERSION: u32 = 20;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -342,6 +342,7 @@ mod tests {
             layer: 0,
             settings: Default::default(),
             style: crate::painting::Style {
+                variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),
@@ -398,6 +399,7 @@ mod tests {
             layer: 0,
             settings: Default::default(),
             style: crate::painting::Style {
+                variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),

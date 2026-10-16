@@ -255,6 +255,7 @@ pub fn verify() -> Result<(), String> {
         seed: 42,
     };
     let style = Style {
+        variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),
         sequence,
@@ -422,6 +423,7 @@ mod persistence_tests {
         )
         .unwrap();
         let style = crate::painting::Style {
+            variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),
             sequence: loaded.sequence,

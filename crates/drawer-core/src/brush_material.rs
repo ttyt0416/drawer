@@ -130,6 +130,7 @@ fn probe_in(
     d.mark_saved("material-baseline.drawer".into());
     let before = d.snapshot();
     let style = Style {
+        variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),
         sequence: Default::default(),
@@ -609,6 +610,7 @@ mod tests {
             .unwrap();
             d.layers[0].pixels = vec![[15, 22, 33, 0], [80, 90, 100, 128], [120, 130, 140, 255]];
             let style = Style {
+                variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),
@@ -706,6 +708,7 @@ pub fn verify_mix_modes() -> Result<(), String> {
     let render = |quality, mode| -> Result<Vec<[u8; 4]>, String> {
         let (mut d, _) = probe(Settings::default(), 0.0)?;
         let s = Style {
+            variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),
             sequence: Default::default(),

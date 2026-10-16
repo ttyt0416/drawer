@@ -229,6 +229,7 @@ impl Settings {
 
 fn style() -> crate::painting::Style {
     crate::painting::Style {
+        variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),
         sequence: Default::default(),

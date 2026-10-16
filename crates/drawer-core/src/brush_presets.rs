@@ -75,6 +75,11 @@ pub struct Preset {
         skip_serializing_if = "crate::brush_pattern::Settings::is_default"
     )]
     pub pattern: crate::brush_pattern::Settings,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::brush_variation::Settings::is_default"
+    )]
+    pub variation: crate::brush_variation::Settings,
 }
 impl Preset {
     pub fn validate(&self) -> Result<(), String> {
@@ -99,6 +104,7 @@ impl Preset {
             || !self.sequence.valid()
             || !self.dynamics.valid()
             || !self.pattern.valid()
+            || !self.variation.valid()
             || !self.filters.valid()
             || !self.profile.valid()
         {
@@ -133,6 +139,7 @@ impl Preset {
             sequence: snapshot.input.sequences[n],
             dynamics: snapshot.input.dynamics[n],
             pattern: snapshot.input.patterns[n],
+            variation: snapshot.input.variations[n],
         };
         p.validate()?;
         Ok(p)
@@ -177,6 +184,7 @@ impl Preset {
         next.input.sequences[n] = self.sequence;
         next.input.dynamics[n] = self.dynamics;
         next.input.patterns[n] = self.pattern;
+        next.input.variations[n] = self.variation;
         next.tool = self.tip.name().into();
         if !next.valid() {
             return Err("Preset would create invalid workspace settings".into());

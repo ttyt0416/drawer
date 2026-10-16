@@ -212,3 +212,7 @@ docs/process/brush-dynamics.md
 crates/drawer-core/src/brush_pattern.rs
 crates/drawer-app/src/brush_pattern.rs
 docs/process/brush-pattern.md
+
+crates/drawer-core/src/brush_variation.rs
+crates/drawer-app/src/brush_variation.rs
+docs/process/brush-variation.md

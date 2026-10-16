@@ -16,6 +16,11 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 pub struct Style {
     #[serde(
         default,
+        skip_serializing_if = "crate::brush_variation::Settings::is_default"
+    )]
+    pub variation: crate::brush_variation::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::brush_pattern::Settings::is_default"
     )]
     pub pattern: crate::brush_pattern::Settings,
@@ -91,7 +96,8 @@ impl Style {
             .max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.pattern.valid()
+        self.variation.valid()
+            && self.pattern.valid()
             && self.dynamics.valid()
             && self.sequence.valid()
             && self.filters.valid()
@@ -134,6 +140,7 @@ pub struct Stroke {
     dynamic_index: u64,
     pattern_index: u64,
     ribbon: Option<(Point, f64)>,
+    dab_color: [u8; 4],
     sequence: crate::tip_sequence::Sequence,
     mask_tip: BrushTip,
     last_stamp_pressure: f64,
@@ -247,20 +254,16 @@ impl Stroke {
         };
         let mut color = if !m.pigment() {
             match self.effect {
-                Effect::Blend => blend(self.style.color, picked, self.strength),
+                Effect::Blend => blend(self.dab_color, picked, self.strength),
                 Effect::Smudge => {
                     let carried = self.carried.unwrap_or(picked);
                     self.carried = Some(blend(carried, picked, self.strength));
                     carried
                 }
-                _ => self.style.color,
+                _ => self.dab_color,
             }
         } else if m.mode == Mode::RunningColor {
-            let mut foreground = if m.colorless {
-                picked
-            } else {
-                self.style.color
-            };
+            let mut foreground = if m.colorless { picked } else { self.dab_color };
             foreground[3] =
                 (foreground[3] as f64 * if m.colorless { 1.0 } else { m.supply }).round() as u8;
             let mut local = blend(foreground, picked, m.mixing);
@@ -269,7 +272,7 @@ impl Stroke {
             }
             local
         } else if m.mode == Mode::Paint && !m.colorless {
-            let mut color = self.style.color;
+            let mut color = self.dab_color;
             color[3] = (color[3] as f64 * m.supply).round() as u8;
             color
         } else {
@@ -300,7 +303,7 @@ impl Stroke {
             } else {
                 1.0 - (1.0 - supply).powf(distance / self.style.shape.size.max(0.1))
             };
-            pigment = blend(pigment, self.style.color, replenish);
+            pigment = blend(pigment, self.dab_color, replenish);
             if m.keep_density {
                 if pigment[3] == 0 && previous[3] > 0 {
                     pigment[..3].copy_from_slice(&previous[..3]);
@@ -558,6 +561,7 @@ impl Stroke {
             dynamic_index: 0,
             pattern_index: 0,
             ribbon: None,
+            dab_color: style.color,
             sequence: Default::default(),
             mask_tip: style.tip,
             last_stamp_pressure: 1.0,
@@ -692,6 +696,9 @@ impl Stroke {
                     } else {
                         1.0
                     }
+                    + self.style.shape.size.max(self.style.dynamics.minimum_size)
+                        * 0.5
+                        * self.style.variation.dual.extra_radius()
                     + 1.0
                     + if self.style.pattern.mode == crate::brush_pattern::Mode::Scatter {
                         self.style.pattern.width * 0.5
@@ -867,6 +874,7 @@ impl Stroke {
         scale: f64,
     ) -> Result<(), String> {
         if (!self.style.dynamics.is_default()
+            || !self.style.variation.is_default()
             || self.style.pattern.mode != crate::brush_pattern::Mode::Dabs)
             && self.dynamic_index >= 262144
         {
@@ -877,6 +885,10 @@ impl Stroke {
         self.last_stamp_scale = scale;
         self.last_stamp_angle = self.rotation();
         self.last_dynamics = self.dynamics;
+        self.dab_color = self
+            .style
+            .variation
+            .color(self.style.color, self.dynamic_index);
         let mut shape = self.style.shape;
         shape.size = self.dynamic_size(pressure, self.dynamic_index)? * scale;
         shape.angle += self.rotation();
@@ -935,6 +947,7 @@ impl Stroke {
             (center, shape.size * 0.5, shape.size * 0.5 * shape.aspect)
         };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
+        let extra = radius * self.style.variation.dual.extra_radius();
         let extent = if self.style.profile.square(mask_tip) {
             [
                 radius * cos.abs() + minor * sin.abs() + 1.0,
@@ -946,6 +959,7 @@ impl Stroke {
                 (radius * sin).hypot(minor * cos) + 1.0,
             ]
         };
+        let extent = extent.map(|n| n + extra);
         let layer = &doc.layers[self.layer];
         let storage = layer.extent(doc.width, doc.height);
         let lower = std::array::from_fn::<_, 2, _>(|n| {
@@ -1065,7 +1079,7 @@ impl Stroke {
                 } else {
                     edge * softness
                 };
-                if coverage <= 0.0 {
+                if coverage <= 0.0 && !self.style.variation.dual.active() {
                     continue;
                 }
                 let amount = match mask_tip {
@@ -1098,6 +1112,20 @@ impl Stroke {
                             * 0.65
                     }
                 };
+                let amount = if self.style.variation.dual.active() {
+                    self.style.variation.dual.combine(
+                        amount,
+                        self.style
+                            .variation
+                            .dual
+                            .mask(q, minor, point, self.style.variation.seed),
+                    )
+                } else {
+                    amount
+                };
+                if amount <= 0.0 {
+                    continue;
+                }
                 let offset = layer.pixel_index(doc.width, doc.height, x, y).unwrap();
                 let old = self.lookup.get(&offset).copied();
                 let original = old.map_or(layer.pixels[offset], |n| self.changes[n].before);
@@ -1266,6 +1294,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
                 sequence: Default::default(),
@@ -1337,6 +1366,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),
             sequence: Default::default(),

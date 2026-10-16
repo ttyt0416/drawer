@@ -129,6 +129,7 @@ fn document() -> Result<crate::document::Document, String> {
 }
 fn style(pattern: Settings) -> crate::painting::Style {
     crate::painting::Style {
+        variation: Default::default(),
         pattern,
         dynamics: Default::default(),
         sequence: Default::default(),
