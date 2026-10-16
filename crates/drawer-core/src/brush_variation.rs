@@ -142,6 +142,10 @@ impl Blend {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Controls {
+    #[serde(default)]
+    pub flip: [bool; 2],
+    #[serde(default)]
+    pub texture: Option<crate::tip_texture::Settings>,
     pub rgb: bool,
     pub color: [u8; 4],
     pub linked_size: bool,
@@ -150,6 +154,8 @@ pub struct Controls {
 impl Default for Controls {
     fn default() -> Self {
         Self {
+            flip: [false; 2],
+            texture: None,
             rgb: false,
             color: [0, 0, 0, 255],
             linked_size: true,
@@ -186,7 +192,8 @@ impl Default for Dual {
 }
 impl Dual {
     pub fn valid(self) -> bool {
-        (0.1..=4096.0).contains(&self.controls.size)
+        self.controls.texture.is_none_or(|s| s.valid())
+            && (0.1..=4096.0).contains(&self.controls.size)
             && (0.1..=1.0).contains(&self.scale)
             && self.angle.is_finite()
             && self.angle.abs() <= 180.0
@@ -211,6 +218,21 @@ impl Dual {
             0.0
         }
     }
+    pub fn local(self, q: [f64; 2], primary_size: f64) -> [f64; 2] {
+        let scale = self.effective_scale(primary_size);
+        let (s, c) = self.angle.to_radians().sin_cos();
+        let d = [q[0] - self.offset[0], q[1] - self.offset[1]];
+        let mut p = [
+            (d[0] * c + d[1] * s) / scale,
+            (-d[0] * s + d[1] * c) / scale,
+        ];
+        for (n, v) in p.iter_mut().enumerate() {
+            if self.controls.flip[n] {
+                *v = -*v;
+            }
+        }
+        p
+    }
     pub fn mask(
         self,
         q: [f64; 2],
@@ -220,12 +242,7 @@ impl Dual {
         primary_size: f64,
     ) -> f64 {
         let scale = self.effective_scale(primary_size);
-        let (s, c) = self.angle.to_radians().sin_cos();
-        let d = [q[0] - self.offset[0], q[1] - self.offset[1]];
-        let p = [
-            (d[0] * c + d[1] * s) / scale,
-            (-d[0] * s + d[1] * c) / scale,
-        ];
+        let p = self.local(q, primary_size);
         let distance = if self.mask == Mask::Square {
             p[0].abs().max(p[1].abs())
         } else {
@@ -235,6 +252,11 @@ impl Dual {
         edge * match self.mask {
             Mask::Soft => (1.0 - distance.powi(2)).clamp(0.0, 1.0).powi(3),
             Mask::Grain => {
+                let point = if self.controls.flip.iter().any(|v| *v) {
+                    p.map(|v| v * 64.0)
+                } else {
+                    point
+                };
                 0.25 + 0.75
                     * random(
                         seed,

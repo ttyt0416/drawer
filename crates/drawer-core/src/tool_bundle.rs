@@ -38,18 +38,12 @@ fn hash(bytes: &[u8]) -> String {
     format!("{n:016x}")
 }
 fn refs(p: &Preset) -> impl Iterator<Item = (u32, Kind)> + '_ {
-    p.sequence
-        .tips
-        .iter()
-        .copied()
-        .map(|id| (id, Kind::Tip))
-        .chain(std::iter::once((p.overlay.source, Kind::Texture)))
-        .filter(|(id, kind)| {
-            *id > match kind {
-                Kind::Tip => 7,
-                Kind::Texture => 3,
-            }
-        })
+    p.material_refs().into_iter().filter(|(id, kind)| {
+        *id > match kind {
+            Kind::Tip => 7,
+            Kind::Texture => 3,
+        }
+    })
 }
 fn remap(p: &mut Preset, map: &BTreeMap<u32, u32>) {
     for id in &mut p.sequence.tips {
@@ -59,6 +53,18 @@ fn remap(p: &mut Preset, map: &BTreeMap<u32, u32>) {
     }
     if let Some(id) = map.get(&p.overlay.source) {
         p.overlay.source = *id;
+    }
+    for slot in &mut p.sequence.slots {
+        if let Some(texture) = &mut slot.texture
+            && let Some(id) = map.get(&texture.pattern.source)
+        {
+            texture.pattern.source = *id;
+        }
+    }
+    if let Some(texture) = &mut p.variation.dual.controls.texture
+        && let Some(id) = map.get(&texture.pattern.source)
+    {
+        texture.pattern.source = *id;
     }
 }
 fn metadata(path: &Path) -> io::Result<fs::Metadata> {

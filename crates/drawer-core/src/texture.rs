@@ -1,6 +1,22 @@
 //! Owned procedural texture recipes: deterministic document-space samples, no external assets.
 use crate::scene::Point;
 use serde::{Deserialize, Serialize};
+// Exact quarter turns prevent a roundoff-sized coordinate from selecting
+// the adjacent texel. Full turns remain identical to zero rotation.
+pub(crate) fn rotation(angle: f64) -> (f64, f64) {
+    let angle = angle.rem_euclid(360.0);
+    if angle == 0.0 {
+        (0.0, 1.0)
+    } else if angle == 90.0 {
+        (1.0, 0.0)
+    } else if angle == 180.0 {
+        (0.0, -1.0)
+    } else if angle == 270.0 {
+        (-1.0, 0.0)
+    } else {
+        angle.to_radians().sin_cos()
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Pattern {
@@ -56,14 +72,14 @@ impl Pattern {
         if !self.effective() || !self.valid() {
             return 1.0;
         }
-        let (sin, cos) = self.angle.to_radians().sin_cos();
+        let (sin, cos) = rotation(self.angle);
         let q = [
             (point[0] - self.offset[0]) / self.scale,
             (point[1] - self.offset[1]) / self.scale,
         ];
         let q = [q[0] * cos + q[1] * sin, -q[0] * sin + q[1] * cos];
-        let x = q[0].rem_euclid(64.0).floor() as u32;
-        let y = q[1].rem_euclid(64.0).floor() as u32;
+        let x = (q[0].rem_euclid(64.0).floor() as u32).min(63);
+        let y = (q[1].rem_euclid(64.0).floor() as u32).min(63);
         let mut hash = x.wrapping_mul(0x9e3779b9) ^ y.wrapping_mul(0x85ebca6b) ^ self.seed;
         hash = (hash ^ (hash >> 16)).wrapping_mul(0x7feb352d);
         hash = (hash ^ (hash >> 15)).wrapping_mul(0x846ca68b);

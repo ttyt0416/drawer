@@ -82,6 +82,9 @@ pub struct Preset {
     pub variation: crate::brush_variation::Settings,
 }
 impl Preset {
+    pub fn material_refs(&self) -> Vec<(u32, crate::material_library::Kind)> {
+        crate::tip_texture::references(&self.sequence, &self.variation.dual.controls, self.overlay)
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.version != 1 || !valid_name(&self.name) {
             return Err("Invalid preset version/name (1–64 characters, no controls)".into());

@@ -1,6 +1,10 @@
 use super::*;
 use drawer_core::brush_variation::{Blend, Mask, Scope, Settings};
-pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
+pub(super) fn settings_ui(
+    ui: &mut egui::Ui,
+    s: &mut Settings,
+    library: &drawer_core::material_library::Library,
+) {
     super::edit::number(
         ui,
         &mut s.hue,
@@ -106,6 +110,13 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
                 "brush-variation",
             );
         }
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut s.dual.controls.flip[0], "Flip secondary left/right");
+            ui.checkbox(&mut s.dual.controls.flip[1], "Flip secondary up/down");
+        });
+        ui.push_id("secondary-texture", |ui| {
+            super::tip_texture::option_ui(ui, &mut s.dual.controls.texture, library)
+        });
         super::edit::number(
             ui,
             &mut s.dual.angle,

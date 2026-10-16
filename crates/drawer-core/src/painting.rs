@@ -72,6 +72,23 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn advanced_texture(&self) -> bool {
+        self.sequence.slots[..if self.sequence.enabled {
+            self.sequence.count as usize
+        } else {
+            1
+        }]
+            .iter()
+            .any(|s| s.texture.is_some())
+            || (self.variation.dual.active() && self.variation.dual.controls.texture.is_some())
+    }
+    pub fn water_edges(&self) -> bool {
+        self.material.mode == crate::brush_material::Mode::Water
+            && self.material.edge > 0.0
+            && !self.clone_stamp.enabled
+            && !self.pixel_overwrite()
+            && self.material.composition.mode == crate::brush_composite::Mode::Normal
+    }
     pub fn dual_rgb(&self) -> bool {
         self.variation.dual.active()
             && self.variation.dual.controls.rgb
@@ -162,6 +179,7 @@ pub struct Stroke {
     material_last: Option<Point>,
     direct: bool,
     diffused: bool,
+    edges_done: bool,
     dabs: u32,
     style: Style,
     trace: Trace,
@@ -400,10 +418,82 @@ impl Stroke {
             0.0
         };
         if strength > 0.0 {
-            self.diffuse(doc, strength, cancel)
-        } else {
-            Ok(())
+            self.diffuse(doc, strength, &cancel)?;
         }
+        self.finish_water_edges(doc, cancel)
+    }
+    fn finish_water_edges(
+        &mut self,
+        doc: &Document,
+        cancel: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        self.check(doc)?;
+        if self.edges_done || !self.style.water_edges() {
+            return Ok(());
+        }
+        if cancel() {
+            return Err("Water edge processing cancelled".into());
+        }
+        self.finish_sample(doc)?;
+        self.pixel_work = self
+            .pixel_work
+            .saturating_add(self.changes.len() as u64 * 4);
+        if self.pixel_work > 64 * 1024 * 1024 {
+            return Err("Water edge pixel-work budget exceeded".into());
+        }
+        let layer = &doc.layers[self.layer];
+        let extent = layer.extent(doc.width, doc.height);
+        let mut rim = Vec::new();
+        rim.try_reserve_exact(self.changes.len())
+            .map_err(|e| e.to_string())?;
+        for (n, change) in self.changes.iter().enumerate() {
+            if n % 256 == 0 && cancel() {
+                return Err("Water edge processing cancelled".into());
+            }
+            let p = [
+                extent.offset[0] + (change.offset % extent.width as usize) as i64,
+                extent.offset[1] + (change.offset / extent.width as usize) as i64,
+            ];
+            rim.push(
+                change.after != change.before
+                    && change.after[3] > 0
+                    && [[-1, 0], [1, 0], [0, -1], [0, 1]].iter().any(|d| {
+                        let q = [p[0] + d[0], p[1] + d[1]];
+                        layer
+                            .pixel_index(doc.width, doc.height, q[0], q[1])
+                            .and_then(|offset| self.lookup.get(&offset))
+                            .is_none_or(|i| {
+                                self.changes[*i].after == self.changes[*i].before
+                                    || self.changes[*i].after[3] == 0
+                            })
+                    }),
+            );
+        }
+        for (n, boundary) in rim.into_iter().enumerate() {
+            if n % 256 == 0 && cancel() {
+                return Err("Water edge processing cancelled".into());
+            }
+            if !boundary {
+                continue;
+            }
+            let change = &mut self.changes[n];
+            let p = [
+                extent.offset[0] as f64 + (change.offset % extent.width as usize) as f64 + 0.5,
+                extent.offset[1] as f64 + (change.offset / extent.width as usize) as f64 + 0.5,
+            ];
+            let factor = self.style.material.edge
+                * self.style.opacity
+                * doc.scene.selection_coverage(p) as f64
+                / 255.0;
+            for c in &mut change.after[..3] {
+                *c = (*c as f64 * (1.0 - 0.5 * factor)).round() as u8;
+            }
+            self.unmasked[n] = change.after;
+        }
+        self.edges_done = true;
+        self.direct = true;
+        self.preview_revision += 1;
+        Ok(())
     }
     pub fn direct_dab(
         &mut self,
@@ -449,6 +539,7 @@ impl Stroke {
             self.direct = true;
             return Ok(());
         }
+        let advanced = self.style.advanced_texture();
         let layer = &doc.layers[self.layer];
         let extent = layer.extent(doc.width, doc.height);
         let mut positions = std::collections::HashSet::new();
@@ -535,9 +626,12 @@ impl Stroke {
                 original,
                 desired,
                 self.style.opacity
-                    * self
-                        .materials
-                        .factor(self.style.texture, [x as f64 + 0.5, y as f64 + 0.5])
+                    * if advanced {
+                        1.0
+                    } else {
+                        self.materials
+                            .factor(self.style.texture, [x as f64 + 0.5, y as f64 + 0.5])
+                    }
                     * doc
                         .scene
                         .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
@@ -626,6 +720,7 @@ impl Stroke {
             material_last: None,
             direct: false,
             diffused: false,
+            edges_done: false,
             dabs: 0,
             style,
             trace: Default::default(),
@@ -1017,6 +1112,20 @@ impl Stroke {
         } else {
             None
         };
+        let slot = self.style.sequence.slots[source.map_or(0, |(n, _)| n)];
+        let advanced = self.style.advanced_texture();
+        let inherited = crate::tip_texture::Settings {
+            pattern: self.style.texture,
+            ..Default::default()
+        };
+        let primary_texture = slot.texture.unwrap_or(inherited);
+        let secondary_texture = self
+            .style
+            .variation
+            .dual
+            .controls
+            .texture
+            .unwrap_or(inherited);
         let materials = self.materials.clone();
         let bitmap =
             source.and_then(|(_, id)| materials.get(id, crate::material_library::Kind::Tip));
@@ -1110,6 +1219,16 @@ impl Stroke {
                 0
             }
             + bitmap.map_or(0, |asset| asset.sample_cost())
+            + if advanced {
+                primary_texture.cost()
+                    + if self.style.variation.dual.active() {
+                        secondary_texture.cost()
+                    } else {
+                        0
+                    }
+            } else {
+                0
+            }
             + if materials
                 .get(
                     self.style.texture.source,
@@ -1179,16 +1298,17 @@ impl Stroke {
                 }
                 let dx = point[0] - center[0];
                 let dy = point[1] - center[1];
-                let q = [
+                let raw_q = [
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
+                let q = slot.point(raw_q);
                 let geometry = |p: Point| {
                     let delta = [p[0] - center[0], p[1] - center[1]];
-                    let local = [
+                    let local = slot.point([
                         (delta[0] * cos + delta[1] * sin) / radius,
                         (-delta[0] * sin + delta[1] * cos) / minor,
-                    ];
+                    ]);
                     if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
                         crate::brush_pattern::ribbon_distance(
                             p,
@@ -1242,15 +1362,25 @@ impl Stroke {
                     }
                     BrushTip::Marker => coverage * 0.22,
                     BrushTip::Pencil => {
+                        let [gx, gy] = if slot.flip.iter().any(|v| *v) {
+                            [
+                                (center[0] + q[0] * radius * cos - q[1] * minor * sin).floor()
+                                    as i64,
+                                (center[1] + q[0] * radius * sin + q[1] * minor * cos).floor()
+                                    as i64,
+                            ]
+                        } else {
+                            [x, y]
+                        };
                         let grain = if self.seed == 0 {
-                            ((x.rem_euclid(23) * 17
-                                + y.rem_euclid(23) * 31
-                                + x.rem_euclid(23) * y.rem_euclid(23) * 7)
+                            ((gx.rem_euclid(23) * 17
+                                + gy.rem_euclid(23) * 31
+                                + gx.rem_euclid(23) * gy.rem_euclid(23) * 7)
                                 .rem_euclid(23)) as f64
                                 / 22.0
                         } else {
-                            let mut hash = (x as u64).wrapping_mul(0x9e3779b97f4a7c15)
-                                ^ (y as u64).rotate_left(31)
+                            let mut hash = (gx as u64).wrapping_mul(0x9e3779b97f4a7c15)
+                                ^ (gy as u64).rotate_left(31)
                                 ^ self.seed as u64;
                             hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
                             hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d049bb133111eb);
@@ -1267,14 +1397,29 @@ impl Stroke {
                     }
                 };
                 let amount = amount * bitmap.map_or(1.0, |asset| asset.tip(q));
+                let amount = if advanced {
+                    primary_texture.apply(amount, point, q, &materials)
+                } else {
+                    amount
+                };
                 let (amount, paint_color) = if self.style.variation.dual.active() {
                     let secondary = self.style.variation.dual.mask(
-                        q,
+                        raw_q,
                         minor,
                         point,
                         self.style.variation.seed,
                         shape.size,
                     );
+                    let secondary = if advanced {
+                        secondary_texture.apply(
+                            secondary,
+                            point,
+                            self.style.variation.dual.local(raw_q, shape.size),
+                            &materials,
+                        )
+                    } else {
+                        secondary
+                    };
                     self.style.variation.dual.ink(
                         amount,
                         secondary,
@@ -1365,7 +1510,11 @@ impl Stroke {
                 };
                 let factor = mask as f64 / 255.0
                     * self.style.opacity
-                    * self.materials.factor(self.style.texture, point);
+                    * if advanced {
+                        1.0
+                    } else {
+                        self.materials.factor(self.style.texture, point)
+                    };
                 let mut result = if self.style.pixel_overwrite() {
                     let mut ink = self.dab_color;
                     ink[3] = (ink[3] as f64 * amount * factor).round() as u8;

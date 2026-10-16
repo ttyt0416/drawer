@@ -136,8 +136,12 @@ impl Asset {
             .map_or(4, |s| s.fibres.len() as u64 + 1)
     }
     pub fn tile(&self, point: [f64; 2]) -> f64 {
-        let x = point[0].rem_euclid(self.width as f64).floor() as usize;
-        let y = point[1].rem_euclid(self.height as f64).floor() as usize;
+        // A tiny negative coordinate can round its floating remainder to exactly
+        // the positive divisor. It belongs to the last texel, never one past it.
+        let x =
+            (point[0].rem_euclid(self.width as f64).floor() as usize).min(self.width as usize - 1);
+        let y = (point[1].rem_euclid(self.height as f64).floor() as usize)
+            .min(self.height as usize - 1);
         self.values[y * self.width as usize + x] as f64 / 255.0
     }
 }
@@ -395,12 +399,25 @@ impl Library {
         }
         Ok(())
     }
+    pub fn raw_texture(
+        &self,
+        mut pattern: crate::texture::Pattern,
+        point: [f64; 2],
+    ) -> Option<f64> {
+        if pattern.source == 0
+            || (pattern.source > 3 && self.get(pattern.source, Kind::Texture).is_none())
+        {
+            return None;
+        }
+        pattern.strength = 1.0;
+        Some(self.factor(pattern, point))
+    }
     pub fn factor(&self, p: crate::texture::Pattern, point: [f64; 2]) -> f64 {
         if let Some(asset) = self.get(p.source, Kind::Texture) {
             if !p.valid() {
                 return 1.0;
             }
-            let (s, c) = p.angle.to_radians().sin_cos();
+            let (s, c) = crate::texture::rotation(p.angle);
             let q = [
                 (point[0] - p.offset[0]) / p.scale,
                 (point[1] - p.offset[1]) / p.scale,

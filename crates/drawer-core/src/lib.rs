@@ -102,4 +102,5 @@ pub mod brush_behavior;
 pub mod brush_color;
 pub mod fibres;
 pub mod lab_mix;
+pub mod tip_texture;
 pub mod tool_bundle;

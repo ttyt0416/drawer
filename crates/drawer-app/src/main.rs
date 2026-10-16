@@ -53,6 +53,7 @@ mod stroke_filter;
 mod texture_panel;
 mod tip_profile;
 mod tip_sequence;
+mod tip_texture;
 mod tool_input;
 mod tool_modes;
 mod tool_properties;
@@ -1084,11 +1085,12 @@ impl eframe::App for Drawer {
                 }
                 let mut held = drawer_core::tool_input::Controller::default();
                 held.press("E", BrushTip::Eraser, self.selected, None, 0.0, false);
-                if held.release("E", 0.351, input_workspace.input) != Some((self.selected, None)) {
+                if held.release("E", 0.351, *input_workspace.input) != Some((self.selected, None)) {
                     fail_smoke();
                 }
                 held.press_modifier("@Ctrl", BrushTip::Eraser, self.selected, None, 1.0);
-                if held.release("@Ctrl", 1.01, input_workspace.input) != Some((self.selected, None))
+                if held.release("@Ctrl", 1.01, *input_workspace.input)
+                    != Some((self.selected, None))
                 {
                     fail_smoke();
                 }
@@ -1250,6 +1252,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = tip_texture::smoke(&root) {
+                    eprintln!("Tip texture/finished water edges: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = brush_color::smoke(&root) {
                     eprintln!("Two-ink color/Lab: {e}");
                     fail_smoke();
@@ -1397,7 +1403,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

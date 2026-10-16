@@ -289,7 +289,7 @@ pub struct Snapshot {
     #[serde(default)]
     pub actions: crate::actions::Settings,
     #[serde(default)]
-    pub input: crate::tool_input::Settings,
+    pub input: Box<crate::tool_input::Settings>,
     #[serde(default)]
     pub pointer: crate::pointer_input::Settings,
     #[serde(default)]
@@ -483,7 +483,7 @@ impl Snapshot {
             next.preferences = incoming.preferences.clone();
             next.properties = incoming.properties.clone();
             next.brushes = incoming.brushes.clone();
-            next.input = incoming.input;
+            next.input = incoming.input.clone();
             next.pointer = incoming.pointer;
             next.pressure = incoming.pressure;
             next.help = incoming.help.clone();

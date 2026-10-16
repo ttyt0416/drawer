@@ -136,6 +136,7 @@ fn verify_settings(root: &std::path::Path) -> Result<(), String> {
             color: [20, 100, 220, 63],
             linked_size: false,
             size: 12.0,
+            ..Default::default()
         },
         ..Default::default()
     };

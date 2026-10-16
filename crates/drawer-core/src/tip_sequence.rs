@@ -31,9 +31,11 @@ impl Order {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub slots: [crate::tip_texture::Slot; 8],
     pub enabled: bool,
     pub count: u8,
     pub tips: [u32; 8],
@@ -43,6 +45,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            slots: [Default::default(); 8],
             enabled: false,
             count: 1,
             tips: [0; 8],
@@ -53,7 +56,7 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        (1..=8).contains(&self.count)
+        (1..=8).contains(&self.count) && self.slots.iter().all(|s| s.valid())
     }
     pub fn is_default(&self) -> bool {
         *self == Self::default()
@@ -248,6 +251,7 @@ pub fn verify() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let sequence = Settings {
+        slots: Default::default(),
         enabled: true,
         count: 3,
         tips: [7, 3, 999, 0, 0, 0, 0, 0],
@@ -384,6 +388,7 @@ mod persistence_tests {
             ..Default::default()
         };
         s.input.sequences[0] = Settings {
+            slots: Default::default(),
             enabled: true,
             count: 3,
             tips: [7, 2, 8001, 0, 0, 0, 0, 0],

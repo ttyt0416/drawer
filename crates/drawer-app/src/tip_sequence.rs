@@ -70,23 +70,32 @@ pub(super) fn settings_ui(
                     remove = Some(n);
                 }
             });
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut s.slots[n].flip[0], "Flip tip left/right");
+                ui.checkbox(&mut s.slots[n].flip[1], "Flip tip up/down");
+            });
+            super::tip_texture::option_ui(ui, &mut s.slots[n].texture, library);
         });
     }
     if let Some((a, b)) = movement {
         s.tips.swap(a, b);
+        s.slots.swap(a, b);
     }
     if let Some(n) = remove {
         for k in n..s.count as usize - 1 {
             s.tips[k] = s.tips[k + 1];
+            s.slots[k] = s.slots[k + 1];
         }
         s.count -= 1;
         s.tips[s.count as usize] = 0;
+        s.slots[s.count as usize] = Default::default();
     }
     if ui
         .add_enabled(s.count < 8, egui::Button::new("Add local tip"))
         .clicked()
     {
         s.tips[s.count as usize] = 0;
+        s.slots[s.count as usize] = Default::default();
         s.count += 1;
     }
     for source in s.missing().into_iter().filter(|id| {
@@ -96,6 +105,7 @@ pub(super) fn settings_ui(
     }) {
         ui.colored_label(egui::Color32::YELLOW, Settings::label(source));
     }
+    ui.label("Slot 1 controls the current tip when multiple masks are off. Texture overrides apply before combining tips; inherited brush textures use Multiply in this mode.");
     ui.label("Do not repeat keeps the last mask. One time only / one random cycle stop after one pass. Mask choice does not turn a color brush into an eraser.");
 }
 pub(super) fn ends_ui(ui: &mut egui::Ui, s: &mut drawer_core::stroke_ends::Settings) {

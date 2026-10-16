@@ -26,7 +26,7 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
             " emissions per second",
             "brush-pattern",
         );
-        ui.label("Emits on press and at fixed time intervals, including while stationary. Time emission ignores path spacing compensation. Release stops; Escape/focus loss cancels the pending session. Existing Mouse spray keeps its own controls when selected.");
+        ui.label("Emits on press and at fixed time intervals, including while stationary. Time emission ignores path spacing compensation. Release stops; Escape cancels. Focus loss cancels, except valid watercolor edge strokes, which finish. Existing Mouse spray keeps its own controls when selected.");
     }
     ui.checkbox(
         &mut s.behavior.fixed_scatter,

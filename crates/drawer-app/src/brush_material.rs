@@ -146,6 +146,8 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip, ov
         ui.label("Running color uses the current local pigment without carrying color from earlier positions. High quality reads more samples inside the footprint and selection.");
     }
     ui.add_enabled_ui(s.mode == Mode::Water, |ui| {
+        super::edit::slider(ui,&mut s.edge,0.0..=1.0,"Darken the finished watercolor edge","tip-texture");
+        ui.label("Applied once on release or valid focus-loss termination. Escape cancels the pending stroke.");
         super::edit::slider(
             ui,
             &mut s.supply_threshold,

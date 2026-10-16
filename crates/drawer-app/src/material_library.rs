@@ -16,26 +16,26 @@ impl Drawer {
     pub(super) fn material_dependencies(&self, document: &Document) -> Vec<String> {
         let mut missing = document.scene.paper.missing();
         for record in &document.scene.mouse_strokes {
-            for source in record
-                .style
-                .sequence
-                .missing()
-                .into_iter()
-                .filter(|id| self.materials.library.get(*id, Kind::Tip).is_none())
-            {
-                let note = drawer_core::tip_sequence::Settings::label(source);
-                if missing.len() < 8 && !missing.contains(&note) {
-                    missing.push(note);
+            for (source, kind) in drawer_core::tip_texture::references(
+                &record.style.sequence,
+                &record.style.variation.dual.controls,
+                record.style.texture,
+            ) {
+                let builtin = match kind {
+                    Kind::Tip => 7,
+                    Kind::Texture => 3,
+                };
+                if source <= builtin || self.materials.library.get(source, kind).is_some() {
+                    continue;
                 }
-            }
-            if record.style.texture.missing()
-                && self
-                    .materials
-                    .library
-                    .get(record.style.texture.source, Kind::Texture)
-                    .is_none()
-            {
-                let note = record.style.texture.label();
+                let note = match kind {
+                    Kind::Tip => drawer_core::tip_sequence::Settings::label(source),
+                    Kind::Texture => drawer_core::texture::Pattern {
+                        source,
+                        ..Default::default()
+                    }
+                    .label(),
+                };
                 if missing.len() < 8 && !missing.contains(&note) {
                     missing.push(note);
                 }

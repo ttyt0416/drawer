@@ -31,6 +31,8 @@ impl Mode {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub edge: f64,
+    #[serde(default)]
     pub brightness: f64,
     /// Legacy files without this field keep the previous ungated supply.
     #[serde(default)]
@@ -55,6 +57,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            edge: 0.0,
             brightness: 0.0,
             supply_threshold: 0.2,
             composition: Default::default(),
@@ -76,6 +79,7 @@ impl Default for Settings {
 impl Settings {
     pub fn valid(self) -> bool {
         [
+            self.edge,
             self.brightness,
             self.supply,
             self.supply_threshold,
@@ -326,6 +330,7 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        edge: 0.0,
         brightness: 0.0,
         supply_threshold: 0.2,
         composition: Default::default(),

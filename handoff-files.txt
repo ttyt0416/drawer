@@ -261,3 +261,7 @@ crates/drawer-core/src/lab_mix.rs
 crates/drawer-core/src/brush_color.rs
 crates/drawer-app/src/brush_color.rs
 docs/process/brush-color.md
+
+crates/drawer-core/src/tip_texture.rs
+crates/drawer-app/src/tip_texture.rs
+docs/process/tip-texture.md

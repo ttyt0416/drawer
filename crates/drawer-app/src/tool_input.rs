@@ -79,7 +79,7 @@ impl Drawer {
             self.canvas_view.cancel_input();
         }
         let time = ctx.input(|i| i.time);
-        let settings = self.workspaces.store.current.input;
+        let settings = *self.workspaces.store.current.input;
         let releases = ctx.input(|i| {
             i.events
                 .iter()
@@ -161,7 +161,7 @@ impl Drawer {
         let mut draft = self
             .tool_input
             .draft
-            .unwrap_or(self.workspaces.store.current.input);
+            .unwrap_or(*self.workspaces.store.current.input);
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
@@ -180,7 +180,7 @@ impl Drawer {
             });
             ui.collapsing("Local image materials",|ui|self.local_materials_ui(ui,&mut draft));
             ui.collapsing("Clone stamp source",|ui|super::clone_stamp::settings_ui(ui,&mut draft.clone_stamp));
-            ui.collapsing("Color variation and dual tip masks",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-variation",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_variation::settings_ui(ui,&mut draft.variations[n]));});}});
+            ui.collapsing("Color variation and dual tip masks",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-variation",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_variation::settings_ui(ui,&mut draft.variations[n],&self.materials.library));});}});
             ui.collapsing("Scatter, ribbon and repeating decorations",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-pattern",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_pattern::settings_ui(ui,&mut draft.patterns[n]));});}});
             ui.collapsing("Tip direction, size dynamics and spacing",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-dynamics",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_dynamics::settings_ui(ui,&mut draft.dynamics[n]));});}});
             ui.collapsing("Multiple local tips and order",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-sequence",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_sequence::settings_ui(ui,&mut draft.sequences[n],&self.materials.library));});}});
@@ -208,7 +208,7 @@ impl Drawer {
             ui.label("Input fields, menus and dialogs take priority. After suspension, release the modifier before using it again.");
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
             ui.horizontal_wrapped(|ui|{apply|=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior")).clicked();cancel|=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,"Reset draft","modifier-tools").clicked(){draft=Default::default();super::edit::discard_layer(ctx,ui.layer_id());}
-                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>{draft=s.input;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
+                if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>{draft = *s.input;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
             });
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -222,7 +222,7 @@ impl Drawer {
             self.tool_input.draft = Some(draft);
         } else if apply {
             let mut s = self.capture_workspace();
-            s.input = draft;
+            *s.input = draft;
             if let Some(properties) = &mut s.properties {
                 for (tip, value) in BrushTip::ALL.into_iter().zip(draft.smoothing) {
                     properties
@@ -427,7 +427,7 @@ mod tests {
         frame(&ctx, &mut app, 0.0, vec![]);
         let before = app.documents[0].snapshot();
         let baseline = app.capture_workspace();
-        let mut draft = baseline.input;
+        let mut draft = *baseline.input;
         draft.clone_stamp = drawer_core::clone_stamp::Settings {
             enabled: true,
             origin: Some([32.5, 12.5]),
@@ -468,6 +468,7 @@ mod tests {
             ..Default::default()
         };
         draft.sequences[0] = drawer_core::tip_sequence::Settings {
+            slots: Default::default(),
             enabled: true,
             count: 3,
             tips: [7, 2, 999, 0, 0, 0, 0, 0],
@@ -516,7 +517,7 @@ mod tests {
         let rect = app.tool_input.apply_button.unwrap();
         crate::tests::click(&ctx, &mut app, rect);
         assert!(!app.tool_input.open);
-        assert_eq!(app.workspaces.store.current.input, draft);
+        assert_eq!(*app.workspaces.store.current.input, draft);
         let backup = drawer_core::workspaces::Snapshot::read(
             &storage.root().join("settings/workspace-before-apply.json"),
         )
@@ -524,7 +525,7 @@ mod tests {
         assert_eq!(backup.input, baseline.input);
         let restarted = Drawer::new(&egui::Context::default(), None)
             .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
-        assert_eq!(restarted.workspaces.store.current.input, draft);
+        assert_eq!(*restarted.workspaces.store.current.input, draft);
         assert!(app.documents[0].snapshot() == before);
         assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
@@ -611,7 +612,7 @@ mod tests {
             ],
         );
         assert_eq!(app.selected, BrushTip::Wash);
-        app.workspaces.store.current.input = Settings {
+        *app.workspaces.store.current.input = Settings {
             hold_millis: 650,
             drag_pixels: 12.0,
             ..Default::default()

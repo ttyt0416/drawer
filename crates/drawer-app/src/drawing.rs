@@ -430,6 +430,20 @@ impl Drawing {
             _ => {}
         }
     }
+    fn focus_loss(&mut self, documents: &mut [Document]) {
+        self.controls.reset();
+        self.touch.reset();
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|s| s.stroke.style().water_edges())
+        {
+            self.finish(documents);
+        } else {
+            self.cancel();
+        }
+        self.events.clear();
+    }
     pub fn advance(&mut self, ctx: &egui::Context, documents: &mut [Document]) {
         if ctx.input(|i| {
             !i.focused
@@ -437,10 +451,7 @@ impl Drawing {
                     .iter()
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         }) {
-            self.controls.reset();
-            self.touch.reset();
-            self.cancel();
-            self.events.clear();
+            self.focus_loss(documents);
             return;
         }
         if self
@@ -963,10 +974,10 @@ impl Drawer {
                     .iter()
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         }) {
-            self.drawing.controls.reset();
-            self.drawing.touch.reset();
-            self.drawing.cancel();
-            self.drawing.events.clear();
+            self.drawing.focus_loss(&mut self.documents);
+            if let Some(e) = self.drawing.error.take() {
+                self.status = Some(e);
+            }
             return;
         }
         if self.tool_shortcuts_blocked(ctx) {
