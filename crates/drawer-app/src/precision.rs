@@ -49,6 +49,9 @@ impl Drawer {
                 }
             }
         });
+        if self.drawing.mode == Mode::Eyedropper {
+            self.eyedropper_controls(ui);
+        }
         let old = self.precision.target;
         egui::ComboBox::from_id_salt("keyboard-move-target")
             .selected_text(self.precision.target.label())
@@ -233,7 +236,7 @@ fn key(key: egui::Key, pressed: bool, repeat: bool, shift: bool) -> egui::Event 
         },
     }
 }
-fn pointer(
+pub(super) fn pointer(
     ctx: &egui::Context,
     app: &Drawer,
     point: [f64; 2],

@@ -225,6 +225,7 @@ impl Drawer {
             .name()
             .into();
         s.color = self.references.session.workspace.color;
+        s.eyedropper.observe(s.color);
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {

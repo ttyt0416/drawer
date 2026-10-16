@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 #[serde(deny_unknown_fields)]
 pub struct Paper {
     #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
     pub blend: crate::brush_composite::Mode,
     #[serde(default)]
     pub seed: u32,
@@ -18,6 +20,9 @@ pub struct Paper {
 }
 impl Paper {
     fn add(self, color: &mut Color, pixel: [u8; 4], original: Point) {
+        if self.hidden {
+            return;
+        }
         let pixel = self.shade(pixel, original);
         if self.blend == crate::brush_composite::Mode::Normal {
             color.add(pixel);
@@ -482,6 +487,11 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
         return Err("Invalid folder graph".into());
     }
     let graph = &doc.scene.paper;
+    if graph.layers.values().any(|p| p.hidden) || graph.folders.iter().any(|f| f.paper.hidden) {
+        return Err(
+            "Unhide affected layers/folders before baking; stored pixels are preserved".into(),
+        );
+    }
     if graph
         .layers
         .values()

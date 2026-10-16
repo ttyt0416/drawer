@@ -162,6 +162,7 @@ impl Drawer {
                     let through=matches!(e.node,Node::Folder(n) if e.draft.folders[n].through);
                     let paper=match e.node{Node::Raster(n)=>e.draft.layers.entry(n).or_default(),Node::Folder(n)=>&mut e.draft.folders[n].paper};
                     ui.add_enabled_ui(!through,|ui|{
+                        crate::help::checkbox(ui,&mut paper.hidden,"Hide this layer / isolated folder","pixel-eyedropper");
                         egui::ComboBox::from_id_salt("paper-blend").selected_text(paper.blend.label()).show_ui(ui,|ui|{
                             for mode in drawer_core::brush_composite::Mode::ALL {ui.selectable_value(&mut paper.blend,mode,mode.label());}
                         });

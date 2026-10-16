@@ -275,6 +275,8 @@ impl Scratchpad {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(default)]
+    pub eyedropper: crate::eyedropper::State,
     pub version: u32,
     pub placements: [Placement; 4],
     pub order: [panels::Kind; 4],
@@ -339,6 +341,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            eyedropper: Default::default(),
             color: [0, 0, 0, 255],
             scratchpad: Default::default(),
         }
@@ -374,6 +377,7 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.eyedropper.valid()
             && self.pointer.valid()
             && self.pressure.valid()
             && self.help.valid()
@@ -446,6 +450,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.eyedropper = incoming.eyedropper.clone();
             next.preferences = incoming.preferences.clone();
             next.properties = incoming.properties.clone();
             next.brushes = incoming.brushes.clone();

@@ -42,12 +42,12 @@ pub fn layers_supported(d: &Document) -> bool {
             .paper
             .layers
             .values()
-            .all(|p| p.blend == crate::brush_composite::Mode::Normal)
+            .all(|p| !p.hidden && p.blend == crate::brush_composite::Mode::Normal)
         && d.scene
             .paper
             .folders
             .iter()
-            .all(|f| f.paper.blend == crate::brush_composite::Mode::Normal)
+            .all(|f| !f.paper.hidden && f.paper.blend == crate::brush_composite::Mode::Normal)
 }
 pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
 pub fn export(
@@ -99,7 +99,7 @@ pub fn export(
         Choice::RenderedLayers => {
             if !layers_supported(d) {
                 return Err(error(
-                    "Animation, page objects and external composition modes require Rendered image",
+                    "Animation, page objects and hidden layers and external composition modes require Rendered image",
                 ));
             }
             let mut remaining = budget / 4;

@@ -18,9 +18,25 @@ impl Image {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pixel {
+    pub pressure: bool,
+    pub grid: bool,
+}
+impl Default for Pixel {
+    fn default() -> Self {
+        Self {
+            pressure: true,
+            grid: true,
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub pixel: Pixel,
     pub minimum_size: f64,
     pub minimum_opacity: f64,
     pub image: Image,
@@ -134,6 +150,7 @@ pub fn verify() -> Result<(), String> {
     let full = Settings {
         minimum_size: 1.0,
         minimum_opacity: 1.0,
+        pixel: Default::default(),
         image: Image::Round,
     };
     let zero = probe(full, 0.0, 1.0)?;
@@ -146,6 +163,7 @@ pub fn verify() -> Result<(), String> {
     let floor = Settings {
         minimum_size: 0.5,
         minimum_opacity: 0.4,
+        pixel: Default::default(),
         image: Image::Round,
     };
     let mut minimum = probe(floor, 0.0, 1.0)?;
@@ -164,6 +182,7 @@ pub fn verify() -> Result<(), String> {
     let round = probe(full, 1.0, 1.0)?;
     let square = probe(
         Settings {
+            pixel: Default::default(),
             image: Image::Square,
             ..full
         },
@@ -179,8 +198,138 @@ pub fn verify() -> Result<(), String> {
     }
     Ok(())
 }
+/// Fixed single-pixel grid, pressure bypass and native profile persistence.
+pub fn verify_pixel(root: &std::path::Path) -> Result<(), String> {
+    use crate::{
+        document::{Background, CanvasSpec, Document},
+        painting::{Stroke, Style},
+    };
+    let style = Style {
+        clone_stamp: Default::default(),
+        variation: Default::default(),
+        pattern: Default::default(),
+        dynamics: Default::default(),
+        sequence: Default::default(),
+        filters: Default::default(),
+        profile: Settings {
+            pixel: Pixel {
+                pressure: false,
+                grid: true,
+            },
+            ..Default::default()
+        },
+        texture: Default::default(),
+        material: Default::default(),
+        shape: crate::brush_cursor::Shape {
+            size: 1.0,
+            aspect: 1.0,
+            angle: 0.0,
+        },
+        tip: BrushTip::PixelPen,
+        color: [40, 80, 160, 255],
+        opacity: 1.0,
+        hardness: 0.1,
+        spacing: 0.25,
+        smoothing: 0.0,
+        pressure: crate::pressure::Mapping {
+            size: true,
+            opacity: true,
+            ..Default::default()
+        },
+    };
+    let render =
+        |style: Style, p: f64, point: [f64; 2], end: [f64; 2]| -> Result<Document, String> {
+            let mut d = Document::create(
+                CanvasSpec {
+                    width: 24,
+                    height: 24,
+                    dpi: 300.0,
+                    background: Background::Transparent,
+                },
+                8192,
+            )
+            .map_err(|e| e.to_string())?;
+            let before = d.snapshot();
+            let mut stroke = Stroke::begin(&d, 0, style)?;
+            stroke.sample_pressure(&d, point, p)?;
+            stroke.sample_pressure(&d, end, p)?;
+            stroke.commit_mouse(
+                &mut d,
+                crate::mouse_pressure::Metadata {
+                    layer: 0,
+                    settings: Default::default(),
+                    style,
+                    count: 2,
+                    ends: Default::default(),
+                    native_pressure: true,
+                },
+            )?;
+            let after = d.snapshot();
+            if after != before
+                && (!d.undo() || d.snapshot() != before || !d.redo() || d.snapshot() != after)
+            {
+                return Err("Pixel precision history differs".into());
+            }
+            Ok(d)
+        };
+    let mut zero = render(style, 0.0, [4.5, 4.5], [15.5, 15.5])?;
+    let full = render(style, 1.0, [4.5, 4.5], [15.5, 15.5])?;
+    if zero.layers[0].pixels != full.layers[0].pixels {
+        return Err("Pressure-off pixel pen still reacts to pen pressure".into());
+    }
+    for y in 0..24 {
+        for x in 0..24 {
+            let expected = if x == y && (4..=15).contains(&x) {
+                style.color
+            } else {
+                [0; 4]
+            };
+            if zero.layers[0].pixels[y * 24 + x] != expected {
+                return Err("One-pixel staircase had gaps/antialias/extra pixels".into());
+            }
+        }
+    }
+    let mut enabled = style;
+    enabled.profile.pixel.pressure = true;
+    if render(enabled, 0.0, [4.5; 2], [15.5; 2])?.layers[0]
+        .pixels
+        .iter()
+        .any(|p| p[3] != 0)
+    {
+        return Err("Enabled zero pixel pressure did not remain empty".into());
+    }
+    let mut large = style;
+    large.shape.size = 2.0;
+    let snapped = render(large, 1.0, [8.1; 2], [8.1; 2])?;
+    large.profile.pixel.grid = false;
+    let free = render(large, 1.0, [8.1; 2], [8.1; 2])?;
+    if free.layers[0].pixels == snapped.layers[0].pixels
+        || free.layers[0]
+            .pixels
+            .iter()
+            .any(|p| p[3] != 0 && p[3] != 255)
+    {
+        return Err("Pixel coordinate mode ignored or antialiased".into());
+    }
+    let path = root.join("pixel-precision.drawer");
+    let state = zero.snapshot();
+    crate::files::save(&mut zero, &path).map_err(|e| e.to_string())?;
+    if crate::files::open(&path, 8192)
+        .map_err(|e| e.to_string())?
+        .snapshot()
+        != state
+    {
+        return Err("Pixel profile/native result lost".into());
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pixel_pressure_grid_staircase_and_native_reopen() {
+        let root = crate::test_support::TempDir::new();
+        super::verify_pixel(&root.0).unwrap();
+    }
     use super::*;
     #[test]
     fn zero_pressure_floors_equal_maximum_owned_images_softness_and_one_undo() {
@@ -283,6 +432,7 @@ mod tests {
             sequence: Default::default(),
             filters: Default::default(),
             profile: Settings {
+                pixel: Default::default(),
                 image: Image::Square,
                 ..Default::default()
             },
@@ -317,6 +467,7 @@ mod tests {
         let p = Settings {
             minimum_size: 0.4,
             minimum_opacity: 0.7,
+            pixel: Default::default(),
             image: Image::Square,
         };
         snapshot.input.profiles[0] = p;
@@ -411,10 +562,12 @@ mod tests {
     #[test]
     fn owned_mask_and_transformed_rectangle_cursor_are_local_and_deterministic() {
         let round = Settings {
+            pixel: Default::default(),
             image: Image::Round,
             ..Default::default()
         };
         let square = Settings {
+            pixel: Default::default(),
             image: Image::Square,
             ..Default::default()
         };
@@ -483,6 +636,7 @@ mod tests {
                 profile: Settings {
                     minimum_size: 1.0,
                     minimum_opacity: 1.0,
+                    pixel: Default::default(),
                     image: Image::Square,
                 },
                 texture: Default::default(),
@@ -528,6 +682,7 @@ mod tests {
             (
                 BrushTip::Pen,
                 Settings {
+                    pixel: Default::default(),
                     image: Image::Round,
                     ..Default::default()
                 },
@@ -541,6 +696,7 @@ mod tests {
             (
                 BrushTip::Pen,
                 Settings {
+                    pixel: Default::default(),
                     image: Image::Square,
                     ..Default::default()
                 },

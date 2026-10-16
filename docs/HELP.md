@@ -473,3 +473,17 @@ Layer and folder paper에서 레이어/격리 폴더의 합성 모드를 고를 
 [안료 설정](local:brush-material)
 [필압/선 보정](local:stroke-filter)
 [종이와 폴더](local:textures)
+
+## pixel-eyedropper | 픽셀 펜 정밀 모드와 스포이트 | 현재층 RGB RGBA 합성색 알파 평균 색 이력
+
+Pixel pen의 팁 설정에서 필압 반응을 끄거나 Pixel precision 정수 좌표 맞춤을 선택한다. 필압 끄기는 크기/농도와 추가 압력 크기/혼색 반응을 끄며 속도·기울기는 독립으로 유지한다. 두 좌표 모드 모두 이진 가장자리이고1×1 팁은 항상 정수 격자를 유지한다. 더 큰 팁은 정밀 모드를 끄면 자유 중심 좌표를 사용한다. 프로필/프리셋·문서 획에 보존한다.
+
+Eyedropper에서 Current layer RGB는 원래 RGB를 가져오고 현재 그리기 알파를 유지한다. Current layer RGBA는 알파도 가져온다. Composite RGBA는 현재 보이는 합성 결과를 쓴다. 레이어 모드는 숨김·효과·선택 영역과 관계없이 저장된 픽셀을 읽는다. 알파0에 숨은 RGB가 있으면 그 값을 사용하고 RGB도0인 빈 픽셀은 색 없음으로 안내하며 기존 색을 유지한다.
+
+Single pixel과 Average 3×3/5×5/9×9를 명시적으로 선택한다. RGB-only 평균은 원래 RGB의 산술 평균, RGBA/합성 평균은 알파 가중 RGB와 평균 알파를 사용한다. 캔버스 가장자리에서는 안쪽 픽셀만 포함한다. 색 선택은 그림 이력을 바꾸지 않으며 최근 색 칩·Undo color choice·Redo color choice는 별도 색 이력으로 동작한다. 모드와 최근 색/색 이력은 로컬에 저장해 재시작 시 복원한다.
+
+Layer and folder paper의 Hide는 레이어/격리 폴더의 원래 픽셀을 보존하며 합성에서 제외한다. Apply/Cancel·문서 실행 취소를 따른다. 숨긴 원본을 잃을 수 있는 부분 굽기/PSD 레이어 평탄화는 거절하고 자체 문서나 Rendered image를 사용한다.
+
+[팁과 최소 필압 출력](local:tip-profile)
+[키보드 이동과 스포이트](local:precision)
+[브러시 합성](local:brush-composite)

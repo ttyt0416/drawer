@@ -73,6 +73,12 @@ fn default_spacing() -> f64 {
 }
 impl Style {
     pub fn resolved(mut self) -> Self {
+        if self.tip == BrushTip::PixelPen && !self.profile.pixel.pressure {
+            self.pressure.size = false;
+            self.pressure.opacity = false;
+            self.dynamics.pressure.enabled = false;
+            self.material.composition.mixing_pressure.enabled = false;
+        }
         if self.tip == BrushTip::Eraser && self.material.valid() {
             self.material = crate::brush_material::Settings {
                 alpha_lock: self.material.alpha_lock,
@@ -1004,10 +1010,14 @@ impl Stroke {
                 [width, height]
             };
             (
-                [
-                    center[0].floor() + offset(dimensions[0]),
-                    center[1].floor() + offset(dimensions[1]),
-                ],
+                if self.style.profile.pixel.grid || (width == 1.0 && height == 1.0) {
+                    [
+                        center[0].floor() + offset(dimensions[0]),
+                        center[1].floor() + offset(dimensions[1]),
+                    ]
+                } else {
+                    center
+                },
                 width / 2.0,
                 height / 2.0,
             )

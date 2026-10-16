@@ -91,3 +91,5 @@ pub mod material_library;
 pub mod abr;
 
 pub mod brush_composite;
+
+pub mod eyedropper;

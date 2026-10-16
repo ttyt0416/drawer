@@ -232,3 +232,7 @@ docs/process/abr-import.md
 crates/drawer-core/src/brush_composite.rs
 crates/drawer-app/src/brush_composite.rs
 docs/process/brush-composite.md
+
+crates/drawer-core/src/eyedropper.rs
+crates/drawer-app/src/eyedropper.rs
+docs/process/pixel-eyedropper.md

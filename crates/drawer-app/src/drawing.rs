@@ -87,6 +87,7 @@ pub(super) struct Drawing {
     pub patterns: [drawer_core::brush_pattern::Settings; 7],
     pub variations: [drawer_core::brush_variation::Settings; 7],
     pub picked: Option<[u8; 4]>,
+    pub eyedropper: drawer_core::eyedropper::Settings,
     pub clone_config: drawer_core::clone_stamp::Settings,
     pub assets: std::sync::Arc<drawer_core::material_library::Library>,
     pub clone_pick: bool,
@@ -573,9 +574,16 @@ impl Drawing {
                         && point[0] < doc.width as f64
                         && point[1] < doc.height as f64
                     {
-                        self.picked = Some(
-                            doc.composite_pixel(point[0].floor() as u32, point[1].floor() as u32),
-                        );
+                        match self.eyedropper.sample(doc, layer, point, style.color) {
+                            Ok(Some(color)) => self.picked = Some(color),
+                            Ok(None) => {
+                                self.error = Some(
+                                    "No stored color at this sample; drawing color preserved"
+                                        .into(),
+                                )
+                            }
+                            Err(e) => self.error = Some(e),
+                        }
                     }
                 }
                 self.ownership.clear();
@@ -823,9 +831,16 @@ impl Drawer {
         self.drawing
             .endpoints
             .retain(|(id, _, _), _| self.documents.iter().any(|d| d.id == *id));
+        self.workspaces
+            .store
+            .current
+            .eyedropper
+            .observe(self.references.session.workspace.color);
         if let Some(color) = self.drawing.picked.take() {
             self.references.session.workspace.color = color;
+            self.workspaces.store.current.eyedropper.observe(color);
         }
+        self.drawing.eyedropper = self.workspaces.store.current.eyedropper.settings;
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
         let target_view = self
@@ -1483,6 +1498,7 @@ mod tests {
         let profile = Settings {
             minimum_size: 0.5,
             minimum_opacity: 0.4,
+            pixel: Default::default(),
             image: Image::Square,
         };
         app.workspaces.store.current.input.profiles[0] = profile;

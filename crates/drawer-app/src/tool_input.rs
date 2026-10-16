@@ -482,6 +482,7 @@ mod tests {
         draft.profiles[0] = drawer_core::tip_profile::Settings {
             minimum_size: 0.4,
             minimum_opacity: 0.7,
+            pixel: Default::default(),
             image: drawer_core::tip_profile::Image::Square,
         };
         draft.smoothing[0] = 0.95;

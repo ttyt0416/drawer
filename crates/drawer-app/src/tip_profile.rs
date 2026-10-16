@@ -1,6 +1,21 @@
 use super::*;
 use drawer_core::tip_profile::{Image, Settings};
 pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
+    if tip == BrushTip::PixelPen {
+        crate::help::checkbox(
+            ui,
+            &mut s.pixel.pressure,
+            "Pixel pen reacts to pressure",
+            "pixel-eyedropper",
+        );
+        crate::help::checkbox(
+            ui,
+            &mut s.pixel.grid,
+            "Pixel precision: snap to integer pixel grid",
+            "pixel-eyedropper",
+        );
+        ui.label("Both coordinate modes keep a binary edge. A single pixel stays grid-aligned in both modes. Pressure off disables size, opacity and pressure-only dynamics/mixing; speed and tilt remain independent.");
+    }
     for (opacity, value) in [(false, &mut s.minimum_size), (true, &mut s.minimum_opacity)] {
         let mut percent = *value * 100.0;
         super::edit::number(
@@ -51,6 +66,7 @@ pub(super) fn smoke() -> Result<(), String> {
     s.profiles[0] = Settings {
         minimum_size: 1.0,
         minimum_opacity: 1.0,
+        pixel: Default::default(),
         image: Image::Square,
     };
     s.pressure.tools[0].size = true;
