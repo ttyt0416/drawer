@@ -2,6 +2,15 @@ use super::*;
 use drawer_core::eyedropper::Source;
 impl Drawer {
     pub(super) fn eyedropper_controls(&mut self, ui: &mut egui::Ui) {
+        self.sampling_reference_controls(ui);
+        ui.checkbox(
+            &mut self.workspaces.store.current.eyedropper.hide_screen_window,
+            "Hide app window while sampling display",
+        );
+        if ui.button("Sample entire screen (display RGB)…").clicked() {
+            self.execute_command(ui.ctx(), "screen-eyedropper");
+        }
+        ui.label("Canvas: document RGBA / alpha-weighted mean. Screen: displayed RGB / arithmetic mean, drawing alpha kept.");
         let state = &mut self.workspaces.store.current.eyedropper;
         egui::ComboBox::from_id_salt("eyedropper-source")
             .selected_text(state.settings.source.label())

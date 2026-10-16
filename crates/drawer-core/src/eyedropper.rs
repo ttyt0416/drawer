@@ -17,6 +17,61 @@ impl Source {
         }
     }
 }
+/// Local composite references. The all-raster option bypasses explicit inclusions;
+/// explicit exclusions win. A scope prevents applying another document's indices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct References {
+    pub enabled: bool,
+    pub scope: Option<String>,
+    pub all_rasters: bool,
+    pub include: Vec<usize>,
+    pub exclude: Vec<usize>,
+    pub objects: bool,
+    pub vectors: bool,
+    pub animation: bool,
+}
+impl Default for References {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            scope: None,
+            all_rasters: true,
+            include: vec![],
+            exclude: vec![],
+            objects: true,
+            vectors: true,
+            animation: true,
+        }
+    }
+}
+pub fn scope(doc: &crate::document::Document) -> String {
+    doc.path.as_ref().map_or_else(
+        || format!("unsaved:{}:{}", std::process::id(), doc.id),
+        |p| p.to_string_lossy().into_owned(),
+    )
+}
+impl References {
+    pub fn valid(&self) -> bool {
+        let valid = |v: &[usize]| {
+            v.len() <= 256
+                && v.iter().all(|n| *n < 256)
+                && v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len()
+        };
+        valid(&self.include)
+            && valid(&self.exclude)
+            && self
+                .scope
+                .as_ref()
+                .is_none_or(|s| !s.is_empty() && s.len() <= 32768 && !s.contains('\0'))
+    }
+    pub fn active(&self, doc: &crate::document::Document) -> bool {
+        self.enabled && self.scope.as_ref().is_none_or(|s| *s == scope(doc))
+    }
+    pub fn raster(&self, index: usize) -> bool {
+        (self.all_rasters || self.include.contains(&index)) && !self.exclude.contains(&index)
+    }
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
@@ -34,6 +89,29 @@ impl Settings {
         point: [f64; 2],
         current: [u8; 4],
     ) -> Result<Option<[u8; 4]>, String> {
+        self.sample_with(doc, layer, point, current, &References::default())
+    }
+    pub fn sample_with(
+        self,
+        doc: &crate::document::Document,
+        layer: Option<usize>,
+        point: [f64; 2],
+        current: [u8; 4],
+        references: &References,
+    ) -> Result<Option<[u8; 4]>, String> {
+        if !references.valid() {
+            return Err("Invalid sampling references".into());
+        }
+        if self.source == Source::Composite
+            && references.active(doc)
+            && references
+                .include
+                .iter()
+                .chain(&references.exclude)
+                .any(|n| *n >= doc.layers.len())
+        {
+            return Err("Sample layer list changed; refresh reference layers".into());
+        }
         if !self.valid()
             || point.iter().any(|v| !v.is_finite())
             || point[0] < 0.0
@@ -52,7 +130,9 @@ impl Settings {
         } else {
             None
         };
-        let renderer = layer.is_none().then(|| crate::render::Renderer::new(doc));
+        let renderer = layer
+            .is_none()
+            .then(|| crate::render::Renderer::sampling(doc, references));
         let center = point.map(|p| p.floor() as i64);
         let r = self.radius as i64;
         let mut count = 0u64;
@@ -100,15 +180,24 @@ impl Settings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct State {
+    #[serde(default)]
+    pub references: References,
+    #[serde(default = "hide_screen_default")]
+    pub hide_screen_window: bool,
     pub settings: Settings,
     pub recent: Vec<[u8; 4]>,
     undo: Vec<[u8; 4]>,
     redo: Vec<[u8; 4]>,
     last: Option<[u8; 4]>,
 }
+fn hide_screen_default() -> bool {
+    true
+}
 impl Default for State {
     fn default() -> Self {
         Self {
+            references: Default::default(),
+            hide_screen_window: true,
             settings: Default::default(),
             recent: vec![],
             undo: vec![],
@@ -126,6 +215,7 @@ fn push(stack: &mut Vec<[u8; 4]>, color: [u8; 4]) {
 impl State {
     pub fn valid(&self) -> bool {
         self.settings.valid()
+            && self.references.valid()
             && self.recent.len() <= 32
             && self.undo.len() <= 32
             && self.redo.len() <= 32
@@ -356,5 +446,152 @@ mod tests {
         assert!(!copy.can_redo());
         copy.recent.resize(33, [0; 4]);
         assert!(!copy.valid());
+    }
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+    #[test]
+    fn references_exclusions_alpha_weighting_and_source_isolation() {
+        let mut d = crate::document::Document::create(
+            crate::document::CanvasSpec {
+                width: 3,
+                height: 3,
+                dpi: 300.0,
+                background: crate::document::Background::Transparent,
+            },
+            4096,
+        )
+        .unwrap();
+        d.layers[0].pixels = vec![[0, 0, 255, 0]; 9];
+        d.layers[0].pixels[0] = [255, 0, 0, 128];
+        d.layers[0].pixels[1] = [0, 255, 0, 255];
+        d.layers[0].pixels[2] = [0, 255, 0, 255];
+        d.layers.push(crate::document::RasterLayer {
+            locked: true,
+            name: "Overlay".into(),
+            pixels: vec![[0, 0, 255, 255]; 9],
+            placement: None,
+        });
+        let before = d.snapshot();
+        let settings = Settings {
+            source: Source::Composite,
+            radius: 1,
+        };
+        let mut r = References {
+            enabled: true,
+            all_rasters: false,
+            include: vec![0],
+            ..Default::default()
+        };
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            Some([51, 204, 0, 71])
+        );
+        r.include.push(1);
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            Some([0, 0, 255, 255])
+        );
+        r.exclude.push(1);
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            Some([51, 204, 0, 71])
+        );
+        r.exclude.push(0);
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            Settings {
+                source: Source::LayerRgb,
+                radius: 1
+            }
+            .sample_with(&d, Some(0), [1.5, 1.5], [0, 0, 0, 47], &r)
+            .unwrap(),
+            Some([28, 57, 170, 47])
+        );
+        r.exclude.clear();
+        r.scope = Some("another document".into());
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            Some([0, 0, 255, 255])
+        );
+        r.scope = None;
+        r.include = vec![];
+        assert_eq!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .unwrap(),
+            None
+        );
+        r.include.push(255);
+        assert!(
+            settings
+                .sample_with(&d, None, [1.5, 1.5], [0; 4], &r)
+                .is_err()
+        );
+        assert!(
+            Settings {
+                source: Source::LayerRgb,
+                radius: 0
+            }
+            .sample_with(&d, Some(0), [0.5, 0.5], [0; 4], &r)
+            .is_ok()
+        );
+        assert!(d.snapshot() == before);
+        assert_eq!(d.history_counts(), (0, 0));
+    }
+    #[test]
+    fn vector_object_switches_and_legacy_state_defaults() {
+        let mut d = crate::line_tools_verify::fixture().unwrap();
+        let mut r = References {
+            enabled: true,
+            all_rasters: false,
+            ..Default::default()
+        };
+        let s = Settings::default();
+        assert_eq!(
+            s.sample_with(&d, None, [8.0, 20.0], [0; 4], &r).unwrap(),
+            Some([0, 0, 0, 255])
+        );
+        r.vectors = false;
+        assert_eq!(
+            s.sample_with(&d, None, [8.0, 20.0], [0; 4], &r).unwrap(),
+            None
+        );
+        d.scene.objects.push(crate::scene::PageObject::Line {
+            start: [4.0, 20.5],
+            end: [60.0, 20.5],
+            width_px: 2.0,
+            color: [20, 80, 160, 128],
+        });
+        assert_eq!(
+            s.sample_with(&d, None, [8.0, 20.0], [0; 4], &r).unwrap(),
+            Some([20, 80, 160, 128])
+        );
+        r.objects = false;
+        assert_eq!(
+            s.sample_with(&d, None, [8.0, 20.0], [0; 4], &r).unwrap(),
+            None
+        );
+        let mut state = serde_json::to_value(State::default()).unwrap();
+        state.as_object_mut().unwrap().remove("references");
+        state.as_object_mut().unwrap().remove("hide_screen_window");
+        let state: State = serde_json::from_value(state).unwrap();
+        assert!(!state.references.enabled);
+        assert!(state.hide_screen_window && state.valid());
     }
 }

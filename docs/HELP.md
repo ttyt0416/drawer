@@ -619,3 +619,7 @@ Color에서 Primary/Secondary를 고르거나 Swap colors로 두 RGBA를 교환�
 ## RGB/HSV/HSL and editable swatches
 
 Choose RGB, HSV or HSL without changing the selected RGBA. Enable Preserve HSL hue/saturation to adjust only lightness; one drag retains the source color through black and white. Local swatches support size, automatic/fixed columns, scrolling, naming/replacing/deleting, drag before another swatch, and Ctrl-drag to copy. Use the panel’s Undo/Redo color table edit commands separately from drawing Undo. Escape, dropping outside, or releasing Ctrl during a copy cancels it. All values and layout are saved locally.
+
+## Canvas references and screen color
+
+Sampler and used colors offers composite reference/excluded layers and separate page/vector/animation switches. Exclusions win; current-layer RGB/RGBA still reads the raw layer. Canvas averages use alpha-weighted RGBA. Screen sampling reads displayed RGB only after an explicit click, keeps drawing alpha, and uses an arithmetic average. Select Hide app window to sample underneath it. Escape/right-click cancels; original window placement and focus are restored. If Windows declines focus restoration, an error keeps the prior color. No screenshots are saved or transmitted. Settings and recent colors stay local; drawing Undo is unchanged.

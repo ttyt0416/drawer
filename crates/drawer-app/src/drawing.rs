@@ -103,6 +103,7 @@ pub(super) struct Drawing {
     pub sampled: Option<(Option<u64>, [u8; 4])>,
     sample_pending: Option<PendingSample>,
     pub eyedropper: drawer_core::eyedropper::Settings,
+    pub sample_references: drawer_core::eyedropper::References,
     pub clone_config: drawer_core::clone_stamp::Settings,
     pub assets: std::sync::Arc<drawer_core::material_library::Library>,
     pub clone_pick: bool,
@@ -631,7 +632,13 @@ impl Drawing {
                         && point[0] < doc.width as f64
                         && point[1] < doc.height as f64
                     {
-                        match self.eyedropper.sample(doc, layer, point, style.color) {
+                        match self.eyedropper.sample_with(
+                            doc,
+                            layer,
+                            point,
+                            style.color,
+                            &self.sample_references,
+                        ) {
                             Ok(Some(color)) => {
                                 if self.sample_on_release {
                                     self.sample_pending = Some(PendingSample {
@@ -947,6 +954,8 @@ impl Drawer {
             self.choose_color(color);
         }
         self.drawing.eyedropper = self.workspaces.store.current.eyedropper.settings;
+        self.drawing.sample_references =
+            self.workspaces.store.current.eyedropper.references.clone();
         self.drawing.settings = self.workspaces.store.current.pointer;
         self.drawing.pressure = self.workspaces.store.current.pressure;
         let target_view = self

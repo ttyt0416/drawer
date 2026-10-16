@@ -122,3 +122,5 @@ pub mod color_tables;
 pub mod related_colors;
 
 pub mod color_modes;
+
+pub mod screen_sample;

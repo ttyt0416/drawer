@@ -211,6 +211,7 @@ impl Drawer {
                 "primary-color" | "secondary-color" | "swap-colors" | "transparent-color" => {
                     self.color_mode_command(command)?
                 }
+                "screen-eyedropper" => self.begin_screen_sample(ctx)?,
                 "brush-grow" | "brush-shrink" => {
                     let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size

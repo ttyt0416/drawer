@@ -193,10 +193,20 @@ impl Document {
         y: u32,
         mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> [u8; 4] {
+        self.composite_pixel_filtered(x, y, true, &mut pixel)
+    }
+    pub(crate) fn composite_pixel_filtered(
+        &self,
+        x: u32,
+        y: u32,
+        animation: bool,
+        mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
         let mut color = self.scene.paper.composite(self, x, y, &mut pixel);
         for cell in self
             .animation
             .iter()
+            .filter(|_| animation)
             .flat_map(|a| a.visible_cells(self.current_frame))
         {
             color.add(cell.pixel(x as i64, y as i64));

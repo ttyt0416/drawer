@@ -195,7 +195,11 @@ impl Drawer {
             } else if !repeat
                 || !matches!(
                     action.as_str(),
-                    "primary-color" | "secondary-color" | "swap-colors" | "transparent-color"
+                    "primary-color"
+                        | "secondary-color"
+                        | "swap-colors"
+                        | "transparent-color"
+                        | "screen-eyedropper"
                 )
             {
                 self.execute_command(ctx, &action);

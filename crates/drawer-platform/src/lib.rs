@@ -281,3 +281,9 @@ mod tests {
         assert_eq!(input.drain(1.0).unwrap().len(), 2);
     }
 }
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod screen_sample;
+#[cfg(windows)]
+pub use screen_sample::{ScreenSample, verify_screen_boundary};

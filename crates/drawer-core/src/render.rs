@@ -9,6 +9,7 @@ use crate::{
 pub struct Renderer<'a> {
     document: &'a Document,
     stroke: Option<&'a crate::painting::Stroke>,
+    references: Option<&'a crate::eyedropper::References>,
     text_contours: Vec<Vec<Contour>>,
     vector_bounds: Vec<Vec<Rect>>,
 }
@@ -19,6 +20,13 @@ struct Contour {
 impl<'a> Renderer<'a> {
     pub fn new(document: &'a Document) -> Self {
         Self::preview(document, None)
+    }
+    pub fn sampling(document: &'a Document, references: &'a crate::eyedropper::References) -> Self {
+        let mut r = Self::new(document);
+        if references.active(document) {
+            r.references = Some(references);
+        }
+        r
     }
     pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
         let text_contours = document
@@ -38,6 +46,7 @@ impl<'a> Renderer<'a> {
         Self {
             document,
             stroke,
+            references: None,
             text_contours,
             vector_bounds: document
                 .scene
@@ -64,17 +73,30 @@ impl<'a> Renderer<'a> {
         }
         let x = point[0] as u32;
         let y = point[1] as u32;
-        let mut result = doc.composite_pixel_with(x, y, |index, layer| {
-            self.stroke
-                .and_then(|s| s.pixel(doc, index, layer, x, y))
-                .unwrap_or_else(|| layer.pixel(doc.width, doc.height, x as i64, y as i64))
-        });
+        let mut result = doc.composite_pixel_filtered(
+            x,
+            y,
+            self.references.is_none_or(|r| r.animation),
+            |index, layer| {
+                if self.references.is_some_and(|r| !r.raster(index)) {
+                    return [0; 4];
+                }
+                self.stroke
+                    .and_then(|s| s.pixel(doc, index, layer, x, y))
+                    .unwrap_or_else(|| layer.pixel(doc.width, doc.height, x as i64, y as i64))
+            },
+        );
         let scene = &doc.scene;
         let original = scene.transform.inverse().map(point);
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
             return result;
         }
-        for (index, object) in scene.objects.iter().enumerate() {
+        for (index, object) in scene
+            .objects
+            .iter()
+            .enumerate()
+            .filter(|_| self.references.is_none_or(|r| r.objects))
+        {
             let color = match object {
                 PageObject::Text { color, .. } => {
                     let winding: i32 = self.text_contours[index]
@@ -143,7 +165,7 @@ impl<'a> Renderer<'a> {
             result = over(result, color);
         }
         for (layer, bounds) in scene.lines.layers.iter().zip(&self.vector_bounds) {
-            if !layer.hidden {
+            if !layer.hidden && self.references.is_none_or(|r| r.vectors) {
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
                     if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
                         && path.hit(original)
@@ -153,7 +175,8 @@ impl<'a> Renderer<'a> {
                 }
             }
         }
-        if let Some(camera) = &scene.camera
+        if self.references.is_none_or(|r| r.objects)
+            && let Some(camera) = &scene.camera
             && camera.page_bounds.contains(original)
         {
             let center = [

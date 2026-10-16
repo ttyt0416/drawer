@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 30] = [
+pub const EXTRA_COMMANDS: [&str; 31] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -37,6 +37,7 @@ pub const EXTRA_COMMANDS: [&str; 30] = [
     "secondary-color",
     "swap-colors",
     "transparent-color",
+    "screen-eyedropper",
 ];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Item {
@@ -345,6 +346,7 @@ impl Settings {
             "primary-color" => "Use primary drawing color",
             "secondary-color" => "Use secondary drawing color",
             "swap-colors" => "Swap primary and secondary colors",
+            "screen-eyedropper" => "Sample entire screen (display RGB)",
             "transparent-color" => "Toggle transparent shape eraser",
             "brush-grow" => "Increase brush size",
             "brush-shrink" => "Decrease brush size",
