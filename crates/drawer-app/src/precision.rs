@@ -57,6 +57,26 @@ impl Drawer {
         if self.drawing.mode == Mode::Eyedropper {
             self.eyedropper_controls(ui);
         }
+        ui.horizontal_wrapped(|ui| {
+            for (command, label) in [
+                ("move-selection-boundary", "Move boundary"),
+                ("move-selected-pixels", "Move selected pixels"),
+                ("copy-selection", "Copy selected pixels"),
+                ("paste-selection", "Paste to new layer…"),
+            ] {
+                if ui.button(label).clicked() {
+                    self.execute_command(ui.ctx(), command);
+                }
+            }
+        });
+        ui.collapsing("Pick a visible layer on canvas",|ui|{
+            let settings=&mut self.workspaces.store.current.layer_pick;
+            egui::ComboBox::from_id_salt("layer-pick-modifier").selected_text(format!("{:?} + click",settings.modifier)).show_ui(ui,|ui|{for m in [drawer_core::layer_pick::Modifier::Alt,drawer_core::layer_pick::Modifier::Ctrl,drawer_core::layer_pick::Modifier::Shift]{ui.selectable_value(&mut settings.modifier,m,format!("{m:?}"));}});
+            ui.checkbox(&mut settings.include_locked,"Include locked layers (keeps locks)");ui.checkbox(&mut settings.folders,"Pick folders separately");
+            if ui.button("Next overlapping candidate").clicked(){self.execute_command(ui.ctx(),"pick-next-layer");}
+            if let Some(n)=self.active {let d=&self.documents[n];for target in drawer_core::layer_pick::visible(d,self.workspaces.store.current.layer_pick){if ui.selectable_label(self.panels.targets.get(&d.id)==Some(&target),drawer_core::layer_pick::label(d,target)).clicked(){self.drawing.finish(&mut self.documents);self.panels.targets.insert(self.documents[n].id,target);break;}}}
+            ui.label("Use the modifier with Move/selection tools. Empty space keeps the current layer. Raster drag uses one Undo; locked/non-raster targets remain selected without bypassing editing restrictions.");
+        });
         if ui.button("Page selections…").clicked() {
             self.execute_command(ui.ctx(), "selection-tools");
         }

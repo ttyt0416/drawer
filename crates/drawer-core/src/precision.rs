@@ -69,12 +69,6 @@ impl Nudge {
             && self.target == target
     }
     pub fn step(&mut self, doc: &mut Document, delta: [i64; 2]) -> Result<bool, String> {
-        if !self.matches(doc, self.layer, self.target) {
-            return Err("The movement target changed; start a fresh key press".into());
-        }
-        if self.target != Target::Boundary && doc.layers[self.layer].locked {
-            return Err("The raster layer is locked".into());
-        }
         let total = [
             self.total[0].checked_add(delta[0]),
             self.total[1].checked_add(delta[1]),
@@ -86,6 +80,24 @@ impl Nudge {
             return Err("Movement coordinate limit".into());
         }
         let total = [x, y];
+        let after = self.preview_total(doc, total)?;
+        let changed = doc.commit_state_group(after, Some(self.group))?;
+        self.total = total;
+        self.revision = doc.revision;
+        Ok(changed)
+    }
+    /// Preview against a frozen source; releasing a drag commits this state once.
+    pub fn preview_total(&self, doc: &Document, total: [i64; 2]) -> Result<DocumentState, String> {
+        if !self.matches(doc, self.layer, self.target) {
+            return Err("The movement target changed; start a fresh key press".into());
+        }
+        if self.target != Target::Boundary && doc.layers[self.layer].locked {
+            return Err("The raster layer is locked".into());
+        }
+        let [x, y] = total;
+        if total.iter().any(|v| v.unsigned_abs() > 1_000_000) {
+            return Err("Movement coordinate limit".into());
+        }
         let mut after = self.base.clone();
         match self.target {
             Target::Layer => {
@@ -117,10 +129,7 @@ impl Nudge {
                 }
             }
         }
-        let changed = doc.commit_state_group(after, Some(self.group))?;
-        self.total = total;
-        self.revision = doc.revision;
-        Ok(changed)
+        Ok(after)
     }
 }
 fn move_pixels(

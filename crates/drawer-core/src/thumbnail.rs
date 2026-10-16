@@ -3,6 +3,8 @@ use crate::{document::Document, scene::Rect};
 pub enum Target {
     Raster(usize),
     Track(usize),
+    Folder(usize),
+    Vector(u64),
 }
 type SourcePixels<'a> = (&'a [[u8; 4]], [u32; 2], [i64; 2]);
 fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
@@ -35,6 +37,7 @@ fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
                         .map(|c| (c.pixels.as_slice(), [c.width, c.height], c.offset))
                 }
             }),
+        Target::Folder(_) | Target::Vector(_) => None,
     }
 }
 pub fn bounds(document: &Document, target: Target, content: bool) -> Rect {

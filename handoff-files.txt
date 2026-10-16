@@ -314,3 +314,9 @@ docs/process/page-selections.md
 crates/drawer-core/src/selection_paint.rs
 crates/drawer-app/src/selection_paint.rs
 docs/process/selected-paint.md
+
+crates/drawer-core/src/selection_transfer.rs
+crates/drawer-core/src/layer_pick.rs
+crates/drawer-app/src/movement.rs
+crates/drawer-app/src/selection_transfer.rs
+docs/process/selection-transfer.md

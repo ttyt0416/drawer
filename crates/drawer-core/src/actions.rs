@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 39] = [
+pub const EXTRA_COMMANDS: [&str; 44] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -46,6 +46,11 @@ pub const EXTRA_COMMANDS: [&str; 39] = [
     "selection-tools",
     "selection-save",
     "duplicate-page",
+    "move-selection-boundary",
+    "move-selected-pixels",
+    "copy-selection",
+    "paste-selection",
+    "pick-next-layer",
 ];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Item {

@@ -1,3 +1,5 @@
+#[path = "movement.rs"]
+mod movement;
 use super::*;
 use drawer_core::{
     painting::{Stroke, Style},
@@ -85,6 +87,12 @@ pub(super) struct Drawing {
     frame_time: f64,
     active: Option<Session>,
     selection: Option<SelectionGesture>,
+    movement: Option<movement::Gesture>,
+    pub move_target: drawer_core::precision::Target,
+    pub move_layer: Option<usize>,
+    pub pick_settings: drawer_core::layer_pick::Settings,
+    pub pick_point: Option<(u64, Point)>,
+    pub picked_layer: Option<(u64, drawer_core::thumbnail::Target, bool)>,
     ownership: drawer_core::pointer_input::Ownership,
     events: Vec<(drawer_core::touch::Effect, bool)>,
     pub incoming: Vec<drawer_core::pointer_input::Event>,
@@ -166,9 +174,10 @@ impl Drawing {
             .as_ref()
             .map(|s| s.view)
             .or_else(|| self.selection.as_ref().map(|s| s.view))
+            .or_else(|| self.movement.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
-        self.active.is_some() || self.selection.is_some()
+        self.active.is_some() || self.selection.is_some() || self.movement.is_some()
     }
     pub fn changed(&self, document: u64) -> bool {
         self.active
@@ -186,6 +195,7 @@ impl Drawing {
     }
     fn cancel(&mut self) {
         self.selection = None;
+        self.movement = None;
         self.sample_pending = None;
         self.clone_pick = false;
         self.active = None;
@@ -262,6 +272,7 @@ impl Drawing {
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.selection = None;
+        self.movement = None;
         self.controls.reset();
         self.touch.clear_touches();
         self.ownership.clear();
@@ -278,6 +289,7 @@ impl Drawing {
     }
     fn finish_document(&mut self, doc: &mut Document) {
         self.selection = None;
+        self.movement = None;
         self.ownership.clear();
         if let Some(s) = self.active.take() {
             self.commit_session(s, doc);
@@ -602,6 +614,7 @@ impl Drawing {
         }) {
             self.cancel();
         }
+        self.advance_movement(ctx, documents);
         for n in 0..self.events.len() {
             let Some(id) = self.selection.as_ref().map(|s| s.document) else {
                 break;
@@ -643,7 +656,7 @@ impl Drawing {
         response: &egui::Response,
         doc: &mut Document,
         view: u64,
-        layer: Option<usize>,
+        mut layer: Option<usize>,
         style: Style,
         enabled: bool,
     ) {
@@ -718,6 +731,25 @@ impl Drawing {
                 continue;
             }
             if self
+                .movement
+                .as_ref()
+                .is_some_and(|s| s.document == doc.id && s.view == view)
+            {
+                if !enabled
+                    || self
+                        .movement
+                        .as_ref()
+                        .is_some_and(|s| s.projection != projection)
+                {
+                    self.cancel();
+                } else {
+                    self.receive_movement(n, doc);
+                    if self.events[n].1 {
+                        continue;
+                    }
+                }
+            }
+            if self
                 .selection
                 .as_ref()
                 .is_some_and(|s| s.document == doc.id && s.view == view)
@@ -755,6 +787,45 @@ impl Drawing {
             if self.ownership.receive(event, self.settings) != Decision::Begin {
                 continue;
             }
+            let pick = match self.pick_settings.modifier {
+                drawer_core::layer_pick::Modifier::Alt => ui.input(|i| i.modifiers.alt),
+                drawer_core::layer_pick::Modifier::Ctrl => ui.input(|i| i.modifiers.ctrl),
+                drawer_core::layer_pick::Modifier::Shift => ui.input(|i| i.modifiers.shift),
+            };
+            if pick
+                && matches!(
+                    self.mode,
+                    super::precision::Mode::Move
+                        | super::precision::Mode::SelectRectangle
+                        | super::precision::Mode::SelectLasso
+                )
+            {
+                let point = projection.point(pos);
+                self.pick_point = Some((doc.id, point));
+                if let Some(target) =
+                    drawer_core::layer_pick::candidates(doc, point, self.pick_settings)
+                        .first()
+                        .copied()
+                {
+                    let moving = self.mode == super::precision::Mode::Move;
+                    self.picked_layer = Some((doc.id, target, moving));
+                    layer = match target {
+                        drawer_core::thumbnail::Target::Raster(n) => Some(n),
+                        _ => None,
+                    };
+                    if moving {
+                        self.move_target = drawer_core::precision::Target::Layer;
+                        self.move_layer = layer;
+                    }
+                } else {
+                    self.ownership.clear();
+                    continue;
+                }
+                if self.mode != super::precision::Mode::Move {
+                    self.ownership.clear();
+                    continue;
+                }
+            }
             let mut style = style;
             if matches!(
                 self.mode,
@@ -771,6 +842,21 @@ impl Drawing {
                     mode: self.mode,
                     points: vec![point],
                 });
+                continue;
+            }
+            if self.mode == super::precision::Mode::Move {
+                if let Err(error) = self.begin_movement(
+                    doc,
+                    view,
+                    layer,
+                    event.source,
+                    projection,
+                    ui.ctx().content_rect(),
+                    pos,
+                ) {
+                    self.error = Some(error);
+                    self.ownership.clear();
+                }
                 continue;
             }
             if self.mode != super::precision::Mode::Paint {
@@ -1060,7 +1146,27 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        if let Some((id, target, moving)) = self.drawing.picked_layer.take() {
+            self.panels.targets.insert(id, target);
+            if moving {
+                self.precision.target = drawer_core::precision::Target::Layer;
+            }
+        }
+        self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
         self.drawing.frame_time = ctx.input(|i| i.time);
+        self.drawing.move_target = self.precision.target;
+        self.drawing.move_layer = self.active.and_then(|n| {
+            match self
+                .panels
+                .targets
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+            {
+                drawer_core::thumbnail::Target::Raster(n) => Some(n),
+                _ => None,
+            }
+        });
         self.drawing.transparent_mode = self.workspaces.store.current.color_modes.transparent;
         self.drawing.sample_on_release = self.workspaces.store.current.color_tables.auto_sample;
         self.drawing.sample_table = self.workspaces.store.current.color_tables.selected;

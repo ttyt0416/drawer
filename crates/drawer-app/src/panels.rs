@@ -207,6 +207,11 @@ impl Drawer {
                         | "selection-reselect"
                         | "selection-save"
                         | "duplicate-page"
+                        | "Move"
+                        | "move-selection-boundary"
+                        | "move-selected-pixels"
+                        | "copy-selection"
+                        | "paste-selection"
                 )
             {
                 self.execute_command(ctx, &action);
@@ -365,6 +370,14 @@ impl Drawer {
                 ));
             }
         }
+        if kind != Kind::Timeline {
+            for layer in &doc.scene.lines.layers {
+                rows.push((Target::Vector(layer.id), format!("Vector: {}", layer.name)));
+            }
+            for (n, folder) in doc.scene.paper.folders.iter().enumerate() {
+                rows.push((Target::Folder(n), format!("Folder: {}", folder.name)));
+            }
+        }
         if rows.is_empty() {
             ui.label("No animation tracks");
         }
@@ -443,6 +456,9 @@ impl Drawer {
                             .map(|track| {
                                 format!("{} · {} exposures", track.name, track.exposures.len())
                             }),
+                        Target::Folder(_) | Target::Vector(_) => {
+                            Some(drawer_core::layer_pick::label(doc, target))
+                        }
                     };
                     ui.label(label.unwrap_or_else(|| "Selected item unavailable".into()));
                     if let Target::Raster(layer) = target

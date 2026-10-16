@@ -26,7 +26,7 @@ pub(super) fn read_clipboard() -> Result<ClipboardImage, String> {
         origin: None,
     })
 }
-fn write_clipboard(packet: &ClipboardImage, budget: usize) -> Result<(), String> {
+pub(super) fn write_clipboard(packet: &ClipboardImage, budget: usize) -> Result<(), String> {
     let encoded = packet.encode(budget)?;
     let rgba: Vec<u8> = packet
         .image
@@ -130,6 +130,8 @@ impl Drawer {
         preview.height = state.height;
         preview.layers = state.layers;
         preview.scene = state.scene;
+        preview.animation = state.animation;
+        preview.current_frame = doc.current_frame;
         preview.view.zoom = (480.0 / preview.width as f64)
             .min(280.0 / preview.height as f64)
             .clamp(0.01, 64.0);
@@ -159,6 +161,10 @@ impl Drawer {
             .position(|d| d.id == dialog.id && d.revision == dialog.revision)
             .ok_or("The document changed; cancel and paste again")?;
         self.documents[index].commit_state(dialog.preview.snapshot())?;
+        self.panels.targets.insert(
+            self.documents[index].id,
+            drawer_core::thumbnail::Target::Raster(self.documents[index].layers.len() - 1),
+        );
         self.paste_dialog = None;
         Ok(())
     }
@@ -189,6 +195,29 @@ impl Drawer {
             },
             budget,
         )
+    }
+    pub(super) fn copy_selection_from(
+        &self,
+        write: impl FnOnce(&ClipboardImage, usize) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let doc = self
+            .active
+            .map(|i| &self.documents[i])
+            .ok_or("Open a page before copying")?;
+        let drawer_core::thumbnail::Target::Raster(layer) = self
+            .panels
+            .targets
+            .get(&doc.id)
+            .copied()
+            .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+        else {
+            return Err("Select a raster layer to copy".into());
+        };
+        let budget = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
+            / 4;
+        let packet = drawer_core::selection_transfer::copy(doc, layer, budget)?;
+        write(&packet, budget)
     }
     pub(super) fn paste_controls(&mut self, ui: &mut egui::Ui) {
         if self.active.is_none() {

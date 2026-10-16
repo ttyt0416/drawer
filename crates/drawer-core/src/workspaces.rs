@@ -147,6 +147,8 @@ pub fn default_bindings() -> Vec<Binding> {
         ("L", false, false, "connect-line"),
         ("I", false, false, "Eyedropper"),
         ("M", false, false, "Move"),
+        ("C", true, false, "copy-selection"),
+        ("V", true, false, "paste-selection"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {
@@ -300,6 +302,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub layer_pick: crate::layer_pick::Settings,
+    #[serde(default)]
     pub color_modes: crate::color_modes::Settings,
     #[serde(default)]
     pub related_colors: crate::related_colors::Settings,
@@ -379,6 +383,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            layer_pick: Default::default(),
             color_modes: Default::default(),
             related_colors: Default::default(),
             color_tables: Default::default(),
@@ -530,6 +535,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;
             next.color_tables = incoming.color_tables.clone();

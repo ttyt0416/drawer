@@ -68,17 +68,15 @@ impl Mask {
         }
         let y = point[1].floor();
         let x = point[0];
-        let n = self.runs.partition_point(|r| (r.y as f64) < y);
-        for r in self.runs[n..].iter().take_while(|r| r.y as f64 == y) {
-            if x < r.x as f64 {
-                break;
-            }
-            if x < (r.x as f64 + r.length as f64) {
-                return r.alpha;
-            }
-        }
-        0
+        let n = self.runs.partition_point(|r| {
+            (r.y as f64) < y || (r.y as f64 == y && r.x as f64 + r.length as f64 <= x)
+        });
+        self.runs
+            .get(n)
+            .filter(|r| r.y as f64 == y && x >= r.x as f64)
+            .map_or(0, |r| r.alpha)
     }
+
     pub fn boundaries(&self) -> Vec<[Point; 2]> {
         let mut rows: BTreeMap<i32, Vec<Run>> = BTreeMap::new();
         for r in &self.runs {

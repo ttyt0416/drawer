@@ -277,7 +277,7 @@ fn winding(path: &[Point], point: Point) -> i32 {
     }
     result
 }
-fn inside(path: &[Point], point: Point) -> bool {
+pub(crate) fn inside(path: &[Point], point: Point) -> bool {
     winding(path, point) != 0
 }
 struct Outline {

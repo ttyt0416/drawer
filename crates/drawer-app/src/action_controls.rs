@@ -200,6 +200,9 @@ impl Drawer {
                 | "transparent-color"
                 | "select-rectangle"
                 | "select-lasso"
+                | "Move"
+                | "move-selection-boundary"
+                | "move-selected-pixels"
         );
         if !BrushTip::ALL.iter().any(|t| t.name() == command)
             && !command.starts_with("cycle-")
@@ -215,6 +218,45 @@ impl Drawer {
             match command {
                 "primary-color" | "secondary-color" | "swap-colors" | "transparent-color" => {
                     self.color_mode_command(command)?
+                }
+                "pick-next-layer" => {
+                    let n = self.active.ok_or("Open a page first")?;
+                    let doc = &self.documents[n];
+                    let (id, p) = self
+                        .drawing
+                        .pick_point
+                        .ok_or("Use the layer-pick modifier and click the canvas first")?;
+                    if id != doc.id {
+                        return Err("Pick a point on this page first".into());
+                    }
+                    let candidates = drawer_core::layer_pick::candidates(
+                        doc,
+                        p,
+                        self.workspaces.store.current.layer_pick,
+                    );
+                    if !candidates.is_empty() {
+                        let selected = self.panels.targets.get(&id);
+                        let next = candidates
+                            .iter()
+                            .position(|t| Some(t) == selected)
+                            .map_or(0, |i| (i + 1) % candidates.len());
+                        self.panels.targets.insert(id, candidates[next]);
+                    }
+                }
+                "copy-selection" => {
+                    self.copy_selection_from(super::paste_dialog::write_clipboard)?
+                }
+                "paste-selection" => self.begin_paste(ctx, super::paste_dialog::read_clipboard)?,
+                "move-selection-boundary" | "move-selected-pixels" => {
+                    self.restore_locked_tool();
+                    self.precision.target = if command == "move-selection-boundary" {
+                        drawer_core::precision::Target::Boundary
+                    } else {
+                        drawer_core::precision::Target::Pixels
+                    };
+                    self.drawing.move_target = self.precision.target;
+                    self.drawing.mode = super::precision::Mode::Move;
+                    self.drawing.connect_line = false;
                 }
                 "screen-eyedropper" => self.begin_screen_sample(ctx)?,
                 "select-rectangle" | "select-lasso" | "selection-clear" | "selection-invert"

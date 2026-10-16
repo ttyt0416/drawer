@@ -130,3 +130,7 @@ pub mod soft_proof;
 pub mod selection_tools;
 
 pub mod selection_paint;
+
+pub mod selection_transfer;
+
+pub mod layer_pick;

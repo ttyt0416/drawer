@@ -414,8 +414,6 @@ impl CanvasView {
                 && !ui.input(|i| i.key_down(egui::Key::Space)),
         );
         self.working &= paint.drawing.active_view() == Some(paint.view);
-        let stroke = paint.drawing.preview(document.id);
-        self.update_image(ui, document, stroke);
         #[cfg(test)]
         {
             if !self.dock_navigator {
@@ -451,6 +449,13 @@ impl CanvasView {
                 self.show_navigator(navigator_ui, document, rect, ppp);
             }
         }
+        paint.drawing.refresh_movement(document);
+        let document = paint
+            .drawing
+            .movement_preview(document.id)
+            .unwrap_or(document);
+        let stroke = paint.drawing.preview(document.id);
+        self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
         if let Some(start) = self.area_start
@@ -513,6 +518,15 @@ impl CanvasView {
         {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Crosshair);
         }
+        if paint.drawing.mode == crate::precision::Mode::Move && response.hovered() {
+            ui.output_mut(|o| {
+                o.cursor_icon = if paint.drawing.pending() {
+                    egui::CursorIcon::Grabbing
+                } else {
+                    egui::CursorIcon::Grab
+                }
+            });
+        }
         self.paint_aids(ui, document, rect, aids, ppp);
         self.first_point = None;
         if input_active
@@ -555,7 +569,9 @@ impl CanvasView {
         if input_active
             && !matches!(
                 paint.drawing.mode,
-                crate::precision::Mode::SelectRectangle | crate::precision::Mode::SelectLasso
+                crate::precision::Mode::SelectRectangle
+                    | crate::precision::Mode::SelectLasso
+                    | crate::precision::Mode::Move
             )
             && (relative_cursor.is_some()
                 || (ui.input(|i| i.pointer.latest_pos().is_some())

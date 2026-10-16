@@ -639,3 +639,8 @@ Page selections saves/replaces named masks (16 per page), loads/removes them, an
 ## Painting through selections
 
 Raster drawing and erasing use the page selection’s coverage, including soft edges. Empty selections produce no pixel edit or drawing Undo. PixelPen RGBA overwrite first determines replacement RGBA from brush controls, then blends it with the original using selection strength; soft selections preserve the underlying RGBA instead of only lowering new alpha. Undo/Redo and document reopening retain pixels and the mask. Independent test/mixing buffers keep their own selection state.
+
+## selection-transfer | 선택 이동·복사·붙여넣기 | 선택 테두리 픽셀 레이어 후보 이동 복사 붙여넣기
+
+Move boundary는 선택 테두리만, Move selected pixels는 선택된 픽셀을 원위치에서 잘라 옮깁니다. 드래그를 놓을 때 확정하고 Escape로 취소합니다. Copy selected pixels는 현재 래스터의 선택 범위를 복사하고 Paste to new layer는 새 레이어 배치를 미리 봅니다. 기본 키 설정의 Ctrl+C/V로도 실행합니다.
+Move/선택 도구에서 Alt+클릭으로 보이는 레이어를 고릅니다. Pick a visible layer on canvas에서 수정키·잠긴층·폴더 옵션과 겹친 후보 순환을 설정합니다. 빈 곳은 현재층을 유지하며 잠금은 그대로입니다.
