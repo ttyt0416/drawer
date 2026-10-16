@@ -298,6 +298,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub related_colors: crate::related_colors::Settings,
+    #[serde(default)]
     pub color_tables: crate::color_tables::Settings,
     #[serde(default)]
     pub mixer: Scratchpad,
@@ -373,6 +375,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            related_colors: Default::default(),
             color_tables: Default::default(),
             mixer: Default::default(),
             color_picker: Default::default(),
@@ -438,6 +441,7 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.related_colors.valid()
             && self.color_tables.valid()
             && self.mixer.valid()
             && self.color_picker.valid()
@@ -520,6 +524,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.related_colors = incoming.related_colors;
             next.color_tables = incoming.color_tables.clone();
             next.mixer = incoming.mixer.clone();
             next.color_picker = incoming.color_picker;

@@ -206,6 +206,9 @@ impl Drawer {
         if ui.button("Sample color from canvas").clicked() {
             self.execute_command(ui.ctx(), "Eyedropper");
         }
+        if ui.button("Intermediate and similar colors…").clicked() {
+            self.workspaces.store.current.related_colors.visible = true;
+        }
         self.color_table_controls(ui);
         ui.collapsing("Sampler and used colors", |ui| self.eyedropper_controls(ui));
     }

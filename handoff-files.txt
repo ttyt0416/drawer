@@ -287,3 +287,7 @@ crates/drawer-core/src/color_tables.rs
 crates/drawer-app/src/color_tables.rs
 crates/drawer-app/src/mixing_pad.rs
 docs/process/color-tables-mixing.md
+
+crates/drawer-core/src/related_colors.rs
+crates/drawer-app/src/related_colors.rs
+docs/process/related-colors.md
