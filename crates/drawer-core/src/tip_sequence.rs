@@ -255,6 +255,7 @@ pub fn verify() -> Result<(), String> {
         seed: 42,
     };
     let style = Style {
+        clone_stamp: Default::default(),
         variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),
@@ -423,6 +424,7 @@ mod persistence_tests {
         )
         .unwrap();
         let style = crate::painting::Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),

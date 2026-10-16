@@ -856,7 +856,26 @@ impl Drawer {
                                     .iter()
                                     .position(|t| *t == self.selected)
                                     .unwrap();
+                                let anchor = [
+                                    (pos.x - response.rect.min.x) as f64 / 3.0,
+                                    (pos.y - response.rect.min.y) as f64 / 3.0,
+                                ];
+                                let clone_stamp = match self
+                                    .workspaces
+                                    .store
+                                    .current
+                                    .input
+                                    .clone_stamp
+                                    .resolve(anchor)
+                                {
+                                    Ok(stamp) => stamp,
+                                    Err(e) => {
+                                        self.status = Some(e);
+                                        continue;
+                                    }
+                                };
                                 let style = drawer_core::painting::Style {
+                                    clone_stamp,
                                     variation: self.workspaces.store.current.input.variations[n],
                                     pattern: self.workspaces.store.current.input.patterns[n],
                                     dynamics: self.workspaces.store.current.input.dynamics[n],

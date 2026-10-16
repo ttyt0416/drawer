@@ -14,6 +14,8 @@ static NEXT_STROKE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Style {
+    #[serde(default, skip_serializing_if = "crate::clone_stamp::Stamp::is_default")]
+    pub clone_stamp: crate::clone_stamp::Stamp,
     #[serde(
         default,
         skip_serializing_if = "crate::brush_variation::Settings::is_default"
@@ -82,6 +84,12 @@ impl Style {
             self.material.supply = 0.0;
             self.material.colorless = true;
         }
+        if self.clone_stamp.enabled && self.material.valid() {
+            self.material = crate::brush_material::Settings {
+                alpha_lock: self.material.alpha_lock,
+                ..Default::default()
+            };
+        }
         self
     }
     /// Conservative minor-axis spacing also covers a thin tip across its narrow direction.
@@ -96,7 +104,8 @@ impl Style {
             .max(1.0 / 1024.0)
     }
     pub fn valid(self) -> bool {
-        self.variation.valid()
+        self.clone_stamp.valid()
+            && self.variation.valid()
             && self.pattern.valid()
             && self.dynamics.valid()
             && self.sequence.valid()
@@ -236,7 +245,11 @@ impl Stroke {
         if !(0.0..=1.0).contains(&strength) || point.iter().any(|v| !v.is_finite()) {
             return Err("Invalid stroke material".into());
         }
-        self.effect = effect;
+        self.effect = if self.style.clone_stamp.enabled {
+            crate::mouse_pressure::Effect::Normal
+        } else {
+            effect
+        };
         self.strength = strength;
         self.carried = Some(self.candidate(doc, point[0].floor() as i64, point[1].floor() as i64));
         Ok(())
@@ -323,6 +336,9 @@ impl Stroke {
         cancel: impl Fn() -> bool,
     ) -> Result<(), String> {
         use crate::brush_material::Mode;
+        if self.style.clone_stamp.enabled {
+            return self.check(doc);
+        }
         let strength = if self.style.material.mode == Mode::Water {
             self.style.material.water
         } else if self.style.material.mode == Mode::Paint
@@ -1133,7 +1149,8 @@ impl Stroke {
                     continue;
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
-                let limited = self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
+                let limited = self.style.clone_stamp.enabled
+                    || self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
                     || self.style.tip == BrushTip::PixelPen
                     || (self.style.pressure.opacity
                         && self.style.tip != BrushTip::Marker
@@ -1150,7 +1167,14 @@ impl Stroke {
                     amount
                 };
                 let base = if limited { original } else { unmasked };
-                let next = if self.style.tip == BrushTip::Eraser {
+                let next = if self.style.clone_stamp.enabled {
+                    let source = self.style.clone_stamp.sample(doc, self.layer, [x, y]);
+                    if self.style.material.alpha_lock && source[3] == 0 {
+                        base
+                    } else {
+                        mix(base, source, amount)
+                    }
+                } else if self.style.tip == BrushTip::Eraser {
                     [
                         base[0],
                         base[1],
@@ -1294,6 +1318,7 @@ pub fn verify_spacing() -> Result<(), String> {
             }
             let before = d.snapshot();
             let style = Style {
+                clone_stamp: Default::default(),
                 variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
@@ -1366,6 +1391,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),

@@ -63,6 +63,7 @@ pub(super) fn run(
     app.workspaces.store.current.input.dynamics = sequence.dynamics;
     app.workspaces.store.current.input.patterns = sequence.patterns;
     app.workspaces.store.current.input.variations = sequence.variations;
+    app.workspaces.store.current.input.clone_stamp = sequence.clone_stamp;
     app.workspaces.store.current.input.mouse_pressure = sequence.mouse_pressure;
     app.workspaces.store.current.cursors = sequence.cursors;
     app.references.session.workspace.color = sequence.color;

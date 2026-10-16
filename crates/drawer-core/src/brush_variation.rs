@@ -247,6 +247,7 @@ fn document() -> Result<crate::document::Document, String> {
 }
 fn style(variation: Settings) -> crate::painting::Style {
     crate::painting::Style {
+        clone_stamp: Default::default(),
         variation,
         pattern: Default::default(),
         dynamics: Default::default(),

@@ -178,6 +178,7 @@ impl Drawer {
                     ui.label(tip.label());super::tip_sequence::ends_ui(ui,&mut draft.ends[n]);
                 });}
             });
+            ui.collapsing("Clone stamp source",|ui|super::clone_stamp::settings_ui(ui,&mut draft.clone_stamp));
             ui.collapsing("Color variation and dual tip masks",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-variation",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_variation::settings_ui(ui,&mut draft.variations[n]));});}});
             ui.collapsing("Scatter, ribbon and repeating decorations",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-pattern",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_pattern::settings_ui(ui,&mut draft.patterns[n]));});}});
             ui.collapsing("Tip direction, size dynamics and spacing",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-dynamics",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_dynamics::settings_ui(ui,&mut draft.dynamics[n]));});}});
@@ -426,6 +427,10 @@ mod tests {
         let before = app.documents[0].snapshot();
         let baseline = app.capture_workspace();
         let mut draft = baseline.input;
+        draft.clone_stamp = drawer_core::clone_stamp::Settings {
+            enabled: true,
+            origin: Some([32.5, 12.5]),
+        };
         draft.variations[0] = drawer_core::brush_variation::Settings {
             hue: 75.0,
             saturation: 0.4,

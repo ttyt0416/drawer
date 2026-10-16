@@ -339,6 +339,7 @@ impl CanvasView {
             .position(|t| *t == document.tool)
             .unwrap();
         let style = drawer_core::painting::Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),

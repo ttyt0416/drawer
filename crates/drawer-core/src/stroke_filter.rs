@@ -53,6 +53,7 @@ impl Pressure {
 
 fn style() -> crate::painting::Style {
     crate::painting::Style {
+        clone_stamp: Default::default(),
         variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),

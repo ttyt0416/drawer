@@ -161,9 +161,12 @@ impl Replay {
         doc: &Document,
         layer: usize,
         style: Style,
-        settings: Settings,
+        mut settings: Settings,
     ) -> Result<Self, String> {
         let style = style.resolved();
+        if style.clone_stamp.enabled {
+            settings.effect = Effect::Normal;
+        }
         if !settings.valid() || !style.valid() {
             return Err("Invalid mouse stroke settings".into());
         }
@@ -416,6 +419,7 @@ impl Replay {
         }
         if (style.color[3] == 0
             && !style.material.pigment()
+            && !style.clone_stamp.enabled
             && !matches!(self.settings.effect, Effect::Blend | Effect::Smudge))
             || style.opacity == 0.0
         {
@@ -964,6 +968,7 @@ mod tests {
     }
     fn style(tip: BrushTip) -> Style {
         Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),
@@ -1242,6 +1247,7 @@ mod dynamics_tests {
         )
         .unwrap();
         let style = Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: crate::brush_dynamics::Settings {

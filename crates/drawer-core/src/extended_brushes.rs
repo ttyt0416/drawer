@@ -20,6 +20,7 @@ fn document() -> Result<Document, String> {
 fn style(tip: BrushTip) -> Style {
     let v = crate::basic_brush::values(tip);
     Style {
+        clone_stamp: Default::default(),
         variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),

@@ -216,3 +216,7 @@ docs/process/brush-pattern.md
 crates/drawer-core/src/brush_variation.rs
 crates/drawer-app/src/brush_variation.rs
 docs/process/brush-variation.md
+
+crates/drawer-core/src/clone_stamp.rs
+crates/drawer-app/src/clone_stamp.rs
+docs/process/clone-stamp.md

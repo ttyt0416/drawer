@@ -155,6 +155,7 @@ mod tests {
                 ..Default::default()
             };
             let style = Style {
+                clone_stamp: Default::default(),
                 variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),

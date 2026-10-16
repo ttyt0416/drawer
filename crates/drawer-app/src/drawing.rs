@@ -87,6 +87,9 @@ pub(super) struct Drawing {
     pub patterns: [drawer_core::brush_pattern::Settings; 7],
     pub variations: [drawer_core::brush_variation::Settings; 7],
     pub picked: Option<[u8; 4]>,
+    pub clone_config: drawer_core::clone_stamp::Settings,
+    pub clone_pick: bool,
+    pub picked_origin: Option<Point>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
     pub pressure: drawer_core::pressure::Settings,
     pub last_source: Option<drawer_core::pointer_input::Source>,
@@ -147,6 +150,7 @@ impl Drawing {
             .map(|s| &s.stroke)
     }
     fn cancel(&mut self) {
+        self.clone_pick = false;
         self.active = None;
         self.ownership.clear();
     }
@@ -576,6 +580,23 @@ impl Drawing {
                 self.ownership.clear();
                 continue;
             }
+            if self.clone_pick {
+                let point = projection.point(pos);
+                self.clone_config.origin = Some(point);
+                self.picked_origin = Some(point);
+                self.clone_pick = false;
+                self.ownership.clear();
+                ui.ctx().request_repaint();
+                continue;
+            }
+            style.clone_stamp = match self.clone_config.resolve(projection.point(pos)) {
+                Ok(stamp) => stamp,
+                Err(e) => {
+                    self.error = Some(e);
+                    self.ownership.clear();
+                    continue;
+                }
+            };
             let current_tip = style.tip;
             style.tip =
                 self.settings
@@ -607,6 +628,7 @@ impl Drawing {
             style.dynamics = self.dynamics[index];
             style.pattern = self.patterns[index];
             style.variation = self.variations[index];
+            style = style.resolved();
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
@@ -620,6 +642,7 @@ impl Drawing {
                         .get(&(doc.id, layer, style.tip))
                         .ok_or("Draw a starting stroke with this tool on this layer first")?;
                     let to = projection.point(pos);
+                    style.clone_stamp = self.clone_config.resolve(from)?;
                     style.smoothing = 0.0;
                     let config = self.mouse_settings[index];
                     let virtual_mouse = event.source.kind
@@ -635,6 +658,7 @@ impl Drawing {
                         || !style.dynamics.is_default()
                         || !style.pattern.is_default()
                         || !style.variation.is_default()
+                        || style.clone_stamp.enabled
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -709,6 +733,7 @@ impl Drawing {
                         || !style.dynamics.is_default()
                         || !style.pattern.is_default()
                         || !style.variation.is_default()
+                        || style.clone_stamp.enabled
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,
@@ -779,6 +804,14 @@ impl Drawer {
         self.drawing.dynamics = self.workspaces.store.current.input.dynamics;
         self.drawing.patterns = self.workspaces.store.current.input.patterns;
         self.drawing.variations = self.workspaces.store.current.input.variations;
+        if let Some(origin) = self.drawing.picked_origin.take() {
+            self.workspaces.store.current.input.clone_stamp.origin = Some(origin);
+            self.status = Some(format!(
+                "Clone source set at {:.3}, {:.3} on the current layer",
+                origin[0], origin[1]
+            ));
+        }
+        self.drawing.clone_config = self.workspaces.store.current.input.clone_stamp;
         self.drawing.opacity = Some(self.panels.settings.brush_opacity);
         self.drawing.hardness = Some(self.panels.settings.brush_hardness);
         self.drawing.spacing = Some(self.panels.settings.brush_spacing);
@@ -1120,6 +1153,7 @@ pub(super) fn smoke_defaults() -> Result<(), String> {
                 d.layers[0].pixels[8 * 16 + 8] = [200, 50, 10, 255];
             }
             let style = Style {
+                clone_stamp: Default::default(),
                 variation: Default::default(),
                 pattern: Default::default(),
                 dynamics: Default::default(),
@@ -1210,6 +1244,7 @@ pub(super) fn smoke_attributes() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let style = Style {
+        clone_stamp: Default::default(),
         variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),
@@ -1262,6 +1297,7 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let before = d.snapshot();
     let mut style = Style {
+        clone_stamp: Default::default(),
         variation: Default::default(),
         pattern: Default::default(),
         dynamics: Default::default(),

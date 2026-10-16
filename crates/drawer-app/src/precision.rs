@@ -62,6 +62,7 @@ impl Drawer {
         }
         ui.label("Arrows: 1 document pixel · Shift: 10 · Ctrl-drag: fine values");
         if self.drawing.mode == Mode::Paint {
+            self.clone_controls(ui);
             let n = BrushTip::ALL
                 .iter()
                 .position(|t| *t == self.selected)

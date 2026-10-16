@@ -30,6 +30,8 @@ pub struct Settings {
     pub patterns: [crate::brush_pattern::Settings; 7],
     #[serde(default, deserialize_with = "crate::brush_slots::read")]
     pub variations: [crate::brush_variation::Settings; 7],
+    #[serde(default)]
+    pub clone_stamp: crate::clone_stamp::Settings,
     /// Ctrl, Shift, Alt. Modifiers always restore on release.
     #[serde(default)]
     pub modifiers: [Option<BrushTip>; 3],
@@ -53,6 +55,7 @@ impl Default for Settings {
             dynamics: [Default::default(); 7],
             patterns: [Default::default(); 7],
             variations: [Default::default(); 7],
+            clone_stamp: Default::default(),
             modifiers: [None; 3],
             mouse_pressure: [Default::default(); 7],
         }
@@ -61,6 +64,7 @@ impl Default for Settings {
 impl Settings {
     pub fn valid(self) -> bool {
         self.version == 1
+            && self.clone_stamp.valid()
             && self.ends.iter().all(|s| s.valid())
             && self.materials.iter().all(|s| s.valid())
             && self.sequences.iter().all(|s| s.valid())

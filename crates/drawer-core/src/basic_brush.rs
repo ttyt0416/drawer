@@ -103,6 +103,7 @@ pub fn verify_pixels() -> Result<(), String> {
         let before = d.snapshot();
         let v = values(tip);
         let style = Style {
+            clone_stamp: Default::default(),
             variation: Default::default(),
             pattern: Default::default(),
             dynamics: Default::default(),

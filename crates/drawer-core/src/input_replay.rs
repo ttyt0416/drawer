@@ -55,6 +55,8 @@ pub struct Sequence {
     #[serde(default, deserialize_with = "crate::brush_slots::read")]
     pub variations: [crate::brush_variation::Settings; 7],
     #[serde(default)]
+    pub clone_stamp: crate::clone_stamp::Settings,
+    #[serde(default)]
     #[serde(deserialize_with = "crate::brush_slots::read")]
     pub mouse_pressure: [crate::mouse_pressure::Settings; 7],
     #[serde(default)]
@@ -104,6 +106,7 @@ impl Default for Sequence {
             dynamics: [Default::default(); 7],
             patterns: [Default::default(); 7],
             variations: [Default::default(); 7],
+            clone_stamp: Default::default(),
             mouse_pressure: [Default::default(); 7],
             cursors: Default::default(),
             color: [30, 80, 160, 255],
@@ -138,6 +141,7 @@ impl Default for Sequence {
 impl Sequence {
     pub fn validate(&self) -> Result<(), String> {
         if self.version != 1
+            || !self.clone_stamp.valid()
             || !(1..=256).contains(&self.width)
             || !(1..=256).contains(&self.height)
             || !(0.1..=256.0).contains(&self.size)
