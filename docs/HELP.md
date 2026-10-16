@@ -635,3 +635,7 @@ Apply tone/levels to selected raster is a separate drawing command: it bakes onl
 Choose Rectangle select or Lasso select in Precision tools or Commands. Drag and release on the canvas; Escape/focus loss cancels the preview. Deselect removes restrictions, Invert complements the current page mask, and Reselect restores this page’s previous selection. Edges use 4×4 coverage. Selections use drawing Undo and never change raster/cell pixels by themselves.
 
 Page selections saves/replaces named masks (16 per page), loads/removes them, and duplicates a page as a separate document with independent selection identity. Cells and frames share their page’s selection. Saved/previous masks reopen with the document. Out-of-range or oversized shapes are rejected with the previous selection preserved.
+
+## Painting through selections
+
+Raster drawing and erasing use the page selection’s coverage, including soft edges. Empty selections produce no pixel edit or drawing Undo. PixelPen RGBA overwrite first determines replacement RGBA from brush controls, then blends it with the original using selection strength; soft selections preserve the underlying RGBA instead of only lowering new alpha. Undo/Redo and document reopening retain pixels and the mask. Independent test/mixing buffers keep their own selection state.

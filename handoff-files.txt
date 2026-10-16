@@ -310,3 +310,7 @@ docs/process/soft-proof.md
 crates/drawer-core/src/selection_tools.rs
 crates/drawer-app/src/selection_tools.rs
 docs/process/page-selections.md
+
+crates/drawer-core/src/selection_paint.rs
+crates/drawer-app/src/selection_paint.rs
+docs/process/selected-paint.md

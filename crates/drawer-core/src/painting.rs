@@ -1563,17 +1563,19 @@ impl Stroke {
                 } else {
                     over(base, paint_color, amount)
                 };
-                let factor = mask as f64 / 255.0
-                    * self.style.opacity
+                let paint_factor = self.style.opacity
                     * if advanced {
                         1.0
                     } else {
                         self.materials.factor(self.style.texture, point)
                     };
+                let factor = mask as f64 / 255.0 * paint_factor;
                 let mut result = if self.style.pixel_overwrite() {
                     let mut ink = self.dab_color;
-                    ink[3] = (ink[3] as f64 * amount * factor).round() as u8;
-                    ink
+                    ink[3] = (ink[3] as f64 * amount * paint_factor).round() as u8;
+                    // Brush controls determine replacement RGBA; selection blends
+                    // that replacement with the original pixel only once.
+                    mix(original, ink, mask as f64 / 255.0)
                 } else if special {
                     composition.mode.compose(
                         original,

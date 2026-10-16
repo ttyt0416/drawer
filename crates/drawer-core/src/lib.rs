@@ -128,3 +128,5 @@ pub mod screen_sample;
 pub mod soft_proof;
 
 pub mod selection_tools;
+
+pub mod selection_paint;

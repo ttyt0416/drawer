@@ -115,6 +115,7 @@ try {
     if ($smokeResult -notmatch 'color_selector=true') { throw '색상환·색상 입력·색 이력 검증 실패' }
     if ($smokeResult -notmatch 'color_tables_mixing=true') { throw '로컬 색상표·혼색판·시험 이력 검증 실패' }
     if ($smokeResult -notmatch 'related_colors=true') { throw '중간색·유사색 격자·키보드 선택 검증 실패' }
+    if ($smokeResult -notmatch 'selected_paint=true') { throw '선택 강도·RGBA덮어쓰기·그리기/지우기 검증 실패' }
     if ($smokeResult -notmatch 'page_selections=true') { throw '페이지 선택·마우스/펜 취소·셀/문서 재열기 검증 실패' }
     if ($smokeResult -notmatch 'soft_proof=true') { throw 'ICC 보기·톤/레벨·적용/취소/재시작 검증 실패' }
     if ($smokeResult -notmatch 'screen_sampling=true') { throw '화면색 평균·창복원·참조레이어 검증 실패' }

@@ -119,20 +119,16 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
                 select(&mut d, mask);
                 let mut s = style(BrushTip::PixelPen);
                 s.opacity = 0.5;
-                let expected = if mask == 0 {
-                    bg
-                } else {
-                    [
-                        220,
-                        70,
-                        30,
-                        (64.0 * 0.5 * mask as f64 / 255.0).round() as u8,
-                    ]
-                };
+                let target = [220, 70, 30, 32];
+                let mut expected = bg;
+                let mut histories = 0;
                 for _ in 0..repeats {
-                    dab(&mut d, s, 1.0, repeats, [1.5; 2])?;
-                    if d.layers[0].pixels[5] != expected {
-                        return Err("Pixel overwrite accumulated or kept destination alpha".into());
+                    let before = expected;
+                    expected = crate::selection_paint::expected(expected, target, mask);
+                    let changed = dab(&mut d, s, 1.0, repeats, [1.5; 2])?;
+                    histories += usize::from(expected != before);
+                    if d.layers[0].pixels[5] != expected || changed != (expected != before) {
+                        return Err("Pixel overwrite repeated within a stroke or ignored soft selection between strokes".into());
                     }
                 }
                 if d.layers[0]
@@ -140,7 +136,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
                     .iter()
                     .enumerate()
                     .any(|(n, p)| n != 5 && *p != bg)
-                    || d.history_counts().0 != usize::from(mask > 0)
+                    || d.history_counts().0 != histories
                 {
                     return Err(
                         "Pixel overwrite escaped selection or created empty histories".into(),
