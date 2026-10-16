@@ -628,6 +628,8 @@ impl Drawing {
                 .iter()
                 .position(|tip| *tip == style.tip)
                 .unwrap();
+            style.pressure = self.pressure.tools[index];
+            style.pressure.device_response = self.pressure.calibration(event.source);
             style.material = self.materials[index];
             style = style.resolved();
             style.texture = self.textures[index];
@@ -668,6 +670,8 @@ impl Drawing {
                         || !style.pattern.is_default()
                         || !style.variation.is_default()
                         || style.clone_stamp.enabled
+                        || style.pressure.device_response
+                            != drawer_core::pressure::Response::default()
                     {
                         if virtual_mouse
                             && config.effect == drawer_core::mouse_pressure::Effect::Spray
@@ -745,6 +749,8 @@ impl Drawing {
                         || !style.pattern.is_default()
                         || !style.variation.is_default()
                         || style.clone_stamp.enabled
+                        || style.pressure.device_response
+                            != drawer_core::pressure::Response::default()
                     {
                         match drawer_core::mouse_pressure::Replay::begin(
                             doc,

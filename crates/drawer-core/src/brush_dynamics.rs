@@ -75,9 +75,17 @@ impl Curve {
                 * (self.curve[n] + (self.curve[n + 1] - self.curve[n]) * (x - n as f64))
     }
 }
+fn velocity_curve() -> Curve {
+    Curve {
+        maximum: 2000.0,
+        ..Default::default()
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default = "velocity_curve")]
+    pub opacity_speed: Curve,
     pub direction: Direction,
     pub fallback_angle: f64,
     pub scatter_angle: f64,
@@ -93,6 +101,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            opacity_speed: velocity_curve(),
             direction: Default::default(),
             fallback_angle: 0.0,
             scatter_angle: 0.0,
@@ -193,6 +202,7 @@ impl Settings {
         self.pressure.valid(1.0)
             && self.tilt.valid(90.0)
             && self.speed.valid(1e6)
+            && self.opacity_speed.valid(1e6)
             && [self.fallback_angle, self.scatter_angle]
                 .iter()
                 .all(|v| v.is_finite() && v.abs() <= 180.0)
@@ -339,8 +349,164 @@ pub fn verify() -> Result<(), String> {
     }
     Ok(())
 }
+/// Velocity opacity is independent of pressure and size; invalid/equal time uses a bounded fallback.
+pub fn verify_velocity(root: &std::path::Path) -> Result<(), String> {
+    use crate::painting::Stroke;
+    let mut s = style();
+    s.shape.aspect = 1.0;
+    s.dynamics.opacity_speed = Curve {
+        enabled: true,
+        maximum: 1000.0,
+        curve: [1.0, 0.75, 0.5, 0.25, 0.0],
+        output_minimum: 0.1,
+        ..Default::default()
+    };
+    let render = |s: crate::painting::Style,
+                  speed: Option<f64>,
+                  pressure: f64|
+     -> Result<crate::document::Document, String> {
+        let mut d = document()?;
+        let before = d.snapshot();
+        let mut stroke = Stroke::begin(&d, 0, s)?;
+        stroke.set_dynamic_input(Input {
+            speed,
+            ..Default::default()
+        })?;
+        stroke.sample_pressure(&d, [8.5, 12.5], pressure)?;
+        stroke.sample_pressure(&d, [38.5, 12.5], pressure)?;
+        if d.snapshot() != before {
+            return Err("Velocity preview changed original".into());
+        }
+        stroke.commit_mouse(
+            &mut d,
+            crate::mouse_pressure::Metadata {
+                layer: 0,
+                settings: Default::default(),
+                style: s,
+                count: 2,
+                ends: Default::default(),
+                native_pressure: true,
+            },
+        )?;
+        let after = d.snapshot();
+        if after != before
+            && (!d.undo() || d.snapshot() != before || !d.redo() || d.snapshot() != after)
+        {
+            return Err("Velocity history changed".into());
+        }
+        Ok(d)
+    };
+    let slow = render(s, Some(0.0), 0.0)?;
+    let mut fast = render(s, Some(1000.0), 1.0)?;
+    if slow.layers[0].pixels[12 * 48 + 24] != [50, 100, 210, 255]
+        || fast.layers[0].pixels[12 * 48 + 24] != [50, 100, 210, 26]
+        || render(s, Some(1000.0), 0.0)?.layers[0].pixels != fast.layers[0].pixels
+    {
+        return Err("Speed opacity or pressure independence failed".into());
+    }
+    if render(s, None, 1.0)?.layers[0].pixels != slow.layers[0].pixels {
+        return Err("Missing speed fallback differs".into());
+    }
+    let path = root.join("velocity-opacity.drawer");
+    let state = fast.snapshot();
+    crate::files::save(&mut fast, &path).map_err(|e| e.to_string())?;
+    if crate::files::open(&path, 65536)
+        .map_err(|e| e.to_string())?
+        .snapshot()
+        != state
+    {
+        return Err("Speed opacity/native settings lost".into());
+    }
+    let mut together = s;
+    together.dynamics.speed = Curve {
+        enabled: true,
+        maximum: 1000.0,
+        curve: [1.0, 0.8, 0.6, 0.4, 0.2],
+        ..Default::default()
+    };
+    if render(together, Some(1000.0), 1.0)?.layers[0]
+        .pixels
+        .iter()
+        .filter(|p| p[3] > 0)
+        .count()
+        >= fast.layers[0].pixels.iter().filter(|p| p[3] > 0).count()
+    {
+        return Err("Separate speed size factor was ignored".into());
+    }
+    s.dynamics.opacity_speed = velocity_curve();
+    s.pressure.opacity = true;
+    s.pressure.device_response = crate::pressure::Response {
+        curve: [0.0, 0.1, 0.2, 0.7, 1.0],
+        ..Default::default()
+    };
+    let mut calibrated = render(s, None, 0.5)?;
+    if calibrated.layers[0].pixels[12 * 48 + 24][3] != 51 {
+        return Err("Frozen device pressure was not composed before brush response".into());
+    }
+    let path = root.join("device-frozen.drawer");
+    let state = calibrated.snapshot();
+    crate::files::save(&mut calibrated, &path).map_err(|e| e.to_string())?;
+    if crate::files::open(&path, 65536)
+        .map_err(|e| e.to_string())?
+        .snapshot()
+        != state
+    {
+        return Err("Frozen device response/native settings lost".into());
+    }
+    // Equal, absent and backwards timestamps all use the missing speed multiplier.
+    s.pressure = crate::pressure::Mapping {
+        size: false,
+        opacity: false,
+        ..Default::default()
+    };
+    s.dynamics.opacity_speed = Curve {
+        enabled: true,
+        maximum: 1000.0,
+        missing: 0.5,
+        ..Default::default()
+    };
+    let replay = |times: [Option<u64>; 3],
+                  points: [[f64; 2]; 3],
+                  clock: bool|
+     -> Result<Vec<[u8; 4]>, String> {
+        let mut d = document()?;
+        let mut r = crate::mouse_pressure::Replay::begin(&d, 0, s, Default::default())?
+            .configure_input(Default::default(), true)?;
+        for (micros, point) in times.into_iter().zip(points) {
+            r.push_input(crate::mouse_pressure::Sample { point, micros }, 1.0, 0.0)?;
+        }
+        if clock {
+            r.push_clock(crate::mouse_pressure::Sample {
+                point: points[2],
+                micros: Some(100000),
+            })?;
+        }
+        let stroke = r.render(&d, true)?;
+        stroke.commit_mouse(&mut d, r.metadata())?;
+        Ok(d.layers.remove(0).pixels)
+    };
+    let points = [[8.5, 12.5], [20.5, 12.5], [38.5, 12.5]];
+    let equal = replay([Some(10); 3], points, false)?;
+    if equal != replay([Some(20), Some(10), Some(0)], points, false)?
+        || equal != replay([None; 3], points, false)?
+        || equal != replay([Some(10); 3], points, true)?
+        || equal.iter().any(|p| p[3] > 128)
+    {
+        return Err("Timestamp fallback or held-clock opacity changed".into());
+    }
+    let still = replay([Some(0), Some(1000), Some(2000)], [[8.5, 12.5]; 3], false)?;
+    if still.iter().any(|p| p[3] > 128) {
+        return Err("Stationary speed increased beyond fallback/zero speed".into());
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn velocity_opacity_pressure_size_time_edges_and_native_roundtrip() {
+        let root = crate::test_support::TempDir::new();
+        super::verify_velocity(&root.0).unwrap();
+    }
     use super::*;
     #[test]
     fn actual_stroke_directions_and_independent_input_factors() {

@@ -49,6 +49,8 @@ impl Response {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Mapping {
+    #[serde(default)]
+    pub device_response: Response,
     pub size: bool,
     pub opacity: bool,
     #[serde(default)]
@@ -57,15 +59,38 @@ pub struct Mapping {
 impl Default for Mapping {
     fn default() -> Self {
         Self {
+            device_response: Default::default(),
             size: true,
             opacity: false,
             response: Response::default(),
         }
     }
 }
+impl Mapping {
+    pub fn error(self) -> Option<&'static str> {
+        self.device_response.error().or(self.response.error())
+    }
+    pub fn map(self, p: f64) -> Result<f64, String> {
+        self.response.map(self.device_response.map(p)?)
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Calibration {
+    pub kind: crate::pointer_input::Kind,
+    pub device: u64,
+    pub response: Response,
+}
+impl Calibration {
+    fn valid(self) -> bool {
+        self.kind != crate::pointer_input::Kind::Unknown && self.response.error().is_none()
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub calibrations: [Option<Calibration>; 8],
     pub version: u32,
     #[serde(deserialize_with = "crate::brush_slots::read")]
     pub tools: [Mapping; 7],
@@ -74,13 +99,31 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             version: 1,
+            calibrations: [None; 8],
             tools: [Mapping::default(); 7],
         }
     }
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        self.version == 1 && self.tools.iter().all(|m| m.response.error().is_none())
+        self.version == 1
+            && self.tools.iter().all(|m| m.error().is_none())
+            && self.calibrations.iter().enumerate().all(|(n, c)| {
+                c.is_none_or(|c| {
+                    c.valid()
+                        && !self.calibrations[..n]
+                            .iter()
+                            .flatten()
+                            .any(|old| old.kind == c.kind && old.device == c.device)
+                })
+            })
+    }
+    pub fn calibration(self, source: crate::pointer_input::Source) -> Response {
+        self.calibrations
+            .into_iter()
+            .flatten()
+            .find(|c| c.kind == source.kind && c.device == source.device)
+            .map_or_else(Response::default, |c| c.response)
     }
     pub fn read(path: &Path) -> io::Result<Self> {
         if std::fs::metadata(path)?.len() > 65536 {
@@ -102,6 +145,83 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn per_device_contact_independence_frozen_composition_validation_and_legacy() {
+        use crate::pointer_input::{Kind, Source};
+        let mut settings = Settings::default();
+        let response = Response {
+            curve: [0.0, 0.1, 0.2, 0.7, 1.0],
+            ..Default::default()
+        };
+        settings.calibrations[0] = Some(Calibration {
+            kind: Kind::Pen,
+            device: 11,
+            response,
+        });
+        let source = Source {
+            kind: Kind::Pen,
+            device: 11,
+            contact: 1,
+        };
+        assert_eq!(settings.calibration(source), response);
+        assert_eq!(
+            settings.calibration(Source {
+                contact: 99,
+                ..source
+            }),
+            response
+        );
+        assert_eq!(
+            settings.calibration(Source {
+                device: 12,
+                ..source
+            }),
+            Response::default()
+        );
+        assert_eq!(
+            settings.calibration(Source {
+                kind: Kind::Mouse,
+                ..source
+            }),
+            Response::default()
+        );
+        let frozen = Mapping {
+            device_response: settings.calibration(source),
+            response: Response {
+                curve: [0.0, 0.05, 0.5, 0.8, 1.0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!((frozen.map(0.5).unwrap() - 0.04).abs() < 1e-12);
+        settings.calibrations[0] = None;
+        assert!((frozen.map(0.5).unwrap() - 0.04).abs() < 1e-12);
+        settings.calibrations[0] = Some(Calibration {
+            kind: Kind::Pen,
+            device: 11,
+            response,
+        });
+        settings.calibrations[1] = settings.calibrations[0];
+        assert!(!settings.valid());
+        settings.calibrations[1] = None;
+        let root = crate::test_support::TempDir::new();
+        let path = root.0.join("devices.json");
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::read(&path).unwrap(), settings);
+        let bytes = std::fs::read(&path).unwrap();
+        settings.calibrations[0].as_mut().unwrap().kind = Kind::Unknown;
+        assert!(settings.save(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let mut old = serde_json::to_value(Settings::default()).unwrap();
+        old.as_object_mut().unwrap().remove("calibrations");
+        for tool in old["tools"].as_array_mut().unwrap() {
+            tool.as_object_mut().unwrap().remove("device_response");
+        }
+        assert_eq!(
+            serde_json::from_value::<Settings>(old).unwrap(),
+            Settings::default()
+        );
+    }
     #[test]
     fn monotone_curve_range_clamps_output_and_rejects_invalid_configuration() {
         let r = Response {

@@ -5,10 +5,42 @@ pub(super) struct Editor {
     pub open: bool,
     draft: Option<Settings>,
     tool: usize,
+    device_slot: usize,
     path: String,
     replace: bool,
     #[cfg(test)]
     buttons: [Option<egui::Rect>; 2],
+}
+fn device_ui(
+    ui: &mut egui::Ui,
+    draft: &mut Settings,
+    slot: &mut usize,
+    last: Option<drawer_core::pointer_input::Source>,
+) {
+    use drawer_core::pressure::{Calibration, Response};
+    ui.collapsing("Device pressure calibration",|ui|{
+        ui.label("Profiles match device kind and backend device ID. Contact IDs share a calibration. The selected input backend supplies these IDs.");
+        egui::ComboBox::from_id_salt("pressure-device-slot").selected_text(format!("Calibration slot {}",*slot+1)).show_ui(ui,|ui|{
+            for (n,c) in draft.calibrations.iter().enumerate() {ui.selectable_value(slot,n,c.map_or_else(||format!("{}: empty",n+1),|c|format!("{}: {:?} device {}",n+1,c.kind,c.device)));}
+        });
+        let mut attach=None;
+        if ui.add_enabled(last.is_some(),egui::Button::new("Use most recently drawn device")).clicked() {attach=last;}
+        if ui.button("Use aggregate mouse").clicked() {attach=Some(drawer_core::pointer_input::Source::MOUSE);}
+        if let Some(source)=attach {
+            if let Some(n)=draft.calibrations.iter().position(|c|c.is_some_and(|c|c.kind==source.kind&&c.device==source.device)) {*slot=n;}
+            else {draft.calibrations[*slot]=Some(Calibration{kind:source.kind,device:source.device,response:Response::default()});}
+        }
+        if let Some(c)=&mut draft.calibrations[*slot] {
+            ui.label(format!("{:?} · device {}",c.kind,c.device));
+            super::edit::number(ui,&mut c.response.minimum,0.0..=1.0,0.01," minimum device pressure","velocity-pressure");
+            super::edit::number(ui,&mut c.response.maximum,0.0..=1.0,0.01," maximum device pressure","velocity-pressure");
+            for n in 1..4 {super::edit::slider(ui,&mut c.response.curve[n],0.0..=1.0,format!("Device output at {}%",n*25),"velocity-pressure");}
+            if let Some(e)=c.response.error() {ui.colored_label(egui::Color32::YELLOW,e);}
+            if ui.button("Remove this calibration from draft").clicked() {draft.calibrations[*slot]=None;}
+        }
+        if !draft.valid() {ui.colored_label(egui::Color32::YELLOW,"Fix invalid or duplicate device profiles before applying.");}
+        ui.label("Device calibration is frozen when a stroke starts, then followed by the brush response. Mouse virtual pressure uses the mouse calibration; missing pressure stays at full pressure.");
+    });
 }
 impl Drawer {
     pub(super) fn pressure_settings(&mut self, ctx: &egui::Context) {
@@ -53,6 +85,8 @@ impl Drawer {
             }
             ui.label("Pressure 0–1 scales each enabled axis independently. Mouse and missing pressure use 1.");
             ui.label("A stroke keeps the settings used when it starts. Opacity pressure limits the stroke's ink contribution, including overlapping stamps.");
+            ui.separator();
+            device_ui(ui,&mut draft,&mut self.pressure.device_slot,self.drawing.last_source);
             ui.separator();
             ui.label("Local pressure preset path (JSON)");
             if super::edit::text(ui,&mut self.pressure.path,"pressure").changed(){self.pressure.replace=false;}
@@ -186,6 +220,14 @@ mod tests {
         let before = app.documents[0].snapshot();
         let initial = app.workspaces.store.current.pressure;
         let mut next = initial;
+        next.calibrations[0] = Some(drawer_core::pressure::Calibration {
+            kind: drawer_core::pointer_input::Kind::Pen,
+            device: 11,
+            response: drawer_core::pressure::Response {
+                curve: [0.0, 0.1, 0.2, 0.7, 1.0],
+                ..Default::default()
+            },
+        });
         next.tools[0].size = false;
         next.tools[0].opacity = true;
         next.tools[0].response = drawer_core::pressure::Response {

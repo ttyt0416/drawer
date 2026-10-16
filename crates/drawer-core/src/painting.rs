@@ -133,7 +133,7 @@ impl Style {
             && (0.01..=10.0).contains(&self.spacing)
             && self.shape.angle.abs() <= 1e12
             && (0.0..=0.95).contains(&self.smoothing)
-            && self.pressure.response.error().is_none()
+            && self.pressure.error().is_none()
     }
 }
 pub struct Stroke {
@@ -208,16 +208,16 @@ impl Stroke {
     fn dynamic_size(&self, pressure: f64, index: u64) -> Result<f64, String> {
         let base = self.style.shape.size
             * if self.style.pressure.size {
-                self.style
-                    .profile
-                    .size(self.style.pressure.response.map(pressure)?)
+                self.style.profile.size(self.style.pressure.map(pressure)?)
             } else {
                 1.0
             };
-        Ok(self
-            .style
-            .dynamics
-            .size(base, pressure, self.dynamics, index))
+        Ok(self.style.dynamics.size(
+            base,
+            self.style.pressure.device_response.map(pressure)?,
+            self.dynamics,
+            index,
+        ))
     }
     fn heading_to(&mut self, point: Point) {
         if let Some(from) = self.last {
@@ -719,12 +719,8 @@ impl Stroke {
             let pressure_scale = if self.style.pressure.size {
                 self.style
                     .profile
-                    .size(self.style.pressure.response.map(self.pressure)?)
-                    .min(
-                        self.style
-                            .profile
-                            .size(self.style.pressure.response.map(pressure)?),
-                    )
+                    .size(self.style.pressure.map(self.pressure)?)
+                    .min(self.style.profile.size(self.style.pressure.map(pressure)?))
             } else {
                 1.0
             };
@@ -965,12 +961,12 @@ impl Stroke {
         } else {
             None
         };
-        let pressure = self.style.pressure.response.map(pressure)?;
-        let opacity = if self.style.pressure.opacity {
+        let pressure = self.style.pressure.map(pressure)?;
+        let opacity = (if self.style.pressure.opacity {
             self.style.profile.opacity(pressure)
         } else {
             1.0
-        };
+        }) * self.style.dynamics.opacity_speed.map(self.dynamics.speed);
         if shape.size == 0.0 || opacity == 0.0 || self.style.opacity == 0.0 {
             return Ok(());
         }
@@ -1255,18 +1251,14 @@ impl Stroke {
                 let composition = self.style.material.composition;
                 let special = composition.mode != crate::brush_composite::Mode::Normal;
                 let limited = special
+                    || self.style.dynamics.opacity_speed.enabled
                     || self.style.clone_stamp.enabled
                     || self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
                     || self.style.tip == BrushTip::PixelPen
                     || (self.style.pressure.opacity
                         && self.style.tip != BrushTip::Marker
                         && self.style.tip != BrushTip::Smudge);
-                let amount = amount
-                    * if self.style.pressure.opacity {
-                        opacity
-                    } else {
-                        1.0
-                    };
+                let amount = amount * opacity;
                 let amount = if limited {
                     amount.max(old.map_or(0.0, |n| self.amounts[n]))
                 } else {

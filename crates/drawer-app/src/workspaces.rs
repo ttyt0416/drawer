@@ -901,7 +901,15 @@ impl Drawer {
                                     opacity: self.panels.settings.brush_opacity[n],
                                     hardness: self.panels.settings.brush_hardness[n],
                                     spacing: self.panels.settings.brush_spacing[n],
-                                    pressure: self.workspaces.store.current.pressure.tools[n],
+                                    pressure: {
+                                        let mut mapping =
+                                            self.workspaces.store.current.pressure.tools[n];
+                                        mapping.device_response =
+                                            self.workspaces.store.current.pressure.calibration(
+                                                drawer_core::pointer_input::Source::MOUSE,
+                                            );
+                                        mapping
+                                    },
                                 };
                                 match PadPaint::begin(
                                     &self.workspaces.store.current.scratchpad.pixels,

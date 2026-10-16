@@ -96,7 +96,7 @@ impl Preset {
         if Property::ALL.into_iter().zip(self.values).any(|(p, v)| {
             let [a, b] = p.bounds();
             !v.is_finite() || v < a || v > b
-        }) || self.pressure.response.error().is_some()
+        }) || self.pressure.error().is_some()
             || !self.ends.valid()
             || !self.mouse.valid()
             || !self.material.valid()

@@ -41,6 +41,11 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
             });
         });
     }
+    ui.push_id("speed-opacity", |ui| {
+        ui.collapsing("Speed opacity factor", |ui| {
+            curve_ui(ui, &mut s.opacity_speed, 1e6, " document px/s")
+        })
+    });
     super::edit::slider(
         ui,
         &mut s.random_minimum,
@@ -84,7 +89,7 @@ fn curve_ui(ui: &mut egui::Ui, c: &mut Curve, limit: f64, unit: &str) {
     crate::help::checkbox(
         ui,
         &mut c.enabled,
-        "Enable this size factor",
+        "Enable this output factor",
         "brush-dynamics",
     );
     super::edit::number(

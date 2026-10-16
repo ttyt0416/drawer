@@ -487,3 +487,15 @@ Layer and folder paper의 Hide는 레이어/격리 폴더의 원래 픽셀을 �
 [팁과 최소 필압 출력](local:tip-profile)
 [키보드 이동과 스포이트](local:precision)
 [브러시 합성](local:brush-composite)
+
+## velocity-pressure | 속도 크기·농도와 장치별 필압 | 마우스 속도 곡선 센서 보정 장치 ID
+
+도구 입력 → 브러시 동역학에서 Speed size factor와 Speed opacity factor를 각각 켜고 범위·5점 곡선·출력 한계·누락 계수를 조절한다. 압력이 없는 마우스도 위치/시각으로 동작한다. 크기와 농도는 독립이고 필압 축을 꺼도 속도 농도를 사용할 수 있다. 같은/역행 시각·시각 누락에는 누락 계수를 사용하고, 실제 정지에는 속도0을 쓴다. 타이머만의 입력은 최근 motion 값을 유지한다.
+
+Brush pressure → Device pressure calibration에서 최근 캔버스에서 그린 장치 또는 aggregate mouse를8개 슬롯 중 하나에 등록한다. 장치 종류와 ID가 같으면 같은 보정을 쓰고 접촉 번호는 구별하지 않는다. 범위/곡선을 편집하고 기존 Apply/Cancel로 적용한다. 장치가 없으면 항등 곡선이다. ID는 입력 백엔드가 보고하는 값이며 백엔드 변경 후 달라지면 다시 등록한다.
+
+장치 보정은 획 시작에 고정되며 입력 필터 뒤에서 장치 곡선, 브러시 곡선 순으로 적용한다. 브러시의 두 속도 곡선은 브러시 프리셋에, 장치 목록은 작업공간/필압 프리셋에 저장한다. 적용 전 백업과 재시작을 지원하며 문서에는 선택한 Response와 결과 픽셀이 남는다. 펜 센서의 실제 체감 검증은 별도 대기다.
+
+[브러시 동역학](local:brush-dynamics)
+[필압 응답](local:pressure)
+[마우스 가상 필압](local:mouse-pressure)
