@@ -3,6 +3,10 @@ use eframe::egui;
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    proof_settings: Option<drawer_core::soft_proof::Settings>,
+    proof: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
+    pub(super) proof_error: Option<String>,
+    pub(super) preview_sample: Option<([u8; 4], [u8; 4])>,
     image: Option<(ImageKey, egui::TextureHandle)>,
     checker: egui::TextureHandle,
     pub move_delta: Option<[f64; 2]>,
@@ -74,6 +78,10 @@ impl CanvasView {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
             image: None,
+            proof_settings: None,
+            proof: None,
+            proof_error: None,
+            preview_sample: None,
             move_delta: None,
             filter: drawer_core::interpolation::Filter::Nearest,
             screen_image: None,
@@ -141,6 +149,41 @@ impl CanvasView {
             navigator_rect: None,
         }
     }
+    pub(super) fn set_proof(&mut self, settings: &drawer_core::soft_proof::Settings) {
+        if self.proof_settings.as_ref() == Some(settings) {
+            return;
+        }
+        self.proof_settings = Some(settings.clone());
+        self.image = None;
+        self.screen_image = None;
+        self.preview_sample = None;
+        match drawer_core::soft_proof::Proof::read(settings) {
+            Ok(p) => {
+                self.proof = settings.enabled.then(|| std::sync::Arc::new(p));
+                self.proof_error = None;
+            }
+            Err(e) => {
+                self.proof = None;
+                self.proof_error = Some(e);
+            }
+        }
+    }
+    pub(super) fn reload_proof(&mut self) {
+        self.proof_settings = None;
+    }
+    fn proof_notice(&self, ui: &mut egui::Ui) {
+        if let Some(e) = &self.proof_error {
+            ui.colored_label(
+                egui::Color32::LIGHT_RED,
+                format!("View proof unavailable; showing document color: {e}"),
+            );
+        } else if self.proof.is_some() {
+            ui.label("View-only ICC / tone preview · document pixels unchanged");
+        }
+    }
+    fn displayed_color(&self, color: [u8; 4]) -> [u8; 4] {
+        self.proof.as_ref().map_or(color, |p| p.map(color))
+    }
     pub fn cancel_input(&mut self) {
         self.pan_drag = None;
         self.area_start = None;
@@ -157,6 +200,7 @@ impl CanvasView {
         aids: drawer_core::aids::AidPreferences,
         paint: crate::drawing::PaintInput<'_>,
     ) -> bool {
+        self.proof_notice(ui);
         if self.input_document != Some(document.id) {
             self.cancel_input();
             self.input_document = Some(document.id);
@@ -622,6 +666,11 @@ impl CanvasView {
                 for x in 0..width {
                     let pixel = renderer
                         .pixel([(x * reduction) as f64 + 0.5, (y * reduction) as f64 + 0.5]);
+                    let original = pixel;
+                    let pixel = self.displayed_color(pixel);
+                    if x == 0 && y == 0 {
+                        self.preview_sample = Some((original, pixel));
+                    }
                     pixels.push(egui::Color32::from_rgba_unmultiplied(
                         pixel[0], pixel[1], pixel[2], pixel[3],
                     ));
@@ -778,6 +827,11 @@ impl CanvasView {
                                 |x, y| renderer.pixel([x as f64 + 0.5, y as f64 + 0.5]),
                             )
                         };
+                        let original = pixel;
+                        let pixel = self.displayed_color(pixel);
+                        if original[3] > 0 {
+                            self.preview_sample = Some((original, pixel));
+                        }
                         pixels[y * dimensions[0] + x] = egui::Color32::from_rgba_unmultiplied(
                             pixel[0], pixel[1], pixel[2], pixel[3],
                         );
@@ -807,6 +861,7 @@ impl CanvasView {
         view: &mut drawer_core::view::View,
         interactive: bool,
     ) {
+        self.proof_notice(ui);
         let (rect, response) = ui.allocate_exact_size(
             ui.available_size().max(egui::vec2(1.0, 1.0)),
             egui::Sense::drag(),

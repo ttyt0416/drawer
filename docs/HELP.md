@@ -623,3 +623,9 @@ Choose RGB, HSV or HSL without changing the selected RGBA. Enable Preserve HSL h
 ## Canvas references and screen color
 
 Sampler and used colors offers composite reference/excluded layers and separate page/vector/animation switches. Exclusions win; current-layer RGB/RGBA still reads the raw layer. Canvas averages use alpha-weighted RGBA. Screen sampling reads displayed RGB only after an explicit click, keeps drawing alpha, and uses an arithmetic average. Select Hide app window to sample underneath it. Escape/right-click cancels; original window placement and focus are restored. If Windows declines focus restoration, an error keeps the prior color. No screenshots are saved or transmitted. Settings and recent colors stay local; drawing Undo is unchanged.
+
+## View ICC and tone preview
+
+Color proof and tone preview edits each canvas view or the separate display view independently. Preview draft changes display only; Save view preview settings keeps local values; Cancel/Escape restores the saved preview. Choose a local RGB/Gray/CMYK ICC with usable transforms in both directions. Preview/Save reloads the file. Missing or unsupported ICC displays an error and preserves document pixels.
+
+Apply tone/levels to selected raster is a separate drawing command: it bakes only the curve/levels into the active selected layer and selection, preserves alpha and sRGB, and creates one drawing Undo. Activate the view being edited first. Its tone preview then resets to avoid applying the adjustment twice. ICC simulation stays view-only. The preview uses an 8-bit ICC gamut round trip; it does not promise calibrated monitor or print matching.

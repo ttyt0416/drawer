@@ -2,6 +2,7 @@ use super::*;
 use std::{collections::HashSet, path::Path};
 
 pub(super) struct DocumentTab {
+    pub proof: drawer_core::soft_proof::Settings,
     pub id: u64,
     pub document_id: u64,
     pub view: drawer_core::view::View,
@@ -86,6 +87,7 @@ impl Drawer {
         self.documents.push(document);
         self.next_tab_id += 1;
         self.tabs.push(DocumentTab {
+            proof: Default::default(),
             id: self.next_tab_id,
             document_id: id,
             view,
@@ -144,6 +146,10 @@ impl Drawer {
         self.sync_active_view();
         self.next_tab_id += 1;
         self.tabs.push(DocumentTab {
+            proof: self
+                .active_tab
+                .map(|i| self.tabs[i].proof.clone())
+                .unwrap_or_default(),
             id: self.next_tab_id,
             document_id: self.documents[document].id,
             view: self.documents[document].view,

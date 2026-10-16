@@ -83,6 +83,7 @@ impl Drawer {
                         .find(|doc| doc.id == tab.document_id)
                         .unwrap();
                     SavedView {
+                        proof: tab.proof.clone(),
                         tab: tab.id,
                         document: doc.id,
                         session: self.view_session,
@@ -167,6 +168,7 @@ impl Drawer {
                 .iter()
                 .find(|doc| doc.id == document)
                 .unwrap();
+            self.tabs[tab].proof = row.proof.clone();
             self.tabs[tab].view = row.framing.view([doc.width as f64, doc.height as f64], ppp);
             // Selecting another tab must not overwrite the just-restored active view.
             if self.active_tab == Some(tab) {

@@ -302,3 +302,7 @@ crates/drawer-core/src/screen_sample.rs
 crates/drawer-app/src/screen_sample.rs
 crates/drawer-platform/src/screen_sample.rs
 docs/process/screen-sampling.md
+
+crates/drawer-core/src/soft_proof.rs
+crates/drawer-app/src/soft_proof.rs
+docs/process/soft-proof.md

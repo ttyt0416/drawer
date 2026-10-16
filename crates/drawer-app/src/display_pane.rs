@@ -90,7 +90,7 @@ impl DisplayPane {
         }
         ctx.request_repaint_after(Duration::from_secs(1));
     }
-    fn apply(
+    pub(super) fn apply(
         &mut self,
         next: Preferences,
         storage: Option<&UserStorage>,

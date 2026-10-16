@@ -9,6 +9,8 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SavedView {
+    #[serde(default)]
+    pub proof: crate::soft_proof::Settings,
     pub tab: u64,
     pub document: u64,
     pub session: u64,
@@ -34,7 +36,8 @@ impl Layout {
         self.version == 1
             && self.rows.len() <= 256
             && self.rows.iter().all(|v| {
-                v.tab > 0
+                v.proof.valid()
+                    && v.tab > 0
                     && v.document > 0
                     && v.title.len() <= 4096
                     && v.framing.valid()

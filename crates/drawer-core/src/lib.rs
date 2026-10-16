@@ -124,3 +124,5 @@ pub mod related_colors;
 pub mod color_modes;
 
 pub mod screen_sample;
+
+pub mod soft_proof;

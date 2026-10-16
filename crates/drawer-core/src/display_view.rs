@@ -99,6 +99,8 @@ impl Framing {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Preferences {
+    #[serde(default)]
+    pub proof: crate::soft_proof::Settings,
     pub version: u32,
     pub visible: bool,
     pub preferred: Option<String>,
@@ -109,6 +111,7 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            proof: Default::default(),
             version: 1,
             visible: false,
             preferred: None,
@@ -147,7 +150,8 @@ fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 impl Preferences {
     pub fn valid(&self) -> bool {
-        self.version == 1
+        self.proof.valid()
+            && self.version == 1
             && self.framing.valid()
             && self
                 .preferred

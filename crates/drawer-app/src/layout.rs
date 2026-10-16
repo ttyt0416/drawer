@@ -29,6 +29,16 @@ pub(super) struct Layout {
     cancel_button: Option<egui::Rect>,
 }
 impl Layout {
+    pub(super) fn proof_sample(&self, id: u64) -> Option<([u8; 4], [u8; 4])> {
+        self.views.get(&id).and_then(|c| c.preview_sample)
+    }
+
+    pub(super) fn reload_proof(&mut self, id: u64) {
+        if let Some(c) = self.views.get_mut(&id) {
+            c.reload_proof();
+        }
+    }
+
     pub(super) fn viewport_layer(&self, id: u64) -> Option<egui::LayerId> {
         self.views.get(&id)?.viewport_layer()
     }
@@ -424,6 +434,7 @@ impl Drawer {
         let mut activate = None;
         let mut close = None;
         for (index, rect) in rects.iter().enumerate() {
+            let proof = self.proof_for(super::soft_proof::Target::View(self.tabs[index].id));
             let tab = &mut self.tabs[index];
             let Some(doc) = self.documents.iter_mut().find(|d| d.id == tab.document_id) else {
                 continue;
@@ -433,6 +444,7 @@ impl Drawer {
                 .views
                 .entry(tab.id)
                 .or_insert_with(|| canvas_view::CanvasView::new(ctx));
+            canvas.set_proof(&proof);
             canvas.filter = self.interpolation.view;
             canvas.simple = true;
             canvas.compact_controls = true;

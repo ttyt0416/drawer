@@ -311,6 +311,7 @@ impl Drawer {
         self.drawing.cancel_sample();
         self.color_tables.cancel_drag();
         self.screen_sampler.cancel();
+        self.proof_editor = Default::default();
         self.finish_stroke();
         self.mixer.cancel(&mut self.workspaces.store.current.mixer);
         self.workspaces.cancel_pad();

@@ -297,6 +297,9 @@ impl Drawer {
         if ui.button("Intermediate and similar colors…").clicked() {
             self.workspaces.store.current.related_colors.visible = true;
         }
+        if ui.button("Color proof and tone preview…").clicked() {
+            self.open_proof();
+        }
         self.color_table_controls(ui);
         ui.collapsing("Sampler and used colors", |ui| self.eyedropper_controls(ui));
     }
