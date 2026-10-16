@@ -151,6 +151,20 @@ impl Drawer {
                 "This tool does not support brush size, opacity or connecting strokes".into(),
             );
         }
+        if let Some(id) = drawer_core::user_tools::command_id(command) {
+            return if self.workspaces.store.current.user_tools.entry(id).is_some() {
+                None
+            } else {
+                Some(format!("User tool unavailable: {command}"))
+            };
+        }
+        if (["brush-grow", "brush-shrink"].contains(&command)
+            && !self.user_tool_supports(drawer_core::tool_properties::Property::Size))
+            || (command.starts_with("opacity-")
+                && !self.user_tool_supports(drawer_core::tool_properties::Property::Opacity))
+        {
+            return Some("This user tool has a fixed value for that property".into());
+        }
         if !self.workspaces.store.current.actions.has_command(command) {
             return Some(format!("Command unavailable: {command}"));
         }
@@ -272,6 +286,7 @@ impl Drawer {
                     } else if let Some((prefix, id)) = command.split_once(':') {
                         let id: u64 = id.parse().map_err(|_| "Invalid command reference")?;
                         match prefix {
+                            "local-tool" => self.select_user_tool(id)?,
                             "cycle-next" | "cycle-prev" => {
                                 let c = self
                                     .workspaces
@@ -282,10 +297,28 @@ impl Drawer {
                                     .iter()
                                     .find(|c| c.id == id)
                                     .ok_or("Tool cycle unavailable")?;
-                                let tip = c
-                                    .next(self.selected.name(), prefix == "cycle-prev")
-                                    .map_err(|e| e.to_string())?;
-                                self.set_tool(tip);
+                                let current = self
+                                    .workspaces
+                                    .store
+                                    .current
+                                    .user_tools
+                                    .active
+                                    .map(drawer_core::user_tools::command)
+                                    .unwrap_or_else(|| self.selected.name().into());
+                                let next = self.workspaces.store.current.user_tools.cycle(
+                                    c,
+                                    &current,
+                                    prefix == "cycle-prev",
+                                )?;
+                                if let Some(id) = drawer_core::user_tools::command_id(&next) {
+                                    self.select_user_tool(id)?;
+                                } else {
+                                    let tip = BrushTip::ALL
+                                        .into_iter()
+                                        .find(|t| t.name() == next)
+                                        .unwrap();
+                                    self.set_tool(tip);
+                                }
                             }
                             "quick" => self.controls.quick = Some(id),
                             "radial" => {
@@ -440,7 +473,7 @@ impl Drawer {
             let mut items = |ui: &mut egui::Ui| {
                 for (index, item) in set.items.iter().enumerate() {
                     let label = match item {
-                        Item::Command(c) => self.workspaces.store.current.actions.label(c),
+                        Item::Command(c) => self.workspaces.store.current.command_label(c),
                         _ => item.label(),
                     };
                     if !query.is_empty() && !label.to_lowercase().contains(&query) {
@@ -645,7 +678,7 @@ impl Drawer {
                             "{}\n{}",
                             n + 1,
                             slot.as_ref()
-                                .map(|c| self.workspaces.store.current.actions.label(c))
+                                .map(|c| self.workspaces.store.current.command_label(c))
                                 .unwrap_or_else(|| "Empty".into())
                         );
                         let disabled = slot.as_ref().and_then(|c| self.command_reason(c));
@@ -814,7 +847,7 @@ impl Drawer {
                 if let Err(e) = &keys {
                     ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
                 }
-                for report in editor.draft.actions.missing() {
+                for report in editor.draft.missing_commands() {
                     ui.colored_label(egui::Color32::YELLOW, report);
                 }
             });
@@ -872,7 +905,7 @@ fn edit_bindings(ui: &mut egui::Ui, e: &mut Editor) {
     let mut pick = None;
     for (n, b) in e.draft.bindings.iter_mut().enumerate() {
         ui.push_id(n,|ui|ui.horizontal_wrapped(|ui|{
-        super::edit::text(ui,&mut b.key,"shortcuts").on_hover_text("Key name: A–Z, 0–9, [, ], F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");crate::help::checkbox(ui,&mut b.ctrl,"Ctrl","shortcuts");crate::help::checkbox(ui,&mut b.shift,"Shift","shortcuts");crate::help::checkbox(ui,&mut b.alt,"Alt","shortcuts");if crate::help::button(ui,e.draft.actions.label(&b.command),"shortcuts").clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
+        super::edit::text(ui,&mut b.key,"shortcuts").on_hover_text("Key name: A–Z, 0–9, [, ], F1–F12, ArrowUp/Right/Down/Left, Space, Enter, Tab, Delete");crate::help::checkbox(ui,&mut b.ctrl,"Ctrl","shortcuts");crate::help::checkbox(ui,&mut b.shift,"Shift","shortcuts");crate::help::checkbox(ui,&mut b.alt,"Alt","shortcuts");if crate::help::button(ui,e.draft.user_tools.command_label(&b.command).unwrap_or_else(||e.draft.actions.label(&b.command)),"shortcuts").clicked(){pick=Some(Picker{target:Target::Binding(n),selected:b.command.clone()});}
 if ui.small_button("Remove").clicked(){remove=Some(n);}
     }));
     }
@@ -893,6 +926,16 @@ if ui.small_button("Remove").clicked(){remove=Some(n);}
     }
 }
 fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
+    let user_choices = e
+        .draft
+        .user_tools
+        .commands()
+        .into_iter()
+        .map(|c| {
+            let label = e.draft.command_label(&c);
+            (c, label)
+        })
+        .collect::<Vec<_>>();
     let s = &mut e.draft.actions;
     for (n, c) in s.cycles.iter().enumerate() {
         ui.selectable_value(&mut e.selected, n, &c.name);
@@ -937,6 +980,19 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
                     .clicked()
                 {
                     c.tools.push(t.name().into());
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            for (command, label) in &user_choices {
+                if ui
+                    .add_enabled(
+                        !c.tools.contains(command),
+                        egui::Button::new(format!("Add {label}")),
+                    )
+                    .clicked()
+                {
+                    c.tools.push(command.clone());
                 }
             }
         });
@@ -1084,7 +1140,7 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
     }
 }
 fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
-    let labels = e.draft.actions.clone();
+    let labels = e.draft.clone();
     let s = &mut e.draft.actions;
     for (n, r) in s.radials.iter().enumerate() {
         ui.selectable_value(&mut e.selected, n, &r.name);
@@ -1108,7 +1164,7 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
                 if ui
                     .button(
                         slot.as_ref()
-                            .map(|c| labels.label(c))
+                            .map(|c| labels.command_label(c))
                             .unwrap_or_else(|| "Empty".into()),
                     )
                     .clicked()
@@ -1149,7 +1205,7 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
     }
 }
 fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
-    let labels = e.draft.actions.clone();
+    let labels = e.draft.clone();
     ui.label("Pointer: extra-1 / extra-2. Windows wheel: windows-radial / clockwise, counterclockwise, click. Select Drawer in the OS wheel menu. Keyboard assignments use the same commands. Physical device validation pending.");
     ui.checkbox(
         &mut e.draft.actions.controller.enabled,
@@ -1189,7 +1245,7 @@ fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
         ui.horizontal_wrapped(|ui| {
             super::edit::text(ui, &mut d.device, "shortcuts");
             super::edit::text(ui, &mut d.action, "shortcuts");
-            if crate::help::button(ui, labels.label(&d.command), "shortcuts").clicked() {
+            if crate::help::button(ui, labels.command_label(&d.command), "shortcuts").clicked() {
                 pick = Some(Picker {
                     target: Target::Device(n),
                     selected: d.command.clone(),
@@ -1227,7 +1283,7 @@ fn picker(ctx: &egui::Context, e: &mut Editor) {
         .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
         .show(ctx, |ui| {
             ui.label("Current assignment is selected. Only Confirm changes it.");
-            ui.label(format!("Selected: {}", e.draft.actions.label(&p.selected)));
+            ui.label(format!("Selected: {}", e.draft.command_label(&p.selected)));
             ui.horizontal(|ui| {
                 let confirm = crate::help::button(ui, "Confirm command", "shortcuts");
                 apply = confirm.clicked();
@@ -1242,11 +1298,11 @@ fn picker(ctx: &egui::Context, e: &mut Editor) {
                 .id_salt("command-picker-list")
                 .max_height(ctx.content_rect().height() * 0.5)
                 .show(ui, |ui| {
-                    for command in e.draft.actions.commands() {
+                    for command in e.draft.commands() {
                         ui.selectable_value(
                             &mut p.selected,
                             command.clone(),
-                            e.draft.actions.label(&command),
+                            e.draft.command_label(&command),
                         );
                     }
                 });

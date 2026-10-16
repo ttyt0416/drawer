@@ -276,6 +276,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub user_tools: crate::user_tools::Library,
+    #[serde(default)]
     pub eyedropper: crate::eyedropper::State,
     pub version: u32,
     pub placements: [Placement; 4],
@@ -341,6 +343,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            user_tools: Default::default(),
             eyedropper: Default::default(),
             color: [0, 0, 0, 255],
             scratchpad: Default::default(),
@@ -366,6 +369,30 @@ impl Scope {
     }
 }
 impl Snapshot {
+    pub fn commands(&self) -> Vec<String> {
+        let mut list = self.actions.commands();
+        list.extend(self.user_tools.commands());
+        list
+    }
+    pub fn command_label(&self, command: &str) -> String {
+        self.user_tools
+            .command_label(command)
+            .unwrap_or_else(|| self.actions.label(command))
+    }
+    pub fn missing_commands(&self) -> Vec<String> {
+        let mut reports = self
+            .actions
+            .missing()
+            .into_iter()
+            .filter(|line| {
+                !line
+                    .split_whitespace()
+                    .any(|part| self.user_tools.has_command(part))
+            })
+            .collect::<Vec<_>>();
+        reports.extend(self.user_tools.missing_refs(self));
+        reports
+    }
     pub fn valid(&self) -> bool {
         self.version == 1
             && self.placements.iter().all(Placement::valid)
@@ -378,6 +405,7 @@ impl Snapshot {
             && self.interface.valid()
             && self.input.valid()
             && self.eyedropper.valid()
+            && self.user_tools.valid()
             && self.pointer.valid()
             && self.pressure.valid()
             && self.help.valid()
@@ -450,6 +478,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.user_tools = incoming.user_tools.clone();
             next.eyedropper = incoming.eyedropper.clone();
             next.preferences = incoming.preferences.clone();
             next.properties = incoming.properties.clone();
@@ -480,10 +509,12 @@ impl Snapshot {
             ));
         }
         let mut reports = next.recover(monitors);
-        reports.extend(next.actions.missing());
+        reports.extend(next.missing_commands());
         if scope.keys {
             next.bindings.retain(|b| {
-                let found = next.actions.has_command(&b.command) && supported_key(&b.key);
+                let found = (next.actions.has_command(&b.command)
+                    || crate::user_tools::command_id(&b.command).is_some())
+                    && supported_key(&b.key);
                 if !found {
                     reports.push(format!(
                         "Unavailable command/key: {} ({}) — skipped",

@@ -70,12 +70,17 @@ impl Drawer {
                 .iter()
                 .position(|t| *t == self.selected)
                 .unwrap();
-            super::edit::slider(
-                ui,
-                &mut self.panels.settings.brush_opacity[n],
-                0.0..=1.0,
-                "Brush opacity",
-                "tool-properties",
+            ui.add_enabled_ui(
+                self.user_tool_supports(drawer_core::tool_properties::Property::Opacity),
+                |ui| {
+                    super::edit::slider(
+                        ui,
+                        &mut self.panels.settings.brush_opacity[n],
+                        0.0..=1.0,
+                        "Brush opacity",
+                        "tool-properties",
+                    );
+                },
             );
             if ui
                 .selectable_label(

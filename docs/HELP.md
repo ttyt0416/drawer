@@ -499,3 +499,19 @@ Brush pressure → Device pressure calibration에서 최근 캔버스에서 그�
 [브러시 동역학](local:brush-dynamics)
 [필압 응답](local:pressure)
 [마우스 가상 필압](local:mouse-pressure)
+
+## user-tools | 사용자 도구와 분류 관리 | 도구 생성 복제 이동 삭제 기본값 그룹 가져오기
+
+User tools 목록에서 등록한 도구를 선택한다. Manage local tools는 Brush presets 창의 User tools and categories를 연다. 기본 브러시 엔진과 지원 공통 속성을 고르고 현재 값 또는 공장값에서 도구를 만든다. 같은 기본 엔진의 도구도 설정을 독립 편집하며 내장 도구로 돌아가면 원래 설정과 표시를 복원한다. 지원하지 않는 속성은 공장값으로 고정한다.
+
+도구/분류 이름변경, 순서 이동, 여러 도구 체크선택과 복제·이동·삭제를 제공한다. 분류 이름은 전체, 도구 이름은 같은 분류 안에서 중복을 거절한다. 빈 분류도 저장한다. 분류삭제는 소속 도구를 이동할지 함께 삭제할지 고른다. 최대32분류/64도구이며 복제/가져오기는 별도 도구로 만든다.
+
+Register selected values as default는 선택 도구의 값과 지원 속성을 등록하고 Reset은 이를 복원한다. 기본 브러시별 사용자 기본값도 등록·임시 복원할 수 있다. Apply brush presets가 목록/기본값을 저장하고 적용 전 설정 백업을 만든다. Cancel은 현재 설정을 유지한다. 도구 삭제/초기화는 저장한 브러시 프리셋이나 이미지 소재·그림을 지우지 않는다. 활성 도구 삭제 시 공장 Pen을 선택한다.
+
+도구 이름을 바꾸거나 이동해도 단축키/빠른 접근 등의 참조는 유지된다. 명령 선택기에 분류/도구 이름이 나타나며 도구 순환에도 추가할 수 있다. 삭제된 참조는 누락으로 표시하고 실행을 거절한다. Stage tool + reference settings backup은 도구와 명령 지정이 함께 있는 적용 전 설정을 임시 복원하며 Apply로 확정한다. 그림 실행 취소와 별개다.
+
+Export selected tools / current category는 로컬 그룹 JSON을 저장하고 Import는 전체 검증 뒤 목록 임시본에 추가한다. 손상·중복ID·버전/한도 초과는 기존 목록을 유지한다. 이미지 소재는 이 컴퓨터의 로컬 목록을 참조하며 그룹 JSON에 묶지 않는다. 누락된 팁은 경고와 기존 대체를 사용한다. 기존 그룹 파일 교체는 Replace를 명시적으로 선택한다. 계정/클라우드는 없다.
+
+[브러시 프리셋](local:tool-properties)
+[명령과 단축키](local:shortcuts)
+[로컬 소재](local:local-materials)

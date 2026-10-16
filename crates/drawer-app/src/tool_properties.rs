@@ -240,6 +240,14 @@ impl Drawer {
             self.panels.settings.brush_spacing[n],
         ];
         let tool = Tool::brush(self.selected);
+        let capabilities = self
+            .workspaces
+            .store
+            .current
+            .user_tools
+            .active_entry()
+            .filter(|t| t.preset.tip == self.selected)
+            .map(|t| t.properties.clone());
         let settings = self.workspaces.store.current.properties.as_mut().unwrap();
         if self.properties.applied == Some(self.selected) {
             for (p, value) in Property::ALL.into_iter().zip(live) {
@@ -251,6 +259,15 @@ impl Drawer {
                     .get_mut(&p)
                     .unwrap()
                     .value = value.clamp(min, max);
+            }
+        }
+        if let Some(capabilities) = capabilities {
+            for p in Property::ALL {
+                if !capabilities.contains(&p) {
+                    let state = settings.tools.get_mut(&tool).unwrap().get_mut(&p).unwrap();
+                    state.value = drawer_core::basic_brush::value(tool, p);
+                    state.visible = false;
+                }
             }
         }
         let values = Property::ALL.map(|p| settings.tools[&tool][&p].value);

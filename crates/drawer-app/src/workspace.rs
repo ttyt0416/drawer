@@ -139,6 +139,7 @@ impl Drawer {
         self.select_tab(self.tabs.len() - 1);
     }
     pub(super) fn set_tool(&mut self, tip: BrushTip) {
+        self.leave_user_tool();
         self.precision.finish();
         self.drawing.mode = super::precision::Mode::Paint;
         self.drawing.connect_line = false;

@@ -8,6 +8,7 @@ enum Pending {
     File(Preset, PathBuf),
 }
 struct Editor {
+    tools: super::user_tools::Editor,
     abr: super::abr::Editor,
     draft: Book,
     name: String,
@@ -18,6 +19,7 @@ struct Editor {
 #[derive(Default)]
 pub(super) struct Presets {
     pub open: bool,
+    pub tools_requested: bool,
     editor: Option<Editor>,
     #[cfg(test)]
     apply: Option<egui::Rect>,
@@ -32,6 +34,9 @@ impl Drawer {
     pub(super) fn set_quick_brush_size(&mut self, value: f64) -> Result<bool, String> {
         if self.drawing.mode != super::precision::Mode::Paint {
             return Err("This tool has no brush size".into());
+        }
+        if !self.user_tool_supports(Property::Size) {
+            return Err("This user tool has a fixed brush size".into());
         }
         self.sync_tool_properties();
         let current = self.capture_workspace();
@@ -51,7 +56,9 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn quick_brush_sizes(&mut self, ui: &mut egui::Ui) {
-        let capable = self.drawing.mode == super::precision::Mode::Paint;
+        self.user_tool_picker(ui);
+        let capable = self.drawing.mode == super::precision::Mode::Paint
+            && self.user_tool_supports(Property::Size);
         let sizes = self.workspaces.store.current.brushes.sizes.clone();
         let mut chosen = None;
         ui.add_enabled_ui(capable, |ui| {
@@ -117,6 +124,10 @@ impl Drawer {
         }
         self.sync_tool_properties();
         let mut e = self.brush_presets.editor.take().unwrap_or_else(|| Editor {
+            tools: super::user_tools::Editor::new(
+                self.capture_workspace().user_tools,
+                self.selected,
+            ),
             abr: Default::default(),
             draft: self.workspaces.store.current.brushes.clone(),
             name: self.selected.label().into(),
@@ -128,7 +139,7 @@ impl Drawer {
         let mut apply = false;
         let mut cancel = false;
         egui::Window::new("Local brush presets").open(&mut open).vscroll(true).show(ctx,|ui|{
-   ui.horizontal(|ui|{let a=ui.add_enabled(e.draft.valid()&&e.pending.is_none(),egui::Button::new("Apply brush presets"));let c=ui.button("Cancel brush presets");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.brush_presets.apply=Some(a.rect);self.brush_presets.cancel=Some(c.rect);}});
+   ui.horizontal(|ui|{let a=ui.add_enabled(e.draft.valid()&&e.tools.draft.valid()&&e.pending.is_none(),egui::Button::new("Apply brush presets"));let c=ui.button("Cancel brush presets");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.brush_presets.apply=Some(a.rect);self.brush_presets.cancel=Some(c.rect);}});
    ui.label("Presets and size lists are local settings. Restore is staged until Apply; drawing history stays separate.");
    if let Some(p)=&e.pending{
     ui.separator();ui.colored_label(egui::Color32::YELLOW,match p{Pending::Collection(p)=>format!("Replace existing preset ‘{}’?",p.name),Pending::File(_,path)=>format!("Replace local preset file {}?",path.display())});
@@ -156,6 +167,9 @@ impl Drawer {
     });
     if ui.button("Read local brush preset into draft…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Local brush preset",&["json"]).pick_file(){match Preset::read(&path){Ok(p)=>if e.draft.contains(&p.name){e.pending=Some(Pending::Collection(p));}else if let Err(err)=e.draft.put(p,false){self.status=Some(err);},Err(err)=>self.status=Some(err.to_string())}}
     if let Some(p)=&e.restore{for source in p.sequence.missing().into_iter().filter(|id|self.materials.library.get(*id,drawer_core::material_library::Kind::Tip).is_none()){ui.colored_label(egui::Color32::YELLOW,drawer_core::tip_sequence::Settings::label(source));}if p.overlay.missing()&&self.materials.library.get(p.overlay.source,drawer_core::material_library::Kind::Texture).is_none(){ui.colored_label(egui::Color32::YELLOW,p.overlay.label());}ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
+    egui::CollapsingHeader::new("User tools and categories").open(self.brush_presets.tools_requested.then_some(true)).show(ui,|ui|{
+        match self.user_tools_ui(ui,&mut e.tools){Some(super::user_tools::Action::Brush(p))=>e.restore=Some(*p),Some(super::user_tools::Action::Backup(s))=>{e.draft=s.brushes.clone();e.restore=None;e.tools.backup=Some(s);},None=>{}}
+    });
     ui.collapsing("Import ABR tips",|ui|self.abr_ui(ui,&mut e.abr,&mut e.draft));
     ui.separator();ui.heading("Quick size order");let mut movement=None;let mut remove=None;
     for(n,size)in e.draft.sizes.iter().enumerate(){ui.push_id(("size",n),|ui|{ui.horizontal(|ui|{ui.label(format!("{size} px"));if ui.add_enabled(n>0,egui::Button::new("Up")).clicked(){movement=Some((n,-1));}
@@ -166,30 +180,42 @@ impl Drawer {
     if ui.add_enabled(self.drawing.mode==super::precision::Mode::Paint,egui::Button::new("Add current size to draft list")).clicked() && let Err(err)=e.draft.add_size(self.panels.settings.brush_size){self.status=Some(err);}
    });
   });
+        self.brush_presets.tools_requested = false;
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.brush_presets.open = false;
         } else if apply && e.pending.is_none() {
             let next = (|| {
                 let current = self.capture_workspace();
-                let mut next = if let Some(p) = &e.restore {
-                    p.apply(&current)?
-                } else {
-                    current
-                };
+                let base = e.tools.backup.as_deref().unwrap_or(&current);
+                let mut next = e.tools.draft.apply_to(base)?;
+                if let Some(p) = &e.restore {
+                    next = next.user_tools.deactivate(&next)?;
+                    next = p.apply(&next)?;
+                }
                 next.brushes = e.draft.clone();
                 Ok::<_, String>(next)
             })();
             match next.and_then(|snapshot| {
                 self.stage_workspace(snapshot, self.workspaces.store.active.clone());
                 self.apply_workspace(
-                    drawer_core::workspaces::Scope {
-                        other: true,
-                        ..Default::default()
+                    if e.tools.backup.is_some() {
+                        drawer_core::workspaces::Scope::ALL
+                    } else {
+                        drawer_core::workspaces::Scope {
+                            other: true,
+                            ..Default::default()
+                        }
                     },
                     None,
                 )
             }) {
                 Ok(()) => {
+                    if e.tools
+                        .original_active
+                        .is_some_and(|id| e.tools.draft.entry(id).is_none())
+                    {
+                        self.drawing.mode = super::precision::Mode::Paint;
+                    }
                     if let Some(p) = &e.restore {
                         self.set_tool(p.tip);
                     }
@@ -278,6 +304,64 @@ mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, frame, tiny_spec};
     #[test]
+    fn user_tools_cancel_apply_and_active_delete_keep_drawing_and_presets() {
+        let root = TestDirectory::new();
+        let ctx = egui::Context::default();
+        let mut app =
+            Drawer::new(&ctx, None).with_storage(UserStorage::at(root.0.join("user")).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let before = app.capture_workspace();
+        let document = app.documents[0].snapshot();
+        let mut library = before.user_tools.clone();
+        let id = library
+            .create_tool(
+                1,
+                Preset::capture(&before, BrushTip::Pen, "User ink").unwrap(),
+                Property::ALL.to_vec(),
+            )
+            .unwrap();
+        let make = |library| Editor {
+            tools: super::super::user_tools::Editor::new(library, BrushTip::Pen),
+            abr: Default::default(),
+            draft: before.brushes.clone(),
+            name: String::new(),
+            selected: None,
+            restore: None,
+            pending: None,
+        };
+        app.brush_presets.open = true;
+        app.brush_presets.editor = Some(make(library.clone()));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let cancel = app.brush_presets.cancel.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(app.capture_workspace() == before);
+        app.brush_presets.open = true;
+        app.brush_presets.editor = Some(make(library));
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.brush_presets.apply.unwrap();
+        click(&ctx, &mut app, apply);
+        assert!(app.workspaces.store.current.user_tools.entry(id).is_some());
+        app.select_user_tool(id).unwrap();
+        let mut e = make(app.capture_workspace().user_tools);
+        e.tools.draft.delete_tools(&[id]).unwrap();
+        app.brush_presets.open = true;
+        app.brush_presets.editor = Some(e);
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.brush_presets.apply.unwrap();
+        click(&ctx, &mut app, apply);
+        assert!(app.workspaces.store.current.user_tools.entry(id).is_none());
+        assert!(app.workspaces.store.current.user_tools.active.is_none());
+        assert_eq!(app.selected, BrushTip::Pen);
+        assert!(app.documents[0].snapshot() == document);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        assert_eq!(app.capture_workspace().brushes, before.brushes);
+    }
+    #[test]
     fn abr_preset_draft_cancel_apply_and_original_preservation() {
         let root = TestDirectory::new();
         drawer_core::abr::verify(&root.0).unwrap();
@@ -295,6 +379,7 @@ mod tests {
         let mut book = baseline.brushes.clone();
         app.stage_abr(&report, 1, "Converted", &mut book).unwrap();
         let editor = || Editor {
+            tools: super::super::user_tools::Editor::new(Default::default(), BrushTip::Pen),
             abr: Default::default(),
             draft: book.clone(),
             name: String::new(),
@@ -355,6 +440,7 @@ mod tests {
         draft.move_size(0, 1);
         draft.remove_size(2);
         let editor = || Editor {
+            tools: super::super::user_tools::Editor::new(Default::default(), BrushTip::Pen),
             abr: Default::default(),
             draft: draft.clone(),
             name: "Local pencil".into(),
@@ -411,6 +497,7 @@ mod tests {
         let mut book = Book::default();
         book.put(original.clone(), false).unwrap();
         let editor = |pending| Editor {
+            tools: super::super::user_tools::Editor::new(Default::default(), BrushTip::Pen),
             abr: Default::default(),
             draft: book.clone(),
             name: "Ink".into(),

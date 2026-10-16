@@ -226,6 +226,12 @@ impl Drawer {
             .into();
         s.color = self.references.session.workspace.color;
         s.eyedropper.observe(s.color);
+        if let Some(tool) = s.user_tools.active_entry().cloned()
+            && let Ok(p) =
+                drawer_core::brush_presets::Preset::capture(&s, tool.preset.tip, &tool.preset.name)
+        {
+            let _ = s.user_tools.update_active(p);
+        }
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {

@@ -239,3 +239,7 @@ docs/process/pixel-eyedropper.md
 
 crates/drawer-app/src/velocity_pressure.rs
 docs/process/velocity-pressure.md
+
+crates/drawer-core/src/user_tools.rs
+crates/drawer-app/src/user_tools.rs
+docs/process/user-tools.md

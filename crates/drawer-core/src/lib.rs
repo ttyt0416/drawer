@@ -93,3 +93,5 @@ pub mod abr;
 pub mod brush_composite;
 
 pub mod eyedropper;
+
+pub mod user_tools;
