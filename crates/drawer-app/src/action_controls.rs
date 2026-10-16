@@ -204,6 +204,9 @@ impl Drawer {
                 | "move-selection-boundary"
                 | "move-selected-pixels"
                 | "bucket-tool"
+                | "wand-tool"
+                | "selection-brush-tool"
+                | "selection-erase-tool"
         );
         if !BrushTip::ALL.iter().any(|t| t.name() == command)
             && !command.starts_with("cycle-")
@@ -219,6 +222,18 @@ impl Drawer {
             match command {
                 "primary-color" | "secondary-color" | "swap-colors" | "transparent-color" => {
                     self.color_mode_command(command)?
+                }
+                "wand-tool" | "selection-brush-tool" | "selection-erase-tool" => {
+                    self.restore_locked_tool();
+                    self.drawing.mode = if command == "wand-tool" {
+                        super::precision::Mode::Wand
+                    } else {
+                        self.workspaces.store.current.selection_edit.erase =
+                            command == "selection-erase-tool";
+                        super::precision::Mode::SelectionBrush
+                    };
+                    self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
+                    self.drawing.connect_line = false;
                 }
                 "bucket-tool" => {
                     self.restore_locked_tool();

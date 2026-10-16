@@ -13,7 +13,10 @@ pub(super) struct Gesture {
     preview: Document,
     config: ([u8; 4], bool, bool),
 }
-fn preview(doc: &Document, state: drawer_core::sizing::DocumentState) -> Result<Document, String> {
+pub(super) fn preview(
+    doc: &Document,
+    state: drawer_core::sizing::DocumentState,
+) -> Result<Document, String> {
     let mut p = Document::create(
         CanvasSpec {
             width: 1,

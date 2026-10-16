@@ -72,7 +72,7 @@ impl Default for Data {
         }
     }
 }
-fn page_id() -> String {
+pub(crate) fn page_id() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     format!(
         "{:x}-{:x}-{:x}",
@@ -147,10 +147,14 @@ fn commit(doc: &mut Document, scene: Scene) -> Result<bool, String> {
     }
     doc.edit_scene(scene)
 }
-fn selected(doc: &mut Document, shape: Shape) -> Result<bool, String> {
+/// Build a page-owned selection for a preview without modifying pixels/history.
+pub fn prepare_shape(doc: &Document, shape: Shape) -> Result<Scene, String> {
     let old = Shape::capture(&doc.scene);
     if shape == old {
-        return Ok(false);
+        return Ok(doc.scene.clone());
+    }
+    if !shape.valid() {
+        return Err("Invalid selection shape".into());
     }
     let mut scene = doc.scene.clone();
     if scene.selections.page.is_none() {
@@ -164,7 +168,16 @@ fn selected(doc: &mut Document, shape: Shape) -> Result<bool, String> {
         scene.selections.last.clone()
     };
     shape.put(&mut scene);
-    commit(doc, scene)
+    if !scene.valid()
+        || serde_json::to_vec(&scene).map_err(|e| e.to_string())?.len() > 4 * 1024 * 1024
+    {
+        return Err("Selection exceeds page geometry/serialization budget".into());
+    }
+    Ok(scene)
+}
+fn selected(doc: &mut Document, shape: Shape) -> Result<bool, String> {
+    let scene = prepare_shape(doc, shape)?;
+    doc.edit_scene(scene)
 }
 pub fn clear(doc: &mut Document) -> Result<bool, String> {
     selected(doc, Shape::default())

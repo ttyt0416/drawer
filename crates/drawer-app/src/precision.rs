@@ -10,6 +10,8 @@ pub(super) enum Mode {
     SelectRectangle,
     SelectLasso,
     Fill,
+    Wand,
+    SelectionBrush,
 }
 #[derive(Default)]
 pub(super) struct Precision {
@@ -44,6 +46,8 @@ impl Drawer {
                 ("Rectangle select", Mode::SelectRectangle),
                 ("Lasso select", Mode::SelectLasso),
                 ("Fill", Mode::Fill),
+                ("Wand", Mode::Wand),
+                ("Selection brush", Mode::SelectionBrush),
             ] {
                 if ui
                     .selectable_label(self.drawing.mode == mode, label)
@@ -80,6 +84,7 @@ impl Drawer {
             ui.label("Use the modifier with Move/selection tools. Empty space keeps the current layer. Raster drag uses one Undo; locked/non-raster targets remain selected without bypassing editing restrictions.");
         });
         self.bucket_controls(ui);
+        self.selection_edit_controls(ui);
         if ui.button("Page selections…").clicked() {
             self.execute_command(ui.ctx(), "selection-tools");
         }

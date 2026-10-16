@@ -2,6 +2,8 @@
 pub(crate) mod bucket;
 #[path = "movement.rs"]
 mod movement;
+#[path = "selection_edit.rs"]
+pub(crate) mod selection_edit;
 use super::*;
 use drawer_core::{
     painting::{Stroke, Style},
@@ -91,6 +93,8 @@ pub(super) struct Drawing {
     selection: Option<SelectionGesture>,
     movement: Option<movement::Gesture>,
     bucket: Option<bucket::Gesture>,
+    selection_edit: Option<selection_edit::Gesture>,
+    pub selection_settings: drawer_core::selection_edit::Settings,
     pub fill_settings: drawer_core::bucket::Settings,
     pub fill_budget: usize,
     pub fill_config: ([u8; 4], bool, bool),
@@ -182,12 +186,14 @@ impl Drawing {
             .or_else(|| self.selection.as_ref().map(|s| s.view))
             .or_else(|| self.movement.as_ref().map(|s| s.view))
             .or_else(|| self.bucket.as_ref().map(|s| s.view))
+            .or_else(|| self.selection_edit.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
         self.active.is_some()
             || self.selection.is_some()
             || self.movement.is_some()
             || self.bucket.is_some()
+            || self.selection_edit.is_some()
     }
     pub fn changed(&self, document: u64) -> bool {
         self.active
@@ -207,6 +213,7 @@ impl Drawing {
         self.selection = None;
         self.movement = None;
         self.bucket = None;
+        self.selection_edit = None;
         self.sample_pending = None;
         self.clone_pick = false;
         self.active = None;
@@ -285,6 +292,7 @@ impl Drawing {
         self.selection = None;
         self.movement = None;
         self.bucket = None;
+        self.selection_edit = None;
         self.controls.reset();
         self.touch.clear_touches();
         self.ownership.clear();
@@ -303,6 +311,7 @@ impl Drawing {
         self.selection = None;
         self.movement = None;
         self.bucket = None;
+        self.selection_edit = None;
         self.ownership.clear();
         if let Some(s) = self.active.take() {
             self.commit_session(s, doc);
@@ -627,6 +636,7 @@ impl Drawing {
         }) {
             self.cancel();
         }
+        self.advance_selection_edit(ctx, documents);
         self.advance_bucket(ctx, documents);
         self.advance_movement(ctx, documents);
         for n in 0..self.events.len() {
@@ -745,6 +755,25 @@ impl Drawing {
                 continue;
             }
             if self
+                .selection_edit
+                .as_ref()
+                .is_some_and(|s| s.document == doc.id && s.view == view)
+            {
+                if !enabled
+                    || self
+                        .selection_edit
+                        .as_ref()
+                        .is_some_and(|s| s.projection != projection)
+                {
+                    self.cancel();
+                } else {
+                    self.receive_selection_edit(n, doc);
+                    if self.events[n].1 {
+                        continue;
+                    }
+                }
+            }
+            if self
                 .bucket
                 .as_ref()
                 .is_some_and(|s| s.document == doc.id && s.view == view)
@@ -858,6 +887,25 @@ impl Drawing {
                     self.ownership.clear();
                     continue;
                 }
+            }
+            if matches!(
+                self.mode,
+                super::precision::Mode::Wand | super::precision::Mode::SelectionBrush
+            ) {
+                if let Err(e) = self.begin_selection_edit(
+                    doc,
+                    view,
+                    layer,
+                    event.source,
+                    projection,
+                    ui.ctx().content_rect(),
+                    projection.point(pos),
+                    event.pressure.unwrap_or(1.0),
+                ) {
+                    self.error = Some(e);
+                    self.ownership.clear();
+                }
+                continue;
             }
             if self.mode == super::precision::Mode::Fill {
                 if let Err(e) = self.begin_bucket(
@@ -1202,6 +1250,7 @@ impl Drawer {
             }
         }
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
+        self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
         let fill_slot = BrushTip::ALL
             .iter()
             .position(|t| *t == self.selected)

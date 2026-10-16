@@ -214,6 +214,9 @@ impl Drawer {
                         | "paste-selection"
                         | "bucket-tool"
                         | "fill-selection"
+                        | "wand-tool"
+                        | "selection-brush-tool"
+                        | "selection-erase-tool"
                 )
             {
                 self.execute_command(ctx, &action);

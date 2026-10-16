@@ -449,10 +449,12 @@ impl CanvasView {
                 self.show_navigator(navigator_ui, document, rect, ppp);
             }
         }
+        paint.drawing.refresh_selection_edit(document);
         paint.drawing.refresh_movement(document);
         let document = paint
             .drawing
-            .bucket_preview(document.id)
+            .selection_edit_preview(document.id)
+            .or_else(|| paint.drawing.bucket_preview(document.id))
             .or_else(|| paint.drawing.movement_preview(document.id))
             .unwrap_or(document);
         let stroke = paint.drawing.preview(document.id);
@@ -517,9 +519,35 @@ impl CanvasView {
             crate::precision::Mode::SelectRectangle
                 | crate::precision::Mode::SelectLasso
                 | crate::precision::Mode::Fill
+                | crate::precision::Mode::Wand
+                | crate::precision::Mode::SelectionBrush
         ) && response.hovered()
         {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Crosshair);
+        }
+        if paint.drawing.mode == crate::precision::Mode::SelectionBrush
+            && let Some(pos) = paint
+                .drawing
+                .pen_cursor(paint.view)
+                .or_else(|| response.hover_pos())
+            && rect.contains(pos)
+        {
+            let p =
+                document
+                    .view
+                    .screen_to_document([pos.x as f64, pos.y as f64], size, center, ppp);
+            let q = document.view.document_to_screen(
+                [p[0] + paint.drawing.selection_settings.diameter / 2.0, p[1]],
+                size,
+                center,
+                ppp,
+            );
+            let radius = (q[0] - pos.x as f64).hypot(q[1] - pos.y as f64) as f32;
+            painter.circle_stroke(
+                pos,
+                radius,
+                egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
+            );
         }
         if paint.drawing.mode == crate::precision::Mode::Move && response.hovered() {
             ui.output_mut(|o| {
@@ -576,6 +604,8 @@ impl CanvasView {
                     | crate::precision::Mode::SelectLasso
                     | crate::precision::Mode::Move
                     | crate::precision::Mode::Fill
+                    | crate::precision::Mode::Wand
+                    | crate::precision::Mode::SelectionBrush
             )
             && (relative_cursor.is_some()
                 || (ui.input(|i| i.pointer.latest_pos().is_some())

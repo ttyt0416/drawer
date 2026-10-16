@@ -67,6 +67,15 @@ impl Region {
         }
     }
     pub fn build(doc: &Document, active: usize, seed: Point, s: Settings) -> Result<Self, String> {
+        Self::build_with_connectivity(doc, active, seed, s, true)
+    }
+    pub fn build_with_connectivity(
+        doc: &Document,
+        active: usize,
+        seed: Point,
+        s: Settings,
+        connected: bool,
+    ) -> Result<Self, String> {
         if !s.valid()
             || seed.iter().any(|v| !v.is_finite())
             || seed[0] < 0.0
@@ -186,7 +195,7 @@ impl Region {
         queue.push(start as u32);
         closed[start] = 2;
         let mut head = 0;
-        while head < queue.len() {
+        while connected && head < queue.len() {
             let p = queue[head] as usize;
             head += 1;
             for q in neighbors(p, doc.width as usize, doc.height as usize)
@@ -196,6 +205,15 @@ impl Region {
                 if closed[q] == 1 {
                     closed[q] = 2;
                     queue.push(q as u32);
+                }
+            }
+        }
+        if !connected {
+            queue.clear();
+            for (i, value) in closed.iter_mut().enumerate() {
+                if *value != 0 {
+                    *value = 2;
+                    queue.push(i as u32);
                 }
             }
         }

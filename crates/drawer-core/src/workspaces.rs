@@ -148,6 +148,9 @@ pub fn default_bindings() -> Vec<Binding> {
         ("I", false, false, "Eyedropper"),
         ("M", false, false, "Move"),
         ("G", false, false, "bucket-tool"),
+        ("H", false, false, "wand-tool"),
+        ("J", false, false, "selection-brush-tool"),
+        ("J", false, true, "selection-erase-tool"),
         ("C", true, false, "copy-selection"),
         ("V", true, false, "paste-selection"),
     ]
@@ -303,6 +306,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub selection_edit: crate::selection_edit::Settings,
+    #[serde(default)]
     pub layer_pick: crate::layer_pick::Settings,
     #[serde(default)]
     pub color_modes: crate::color_modes::Settings,
@@ -384,6 +389,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            selection_edit: Default::default(),
             layer_pick: Default::default(),
             color_modes: Default::default(),
             related_colors: Default::default(),
@@ -442,6 +448,9 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
+        if !self.selection_edit.valid() {
+            return false;
+        }
         self.version == 1
             && self.placements.iter().all(Placement::valid)
             && panels::Kind::ALL
@@ -536,6 +545,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.selection_edit = incoming.selection_edit;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;
