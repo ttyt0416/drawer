@@ -49,25 +49,29 @@ impl Drawer {
                 *current = c;
             }
         });
-        ui.horizontal_wrapped(|ui| {
-            for color in state.recent.clone() {
-                if ui
-                    .add(
-                        egui::Button::new(format!(
-                            "#{:02X}{:02X}{:02X}/{:02X}",
-                            color[0], color[1], color[2], color[3]
-                        ))
-                        .fill(egui::Color32::from_rgba_unmultiplied(
-                            color[0], color[1], color[2], color[3],
-                        )),
-                    )
-                    .clicked()
-                {
-                    *current = color;
-                    state.observe(color);
+        let layout = &self.workspaces.store.current.color_tables;
+        egui::Grid::new("used-color-tiles")
+            .num_columns(layout.history_columns as usize)
+            .show(ui, |ui| {
+                for (n, color) in state.recent.clone().into_iter().enumerate() {
+                    if ui
+                        .add_sized(
+                            [layout.history_size as f32; 2],
+                            egui::Button::new(" ").fill(egui::Color32::from_rgba_unmultiplied(
+                                color[0], color[1], color[2], color[3],
+                            )),
+                        )
+                        .on_hover_text(drawer_core::color_selector::hex(color))
+                        .clicked()
+                    {
+                        *current = color;
+                        state.observe(color);
+                    }
+                    if (n + 1) % layout.history_columns as usize == 0 {
+                        ui.end_row();
+                    }
                 }
-            }
-        });
+            });
     }
 }
 

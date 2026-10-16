@@ -2,14 +2,17 @@ use super::*;
 use drawer_core::workspaces::{self, Dock, Placement, Scope, Snapshot, Store};
 use std::collections::HashSet;
 
-struct PadPaint {
+pub(super) struct PadPaint {
     replay: Option<drawer_core::mouse_pressure::Replay>,
     last_input: Option<([f64; 2], u64)>,
     document: Document,
     stroke: drawer_core::painting::Stroke,
 }
 impl PadPaint {
-    fn begin(
+    pub(super) fn original(&self) -> &[[u8; 4]] {
+        &self.document.layers[0].pixels
+    }
+    pub(super) fn begin(
         pixels: &[[u8; 4]],
         mut style: drawer_core::painting::Style,
         materials: std::sync::Arc<drawer_core::material_library::Library>,
@@ -51,7 +54,7 @@ impl PadPaint {
             stroke,
         })
     }
-    fn sample(&mut self, point: [f64; 2], micros: u64) -> Result<(), String> {
+    pub(super) fn sample(&mut self, point: [f64; 2], micros: u64) -> Result<(), String> {
         let speed = self.last_input.and_then(|(p, t)| {
             if micros > t {
                 Some(
@@ -84,7 +87,7 @@ impl PadPaint {
         self.last_input = Some((point, micros));
         Ok(())
     }
-    fn tick(&mut self, micros: u64) -> Result<bool, String> {
+    pub(super) fn tick(&mut self, micros: u64) -> Result<bool, String> {
         let Some(replay) = &mut self.replay else {
             return Ok(false);
         };
@@ -102,7 +105,7 @@ impl PadPaint {
         self.last_input = Some((point, micros));
         Ok(true)
     }
-    fn preview(&self) -> Vec<[u8; 4]> {
+    pub(super) fn preview(&self) -> Vec<[u8; 4]> {
         let d = &self.document;
         (0..d.width * d.height)
             .map(|n| {
@@ -112,7 +115,7 @@ impl PadPaint {
             })
             .collect()
     }
-    fn finish(mut self) -> (Vec<[u8; 4]>, Option<String>) {
+    pub(super) fn finish(mut self) -> (Vec<[u8; 4]>, Option<String>) {
         if let Some(replay) = &self.replay {
             match replay.render(&self.document, true) {
                 Ok(stroke) => self.stroke = stroke,
@@ -122,7 +125,7 @@ impl PadPaint {
         let error = self.stroke.commit(&mut self.document).err();
         (self.document.layers.remove(0).pixels, error)
     }
-    fn cancel(mut self) -> Vec<[u8; 4]> {
+    pub(super) fn cancel(mut self) -> Vec<[u8; 4]> {
         self.document.layers.remove(0).pixels
     }
 }
@@ -142,6 +145,9 @@ pub(super) struct Workspaces {
     pad_point: Option<[f64; 2]>,
     pad_trace: drawer_core::brush_cursor::Trace,
     pad_style: Option<PadPaint>,
+    pad_history: drawer_core::color_tables::Pixels,
+    pad_actions: [Option<egui::Rect>; 2],
+    pad_check_rect: Option<egui::Rect>,
     focused: bool,
     keys: HashSet<egui::Key>,
     buttons: HashSet<usize>,
@@ -171,6 +177,9 @@ impl Default for Workspaces {
             pad_point: None,
             pad_trace: Default::default(),
             pad_style: None,
+            pad_history: Default::default(),
+            pad_actions: Default::default(),
+            pad_check_rect: None,
             focused: true,
             keys: HashSet::new(),
             buttons: HashSet::new(),
@@ -185,6 +194,9 @@ impl Default for Workspaces {
     }
 }
 impl Workspaces {
+    fn pad_rect_for_check(&self) -> Option<egui::Rect> {
+        self.pad_check_rect
+    }
     fn cancel_pad(&mut self) {
         if let Some(paint) = self.pad_style.take() {
             self.store.current.scratchpad.pixels = paint.cancel();
@@ -265,6 +277,13 @@ impl Drawer {
     pub(super) fn capture_workspace(&self) -> Snapshot {
         let mut s = self.workspaces.store.current.clone();
         s.panels = self.panels.settings;
+        if let Some(paint) = &self.workspaces.pad_style {
+            s.scratchpad.pixels = paint.original().to_vec();
+        }
+        if let Some(pixels) = self.mixer.original() {
+            s.mixer.pixels = pixels.to_vec();
+        }
+
         s.navigator = self.canvas_view.navigator;
         s.display = self.display.preferences.clone();
         s.interface = self.interface.settings;
@@ -289,7 +308,20 @@ impl Drawer {
         s
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
+        self.drawing.cancel_sample();
         self.finish_stroke();
+        self.mixer.cancel(&mut self.workspaces.store.current.mixer);
+        self.workspaces.cancel_pad();
+        if self.workspaces.store.current.scratchpad.pixels != s.scratchpad.pixels {
+            self.workspaces.pad_history = Default::default();
+        }
+        if self.workspaces.store.current.mixer.pixels != s.mixer.pixels {
+            self.mixer.history = Default::default();
+        }
+
+        if self.workspaces.store.current.color_tables != s.color_tables {
+            self.color_tables.history = Default::default();
+        }
         self.layout.generation += 1;
         self.reset_property_runtime();
         self.tool_input.controller.cancel();
@@ -400,7 +432,11 @@ impl Drawer {
             return Err("Invalid workspace or empty import scope".into());
         }
         if let Some(paint) = self.workspaces.pad_style.take() {
+            let before = paint.original().to_vec();
             let (pixels, error) = paint.finish();
+            if error.is_none() {
+                self.workspaces.pad_history.record(before, &pixels);
+            }
             self.workspaces.store.current.scratchpad.pixels = pixels;
             self.workspaces.pad_point = None;
             self.workspaces.pad_trace.clear();
@@ -913,6 +949,7 @@ impl Drawer {
                 {
                     self.workspaces.pad_rect = Some(response.rect);
                 }
+                self.workspaces.pad_check_rect = Some(response.rect);
                 let owning = response.is_pointer_button_down_on()
                     || response.drag_stopped_by(egui::PointerButton::Primary);
                 if drawing && self.workspaces.focused && owning {
@@ -1048,7 +1085,11 @@ impl Drawer {
                         }
                         if finish {
                             if let Some(paint) = self.workspaces.pad_style.take() {
+                                let before = paint.original().to_vec();
                                 let (pixels, error) = paint.finish();
+                                if error.is_none() {
+                                    self.workspaces.pad_history.record(before, &pixels);
+                                }
                                 self.workspaces.store.current.scratchpad.pixels = pixels;
                                 if let Some(e) = error {
                                     self.status = Some(e);
@@ -1105,9 +1146,31 @@ impl Drawer {
                         self.canvas_view.icon(n),
                     );
                 }
+                ui.horizontal(|ui| {
+                    let undo = ui.button("Undo test stroke");
+                    self.workspaces.pad_actions[0] = Some(undo.rect);
+                    if undo.clicked() {
+                        self.workspaces.cancel_pad();
+                        self.workspaces
+                            .pad_history
+                            .undo(&mut self.workspaces.store.current.scratchpad.pixels);
+                    }
+                    let redo = ui.button("Redo test stroke");
+                    self.workspaces.pad_actions[1] = Some(redo.rect);
+                    if redo.clicked() {
+                        self.workspaces.cancel_pad();
+                        self.workspaces
+                            .pad_history
+                            .redo(&mut self.workspaces.store.current.scratchpad.pixels);
+                    }
+                });
                 if crate::help::button(ui, "Clear test area", "workspace").clicked() {
                     self.workspaces.cancel_pad();
+                    let before = self.workspaces.store.current.scratchpad.pixels.clone();
                     self.workspaces.store.current.scratchpad.pixels.fill([0; 4]);
+                    self.workspaces
+                        .pad_history
+                        .record(before, &self.workspaces.store.current.scratchpad.pixels);
                 }
                 let image = egui::ColorImage::new(
                     size,
@@ -1194,4 +1257,85 @@ pub(super) fn shortcut(
         input.events.remove(i);
         (a, key, repeat)
     })
+}
+
+pub(super) fn verify_test_history(root: &std::path::Path) -> Result<(), String> {
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 4,
+        height: 4,
+        dpi: 300.0,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    drawer_core::files::save(
+        &mut app.documents[0],
+        &root.join("test-area-keeps-document.drawer"),
+    )
+    .map_err(|e| e.to_string())?;
+    let original = app.documents[0].snapshot();
+    app.workspaces.store.current.scratchpad.visible = true;
+    app.references.session.workspace.color = [200, 50, 30, 128];
+    let mut time = 0.0;
+    let mut frame = |app: &mut Drawer, events| {
+        time += 0.1;
+        super::input_replay::frame(&ctx, app, time, events);
+    };
+    frame(&mut app, vec![]);
+    frame(&mut app, vec![]);
+    let rect = app
+        .workspaces
+        .pad_rect_for_check()
+        .ok_or("Test painting rect missing")?;
+    let a = rect.min + egui::vec2(30.0, 30.0);
+    let b = a + egui::vec2(18.0, 0.0);
+    let click = |p, pressed| {
+        vec![
+            egui::Event::PointerMoved(p),
+            egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            },
+        ]
+    };
+    frame(&mut app, click(a, true));
+    frame(&mut app, vec![egui::Event::PointerMoved(b)]);
+    frame(&mut app, click(b, false));
+    let painted = app.workspaces.store.current.scratchpad.pixels.clone();
+    if app.workspaces.pad_history.counts() != (1, 0) || painted.iter().all(|p| *p == [0; 4]) {
+        return Err("Test painting stroke history missing".into());
+    }
+    for (n, empty) in [(0, true), (1, false)] {
+        let p = app.workspaces.pad_actions[n]
+            .ok_or("Test undo/redo button missing")?
+            .center();
+        frame(&mut app, click(p, true));
+        frame(&mut app, click(p, false));
+        if empty {
+            if app
+                .workspaces
+                .store
+                .current
+                .scratchpad
+                .pixels
+                .iter()
+                .any(|p| *p != [0; 4])
+            {
+                return Err("Test-only Undo failed".into());
+            }
+        } else if app.workspaces.store.current.scratchpad.pixels != painted {
+            return Err("Test-only Redo failed".into());
+        }
+    }
+    if app.documents[0].snapshot() != original
+        || app.documents[0].dirty
+        || app.documents[0].history_counts() != (0, 0)
+    {
+        return Err("Test-area history changed the real document".into());
+    }
+    Ok(())
 }

@@ -282,3 +282,8 @@ docs/process/tonal-locks.md
 crates/drawer-core/src/color_selector.rs
 crates/drawer-app/src/color_selector.rs
 docs/process/color-selector.md
+
+crates/drawer-core/src/color_tables.rs
+crates/drawer-app/src/color_tables.rs
+crates/drawer-app/src/mixing_pad.rs
+docs/process/color-tables-mixing.md

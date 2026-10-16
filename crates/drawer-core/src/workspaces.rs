@@ -181,18 +181,40 @@ pub const PAD_SIZE: [usize; 2] = [128, 96];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scratchpad {
+    #[serde(default)]
+    pub background: [u8; 4],
+    #[serde(default = "pad_zoom")]
+    pub zoom: f64,
+    #[serde(default)]
+    pub slots: Vec<crate::brush_presets::Preset>,
+    #[serde(default)]
+    pub tool_slot: Option<usize>,
     pub visible: bool,
     pub pixels: Vec<[u8; 4]>,
+}
+fn pad_zoom() -> f64 {
+    1.0
 }
 impl Default for Scratchpad {
     fn default() -> Self {
         Self {
+            background: [0; 4],
+            zoom: 1.0,
+            slots: vec![],
+            tool_slot: None,
             visible: false,
             pixels: vec![[0; 4]; PAD_SIZE[0] * PAD_SIZE[1]],
         }
     }
 }
 impl Scratchpad {
+    pub fn valid(&self) -> bool {
+        self.pixels.len() == PAD_SIZE[0] * PAD_SIZE[1]
+            && (0.25..=2.0).contains(&self.zoom)
+            && self.slots.len() <= 8
+            && self.slots.iter().all(|p| p.validate().is_ok())
+            && self.tool_slot.is_none_or(|n| n < self.slots.len())
+    }
     pub fn stroke(
         &mut self,
         from: [f64; 2],
@@ -276,6 +298,10 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub color_tables: crate::color_tables::Settings,
+    #[serde(default)]
+    pub mixer: Scratchpad,
+    #[serde(default)]
     pub color_picker: crate::color_selector::Settings,
     #[serde(default)]
     pub locks: crate::tool_locks::Settings,
@@ -347,6 +373,8 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            color_tables: Default::default(),
+            mixer: Default::default(),
             color_picker: Default::default(),
             locks: Default::default(),
             user_tools: Default::default(),
@@ -410,6 +438,8 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.color_tables.valid()
+            && self.mixer.valid()
             && self.color_picker.valid()
             && self.eyedropper.valid()
             && self.user_tools.valid()
@@ -432,7 +462,7 @@ impl Snapshot {
             && self.bindings.iter().all(Binding::valid)
             && !self.tool.is_empty()
             && self.tool.len() <= 128
-            && self.scratchpad.pixels.len() == PAD_SIZE[0] * PAD_SIZE[1]
+            && self.scratchpad.valid()
     }
     pub fn read(path: &Path) -> io::Result<Self> {
         let s: Self = read_json(path)?;
@@ -490,6 +520,8 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.color_tables = incoming.color_tables.clone();
+            next.mixer = incoming.mixer.clone();
             next.color_picker = incoming.color_picker;
             next.locks = incoming.locks.clone();
             next.user_tools = incoming.user_tools.clone();

@@ -59,6 +59,16 @@ struct Session {
     last_attributes: drawer_core::pointer_input::Attributes,
     tilt_angle: bool,
 }
+#[derive(Clone, Copy)]
+struct PendingSample {
+    document: u64,
+    revision: u64,
+    frame: u32,
+    view: u64,
+    source: drawer_core::pointer_input::Source,
+    color: [u8; 4],
+    table: Option<u64>,
+}
 #[derive(Default)]
 pub(super) struct Drawing {
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
@@ -87,6 +97,10 @@ pub(super) struct Drawing {
     pub patterns: [drawer_core::brush_pattern::Settings; 7],
     pub variations: [drawer_core::brush_variation::Settings; 7],
     pub picked: Option<[u8; 4]>,
+    pub sample_on_release: bool,
+    pub sample_table: Option<u64>,
+    pub sampled: Option<(Option<u64>, [u8; 4])>,
+    sample_pending: Option<PendingSample>,
     pub eyedropper: drawer_core::eyedropper::Settings,
     pub clone_config: drawer_core::clone_stamp::Settings,
     pub assets: std::sync::Arc<drawer_core::material_library::Library>,
@@ -151,7 +165,11 @@ impl Drawing {
             .filter(|s| s.stroke.document == document)
             .map(|s| &s.stroke)
     }
+    pub(super) fn cancel_sample(&mut self) {
+        self.sample_pending = None;
+    }
     fn cancel(&mut self) {
+        self.sample_pending = None;
         self.clone_pick = false;
         self.active = None;
         self.ownership.clear();
@@ -445,6 +463,12 @@ impl Drawing {
         self.events.clear();
     }
     pub fn advance(&mut self, ctx: &egui::Context, documents: &mut [Document]) {
+        if !self.sample_on_release
+            || self.mode != super::precision::Mode::Eyedropper
+            || ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            self.sample_pending = None;
+        }
         if ctx.input(|i| {
             !i.focused
                 || i.events
@@ -557,6 +581,27 @@ impl Drawing {
                     continue;
                 }
             };
+            if self.mode == super::precision::Mode::Eyedropper
+                && let Some(p) = self.sample_pending
+                && p.document == doc.id
+                && p.view == view
+                && p.source == event.source
+                && matches!(event.phase, Phase::Up | Phase::Cancel)
+            {
+                self.sample_pending = None;
+                self.events[n].1 = true;
+                let pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
+                if event.phase == Phase::Up
+                    && enabled
+                    && rect.contains(pos)
+                    && p.revision == doc.revision
+                    && p.frame == doc.current_frame
+                {
+                    self.picked = Some(p.color);
+                    self.sampled = Some((p.table, p.color));
+                }
+                continue;
+            }
             if self.pending() {
                 if self.active_view() == Some(view) {
                     self.receive(n, doc);
@@ -586,7 +631,21 @@ impl Drawing {
                         && point[1] < doc.height as f64
                     {
                         match self.eyedropper.sample(doc, layer, point, style.color) {
-                            Ok(Some(color)) => self.picked = Some(color),
+                            Ok(Some(color)) => {
+                                if self.sample_on_release {
+                                    self.sample_pending = Some(PendingSample {
+                                        document: doc.id,
+                                        revision: doc.revision,
+                                        frame: doc.current_frame,
+                                        view,
+                                        source: event.source,
+                                        color,
+                                        table: self.sample_table,
+                                    });
+                                } else {
+                                    self.picked = Some(color)
+                                }
+                            }
                             Ok(None) => {
                                 self.error = Some(
                                     "No stored color at this sample; drawing color preserved"
@@ -835,6 +894,13 @@ impl Drawer {
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.frame_time = ctx.input(|i| i.time);
+        self.drawing.sample_on_release = self.workspaces.store.current.color_tables.auto_sample;
+        self.drawing.sample_table = self.workspaces.store.current.color_tables.selected;
+        if let Some((table, color)) = self.drawing.sampled.take()
+            && self.workspaces.store.current.color_tables.auto_sample
+        {
+            self.register_sample(table, color);
+        }
         self.drawing.mouse_settings = self.workspaces.store.current.input.mouse_pressure;
         self.drawing.ends = self.workspaces.store.current.input.ends;
         self.drawing.materials = self.workspaces.store.current.input.materials;
@@ -981,6 +1047,7 @@ impl Drawer {
             return;
         }
         if self.tool_shortcuts_blocked(ctx) {
+            self.drawing.sample_pending = None;
             self.finish_stroke();
         } else {
             self.drawing.advance(ctx, &mut self.documents);

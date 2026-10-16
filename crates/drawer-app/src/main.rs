@@ -22,6 +22,7 @@ mod brush_variation;
 mod canvas_view;
 mod clone_stamp;
 mod color_selector;
+mod color_tables;
 mod cursor_settings;
 mod display_pane;
 mod drawing;
@@ -35,6 +36,7 @@ mod input_replay;
 mod layout;
 mod line_tools;
 mod material_library;
+mod mixing_pad;
 mod mouse_pressure;
 mod movie_dialog;
 mod navigator_panel;
@@ -143,6 +145,8 @@ struct Drawer {
     textures: texture_panel::Textures,
     lines: line_tools::Tools,
     color_fields: color_selector::Fields,
+    color_tables: color_tables::Tables,
+    mixer: mixing_pad::Runtime,
     replay: input_replay::Editor,
     acquisition: acquisition::Acquisition,
     help: help::Help,
@@ -259,6 +263,8 @@ impl Drawer {
             textures: Default::default(),
             lines: Default::default(),
             color_fields: Default::default(),
+            color_tables: Default::default(),
+            mixer: Default::default(),
             replay: Default::default(),
             acquisition: Default::default(),
             help: help::Help::new(korean_font),
@@ -577,6 +583,7 @@ impl Drawer {
             self.floating_panels(ui.ctx());
         }
         self.scratchpad(ui.ctx());
+        self.mixing_pad(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
@@ -1268,6 +1275,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = mixing_pad::smoke(&root) {
+                    eprintln!("Color tables/mixing/test history: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = color_selector::smoke(&root) {
                     eprintln!("Color selector: {e}");
                     fail_smoke();
@@ -1431,7 +1442,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

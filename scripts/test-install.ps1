@@ -113,6 +113,7 @@ try {
     if ($smokeResult -notmatch 'line_references=true') { throw '참조 경계·벡터 자석·다층 지우기 시험 실패' }
     if ($smokeResult -notmatch 'tonal_locks=true') { throw '닷지·번 톤 구간과 설정 잠금·복원 시험 실패' }
     if ($smokeResult -notmatch 'color_selector=true') { throw '색상환·색상 입력·색 이력 검증 실패' }
+    if ($smokeResult -notmatch 'color_tables_mixing=true') { throw '로컬 색상표·혼색판·시험 이력 검증 실패' }
     if ($smokeResult -notmatch 'brush_color=true') { throw 'CIELAB·밝기·두 잉크 합성 시험 실패' }
     if ($smokeResult -notmatch 'brush_behavior=true') { throw '화면 크기·간격 농도·연속 분사 시험 실패' }
     if ($smokeResult -notmatch 'tool_slots=true') { throw '농담·섬유·슬롯·오프라인 묶음 시험 실패' }

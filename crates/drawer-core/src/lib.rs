@@ -116,3 +116,5 @@ pub mod tool_locks;
 pub mod tonal_verify;
 
 pub mod color_selector;
+
+pub mod color_tables;

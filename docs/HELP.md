@@ -590,3 +590,12 @@ Keyboard editing의 Lock saved tool settings는 현재 도구의 저장값을 �
 Color 패널의 색상환은 각도로 색상,반지름으로 채도를 고른다. 실제 밝기는 Value로 조절한다. RGB/HSV 숫자와 알파를 입력하거나 #RRGGBB/#RRGGBBAA를 Apply HEX로 적용한다.6자리는 현재 알파를 유지한다. 잘못된 입력은 이전 색을 유지한다. RGB/HSV 전환은 색을 바꾸지 않으며 알파0의 RGB도 보존한다.
 
 Sample color from canvas와 Sampler and used colors에서 현재층 RGB/RGBA 또는 표시 합성,평균 범위를 고른다. 표시 합성은 페이지 선과 벡터도 포함한다. 최근색은 같은 RGBA만 중복을 없애고 알파가 다르면 별개다. 색 선택 Undo/Redo와 설정 저장은 그림 문서 이력에 영향을 주지 않는다.
+
+
+## color-tables | 로컬 색상표·혼색판·시험 영역 이력 | 스와치 혼색 배경 확대 전용 도구 자동등록
+
+Color 패널의 Local swatches and mixing palette에서 색상표를 생성·선택하고 현재/사용색을 등록한다. 같은 RGBA는 재사용하고 알파가 다르면 별개다. Earlier/Later/Remove와 색상표 전용 Undo/Redo를 사용한다. 사용색 이력의 표시 크기·열수와 비우기/복원을 설정할 수 있다.
+
+자동 스포이트 등록을 켜면 캔버스를 놓을 때 한 색을 확정하고 선택한 표에 등록한다. 놓기 전 Esc/초점 상실은 취소한다. 옵션을 끄면 기존처럼 누를 때 색을 고른다.
+
+Open local mixing palette는 실제 문서/기존 시험 칠하기와 별개의 혼색판이다. 캔버스 도구 공유 또는 최대8개 전용 슬롯을 사용한다. Blend/Smear 도구로 혼색하고 Pick mixed RGBA로 색을 고른다. 보기 확대/복원과 배경은 픽셀을 바꾸지 않는다. 혼색 Undo/Redo·Clear와 기존 시험 영역의 Undo/Redo는 각각 독립이다. 그림/도구/배경/보기를 로컬 저장하며 미확정 획은 저장하지 않는다.

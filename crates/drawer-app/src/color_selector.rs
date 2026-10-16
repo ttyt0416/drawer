@@ -10,7 +10,7 @@ pub(super) struct Fields {
     rgb_rects: [Option<egui::Rect>; 4],
 }
 impl Drawer {
-    fn choose_color(&mut self, color: [u8; 4]) {
+    pub(super) fn choose_color(&mut self, color: [u8; 4]) {
         if color != self.references.session.workspace.color {
             self.panels.previous_color = self.references.session.workspace.color;
             self.references.session.workspace.color = color;
@@ -120,6 +120,14 @@ impl Drawer {
                             "color-selector",
                         );
                         self.color_fields.rgb_rects[i] = Some(response.rect);
+                        changed |= super::edit::slider(
+                            ui,
+                            &mut channels[i],
+                            0..=255,
+                            label,
+                            "color-tables",
+                        )
+                        .changed();
                         changed |= response.changed();
                     });
                 }
@@ -147,6 +155,9 @@ impl Drawer {
                             "color-selector",
                         )
                         .changed();
+                        changed |=
+                            super::edit::slider(ui, &mut h[i], 0.0..=max, label, "color-tables")
+                                .changed();
                     });
                 }
                 let mut alpha = current[3];
@@ -195,6 +206,7 @@ impl Drawer {
         if ui.button("Sample color from canvas").clicked() {
             self.execute_command(ui.ctx(), "Eyedropper");
         }
+        self.color_table_controls(ui);
         ui.collapsing("Sampler and used colors", |ui| self.eyedropper_controls(ui));
     }
 }

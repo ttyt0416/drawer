@@ -84,6 +84,31 @@ pub struct Preset {
     pub variation: crate::brush_variation::Settings,
 }
 impl Preset {
+    pub fn style(&self, color: [u8; 4]) -> crate::painting::Style {
+        crate::painting::Style {
+            clone_stamp: Default::default(),
+            variation: self.variation,
+            pattern: self.pattern,
+            dynamics: self.dynamics,
+            sequence: self.sequence,
+            filters: self.filters,
+            profile: self.profile,
+            texture: self.overlay,
+            material: self.material,
+            shape: crate::brush_cursor::Shape {
+                size: self.values[0],
+                aspect: self.values[1],
+                angle: self.values[2],
+            },
+            tip: self.tip,
+            color,
+            smoothing: self.values[3],
+            opacity: self.values[4],
+            hardness: self.values[5],
+            spacing: self.values[6],
+            pressure: self.pressure,
+        }
+    }
     pub fn material_refs(&self) -> Vec<(u32, crate::material_library::Kind)> {
         crate::tip_texture::references(&self.sequence, &self.variation.dual.controls, self.overlay)
     }

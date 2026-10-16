@@ -98,6 +98,9 @@ impl Drawer {
         }
     }
     pub(super) fn select_tab(&mut self, index: usize) {
+        if self.active_tab != Some(index) {
+            self.drawing.cancel_sample();
+        }
         if index >= self.tabs.len() {
             return;
         }
