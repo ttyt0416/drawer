@@ -89,3 +89,5 @@ pub mod clone_stamp;
 pub mod material_library;
 
 pub mod abr;
+
+pub mod brush_composite;

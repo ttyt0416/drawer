@@ -153,8 +153,21 @@ impl Drawer {
                         for(n,f)in e.draft.folders.iter().enumerate().filter(|(_,f)|!f.children.is_empty()){ui.selectable_value(&mut e.node,Node::Folder(n),format!("Folder {}: {}",n+1,f.name));}
                     });
                     if ui.button("Group all roots in a new folder draft").clicked(){match e.draft.group_all(d.layers.len(),&format!("Paper folder {}",e.draft.folders.len()+1)){Ok(n)=>e.node=Node::Folder(n),Err(err)=>self.status=Some(err)}}
+                    if let Node::Folder(n)=e.node {
+                        let f=&mut e.draft.folders[n];
+                        let changed=ui.checkbox(&mut f.through,"Through: compose children with the outside layers").changed();
+                        if changed && f.through {f.paper=Default::default();}
+                        ui.label("Through removes this folder's own effect in this draft. Isolated folders combine their children before applying their effect.");
+                    }
+                    let through=matches!(e.node,Node::Folder(n) if e.draft.folders[n].through);
                     let paper=match e.node{Node::Raster(n)=>e.draft.layers.entry(n).or_default(),Node::Folder(n)=>&mut e.draft.folders[n].paper};
-                    ui.push_id(format!("{:?}",e.node),|ui|pattern_ui(ui,&mut paper.pattern));
+                    ui.add_enabled_ui(!through,|ui|{
+                        egui::ComboBox::from_id_salt("paper-blend").selected_text(paper.blend.label()).show_ui(ui,|ui|{
+                            for mode in drawer_core::brush_composite::Mode::ALL {ui.selectable_value(&mut paper.blend,mode,mode.label());}
+                        });
+                        ui.push_id(format!("{:?}",e.node),|ui|pattern_ui(ui,&mut paper.pattern));
+                        super::edit::number(ui,&mut paper.seed,0.0..=u32::MAX as f64,1.0," composition seed","brush-composite");
+                    });
                     if *paper==Default::default() && let Node::Raster(n)=e.node{e.draft.layers.remove(&n);}
                     ui.separator();ui.label("Raster composition preview");
                     let (rect,_)=ui.allocate_exact_size(egui::vec2(192.0,96.0),egui::Sense::hover());

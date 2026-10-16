@@ -109,6 +109,7 @@ try {
     if ($smokeResult -notmatch 'extended_brushes=true' -or $smokeResult -notmatch 'embedded_tips=7') { throw '마커·번짐·픽셀 펜 실행 시험 실패' }
     if ($smokeResult -notmatch 'tip_profile=true') { throw '최소 굵기·농도/팁 모양 시험 실패' }
     if ($smokeResult -notmatch 'stroke_filter=true') { throw '독립 위치/필압 평활 시험 실패' }
+    if ($smokeResult -notmatch 'brush_composite=true') { throw '브러시·폴더 합성·필압 혼색·저장 시험 실패' }
     if ($smokeResult -notmatch 'abr_import=true') { throw 'ABR 식별·변환·저장·입력 시험 실패' }
     if ($smokeResult -notmatch 'image_materials=true') { throw '로컬 이미지 소재 등록·픽셀 적용 시험 실패' }
     if ($smokeResult -notmatch 'clone_stamp=true') { throw '복제 원점·원본 스냅샷 복제 시험 실패' }

@@ -35,7 +35,19 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
     Ok(u32::from_be_bytes(b))
 }
 pub fn layers_supported(d: &Document) -> bool {
-    d.animation.is_none() && d.scene.objects.is_empty() && d.scene.worlds.is_empty()
+    d.animation.is_none()
+        && d.scene.objects.is_empty()
+        && d.scene.worlds.is_empty()
+        && d.scene
+            .paper
+            .layers
+            .values()
+            .all(|p| p.blend == crate::brush_composite::Mode::Normal)
+        && d.scene
+            .paper
+            .folders
+            .iter()
+            .all(|f| f.paper.blend == crate::brush_composite::Mode::Normal)
 }
 pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
 pub fn export(
@@ -86,7 +98,9 @@ pub fn export(
     let layers = match choice {
         Choice::RenderedLayers => {
             if !layers_supported(d) {
-                return Err(error("Animation and page objects require Rendered image"));
+                return Err(error(
+                    "Animation, page objects and external composition modes require Rendered image",
+                ));
             }
             let mut remaining = budget / 4;
             let mut layers = Vec::new();

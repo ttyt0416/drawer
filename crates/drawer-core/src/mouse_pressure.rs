@@ -431,6 +431,7 @@ impl Replay {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;
         }
         if (style.color[3] == 0
+            && style.material.composition.mode != crate::brush_composite::Mode::ReplaceAlpha
             && !style.material.pigment()
             && !style.clone_stamp.enabled
             && !matches!(self.settings.effect, Effect::Blend | Effect::Smudge))

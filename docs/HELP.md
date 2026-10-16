@@ -457,3 +457,19 @@ Brush presets → Import ABR tips에서 Choose ABR file, Inspect ABR 순서로 �
 
 [프리셋](local:tool-properties)
 [로컬 소재](local:local-materials)
+
+## brush-composite | 브러시 합성과 폴더 통과 | 지우기 뒤쪽 알파 대체 농도 비교 확률 혼색 필압
+
+도구 입력 → 안료 설정에서 Normal, Erase, Dissolve, Background, Replace alpha, Black burn, White burn, Compare density, Erase (compare)를 선택한다. Erase는 알파 감소, Background는 기존 픽셀 뒤 칠하기, Replace alpha는 기존 RGB를 유지한 알파 대체다. Compare density는 최종 잉크 밀도가 기존 알파보다 클 때만 교체하고 Erase(compare)는 같거나 클 때 지운다. Black/White burn은 색을 어둡게/밝게 강조하는 별도 규칙이다. 원본 앱과 같은 수식을 사용한다는 뜻은 아니다.
+
+특수 합성은 한 획에서 coverage 최대값을 쓰고 필압 농도·전체 농도·선택·질감을 한 번 반영한다. Dissolve는 최종 농도를 픽셀 점유 확률로 사용하며 저장한 시드/좌표로 결과를 고정한다. 특수 합성의 수채/시간 효과 후처리 확산은 생략한다. 알파 잠금은 원래 알파를 유지한다. 복제 도장과 기존 지우개의 역할은 기존 규칙을 따른다.
+
+Rendering quality의 High는 기하 경계를 픽셀 내 네 위치에서 평균한다. 기존 중심 계산인 Normal과 선택할 수 있고 Running color의 혼색 품질과 별도로 저장된다. 픽셀 펜은 두 품질 모두 정확한 픽셀 격자를 유지한다.
+
+Pressure controls pigment pickup에서 필압 혼색을 켜고5점 곡선을 정하면 보정된 압력이 안료 pickup 혼색량에 곱해진다. 끄면 기존 혼색량을 그대로 사용한다. 크기/농도와 분리되며 기존 품질·혼색 공간·도구별 선/필압 보정도 함께 각 브러시에 저장된다. 프리셋을 바꾸어도 다른 브러시 설정은 바뀌지 않는다.
+
+Layer and folder paper에서 레이어/격리 폴더의 합성 모드를 고를 수 있다. Through는 자식을 외부 아래층에 직접 합성하며, 끈 격리 폴더는 자식을 먼저 투명 바탕에서 합친다. Through를 켜면 현재 임시본의 폴더 자체 효과를 초기화하며 Apply/Cancel과 문서 실행 취소를 따른다. 외부 바탕 의존 합성이 있는 부분트리 굽기와 PSD Rendered layers는 거절하고, 자체 문서 보존 또는 PSD Rendered image를 사용하도록 안내한다.
+
+[안료 설정](local:brush-material)
+[필압/선 보정](local:stroke-filter)
+[종이와 폴더](local:textures)

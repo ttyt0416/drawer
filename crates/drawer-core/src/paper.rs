@@ -9,10 +9,28 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paper {
+    #[serde(default)]
+    pub blend: crate::brush_composite::Mode,
+    #[serde(default)]
+    pub seed: u32,
     pub pattern: Pattern,
     pub origin: Point,
 }
 impl Paper {
+    fn add(self, color: &mut Color, pixel: [u8; 4], original: Point) {
+        let pixel = self.shade(pixel, original);
+        if self.blend == crate::brush_composite::Mode::Normal {
+            color.add(pixel);
+        } else {
+            *color = Color::from(self.blend.compose(
+                color.rgba(),
+                pixel,
+                1.0,
+                original.map(|v| v.floor() as i64),
+                self.seed,
+            ));
+        }
+    }
     fn valid(self) -> bool {
         self.pattern.valid() && self.origin.iter().all(|v| v.is_finite() && v.abs() <= 1e12)
     }
@@ -31,6 +49,8 @@ pub enum Node {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Folder {
+    #[serde(default)]
+    pub through: bool,
     pub name: String,
     pub children: Vec<Node>,
     pub paper: Paper,
@@ -97,6 +117,7 @@ impl Graph {
                     || f.name.chars().any(char::is_control)
                     || f.children.len() > 512
                     || !f.paper.valid()
+                    || (f.through && f.paper != Paper::default())
             })
         {
             return false;
@@ -170,6 +191,7 @@ impl Graph {
         }
         let index = next.folders.len();
         next.folders.push(Folder {
+            through: false,
             name: name.trim().into(),
             children,
             paper: Default::default(),
@@ -264,7 +286,11 @@ impl Graph {
             let mut color = Color::default();
             for (n, layer) in doc.layers.iter().enumerate() {
                 let c = pixel(n, layer);
-                color.add(self.layers.get(&n).map_or(c, |p| p.shade(c, original)));
+                self.layers
+                    .get(&n)
+                    .copied()
+                    .unwrap_or_default()
+                    .add(&mut color, c, original);
             }
             return color;
         }
@@ -276,7 +302,11 @@ impl Graph {
         for (n, layer) in doc.layers.iter().enumerate() {
             if !seen[n] {
                 let c = pixel(n, layer);
-                color.add(self.layers.get(&n).map_or(c, |p| p.shade(c, original)));
+                self.layers
+                    .get(&n)
+                    .copied()
+                    .unwrap_or_default()
+                    .add(&mut color, c, original);
             }
         }
         color
@@ -304,16 +334,20 @@ impl Graph {
                 };
                 seen[n] = true;
                 let c = pixel(n, layer);
-                color.add(self.layers.get(&n).map_or(c, |p| p.shade(c, original)));
+                self.layers
+                    .get(&n)
+                    .copied()
+                    .unwrap_or_default()
+                    .add(color, c, original);
             }
             Node::Folder(n) => {
                 if let Some(folder) = self.folders.get(n) {
-                    if folder.paper.pattern.effective() {
+                    if !folder.through {
                         let mut group = Color::default();
                         for c in &folder.children {
                             self.append(doc, (*c, depth + 1), original, &mut group, seen, pixel);
                         }
-                        color.add(folder.paper.shade(group.rgba(), original));
+                        folder.paper.add(color, group.rgba(), original);
                     } else {
                         for c in &folder.children {
                             self.append(doc, (*c, depth + 1), original, color, seen, pixel);
@@ -448,6 +482,17 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
         return Err("Invalid folder graph".into());
     }
     let graph = &doc.scene.paper;
+    if graph
+        .layers
+        .values()
+        .any(|p| p.blend != crate::brush_composite::Mode::Normal)
+        || graph
+            .folders
+            .iter()
+            .any(|f| f.paper.blend != crate::brush_composite::Mode::Normal)
+    {
+        return Err("Composition depending on outside layers cannot be baked as an independent subtree. Preserve the document or export a rendered image.".into());
+    }
     if !graph
         .root_nodes(doc.layers.len())
         .iter()
@@ -765,6 +810,7 @@ mod tests {
         assert!(d.edit_scene(scene).is_err());
         let mut graph = Graph::default();
         graph.folders.push(Folder {
+            through: false,
             name: "Cycle".into(),
             children: vec![Node::Folder(0)],
             paper: Default::default(),

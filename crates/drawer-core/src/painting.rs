@@ -76,6 +76,10 @@ impl Style {
         if self.tip == BrushTip::Eraser && self.material.valid() {
             self.material = crate::brush_material::Settings {
                 alpha_lock: self.material.alpha_lock,
+                composition: crate::brush_composite::Settings {
+                    render_quality: self.material.composition.render_quality,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
         }
@@ -87,6 +91,10 @@ impl Style {
         if self.clone_stamp.enabled && self.material.valid() {
             self.material = crate::brush_material::Settings {
                 alpha_lock: self.material.alpha_lock,
+                composition: crate::brush_composite::Settings {
+                    render_quality: self.material.composition.render_quality,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
         }
@@ -266,10 +274,11 @@ impl Stroke {
         self.carried = Some(self.candidate(doc, point[0].floor() as i64, point[1].floor() as i64));
         Ok(())
     }
-    fn pigment_color(&mut self, picked: [u8; 4], center: Point) -> [u8; 4] {
+    fn pigment_color(&mut self, picked: [u8; 4], center: Point, pressure: f64) -> [u8; 4] {
         use crate::brush_material::Mode;
         use crate::mouse_pressure::Effect;
-        let m = self.style.material;
+        let mut m = self.style.material;
+        m.mixing *= m.composition.mixing_pressure.map(Some(pressure));
         let blend = |a, b, w| {
             if m.space == crate::color_mix::Space::Standard {
                 mix(a, b, w)
@@ -348,7 +357,9 @@ impl Stroke {
         cancel: impl Fn() -> bool,
     ) -> Result<(), String> {
         use crate::brush_material::Mode;
-        if self.style.clone_stamp.enabled {
+        if self.style.clone_stamp.enabled
+            || self.style.material.composition.mode != crate::brush_composite::Mode::Normal
+        {
             return self.check(doc);
         }
         let strength = if self.style.material.mode == Mode::Water {
@@ -681,6 +692,7 @@ impl Stroke {
             if ((self.pressure != pressure
                 && (self.style.pressure.size
                     || self.style.pressure.opacity
+                    || self.style.material.composition.mixing_pressure.enabled
                     || self.style.dynamics.pressure.enabled))
                 || self.last_stamp_angle != self.rotation()
                 || self.last_stamp_scale != self.scale
@@ -776,6 +788,7 @@ impl Stroke {
             } else if (self.pressure != pressure
                 && (self.style.pressure.size
                     || self.style.pressure.opacity
+                    || self.style.material.composition.mixing_pressure.enabled
                     || self.style.dynamics.pressure.enabled))
                 || self.last_scale != self.scale
             {
@@ -799,6 +812,7 @@ impl Stroke {
                     || (self.last_stamp_pressure != self.pressure
                         && (self.style.pressure.size
                             || self.style.pressure.opacity
+                            || self.style.material.composition.mixing_pressure.enabled
                             || self.style.dynamics.pressure.enabled))
                     || self.last_stamp_angle != self.rotation()
                     || self.last_stamp_scale != self.scale
@@ -1042,6 +1056,13 @@ impl Stroke {
             0
         };
         let samples = 1
+            + if self.style.material.composition.render_quality == crate::color_mix::Quality::High
+                && !pixel_tip
+            {
+                4
+            } else {
+                0
+            }
             + if bitmap.is_some() { 4 } else { 0 }
             + if materials
                 .get(
@@ -1102,7 +1123,7 @@ impl Stroke {
         } else {
             self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64)
         };
-        let paint_color = self.pigment_color(picked, center);
+        let paint_color = self.pigment_color(picked, center, pressure);
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
                 let point = [x as f64 + 0.5, y as f64 + 0.5];
@@ -1116,35 +1137,55 @@ impl Stroke {
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
-                let (distance, edge_radius) =
+                let geometry = |p: Point| {
+                    let delta = [p[0] - center[0], p[1] - center[1]];
+                    let local = [
+                        (delta[0] * cos + delta[1] * sin) / radius,
+                        (-delta[0] * sin + delta[1] * cos) / minor,
+                    ];
                     if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
                         crate::brush_pattern::ribbon_distance(
-                            point,
+                            p,
                             ribbon.unwrap_or((center, radius)),
                             (center, radius),
                         )
                     } else if self.style.pattern.mode == crate::brush_pattern::Mode::Decoration {
-                        (self.style.pattern.decoration.distance(q), minor)
+                        (self.style.pattern.decoration.distance(local), minor)
                     } else {
                         (
                             if bitmap_square || self.style.profile.square(mask_tip) {
-                                q[0].abs().max(q[1].abs())
+                                local[0].abs().max(local[1].abs())
                             } else {
-                                q[0].hypot(q[1])
+                                local[0].hypot(local[1])
                             },
                             minor,
                         )
-                    };
-                let edge = ((1.0 - distance) * edge_radius + 0.5).clamp(0.0, 1.0);
-                let softness = if self.style.hardness == 1.0 {
-                    1.0
-                } else {
-                    ((1.0 - distance) / (1.0 - self.style.hardness)).clamp(0.0, 1.0)
+                    }
                 };
+                let response = |(distance, edge_radius): (f64, f64)| {
+                    let edge = ((1.0 - distance) * edge_radius + 0.5).clamp(0.0, 1.0);
+                    let softness = if self.style.hardness == 1.0 {
+                        1.0
+                    } else {
+                        ((1.0 - distance) / (1.0 - self.style.hardness)).clamp(0.0, 1.0)
+                    };
+                    edge * softness
+                };
+                let (distance, edge_radius) = geometry(point);
                 let coverage = if pixel_tip {
                     if distance < 1.0 { 1.0 } else { 0.0 }
+                } else if self.style.material.composition.render_quality
+                    == crate::color_mix::Quality::High
+                {
+                    let mut sum = 0.0;
+                    for oy in [-0.25, 0.25] {
+                        for ox in [-0.25, 0.25] {
+                            sum += response(geometry([point[0] + ox, point[1] + oy]));
+                        }
+                    }
+                    sum * 0.25
                 } else {
-                    edge * softness
+                    response((distance, edge_radius))
                 };
                 if coverage <= 0.0 && !self.style.variation.dual.active() {
                     continue;
@@ -1201,7 +1242,10 @@ impl Stroke {
                     continue;
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
-                let limited = self.style.clone_stamp.enabled
+                let composition = self.style.material.composition;
+                let special = composition.mode != crate::brush_composite::Mode::Normal;
+                let limited = special
+                    || self.style.clone_stamp.enabled
                     || self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
                     || self.style.tip == BrushTip::PixelPen
                     || (self.style.pressure.opacity
@@ -1226,6 +1270,10 @@ impl Stroke {
                     } else {
                         mix(base, source, amount)
                     }
+                } else if special {
+                    composition
+                        .mode
+                        .compose(base, paint_color, amount, [x, y], composition.seed)
                 } else if self.style.tip == BrushTip::Eraser {
                     [
                         base[0],
@@ -1242,13 +1290,20 @@ impl Stroke {
                 } else {
                     over(base, paint_color, amount)
                 };
-                let mut result = mix(
-                    original,
-                    next,
-                    mask as f64 / 255.0
-                        * self.style.opacity
-                        * self.materials.factor(self.style.texture, point),
-                );
+                let factor = mask as f64 / 255.0
+                    * self.style.opacity
+                    * self.materials.factor(self.style.texture, point);
+                let mut result = if special {
+                    composition.mode.compose(
+                        original,
+                        paint_color,
+                        amount * factor,
+                        [x, y],
+                        composition.seed,
+                    )
+                } else {
+                    mix(original, next, factor)
+                };
                 if self.style.material.alpha_lock {
                     result[3] = original[3];
                 }

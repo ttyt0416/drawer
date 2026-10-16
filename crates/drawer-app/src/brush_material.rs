@@ -1,6 +1,16 @@
 use super::*;
 use drawer_core::brush_material::{Mode, Settings};
 pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
+    egui::ComboBox::from_id_salt("brush-render-quality")
+        .selected_text(s.composition.render_quality.label())
+        .show_ui(ui, |ui| {
+            for quality in drawer_core::color_mix::Quality::ALL {
+                ui.selectable_value(&mut s.composition.render_quality, quality, quality.label());
+            }
+        });
+    ui.label(
+        "Rendering quality samples the geometric edge. Pixel pen remains on the exact pixel grid.",
+    );
     if tip == BrushTip::Eraser {
         crate::help::checkbox(
             ui,
@@ -11,6 +21,38 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
         ui.label("Eraser removes alpha. Pigment mixing controls belong to color brushes.");
         return;
     }
+    egui::ComboBox::from_id_salt("brush-composition")
+        .selected_text(s.composition.mode.label())
+        .show_ui(ui, |ui| {
+            for mode in drawer_core::brush_composite::Mode::ALL {
+                ui.selectable_value(&mut s.composition.mode, mode, mode.label());
+            }
+        });
+    super::edit::number(
+        ui,
+        &mut s.composition.seed,
+        0.0..=u32::MAX as f64,
+        1.0,
+        " dissolve seed",
+        "brush-composite",
+    );
+    ui.collapsing("Pressure controls pigment pickup", |ui| {
+        crate::help::checkbox(
+            ui,
+            &mut s.composition.mixing_pressure.enabled,
+            "Enable pressure mixing multiplier",
+            "brush-composite",
+        );
+        for (n, value) in s.composition.mixing_pressure.curve.iter_mut().enumerate() {
+            super::edit::slider(
+                ui,
+                value,
+                0.0..=1.0,
+                format!("Pickup multiplier at {}% pressure", n * 25),
+                "brush-composite",
+            );
+        }
+    });
     let smudge = tip == BrushTip::Smudge;
     if smudge {
         s.mode = Mode::Smudge;

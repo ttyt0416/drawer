@@ -31,6 +31,8 @@ impl Mode {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub composition: crate::brush_composite::Settings,
+    #[serde(default)]
     pub space: crate::color_mix::Space,
     #[serde(default)]
     pub quality: crate::color_mix::Quality,
@@ -48,6 +50,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            composition: Default::default(),
             space: Default::default(),
             quality: Default::default(),
             mode: Mode::Paint,
@@ -74,6 +77,7 @@ impl Settings {
         ]
         .iter()
         .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            && self.composition.valid()
             && self.smudge_distance.is_finite()
             && (0.0..=4096.0).contains(&self.smudge_distance)
     }
@@ -169,6 +173,7 @@ fn probe_in(
 /// Same pigment/alpha checks run in unit tests and the installed native process.
 pub fn verify() -> Result<(), String> {
     let base = Settings {
+        composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),
         mode: Mode::Water,
@@ -310,6 +315,7 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),
         mode: Mode::Water,
@@ -367,6 +373,7 @@ fn verify_numeric_controls() -> Result<(), String> {
 pub fn verify_independent() -> Result<(), String> {
     verify_numeric_controls()?;
     let base = Settings {
+        composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),
         mode: Mode::Water,

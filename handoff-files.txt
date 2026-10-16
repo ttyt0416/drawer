@@ -228,3 +228,7 @@ docs/process/image-materials.md
 crates/drawer-core/src/abr.rs
 crates/drawer-app/src/abr.rs
 docs/process/abr-import.md
+
+crates/drawer-core/src/brush_composite.rs
+crates/drawer-app/src/brush_composite.rs
+docs/process/brush-composite.md
