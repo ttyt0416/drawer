@@ -43,30 +43,125 @@ pub enum Blend {
     Minimum,
     Maximum,
     Difference,
+    Normal,
+    Screen,
+    Overlay,
+    ColorDodge,
+    ColorBurn,
+    LinearBurn,
+    HardMix,
+    HeightLinear,
+    ApplyRgb,
 }
 impl Blend {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 15] = [
+        Self::Normal,
         Self::Multiply,
         Self::Add,
         Self::Subtract,
         Self::Minimum,
         Self::Maximum,
+        Self::Screen,
+        Self::Overlay,
+        Self::ColorDodge,
+        Self::ColorBurn,
+        Self::LinearBurn,
+        Self::HardMix,
+        Self::HeightLinear,
+        Self::ApplyRgb,
         Self::Difference,
     ];
+    pub fn channel(self, a: f64, b: f64) -> f64 {
+        let a = a.clamp(0.0, 1.0);
+        let b = b.clamp(0.0, 1.0);
+        match self {
+            Self::Normal | Self::ApplyRgb => b,
+            Self::Multiply => a * b,
+            Self::Add => (a + b).min(1.0),
+            Self::Subtract => (a - b).max(0.0),
+            Self::Minimum => a.min(b),
+            Self::Maximum => a.max(b),
+            Self::Difference => (a - b).abs(),
+            Self::Screen => a + b - a * b,
+            Self::Overlay => {
+                if a <= 0.5 {
+                    2.0 * a * b
+                } else {
+                    1.0 - 2.0 * (1.0 - a) * (1.0 - b)
+                }
+            }
+            Self::ColorDodge => {
+                if a == 0.0 {
+                    0.0
+                } else if b == 1.0 {
+                    1.0
+                } else {
+                    (a / (1.0 - b)).min(1.0)
+                }
+            }
+            Self::ColorBurn => {
+                if a == 1.0 {
+                    1.0
+                } else if b == 0.0 {
+                    0.0
+                } else {
+                    1.0 - ((1.0 - a) / b).min(1.0)
+                }
+            }
+            Self::LinearBurn => (a + b - 1.0).max(0.0),
+            Self::HardMix => {
+                if a + b >= 1.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::HeightLinear => (a + b) * 0.5,
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Multiply => "Multiply masks",
-            Self::Add => "Add masks",
+            Self::Multiply => "Multiply",
+            Self::Add => "Add (Glow)",
             Self::Subtract => "Subtract secondary",
-            Self::Minimum => "Minimum coverage",
-            Self::Maximum => "Maximum coverage",
+            Self::Minimum => "Darken",
+            Self::Maximum => "Lighten",
             Self::Difference => "Coverage difference",
+            Self::Normal => "Normal",
+            Self::Screen => "Screen",
+            Self::Overlay => "Overlay",
+            Self::ColorDodge => "Color dodge",
+            Self::ColorBurn => "Color burn",
+            Self::LinearBurn => "Linear burn",
+            Self::HardMix => "Hard mix",
+            Self::HeightLinear => "Height (Linear)",
+            Self::ApplyRgb => "Apply RGB value",
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Controls {
+    pub rgb: bool,
+    pub color: [u8; 4],
+    pub linked_size: bool,
+    pub size: f64,
+}
+impl Default for Controls {
+    fn default() -> Self {
+        Self {
+            rgb: false,
+            color: [0, 0, 0, 255],
+            linked_size: true,
+            size: 8.0,
         }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Dual {
+    #[serde(default)]
+    pub controls: Controls,
     pub enabled: bool,
     pub mask: Mask,
     pub blend: Blend,
@@ -78,6 +173,7 @@ pub struct Dual {
 impl Default for Dual {
     fn default() -> Self {
         Self {
+            controls: Default::default(),
             enabled: false,
             mask: Default::default(),
             blend: Default::default(),
@@ -90,7 +186,8 @@ impl Default for Dual {
 }
 impl Dual {
     pub fn valid(self) -> bool {
-        (0.1..=1.0).contains(&self.scale)
+        (0.1..=4096.0).contains(&self.controls.size)
+            && (0.1..=1.0).contains(&self.scale)
             && self.angle.is_finite()
             && self.angle.abs() <= 180.0
             && self.offset.iter().all(|v| (-1.0..=1.0).contains(v))
@@ -99,26 +196,42 @@ impl Dual {
     pub fn active(self) -> bool {
         self.enabled && self.opacity > 0.0
     }
-    pub fn extra_radius(self) -> f64 {
+    pub fn effective_scale(self, primary_size: f64) -> f64 {
+        if self.controls.linked_size {
+            self.scale
+        } else {
+            self.controls.size / primary_size.max(1e-9)
+        }
+    }
+    pub fn extra_radius(self, primary_size: f64) -> f64 {
         if self.active() {
-            self.offset[0].abs().max(self.offset[1].abs()) + std::f64::consts::SQRT_2 * self.scale
+            self.offset[0].abs().max(self.offset[1].abs())
+                + std::f64::consts::SQRT_2 * self.effective_scale(primary_size)
         } else {
             0.0
         }
     }
-    pub fn mask(self, q: [f64; 2], minor: f64, point: [f64; 2], seed: u32) -> f64 {
+    pub fn mask(
+        self,
+        q: [f64; 2],
+        minor: f64,
+        point: [f64; 2],
+        seed: u32,
+        primary_size: f64,
+    ) -> f64 {
+        let scale = self.effective_scale(primary_size);
         let (s, c) = self.angle.to_radians().sin_cos();
         let d = [q[0] - self.offset[0], q[1] - self.offset[1]];
         let p = [
-            (d[0] * c + d[1] * s) / self.scale,
-            (-d[0] * s + d[1] * c) / self.scale,
+            (d[0] * c + d[1] * s) / scale,
+            (-d[0] * s + d[1] * c) / scale,
         ];
         let distance = if self.mask == Mask::Square {
             p[0].abs().max(p[1].abs())
         } else {
             p[0].hypot(p[1])
         };
-        let edge = ((1.0 - distance) * minor * self.scale + 0.5).clamp(0.0, 1.0);
+        let edge = ((1.0 - distance) * minor * scale + 0.5).clamp(0.0, 1.0);
         edge * match self.mask {
             Mask::Soft => (1.0 - distance.powi(2)).clamp(0.0, 1.0).powi(3),
             Mask::Grain => {
@@ -132,19 +245,60 @@ impl Dual {
             _ => 1.0,
         }
     }
-    pub fn combine(self, a: f64, b: f64) -> f64 {
-        if !self.active() {
-            return a;
-        }
+    fn secondary(self, mask: f64) -> f64 {
+        let alpha = self.controls.color[3] as f64 / 255.0;
+        let density = if self.blend == Blend::ApplyRgb {
+            (self.controls.color[0] as f64 * 54.0
+                + self.controls.color[1] as f64 * 183.0
+                + self.controls.color[2] as f64 * 19.0)
+                / (256.0 * 255.0)
+        } else {
+            1.0
+        };
+        mask * alpha * density
+    }
+    fn combined(self, a: f64, b: f64) -> f64 {
         let value = match self.blend {
-            Blend::Multiply => a * b,
-            Blend::Add => (a + b).min(1.0),
-            Blend::Subtract => (a - b).max(0.0),
-            Blend::Minimum => a.min(b),
-            Blend::Maximum => a.max(b),
-            Blend::Difference => (a - b).abs(),
+            Blend::Normal => a + b - a * b,
+            Blend::ApplyRgb => a * b,
+            _ => self.blend.channel(a, b),
         };
         (a + (value - a) * self.opacity).clamp(0.0, 1.0)
+    }
+    pub fn combine(self, a: f64, b: f64) -> f64 {
+        if !self.active() {
+            a
+        } else {
+            self.combined(a, self.secondary(b))
+        }
+    }
+    /// Alpha-only uses the primary ink. RGB mode combines two independent inks;
+    /// the returned coverage already includes their alpha, so ink alpha is 255.
+    pub fn ink(self, a: f64, b: f64, primary: [u8; 4], rgb: bool) -> (f64, [u8; 4]) {
+        if !self.active() {
+            return (a, primary);
+        }
+        let b = self.secondary(b);
+        if !rgb {
+            return (self.combined(a, b), primary);
+        }
+        let a = a * primary[3] as f64 / 255.0;
+        let alpha = self.combined(a, b);
+        let source = b * self.opacity;
+        let union = a + source * (1.0 - a);
+        if union <= 0.0 {
+            return (0.0, [0; 4]);
+        }
+        let color = std::array::from_fn::<_, 3, _>(|n| {
+            let base = primary[n] as f64 / 255.0;
+            let ink = self.controls.color[n] as f64 / 255.0;
+            let result = (source * (1.0 - a) * ink
+                + source * a * self.blend.channel(base, ink)
+                + (1.0 - source) * a * base)
+                / union;
+            (result.clamp(0.0, 1.0) * 255.0).round() as u8
+        });
+        (alpha, [color[0], color[1], color[2], 255])
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -451,7 +605,14 @@ mod tests {
     #[test]
     fn all_six_blends_change_pixels_and_secondary_mask_can_extend_primary() {
         let mut images = Vec::new();
-        for blend in Blend::ALL {
+        for blend in [
+            Blend::Multiply,
+            Blend::Add,
+            Blend::Subtract,
+            Blend::Minimum,
+            Blend::Maximum,
+            Blend::Difference,
+        ] {
             let mut d = document().unwrap();
             let mut s = style(Settings {
                 dual: Dual {

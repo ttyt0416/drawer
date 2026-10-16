@@ -100,6 +100,13 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip, ov
             });
         super::edit::slider(
             ui,
+            &mut s.brightness,
+            0.0..=1.0,
+            "Lightness correction toward input L*",
+            "brush-material",
+        );
+        super::edit::slider(
+            ui,
             &mut s.mixing,
             0.0..=1.0,
             "Layer pigment pickup",

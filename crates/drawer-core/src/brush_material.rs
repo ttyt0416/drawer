@@ -30,6 +30,8 @@ impl Mode {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub brightness: f64,
     /// Legacy files without this field keep the previous ungated supply.
     #[serde(default)]
     pub supply_threshold: f64,
@@ -53,6 +55,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            brightness: 0.0,
             supply_threshold: 0.2,
             composition: Default::default(),
             space: Default::default(),
@@ -73,6 +76,7 @@ impl Default for Settings {
 impl Settings {
     pub fn valid(self) -> bool {
         [
+            self.brightness,
             self.supply,
             self.supply_threshold,
             self.mixing,
@@ -178,6 +182,7 @@ fn probe_in(
 /// Same pigment/alpha checks run in unit tests and the installed native process.
 pub fn verify() -> Result<(), String> {
     let base = Settings {
+        brightness: 0.0,
         supply_threshold: 0.2,
         composition: Default::default(),
         space: Default::default(),
@@ -321,6 +326,7 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        brightness: 0.0,
         supply_threshold: 0.2,
         composition: Default::default(),
         space: Default::default(),

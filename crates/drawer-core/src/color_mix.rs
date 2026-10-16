@@ -6,13 +6,15 @@ pub enum Space {
     #[default]
     Standard,
     Perceptual,
+    LabD65,
 }
 impl Space {
-    pub const ALL: [Self; 2] = [Self::Standard, Self::Perceptual];
+    pub const ALL: [Self; 3] = [Self::Standard, Self::LabD65, Self::Perceptual];
     pub fn label(self) -> &'static str {
         match self {
             Self::Standard => "Standard",
-            Self::Perceptual => "Perceptual",
+            Self::Perceptual => "Perceptual Oklab",
+            Self::LabD65 => "Perceptual CIELAB D65",
         }
     }
 }
@@ -52,6 +54,7 @@ fn encoded(x: f64) -> f64 {
 fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
     let c = rgb.map(|n| n as f64 / 255.0);
     match space {
+        Space::LabD65 => crate::lab_mix::coordinates(rgb),
         Space::Standard => c,
         Space::Perceptual => {
             let lms = matrix(
@@ -76,6 +79,7 @@ fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
 }
 fn rgb(space: Space, c: [f64; 3]) -> [u8; 3] {
     let c = match space {
+        Space::LabD65 => return crate::lab_mix::rgb(c),
         Space::Standard => c,
         Space::Perceptual => {
             let lms = matrix(

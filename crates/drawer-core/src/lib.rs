@@ -99,5 +99,7 @@ pub mod user_tools;
 pub mod tool_modes;
 
 pub mod brush_behavior;
+pub mod brush_color;
 pub mod fibres;
+pub mod lab_mix;
 pub mod tool_bundle;

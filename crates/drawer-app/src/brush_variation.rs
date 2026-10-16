@@ -54,7 +54,7 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
     crate::help::checkbox(
         ui,
         &mut s.dual.enabled,
-        "Combine a second local tip mask",
+        "Combine a second local tip",
         "brush-variation",
     );
     ui.add_enabled_ui(s.dual.enabled, |ui| {
@@ -79,13 +79,33 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
             "Secondary mask opacity (0 = no effect)",
             "brush-variation",
         );
-        super::edit::slider(
-            ui,
-            &mut s.dual.scale,
-            0.1..=1.0,
-            "Secondary tip scale",
-            "brush-variation",
+        ui.checkbox(&mut s.dual.controls.rgb, "Combine secondary RGB and alpha");
+        ui.horizontal(|ui| {
+            ui.label("Secondary ink");
+            ui.color_edit_button_srgba_unmultiplied(&mut s.dual.controls.color);
+        });
+        ui.checkbox(
+            &mut s.dual.controls.linked_size,
+            "Link secondary size to primary diameter",
         );
+        if s.dual.controls.linked_size {
+            super::edit::slider(
+                ui,
+                &mut s.dual.scale,
+                0.1..=1.0,
+                "Secondary / primary diameter",
+                "brush-variation",
+            );
+        } else {
+            super::edit::number(
+                ui,
+                &mut s.dual.controls.size,
+                0.1..=4096.0,
+                0.1,
+                " document px secondary diameter",
+                "brush-variation",
+            );
+        }
         super::edit::number(
             ui,
             &mut s.dual.angle,
@@ -111,7 +131,7 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
             });
         }
     });
-    ui.label("The secondary tip combines coverage, using the same ink and stroke history. Add / maximum / difference can extend the footprint. The configured seed is frozen with the stroke; using it again reproduces the variation.");
+    ui.label("Alpha-only uses the primary ink. RGB mode uses the secondary ink as well; eraser, clone and pixel overwrite use coverage only. Normal / Add / Lighten can extend the footprint. Height is the linear average of the two heights; Apply RGB value uses secondary luminance for coverage. The configured seed is frozen with the stroke; using it again reproduces the variation.");
 }
 
 pub(super) fn smoke() -> Result<(), String> {

@@ -547,3 +547,12 @@ Tool input → Scatter, ribbon and repeating decorations에서 도구별 화면 
 연속 분사는 버튼을 누른 동안 정지한 커서에도1–200회/초로 그린다. 놓으면 정지하고 한 번의 그림 Undo로 취소할 수 있다. Esc/포커스 상실은 진행 중 세션을 취소한다. 기존 Mouse spray와 함께 선택하면 Mouse spray의 입자 제어를 사용한다. 팝업 시험 영역에서도 시간 분사를 확인할 수 있다.
 
 고정 산포점은 같은 시드·팁·입자 위치를 유지한다. 간격 농도 보정은 기준0.15에 맞춰 누적 농도를 보정하며 팁 경계나 넓은 간격의 빈 공간까지 같게 만들지는 않는다.
+
+
+## brush-color
+
+안료 설정에서 문서 RGB·CIELAB D65·Oklab 혼색을 선택하고 Lightness correction으로 입력색의 밝기에 맞추는 강도를 조절한다. 기본 강도0은 기존 결과를 유지한다.
+
+색 변화/보조 팁 설정의 Combine secondary RGB and alpha를 켜면 별도 보조 RGBA를 사용한다. 끄면 주 잉크와 보조 마스크로 그린다. 14개 합성 모드와 기존 Difference를 선택할 수 있다. Height는 두 높이의 선형 평균, Apply RGB value는 보조색의 휘도를 밀도에 반영한다.
+
+Link secondary size를 끄면 주 브러시 크기를 바꿔도 보조 지름을 문서 픽셀 단위로 유지한다. 지우개·복제·픽셀 덮어쓰기는 자신의 쓰기 규칙과 보조 coverage를 사용한다. 모든 설정은 프리셋/사용자 도구에 저장되고 한 획의 두 팁·색 변화는 함께 실행 취소된다.

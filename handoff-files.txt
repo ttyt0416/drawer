@@ -256,3 +256,8 @@ docs/process/tool-slots.md
 crates/drawer-core/src/brush_behavior.rs
 crates/drawer-app/src/brush_behavior.rs
 docs/process/brush-behavior.md
+
+crates/drawer-core/src/lab_mix.rs
+crates/drawer-core/src/brush_color.rs
+crates/drawer-app/src/brush_color.rs
+docs/process/brush-color.md

@@ -72,6 +72,13 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn dual_rgb(&self) -> bool {
+        self.variation.dual.active()
+            && self.variation.dual.controls.rgb
+            && !self.clone_stamp.enabled
+            && self.tip != BrushTip::Eraser
+            && !self.pixel_overwrite()
+    }
     pub fn pixel_overwrite(&self) -> bool {
         self.tip == BrushTip::PixelPen
             && self.profile.pixel.overwrite
@@ -299,11 +306,12 @@ impl Stroke {
         }
         m.mixing *= m.composition.mixing_pressure.map(Some(pressure));
         let blend = |a, b, w| {
-            if m.space == crate::color_mix::Space::Standard {
+            let result = if m.space == crate::color_mix::Space::Standard {
                 mix(a, b, w)
             } else {
                 crate::color_mix::mix(m.space, a, b, w)
-            }
+            };
+            crate::lab_mix::correct(result, a, b, w, m.brightness)
         };
         let mut color = if !m.pigment() {
             match self.effect {
@@ -768,7 +776,9 @@ impl Stroke {
                     }
                     + self.style.shape.size.max(self.style.dynamics.minimum_size)
                         * 0.5
-                        * self.style.variation.dual.extra_radius()
+                        * self.style.variation.dual.extra_radius(
+                            self.style.shape.size.max(self.style.dynamics.minimum_size),
+                        )
                     + 1.0
                     + if self.style.pattern.mode == crate::brush_pattern::Mode::Scatter {
                         self.style.pattern.width * 0.5
@@ -1050,7 +1060,7 @@ impl Stroke {
             (center, shape.size * 0.5, shape.size * 0.5 * shape.aspect)
         };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
-        let extra = radius * self.style.variation.dual.extra_radius();
+        let extra = radius * self.style.variation.dual.extra_radius(shape.size);
         let extent = if bitmap_square || self.style.profile.square(mask_tip) {
             [
                 radius * cos.abs() + minor * sin.abs() + 1.0,
@@ -1091,6 +1101,7 @@ impl Stroke {
             0
         };
         let samples = 1
+            + if self.style.dual_rgb() { 4 } else { 0 }
             + if self.style.material.composition.render_quality == crate::color_mix::Quality::High
                 && !pixel_tip
             {
@@ -1256,16 +1267,22 @@ impl Stroke {
                     }
                 };
                 let amount = amount * bitmap.map_or(1.0, |asset| asset.tip(q));
-                let amount = if self.style.variation.dual.active() {
-                    self.style.variation.dual.combine(
+                let (amount, paint_color) = if self.style.variation.dual.active() {
+                    let secondary = self.style.variation.dual.mask(
+                        q,
+                        minor,
+                        point,
+                        self.style.variation.seed,
+                        shape.size,
+                    );
+                    self.style.variation.dual.ink(
                         amount,
-                        self.style
-                            .variation
-                            .dual
-                            .mask(q, minor, point, self.style.variation.seed),
+                        secondary,
+                        paint_color,
+                        self.style.dual_rgb(),
                     )
                 } else {
-                    amount
+                    (amount, paint_color)
                 };
                 if amount <= 0.0 {
                     continue;
@@ -2034,7 +2051,10 @@ mod tests {
         assert!(!s.commit(&mut d).unwrap());
         d.scene.selection_mask = None;
         let before = d.snapshot();
-        let mut s = Stroke::with_budget(&d, 0, style(BrushTip::Pen), 2048).unwrap();
+        // Keep five changed-pixel slots after the current stroke's fixed overhead.
+        // Adding brush settings must not turn this pixel-limit test into a constructor failure.
+        let budget = std::mem::size_of::<Stroke>() + 256 + 5 * 96;
+        let mut s = Stroke::with_budget(&d, 0, style(BrushTip::Pen), budget).unwrap();
         assert!(s.sample(&d, [f64::NAN, 0.0]).is_err());
         s.sample(&d, [2.5, 4.5]).unwrap();
         assert!(s.sample(&d, [30.5, 4.5]).is_err());
