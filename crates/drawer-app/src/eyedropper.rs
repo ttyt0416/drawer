@@ -177,6 +177,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     app.workspaces.store.current.input.profiles[6].pixel = drawer_core::tip_profile::Pixel {
         pressure: false,
         grid: false,
+        overwrite: false,
     };
     let p = drawer_core::brush_presets::Preset::capture(
         &app.capture_workspace(),

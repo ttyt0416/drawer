@@ -72,6 +72,12 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn pixel_overwrite(&self) -> bool {
+        self.tip == BrushTip::PixelPen
+            && self.profile.pixel.overwrite
+            && !self.clone_stamp.enabled
+            && self.material.composition.mode == crate::brush_composite::Mode::Normal
+    }
     pub fn resolved(mut self) -> Self {
         if self.tip == BrushTip::PixelPen && !self.profile.pixel.pressure {
             self.pressure.size = false;
@@ -284,6 +290,9 @@ impl Stroke {
         use crate::brush_material::Mode;
         use crate::mouse_pressure::Effect;
         let mut m = self.style.material;
+        if m.mode == Mode::Water && pressure < m.supply_threshold {
+            m.supply = 0.0;
+        }
         m.mixing *= m.composition.mixing_pressure.map(Some(pressure));
         let blend = |a, b, w| {
             if m.space == crate::color_mix::Space::Standard {
@@ -364,6 +373,7 @@ impl Stroke {
     ) -> Result<(), String> {
         use crate::brush_material::Mode;
         if self.style.clone_stamp.enabled
+            || self.style.pixel_overwrite()
             || self.style.material.composition.mode != crate::brush_composite::Mode::Normal
         {
             return self.check(doc);
@@ -1272,6 +1282,8 @@ impl Stroke {
                     } else {
                         mix(base, source, amount)
                     }
+                } else if self.style.pixel_overwrite() {
+                    self.dab_color
                 } else if special {
                     composition
                         .mode
@@ -1295,7 +1307,11 @@ impl Stroke {
                 let factor = mask as f64 / 255.0
                     * self.style.opacity
                     * self.materials.factor(self.style.texture, point);
-                let mut result = if special {
+                let mut result = if self.style.pixel_overwrite() {
+                    let mut ink = self.dab_color;
+                    ink[3] = (ink[3] as f64 * amount * factor).round() as u8;
+                    ink
+                } else if special {
                     composition.mode.compose(
                         original,
                         paint_color,

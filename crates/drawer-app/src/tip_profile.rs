@@ -4,6 +4,13 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
     if tip == BrushTip::PixelPen {
         crate::help::checkbox(
             ui,
+            &mut s.pixel.overwrite,
+            "Overwrite with brush RGBA (no buildup)",
+            "tool-modes",
+        );
+        ui.label("Overwrite replaces pixel RGB and scales its alpha by coverage. It bypasses pigment/mouse postprocessing; special composition and clone keep their own rules.");
+        crate::help::checkbox(
+            ui,
             &mut s.pixel.pressure,
             "Pixel pen reacts to pressure",
             "pixel-eyedropper",

@@ -30,6 +30,9 @@ impl Mode {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    /// Legacy files without this field keep the previous ungated supply.
+    #[serde(default)]
+    pub supply_threshold: f64,
     #[serde(default)]
     pub composition: crate::brush_composite::Settings,
     #[serde(default)]
@@ -50,6 +53,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            supply_threshold: 0.2,
             composition: Default::default(),
             space: Default::default(),
             quality: Default::default(),
@@ -70,6 +74,7 @@ impl Settings {
     pub fn valid(self) -> bool {
         [
             self.supply,
+            self.supply_threshold,
             self.mixing,
             self.retention,
             self.water,
@@ -173,6 +178,7 @@ fn probe_in(
 /// Same pigment/alpha checks run in unit tests and the installed native process.
 pub fn verify() -> Result<(), String> {
     let base = Settings {
+        supply_threshold: 0.2,
         composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),
@@ -315,6 +321,7 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        supply_threshold: 0.2,
         composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),
@@ -373,6 +380,7 @@ fn verify_numeric_controls() -> Result<(), String> {
 pub fn verify_independent() -> Result<(), String> {
     verify_numeric_controls()?;
     let base = Settings {
+        supply_threshold: 0.2,
         composition: Default::default(),
         space: Default::default(),
         quality: Default::default(),

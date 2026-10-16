@@ -188,7 +188,7 @@ impl Drawer {
             ui.collapsing("Tip images and minimum outputs",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-profile",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_profile::settings_ui(ui,&mut draft.profiles[n],tip));});}});
             ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::brush_pattern_ui(ui,&mut draft.textures[n],&self.materials.library));});}});
             ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
-                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n],tip));});}
+                for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n],tip,draft.profiles[n].pixel.overwrite));});}
             });
             ui.collapsing("Mouse virtual pressure",|ui| {
                 for (n,tip) in BrushTip::ALL.iter().enumerate() {ui.collapsing(tip.label(),|ui|super::mouse_pressure::settings_ui(ui,&mut draft.mouse_pressure[n]));}

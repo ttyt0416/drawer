@@ -515,3 +515,17 @@ Export selected tools / current category는 로컬 그룹 JSON을 저장하고 I
 [브러시 프리셋](local:tool-properties)
 [명령과 단축키](local:shortcuts)
 [로컬 소재](local:local-materials)
+
+## tool-modes | 픽셀 덮어쓰기·알파 유지·무색 번짐 | RGBA 누적 마커 수채 공급 임계필압
+
+Pixel pen 팁의 Overwrite with brush RGBA를 켜면 Normal에서 지정 RGB를 쓰고 지정 알파에 팁/필압/속도/농도/선택/질감을 반영한다. 같은 픽셀을 다시 칠해도 이전 알파와 누적하지 않는다. 투명 지정색은 알파0과 숨은 RGB를 기록한다. 강도0/선택 밖은 바꾸지 않는다. 끄면 기존 source-over다. 덮어쓰기는 안료 pickup/희석/후처리 확산을 우회하며 특수 합성과 복제 도장은 자신의 규칙을 우선한다.
+
+마커의 Keep the layer's original alpha는 색만 혼합하고 모든 기존 알파를 유지한다. 완전 투명 픽셀은 RGB도 유지한다. 일반 브러시의 source-over 누적과 픽셀 덮어쓰기를 구분할 수 있다.
+
+Watercolor의 Minimum pressure for foreground supply 기본값은0.2다. 보정된 압력이 그 미만이면 주색 공급을0으로 하고 기존 색만 섞거나 옮긴다.0.2와 그 이상은 설정한 공급을 쓴다. 물 양·희석·혼색 유지와 독립이다. 압력 없는 마우스에서는 Colorless smudge (no foreground supply)로 주색을 공급하지 않을 수 있다. 빈 영역에 새 주색을 만들지 않는다. 구형 누락은 종전 동작인 임계0으로 보존한다.
+
+프리셋·사용자 도구/설정과 문서의 고정 획에 보존하며 새 설정은 기존 결과를 바꾸지 않는다. 바뀐 획 하나는 Undo 한 번이며 같은 RGBA의 무변경 획은 빈 이력을 만들지 않는다.
+
+[픽셀 펜](local:pixel-eyedropper)
+[안료 설정](local:brush-material)
+[브러시 합성](local:brush-composite)

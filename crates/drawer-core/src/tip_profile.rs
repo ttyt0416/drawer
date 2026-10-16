@@ -21,6 +21,8 @@ impl Image {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Pixel {
+    #[serde(default)]
+    pub overwrite: bool,
     pub pressure: bool,
     pub grid: bool,
 }
@@ -29,6 +31,7 @@ impl Default for Pixel {
         Self {
             pressure: true,
             grid: true,
+            overwrite: false,
         }
     }
 }
@@ -215,6 +218,7 @@ pub fn verify_pixel(root: &std::path::Path) -> Result<(), String> {
             pixel: Pixel {
                 pressure: false,
                 grid: true,
+                overwrite: false,
             },
             ..Default::default()
         },

@@ -1,6 +1,6 @@
 use super::*;
 use drawer_core::brush_material::{Mode, Settings};
-pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
+pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip, overwrite: bool) {
     egui::ComboBox::from_id_salt("brush-render-quality")
         .selected_text(s.composition.render_quality.label())
         .show_ui(ui, |ui| {
@@ -36,6 +36,19 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
         " dissolve seed",
         "brush-composite",
     );
+    if tip == BrushTip::PixelPen
+        && overwrite
+        && s.composition.mode == drawer_core::brush_composite::Mode::Normal
+    {
+        crate::help::checkbox(
+            ui,
+            &mut s.alpha_lock,
+            "Keep the layer's original alpha",
+            "tool-modes",
+        );
+        ui.label("Pixel overwrite uses the brush RGBA directly. Pigment pickup and diffusion are bypassed.");
+        return;
+    }
     ui.collapsing("Pressure controls pigment pickup", |ui| {
         crate::help::checkbox(
             ui,
@@ -126,6 +139,13 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip) {
         ui.label("Running color uses the current local pigment without carrying color from earlier positions. High quality reads more samples inside the footprint and selection.");
     }
     ui.add_enabled_ui(s.mode == Mode::Water, |ui| {
+        super::edit::slider(
+            ui,
+            &mut s.supply_threshold,
+            0.0..=1.0,
+            "Minimum pressure for foreground supply (0 = off)",
+            "tool-modes",
+        );
         super::edit::slider(
             ui,
             &mut s.water,
