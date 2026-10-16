@@ -107,6 +107,29 @@ impl Color {
     }
 }
 impl Graph {
+    pub fn raster_visible(&self, layer: usize, count: usize) -> bool {
+        fn visit(g: &Graph, node: Node, layer: usize, shown: bool, depth: usize) -> Option<bool> {
+            if depth > 16 {
+                return Some(false);
+            }
+            match node {
+                Node::Raster(n) => {
+                    (n == layer).then(|| shown && !g.layers.get(&n).is_some_and(|p| p.hidden))
+                }
+                Node::Folder(n) => g.folders.get(n).and_then(|f| {
+                    f.children
+                        .iter()
+                        .find_map(|c| visit(g, *c, layer, shown && !f.paper.hidden, depth + 1))
+                }),
+            }
+        }
+        layer < count
+            && self
+                .root_nodes(count)
+                .iter()
+                .find_map(|n| visit(self, *n, layer, true, 0))
+                .unwrap_or(false)
+    }
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty() && self.folders.is_empty() && self.roots.is_empty()
     }

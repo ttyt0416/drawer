@@ -565,3 +565,12 @@ Tool input의 각 팁 슬롯에서 좌우/상하 반전과 Override inherited br
 질감의 배율·각도·반전·밝기·대비와 문서/팁 좌표,10개 밀도 합성 모드를 선택할 수 있다. Outline은 질감 경계, Height는 밀도와 질감 높이의 평균을 사용한다. 질감 재정의에서 No texture를 고르면 상속된 질감을 끈다. 새 재정의를 사용하면 팁마다 질감을 적용한 뒤 팁들을 합친다.
 
 Watercolor의 Darken the finished watercolor edge는 획을 놓을 때 가장자리를 한 번 어둡게 하고 알파를 유지한다. 이 옵션이 켜진 유효 수채 획은 포커스를 잃어도 같은 후처리로 완료한다. Esc는 전체 획을 취소한다. 후처리까지 한 번의 그림 Undo에 포함된다. 이 제어는 Normal 합성의 수채에 적용된다.
+
+
+## line-references | 참조 선·벡터층·여러 층 지우기 | 경계 채색 자석 교차점 벡터 erase magnet
+
+Keyboard editing의 Line references and vector layers에서 벡터층과 경로를 만들고 Boundary/magnet, Intersections, Erase 대상을 따로 고른다. Apply는 설정/벡터 초안을 저장하고 Cancel/Esc는 버린다. 잠긴 참조는 읽을 수 있고 숨긴 참조는 무시한다.
+
+Restrict brush coloring은 획 시작점이 속한 닫힌 참조 영역 안으로 채색을 제한한다. Apply and pick fill point 또는 X,Y 직접 실행으로 선택한 래스터층을 전경색으로 채운다. 경계가 열려 있거나 시작점이 선 위면 적용하지 않는다. 자석 거리는 화면 배율과 독립인 문서px다.
+
+Erase는 표시되고 잠기지 않은 선택 대상에만 적용한다. 래스터는 원형 반경, 벡터는 선택한 교차점 참조 사이의 경로 구간을 지운다. 대상 오류는 사전 목록에 표시하고 전체 명령을 취소한다. 벡터 지우기는 래스터 선택을 먼저 해제한다. 모든 영향층은 한 Undo로 복원된다. 위치 선택은 주 탭 캔버스 클릭, Esc/초점 상실 취소다. 설정과 편집 벡터는 .drawer에 저장한다.

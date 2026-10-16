@@ -212,8 +212,32 @@ pub struct Stroke {
     lookup: HashMap<usize, usize>,
     limit: usize,
     pixel_work: u64,
+    region: Option<crate::line_regions::Region>,
+    region_prepared: bool,
 }
 impl Stroke {
+    fn prepare_region(&mut self, doc: &Document, point: Point) -> Result<(), String> {
+        if !self.region_prepared {
+            if doc.scene.lines.settings.clip_paint && self.style.tip != BrushTip::Eraser {
+                let region = crate::line_regions::Region::build(doc, point)?;
+                let remaining = self.limit.saturating_mul(96).saturating_sub(region.bytes());
+                if remaining < 96 {
+                    return Err("Reference mask exceeds stroke memory budget".into());
+                }
+                self.limit = remaining / 96;
+                self.region = Some(region);
+            }
+            self.region_prepared = true;
+        }
+        Ok(())
+    }
+    fn coverage(&self, doc: &Document, p: Point) -> u8 {
+        if self.region.as_ref().is_some_and(|r| !r.contains(p)) {
+            0
+        } else {
+            doc.scene.selection_coverage(p)
+        }
+    }
     pub fn set_geometry_scale(&mut self, scale: f64) -> Result<(), String> {
         if !(0.0..=1.0).contains(&scale) {
             return Err("Invalid stroke geometry scale".into());
@@ -476,15 +500,15 @@ impl Stroke {
             if !boundary {
                 continue;
             }
-            let change = &mut self.changes[n];
+            let change = &self.changes[n];
             let p = [
                 extent.offset[0] as f64 + (change.offset % extent.width as usize) as f64 + 0.5,
                 extent.offset[1] as f64 + (change.offset / extent.width as usize) as f64 + 0.5,
             ];
-            let factor = self.style.material.edge
-                * self.style.opacity
-                * doc.scene.selection_coverage(p) as f64
-                / 255.0;
+            let factor =
+                self.style.material.edge * self.style.opacity * self.coverage(doc, p) as f64
+                    / 255.0;
+            let change = &mut self.changes[n];
             for c in &mut change.after[..3] {
                 *c = (*c as f64 * (1.0 - 0.5 * factor)).round() as u8;
             }
@@ -511,6 +535,7 @@ impl Stroke {
         {
             return Err("Invalid timed dab".into());
         }
+        self.prepare_region(doc, anchor)?;
         self.heading_to(anchor);
         self.particle = Some([anchor[0] - point[0], anchor[1] - point[1]]);
         self.stamp(doc, point, pressure, self.scale)?;
@@ -632,10 +657,7 @@ impl Stroke {
                         self.materials
                             .factor(self.style.texture, [x as f64 + 0.5, y as f64 + 0.5])
                     }
-                    * doc
-                        .scene
-                        .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
-                        as f64
+                    * self.coverage(doc, [x as f64 + 0.5, y as f64 + 0.5]) as f64
                     / 255.0,
             );
             if self.style.material.alpha_lock {
@@ -753,6 +775,8 @@ impl Stroke {
             lookup: HashMap::new(),
             limit,
             pixel_work: 0,
+            region: None,
+            region_prepared: false,
         })
     }
     fn check(&self, doc: &Document) -> Result<(), String> {
@@ -803,6 +827,7 @@ impl Stroke {
         if !point.iter().all(|n| n.is_finite() && n.abs() <= 1e12) {
             return Err("Invalid drawing coordinate".into());
         }
+        self.prepare_region(doc, point)?;
         let pressure = if processed {
             pressure
         } else {
@@ -1265,7 +1290,7 @@ impl Stroke {
                         && p[0] < doc.width as f64
                         && p[1] < doc.height as f64
                     {
-                        let weight = doc.scene.selection_coverage(p) as f64 / 255.0;
+                        let weight = self.coverage(doc, p) as f64 / 255.0;
                         if weight > 0.0 {
                             samples[sample_count] = (
                                 self.candidate(doc, p[0].floor() as i64, p[1].floor() as i64),
@@ -1282,7 +1307,7 @@ impl Stroke {
                 || center[1] < 0.0
                 || center[0] >= doc.width as f64
                 || center[1] >= doc.height as f64
-                || doc.scene.selection_coverage(center) == 0)
+                || self.coverage(doc, center) == 0)
         {
             [0; 4]
         } else {
@@ -1292,7 +1317,7 @@ impl Stroke {
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
                 let point = [x as f64 + 0.5, y as f64 + 0.5];
-                let mask = doc.scene.selection_coverage(point);
+                let mask = self.coverage(doc, point);
                 if mask == 0 {
                     continue;
                 }

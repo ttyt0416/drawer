@@ -439,7 +439,8 @@ impl Drawer {
             canvas.input_active = self.workspaces.is_focused()
                 && !self.acquisition.open
                 && !self.brush_presets.open
-                && !self.textures.modal();
+                && !self.textures.modal()
+                && !self.lines.modal();
             canvas.filters = self.workspaces.store.current.input.filters;
             canvas.profiles = self.workspaces.store.current.input.profiles;
             canvas.smoothing = self.workspaces.store.current.input.smoothing;

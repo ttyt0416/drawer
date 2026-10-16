@@ -32,6 +32,7 @@ mod image_import_dialog;
 mod information;
 mod input_replay;
 mod layout;
+mod line_tools;
 mod material_library;
 mod mouse_pressure;
 mod movie_dialog;
@@ -137,6 +138,7 @@ struct Drawer {
     native_dial: Option<drawer_platform::Dial>,
     pressure: pressure_settings::Editor,
     textures: texture_panel::Textures,
+    lines: line_tools::Tools,
     replay: input_replay::Editor,
     acquisition: acquisition::Acquisition,
     help: help::Help,
@@ -251,6 +253,7 @@ impl Drawer {
             native_dial: None,
             pressure: Default::default(),
             textures: Default::default(),
+            lines: Default::default(),
             replay: Default::default(),
             acquisition: Default::default(),
             help: help::Help::new(korean_font),
@@ -429,10 +432,12 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        self.line_inputs(ui.ctx());
         self.process_drawing(ui.ctx());
         self.pointer_settings(ui.ctx());
         self.pressure_settings(ui.ctx());
         self.texture_windows(ui.ctx());
+        self.line_window(ui.ctx());
         self.input_replay(ui.ctx());
         self.apply_theme(ui.ctx());
         self.canvas_view.measurement_mode = self.measurement_active();
@@ -509,6 +514,7 @@ impl Drawer {
                     && !self.properties.open
                     && !self.brush_presets.open
                     && !self.textures.modal()
+                    && !self.lines.modal()
                     && !self.controls.open
                     && self.controls.radial.is_none(),
                 |ui| {
@@ -1252,6 +1258,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = line_tools::smoke(&root) {
+                    eprintln!("Line references/vectors: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = tip_texture::smoke(&root) {
                     eprintln!("Tip texture/finished water edges: {e}");
                     fail_smoke();
@@ -1403,7 +1413,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

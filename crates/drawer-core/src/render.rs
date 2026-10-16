@@ -10,6 +10,7 @@ pub struct Renderer<'a> {
     document: &'a Document,
     stroke: Option<&'a crate::painting::Stroke>,
     text_contours: Vec<Vec<Contour>>,
+    vector_bounds: Vec<Vec<Rect>>,
 }
 struct Contour {
     points: Vec<Point>,
@@ -38,6 +39,18 @@ impl<'a> Renderer<'a> {
             document,
             stroke,
             text_contours,
+            vector_bounds: document
+                .scene
+                .lines
+                .layers
+                .iter()
+                .map(|l| {
+                    l.paths
+                        .iter()
+                        .map(crate::line_tools::Path::bounds)
+                        .collect()
+                })
+                .collect(),
         }
     }
     pub fn pixel(&self, point: Point) -> [u8; 4] {
@@ -128,6 +141,15 @@ impl<'a> Renderer<'a> {
                 }
             };
             result = over(result, color);
+        }
+        for (layer, bounds) in scene.lines.layers.iter().zip(&self.vector_bounds) {
+            if !layer.hidden {
+                for (path, bounds) in layer.paths.iter().zip(bounds) {
+                    if bounds.contains(original) && path.hit(original) {
+                        result = over(result, path.color);
+                    }
+                }
+            }
         }
         if let Some(camera) = &scene.camera
             && camera.page_bounds.contains(original)

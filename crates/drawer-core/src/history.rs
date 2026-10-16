@@ -7,6 +7,10 @@ pub(crate) struct PixelChange {
     pub after: [u8; 4],
 }
 enum EditKind {
+    Multi {
+        layers: Vec<(usize, Vec<PixelChange>)>,
+        scene: Option<(Box<crate::scene::Scene>, Box<crate::scene::Scene>)>,
+    },
     Pixels {
         layer: usize,
         changes: Vec<PixelChange>,
@@ -36,6 +40,16 @@ struct Edit {
 impl Edit {
     fn bytes(&self) -> usize {
         match &self.kind {
+            EditKind::Multi { layers, scene } => {
+                layers
+                    .iter()
+                    .map(|(_, p)| p.len() * std::mem::size_of::<PixelChange>())
+                    .sum::<usize>()
+                    + std::mem::size_of::<Self>()
+                    + scene
+                        .as_ref()
+                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
+            }
             EditKind::Pixels { changes, scene, .. } => {
                 changes.len() * std::mem::size_of::<PixelChange>()
                     + std::mem::size_of::<Self>()
@@ -83,6 +97,70 @@ impl History {
     }
 }
 impl Document {
+    pub(crate) fn commit_multi(
+        &mut self,
+        mut layers: Vec<(usize, Vec<PixelChange>)>,
+        after: Option<crate::scene::Scene>,
+    ) -> Result<bool, String> {
+        if after
+            .as_ref()
+            .is_some_and(|s| !s.valid() || !s.paper.valid_for(self.layers.len()))
+        {
+            return Err("Invalid multi-layer scene".into());
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for (n, changes) in &mut layers {
+            let layer = self.layers.get(*n).ok_or("Missing raster target")?;
+            if !seen.insert(*n)
+                || layer.locked
+                || !self.scene.paper.raster_visible(*n, self.layers.len())
+            {
+                return Err("Duplicate, hidden or locked raster target".into());
+            }
+            changes.sort_by_key(|p| p.offset);
+            if changes.windows(2).any(|p| p[0].offset == p[1].offset)
+                || changes
+                    .iter()
+                    .any(|p| layer.pixels.get(p.offset) != Some(&p.before))
+            {
+                return Err("Stale or duplicate pixel delta".into());
+            }
+            changes.retain(|p| p.before != p.after);
+        }
+        layers.retain(|(_, p)| !p.is_empty());
+        let scene = after
+            .filter(|s| *s != self.scene)
+            .map(|s| (Box::new(self.scene.clone()), Box::new(s)));
+        if layers.is_empty() && scene.is_none() {
+            return Ok(false);
+        }
+        let kind = EditKind::Multi { layers, scene };
+        let bytes = Edit {
+            group: None,
+            kind,
+            from: 0,
+            to: 0,
+        };
+        if bytes.bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+            || bytes.bytes().saturating_add(self.resident_bytes())
+                > crate::document::DEFAULT_DOCUMENT_BUDGET
+        {
+            return Err("Multi-layer undo memory budget".into());
+        }
+        if let EditKind::Multi { layers, scene } = &bytes.kind {
+            for (n, changes) in layers {
+                for p in changes {
+                    self.layers[*n].pixels[p.offset] = p.after;
+                }
+            }
+            if let Some((_, after)) = scene {
+                self.scene = after.as_ref().clone();
+            }
+        }
+        self.history.push(bytes.kind);
+        self.history_changed();
+        Ok(true)
+    }
     pub(crate) fn commit_pixel_changes(
         &mut self,
         layer: usize,
@@ -287,6 +365,16 @@ impl Document {
             return false;
         };
         match &edit.kind {
+            EditKind::Multi { layers, scene } => {
+                for (n, changes) in layers {
+                    for p in changes {
+                        self.layers[*n].pixels[p.offset] = p.before;
+                    }
+                }
+                if let Some((before, _)) = scene {
+                    self.scene = before.as_ref().clone();
+                }
+            }
             EditKind::Pixels {
                 layer,
                 changes,
@@ -318,6 +406,16 @@ impl Document {
             return false;
         };
         match &edit.kind {
+            EditKind::Multi { layers, scene } => {
+                for (n, changes) in layers {
+                    for p in changes {
+                        self.layers[*n].pixels[p.offset] = p.after;
+                    }
+                }
+                if let Some((_, after)) = scene {
+                    self.scene = after.as_ref().clone();
+                }
+            }
             EditKind::Pixels {
                 layer,
                 changes,

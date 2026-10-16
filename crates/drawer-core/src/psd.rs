@@ -37,6 +37,7 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
 pub fn layers_supported(d: &Document) -> bool {
     d.animation.is_none()
         && d.scene.objects.is_empty()
+        && d.scene.lines.layers.is_empty()
         && d.scene.worlds.is_empty()
         && d.scene
             .paper

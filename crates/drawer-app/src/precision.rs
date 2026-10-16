@@ -52,6 +52,10 @@ impl Drawer {
         if self.drawing.mode == Mode::Eyedropper {
             self.eyedropper_controls(ui);
         }
+        if ui.button("Line references and vector layers…").clicked() {
+            self.finish_stroke();
+            self.lines.open = true;
+        }
         let old = self.precision.target;
         egui::ComboBox::from_id_salt("keyboard-move-target")
             .selected_text(self.precision.target.label())

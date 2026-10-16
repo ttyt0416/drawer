@@ -265,3 +265,9 @@ docs/process/brush-color.md
 crates/drawer-core/src/tip_texture.rs
 crates/drawer-app/src/tip_texture.rs
 docs/process/tip-texture.md
+
+crates/drawer-core/src/line_tools.rs
+crates/drawer-core/src/line_regions.rs
+crates/drawer-core/src/line_tools_verify.rs
+crates/drawer-app/src/line_tools.rs
+docs/process/line-references.md

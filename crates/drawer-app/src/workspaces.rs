@@ -760,7 +760,8 @@ impl Drawer {
                                     ui.add_enabled_ui(
                                         self.workspaces.staged.is_none()
                                             && !self.brush_presets.open
-                                            && !self.textures.modal(),
+                                            && !self.textures.modal()
+                                            && !self.lines.modal(),
                                         |ui| self.show_panel(ui, kind),
                                     )
                                 });
@@ -813,7 +814,8 @@ impl Drawer {
                         ui.add_enabled_ui(
                             self.workspaces.staged.is_none()
                                 && !self.brush_presets.open
-                                && !self.textures.modal(),
+                                && !self.textures.modal()
+                                && !self.lines.modal(),
                             |ui| self.show_panel(ui, kind),
                         )
                     });
@@ -861,6 +863,7 @@ impl Drawer {
             && !self.properties.open
             && !self.brush_presets.open
             && !self.textures.modal()
+            && !self.lines.modal()
             && !self.ui_behavior.open;
         let mut visible = true;
         egui::Window::new("Popup test painting")
