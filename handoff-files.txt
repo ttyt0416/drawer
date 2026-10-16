@@ -295,3 +295,5 @@ docs/process/related-colors.md
 crates/drawer-core/src/color_modes.rs
 crates/drawer-app/src/color_modes.rs
 docs/process/color-modes.md
+
+docs/process/hsl-swatches.md

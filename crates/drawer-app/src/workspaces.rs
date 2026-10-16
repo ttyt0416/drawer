@@ -309,6 +309,7 @@ impl Drawer {
     }
     pub(super) fn restore_workspace(&mut self, s: &Snapshot) {
         self.drawing.cancel_sample();
+        self.color_tables.cancel_drag();
         self.finish_stroke();
         self.mixer.cancel(&mut self.workspaces.store.current.mixer);
         self.workspaces.cancel_pad();

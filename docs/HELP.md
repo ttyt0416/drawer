@@ -615,3 +615,7 @@ Color에서 Primary/Secondary를 고르거나 Swap colors로 두 RGBA를 교환�
 투명색은 현재 팁의 모양·질감·필압과 농도로 알파를 지운다. 사각형·비트맵 팁 모양도 유지한다. 색·안료·복제 공급과 수채 후처리는 지우기에 섞지 않으며 원래 도구 설정은 보존한다. 레이어 잠금/선택은 적용한다. 한 획은 한 Undo이고 Esc는 취소한다.
 
 두 색과 투명색 선택 상태를 로컬 저장한다. 키를 길게 눌러도 교환/토글을 반복하지 않는다. 시험 칠하기와 혼색판은 각각 전용 Undo/Redo를 사용한다.
+
+## RGB/HSV/HSL and editable swatches
+
+Choose RGB, HSV or HSL without changing the selected RGBA. Enable Preserve HSL hue/saturation to adjust only lightness; one drag retains the source color through black and white. Local swatches support size, automatic/fixed columns, scrolling, naming/replacing/deleting, drag before another swatch, and Ctrl-drag to copy. Use the panel’s Undo/Redo color table edit commands separately from drawing Undo. Escape, dropping outside, or releasing Ctrl during a copy cancels it. All values and layout are saved locally.

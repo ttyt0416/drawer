@@ -7,9 +7,38 @@ pub struct Swatch {
     pub name: String,
     pub color: [u8; 4],
 }
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Layout {
+    pub size: u8,
+    pub columns: Option<u8>,
+    pub scroll: bool,
+}
+impl Default for Layout {
+    fn default() -> Self {
+        Self {
+            size: 24,
+            columns: None,
+            scroll: true,
+        }
+    }
+}
+impl Layout {
+    pub fn valid(self) -> bool {
+        (12..=64).contains(&self.size) && self.columns.is_none_or(|n| (1..=32).contains(&n))
+    }
+    pub fn columns_for(self, width: f32) -> usize {
+        self.columns.map_or_else(
+            || ((width.max(1.0) / (self.size as f32 + 2.0)).floor() as usize).clamp(1, 32),
+            usize::from,
+        )
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Table {
+    #[serde(default)]
+    pub layout: Layout,
     pub id: u64,
     pub name: String,
     pub colors: Vec<Swatch>,
@@ -29,6 +58,7 @@ impl Default for Settings {
         Self {
             next_id: 2,
             tables: vec![Table {
+                layout: Default::default(),
                 id: 1,
                 name: "Local colors".into(),
                 colors: vec![],
@@ -57,15 +87,12 @@ impl Settings {
                 ids.insert(t.id)
                     && t.id > 0
                     && t.id < self.next_id
+                    && t.layout.valid()
                     && name(&t.name)
                     && t.colors.len() <= 256
                     && t.colors.iter().all(|c| {
                         ids.insert(c.id) && c.id > 0 && c.id < self.next_id && name(&c.name)
                     })
-                    && t.colors
-                        .iter()
-                        .enumerate()
-                        .all(|(i, c)| !t.colors[..i].iter().any(|p| p.color == c.color))
             })
             && count <= 2048
             && self
@@ -81,7 +108,7 @@ impl Settings {
         let mut next = self.clone();
         let v = f(&mut next)?;
         if !next.valid() {
-            return Err("Invalid name, duplicate RGBA, or color table capacity".into());
+            return Err("Invalid name/layout or color table capacity".into());
         }
         *self = next;
         Ok(v)
@@ -95,6 +122,7 @@ impl Settings {
         self.edit(|s| {
             let id = s.id()?;
             s.tables.push(Table {
+                layout: Default::default(),
                 id,
                 name: name.trim().into(),
                 colors: vec![],
@@ -151,6 +179,62 @@ impl Settings {
         }
         *self = next;
         Ok(id)
+    }
+
+    pub fn edit_color(&mut self, id: u64, name: &str, color: [u8; 4]) -> Result<(), String> {
+        self.edit(|s| {
+            let c = s
+                .tables
+                .iter_mut()
+                .flat_map(|t| &mut t.colors)
+                .find(|c| c.id == id)
+                .ok_or("Swatch missing")?;
+            c.name = name.trim().into();
+            c.color = color;
+            Ok(())
+        })
+    }
+    pub fn drop_before(&mut self, source: u64, target: u64, copy: bool) -> Result<u64, String> {
+        self.edit(|s| {
+            let source_table = s
+                .tables
+                .iter()
+                .position(|t| t.colors.iter().any(|c| c.id == source))
+                .ok_or("Source swatch missing")?;
+            if !s
+                .tables
+                .iter()
+                .any(|t| t.colors.iter().any(|c| c.id == target))
+            {
+                return Err("Drop target missing".into());
+            }
+            if source == target && !copy {
+                return Ok(source);
+            }
+            let source_index = s.tables[source_table]
+                .colors
+                .iter()
+                .position(|c| c.id == source)
+                .unwrap();
+            let mut entry = if copy {
+                s.tables[source_table].colors[source_index].clone()
+            } else {
+                s.tables[source_table].colors.remove(source_index)
+            };
+            if copy {
+                entry.id = s.id()?;
+                entry.name = format!("{} copy", entry.name.chars().take(59).collect::<String>());
+            }
+            let result = entry.id;
+            let t = s
+                .tables
+                .iter_mut()
+                .find(|t| t.colors.iter().any(|c| c.id == target))
+                .ok_or("Drop target missing")?;
+            let index = t.colors.iter().position(|c| c.id == target).unwrap();
+            t.colors.insert(index, entry);
+            Ok(result)
+        })
     }
     pub fn delete_color(&mut self, id: u64) -> Result<(), String> {
         self.edit(|s| {
@@ -317,5 +401,83 @@ mod tests {
         assert_eq!(p, before);
         assert!(h.redo(&mut p));
         assert_eq!(p, after);
+    }
+}
+
+#[cfg(test)]
+mod editable_tests {
+    use super::*;
+    #[test]
+    fn swatch_move_copy_edit_and_layout_restart() {
+        let mut s = Settings::default();
+        let a = s.add([1, 2, 3, 0]).unwrap();
+        let b = s.add([1, 2, 3, 128]).unwrap();
+        let c = s.add([4, 5, 6, 255]).unwrap();
+        s.drop_before(c, a, false).unwrap();
+        assert_eq!(
+            s.tables[0].colors.iter().map(|c| c.id).collect::<Vec<_>>(),
+            vec![c, a, b]
+        );
+        let copy = s.drop_before(a, b, true).unwrap();
+        assert_ne!(copy, a);
+        s.edit_color(copy, "Named color", [1, 2, 3, 0]).unwrap();
+        assert_eq!(
+            s.tables[0]
+                .colors
+                .iter()
+                .filter(|c| c.color == [1, 2, 3, 0])
+                .count(),
+            2
+        );
+        let next = s.create("Second").unwrap();
+        let d = s.add([9; 4]).unwrap();
+        s.drop_before(copy, d, false).unwrap();
+        assert_eq!(s.tables[1].colors[0].id, copy);
+        assert_eq!(s.selected, Some(next));
+        s.tables[1].layout = Layout {
+            size: 40,
+            columns: Some(7),
+            scroll: false,
+        };
+        let saved = serde_json::to_vec(&s).unwrap();
+        assert_eq!(serde_json::from_slice::<Settings>(&saved).unwrap(), s);
+        let before = s.clone();
+        assert!(s.drop_before(a, u64::MAX, false).is_err());
+        assert_eq!(s, before);
+        assert!(s.edit_color(copy, " ", [3; 4]).is_err());
+        assert_eq!(s, before);
+        assert!(s.drop_before(u64::MAX, d, true).is_err());
+        assert_eq!(s, before);
+        let l = Layout::default();
+        assert_eq!(l.columns_for(10.0), 1);
+        assert_eq!(l.columns_for(260.0), 10);
+        assert_eq!(s.tables[1].layout.columns_for(100.0), 7);
+        assert_eq!(s.tables[1].layout.columns_for(1000.0), 7);
+        s.delete_color(d).unwrap();
+        s.delete_color(copy).unwrap();
+        assert!(s.tables[1].colors.is_empty());
+        assert!(s.valid());
+    }
+    #[test]
+    fn copy_capacity_and_own_undo_are_atomic() {
+        let mut s = Settings::default();
+        for n in 0..256 {
+            s.add([n as u8, 1, 2, 128]).unwrap();
+        }
+        let before = s.clone();
+        let a = s.tables[0].colors[0].id;
+        let b = s.tables[0].colors[1].id;
+        assert!(s.drop_before(a, b, true).is_err());
+        assert_eq!(s, before);
+        s.drop_before(a, b, false).unwrap();
+        assert_eq!(s, before);
+        let mut h = History::default();
+        s.delete_color(a).unwrap();
+        h.record(before.clone(), &s);
+        let after = s.clone();
+        assert!(h.undo(&mut s));
+        assert_eq!(s, before);
+        assert!(h.redo(&mut s));
+        assert_eq!(s, after);
     }
 }

@@ -1,14 +1,17 @@
-//! Canonical unassociated 8-bit RGBA with independent HSV picker metadata.
+//! Canonical unassociated 8-bit RGBA with independent RGB/HSV/HSL picker metadata.
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Model {
     #[default]
     Rgb,
     Hsv,
+    Hsl,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub preserve_lightness: bool,
     pub model: Model,
     pub hue: f64,
 }
@@ -77,6 +80,103 @@ pub fn from_hsv([h, s, v]: [f64; 3], alpha: u8) -> Result<[u8; 4], String> {
         (255.0 * (rgb[2] + m)).round() as u8,
         alpha,
     ])
+}
+
+pub fn hsl(color: [u8; 4], last_hue: f64) -> [f64; 3] {
+    let max = *color[..3].iter().max().unwrap() as f64 / 255.0;
+    let min = *color[..3].iter().min().unwrap() as f64 / 255.0;
+    let d = max - min;
+    let l = (max + min) / 2.0;
+    let saturation = if d == 0.0 {
+        0.0
+    } else {
+        d / (1.0 - (2.0 * l - 1.0).abs())
+    };
+    [hsv(color, last_hue)[0], saturation.clamp(0.0, 1.0), l]
+}
+pub fn from_hsl([h, s, l]: [f64; 3], alpha: u8) -> Result<[u8; 4], String> {
+    if !h.is_finite()
+        || !(0.0..=360.0).contains(&h)
+        || !(0.0..=1.0).contains(&s)
+        || !(0.0..=1.0).contains(&l)
+    {
+        return Err("HSL requires hue 0–360°, saturation/lightness 0–1".into());
+    }
+    let h = h.rem_euclid(360.0) / 60.0;
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - (h.rem_euclid(2.0) - 1.0).abs());
+    let rgb = match h as u32 {
+        0 => [c, x, 0.0],
+        1 => [x, c, 0.0],
+        2 => [0.0, c, x],
+        3 => [0.0, x, c],
+        4 => [x, 0.0, c],
+        _ => [c, 0.0, x],
+    };
+    let m = l - c / 2.0;
+    Ok([
+        (255.0 * (rgb[0] + m)).round() as u8,
+        (255.0 * (rgb[1] + m)).round() as u8,
+        (255.0 * (rgb[2] + m)).round() as u8,
+        alpha,
+    ])
+}
+#[derive(Clone, Copy, Debug)]
+pub struct Lightness {
+    pub hue: f64,
+    pub saturation: f64,
+    pub alpha: u8,
+}
+impl Lightness {
+    pub fn begin(color: [u8; 4], hue: f64) -> Result<Self, String> {
+        if !hue.is_finite() || !(0.0..=360.0).contains(&hue) {
+            return Err("Invalid lightness hue".into());
+        }
+        let [h, s, _] = hsl(color, hue);
+        Ok(Self {
+            hue: h,
+            saturation: s,
+            alpha: color[3],
+        })
+    }
+    pub fn at(self, lightness: f64) -> Result<[u8; 4], String> {
+        from_hsl([self.hue, self.saturation, lightness], self.alpha)
+    }
+}
+pub fn verify_hsl() -> Result<(), String> {
+    for r in (0..=255).step_by(17) {
+        for g in (0..=255).step_by(17) {
+            for b in (0..=255).step_by(17) {
+                for alpha in [0, 128, 255] {
+                    let c = [r, g, b, alpha];
+                    if from_hsl(hsl(c, 217.0), alpha)? != c {
+                        return Err("HSL round trip changed RGBA".into());
+                    }
+                }
+            }
+        }
+    }
+    let light = Lightness::begin([220, 30, 40, 128], 217.0)?;
+    for l in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0, 0.5] {
+        let c = light.at(l)?;
+        if c[3] != 128 {
+            return Err("Lightness changed alpha".into());
+        }
+        if l > 0.0 && l < 1.0 {
+            let [h, s, _] = hsl(c, light.hue);
+            if (h - light.hue).abs() > 1.5 || (s - light.saturation).abs() > 0.025 {
+                return Err(
+                    "Lightness changed the source hue/saturation beyond 8-bit rounding".into(),
+                );
+            }
+        }
+    }
+    if from_hsl([0.0, 1.0, 0.5], 0)? != [255, 0, 0, 0]
+        || from_hsl([360.0, 1.0, 0.5], 128)? != [255, 0, 0, 128]
+    {
+        return Err("HSL zero/full-turn mismatch".into());
+    }
+    Ok(())
 }
 pub fn hex(color: [u8; 4]) -> String {
     format!(
@@ -165,6 +265,7 @@ mod tests {
             assert!((hsv(c, 73.0)[0] - h).abs() < 1e-9)
         }
         let mut s = Settings {
+            preserve_lightness: false,
             model: Model::Hsv,
             hue: 217.0,
         };
@@ -198,5 +299,36 @@ mod tests {
             eye.sample(&d, None, [12.0, 20.0], [1; 4]).unwrap(),
             Some([20, 80, 160, 128])
         );
+    }
+}
+
+#[cfg(test)]
+mod hsl_tests {
+    use super::*;
+    #[test]
+    fn hsl_roundtrip_lightness_endpoints_and_rejected_values() {
+        verify_hsl().unwrap();
+        for c in [
+            [0, 0, 0, 0],
+            [255; 4],
+            [128, 128, 128, 128],
+            [255, 0, 0, 255],
+            [0, 255, 0, 128],
+            [0, 0, 255, 0],
+        ] {
+            assert_eq!(from_hsl(hsl(c, 217.0), c[3]).unwrap(), c);
+            for v in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
+                assert!(from_hsl([217.0, v, 0.5], c[3]).is_err());
+                assert!(from_hsl([217.0, 0.5, v], c[3]).is_err());
+            }
+            let t = Lightness::begin(c, 217.0).unwrap();
+            assert_eq!(t.at(0.0).unwrap(), [0, 0, 0, c[3]]);
+            assert_eq!(t.at(1.0).unwrap(), [255, 255, 255, c[3]]);
+            assert_eq!(t.at(hsl(c, 217.0)[2]).unwrap(), c);
+        }
+        assert_eq!(hsl([128, 128, 128, 0], 217.0), [217.0, 0.0, 128.0 / 255.0]);
+        for h in [f64::NAN, -1.0, 361.0] {
+            assert!(from_hsl([h, 1.0, 0.5], 0).is_err());
+        }
     }
 }
