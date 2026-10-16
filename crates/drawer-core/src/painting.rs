@@ -1079,7 +1079,7 @@ impl Stroke {
             } else {
                 0
             }
-            + if bitmap.is_some() { 4 } else { 0 }
+            + bitmap.map_or(0, |asset| asset.sample_cost())
             + if materials
                 .get(
                     self.style.texture.source,

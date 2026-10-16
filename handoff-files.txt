@@ -247,3 +247,8 @@ docs/process/user-tools.md
 crates/drawer-core/src/tool_modes.rs
 crates/drawer-app/src/tool_modes.rs
 docs/process/tool-modes.md
+
+crates/drawer-core/src/fibres.rs
+crates/drawer-core/src/tool_bundle.rs
+crates/drawer-app/src/tool_slots.rs
+docs/process/tool-slots.md

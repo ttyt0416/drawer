@@ -97,3 +97,6 @@ pub mod eyedropper;
 pub mod user_tools;
 
 pub mod tool_modes;
+
+pub mod fibres;
+pub mod tool_bundle;

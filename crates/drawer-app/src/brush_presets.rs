@@ -20,6 +20,7 @@ struct Editor {
 pub(super) struct Presets {
     pub open: bool,
     pub tools_requested: bool,
+    tool_history: drawer_core::user_tools::History,
     editor: Option<Editor>,
     #[cfg(test)]
     apply: Option<egui::Rect>,
@@ -124,10 +125,14 @@ impl Drawer {
         }
         self.sync_tool_properties();
         let mut e = self.brush_presets.editor.take().unwrap_or_else(|| Editor {
-            tools: super::user_tools::Editor::new(
-                self.capture_workspace().user_tools,
-                self.selected,
-            ),
+            tools: {
+                let mut tools = super::user_tools::Editor::new(
+                    self.capture_workspace().user_tools,
+                    self.selected,
+                );
+                tools.history = self.brush_presets.tool_history.clone();
+                tools
+            },
             abr: Default::default(),
             draft: self.workspaces.store.current.brushes.clone(),
             name: self.selected.label().into(),
@@ -210,6 +215,7 @@ impl Drawer {
                 )
             }) {
                 Ok(()) => {
+                    self.brush_presets.tool_history = e.tools.history.clone();
                     if e.tools
                         .original_active
                         .is_some_and(|id| e.tools.draft.entry(id).is_none())

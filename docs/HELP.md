@@ -529,3 +529,12 @@ Watercolor의 Minimum pressure for foreground supply 기본값은0.2다. 보정�
 [픽셀 펜](local:pixel-eyedropper)
 [안료 설정](local:brush-material)
 [브러시 합성](local:brush-composite)
+
+
+## tool-slots
+
+농담·섬유 팁은 Local image materials에서 등록한다. 회색값/알파 밀도와 기존 어두운색 밀도를 선택하고, Owned fibre tip editor에서 위치·굵기·길이·방향·밀도를 편집할 수 있다.
+
+Brush presets → User tools and categories의 :: 손잡이로 슬롯을 정렬한다. Ctrl을 끝까지 누르면 복제한다. Esc·포커스 상실·Ctrl 놓침·목록 밖 놓기는 취소한다. Undo/Redo tool list는 그림 이력과 별개이며 Apply/Cancel은 기존 규칙을 따른다.
+
+다른 PC에는 Export portable tools + materials로 만든 새 Drawer-tool-bundle 폴더 전체를 옮긴다. Import portable tool bundle은 모든 파일을 검증하고 새 ID로 등록한다. 소재는 즉시 저장되고 슬롯은 Apply로 확정한다. 슬롯 삭제/Cancel은 등록 소재를 지우지 않는다. 기존 폴더에는 내보낼 수 없으므로 다른 빈 부모 위치를 고른다.

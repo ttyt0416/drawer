@@ -68,6 +68,12 @@ fn valid_name(s: &str) -> bool {
         && s.chars().count() <= 64
         && !s.chars().any(char::is_control)
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Density {
+    #[default]
+    DarknessOrAlpha,
+    LumaOrAlpha,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Asset {
@@ -78,19 +84,33 @@ pub struct Asset {
     pub height: u32,
     #[serde(deserialize_with = "bytes")]
     pub values: Vec<u8>,
+    #[serde(default)]
+    pub density: Density,
+    #[serde(default)]
+    pub fibres: Option<crate::fibres::Set>,
 }
 impl Asset {
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.id >= FIRST_ID
             && valid_name(&self.name)
             && (1..=512).contains(&self.width)
             && (1..=512).contains(&self.height)
-            && self.values.len() == self.width as usize * self.height as usize
-            && (self.kind != Kind::Tip || self.values.iter().any(|v| *v > 0))
+            && match &self.fibres {
+                Some(set) => self.kind == Kind::Tip && self.values.is_empty() && set.valid(),
+                None => {
+                    self.values.len() == self.width as usize * self.height as usize
+                        && (self.kind != Kind::Tip
+                            || self.density == Density::LumaOrAlpha
+                            || self.values.iter().any(|v| *v > 0))
+                }
+            }
     }
     pub fn tip(&self, q: [f64; 2]) -> f64 {
         if q.iter().any(|n| !n.is_finite() || n.abs() > 1.0) {
             return 0.0;
+        }
+        if let Some(set) = &self.fibres {
+            return set.sample(q, self.width.max(self.height));
         }
         let p = [
             (q[0] + 1.0) * self.width as f64 * 0.5 - 0.5,
@@ -109,6 +129,11 @@ impl Asset {
             }
         }
         sum
+    }
+    pub fn sample_cost(&self) -> u64 {
+        self.fibres
+            .as_ref()
+            .map_or(4, |s| s.fibres.len() as u64 + 1)
     }
     pub fn tile(&self, point: [f64; 2]) -> f64 {
         let x = point[0].rem_euclid(self.width as f64).floor() as usize;
@@ -159,6 +184,15 @@ impl Library {
             .map(|a| format!("{} (#{}): {}×{}", a.name, a.id, a.width, a.height))
     }
     pub fn import(&self, path: &Path, name: &str, kind: Kind) -> io::Result<Self> {
+        self.import_density(path, name, kind, Density::DarknessOrAlpha)
+    }
+    pub fn import_density(
+        &self,
+        path: &Path,
+        name: &str,
+        kind: Kind,
+        density: Density,
+    ) -> io::Result<Self> {
         if !self.valid() {
             return Err(invalid("Existing material library is invalid"));
         }
@@ -192,7 +226,7 @@ impl Library {
         }
         let page = source.decode(0, true, DECODE_BUDGET, &cancel)?;
         let image = page.image;
-        if image.pixels.iter().all(|p| p[3] == 0) {
+        if density == Density::DarknessOrAlpha && image.pixels.iter().all(|p| p[3] == 0) {
             return Err(invalid(
                 "Completely transparent material image has no usable pixels",
             ));
@@ -208,7 +242,11 @@ impl Library {
                         if alpha {
                             p[3]
                         } else {
-                            (255 - luma) as u8
+                            if density == Density::LumaOrAlpha {
+                                luma as u8
+                            } else {
+                                (255 - luma) as u8
+                            }
                         }
                     }
                     Kind::Texture => {
@@ -217,7 +255,19 @@ impl Library {
                 }
             })
             .collect();
-        self.register_mask(name, kind, image.width, image.height, values)
+        self.register_asset(
+            Asset {
+                id: FIRST_ID,
+                name: name.into(),
+                kind,
+                width: image.width,
+                height: image.height,
+                values,
+                density,
+                fibres: None,
+            },
+            false,
+        )
     }
     /// Register independently decoded mask bytes; validation and publication stay separate.
     pub fn register_mask(
@@ -228,35 +278,68 @@ impl Library {
         height: u32,
         values: Vec<u8>,
     ) -> io::Result<Self> {
-        let name = name.trim();
-        if !self.valid()
-            || !valid_name(name)
-            || self
-                .assets
-                .iter()
-                .any(|a| a.name.to_lowercase() == name.to_lowercase())
+        self.register_asset(
+            Asset {
+                id: FIRST_ID,
+                name: name.trim().into(),
+                kind,
+                width,
+                height,
+                values,
+                density: Density::default(),
+                fibres: None,
+            },
+            false,
+        )
+    }
+    pub fn register_fibres(&self, name: &str, set: crate::fibres::Set) -> io::Result<Self> {
+        self.register_asset(
+            Asset {
+                id: FIRST_ID,
+                name: name.trim().into(),
+                kind: Kind::Tip,
+                width: 128,
+                height: 128,
+                values: vec![],
+                density: Density::default(),
+                fibres: Some(set),
+            },
+            false,
+        )
+    }
+    /// Always assigns a fresh local ID. Bundle collisions receive a display suffix.
+    pub(crate) fn register_asset(&self, mut asset: Asset, rename: bool) -> io::Result<Self> {
+        if !self.valid() || !asset.valid() {
+            return Err(invalid("Invalid material/library"));
+        }
+        let original = asset.name.clone();
+        let mut n = 2;
+        while self
+            .assets
+            .iter()
+            .any(|a| a.name.to_lowercase() == asset.name.to_lowercase())
         {
-            return Err(invalid(
-                "Invalid library or duplicate/invalid material name",
-            ));
+            if !rename {
+                return Err(invalid("Duplicate material name"));
+            }
+            let tail = format!(" ({n})");
+            asset.name = format!(
+                "{}{}",
+                original.chars().take(64 - tail.len()).collect::<String>(),
+                tail
+            );
+            n += 1;
         }
         let mut next = self.clone();
-        let id = next.next_id;
+        asset.id = next.next_id;
         next.next_id = next
             .next_id
             .checked_add(1)
             .ok_or_else(|| invalid("Material ID limit"))?;
-        next.assets.push(Asset {
-            id,
-            name: name.into(),
-            kind,
-            width,
-            height,
-            values,
-        });
+        next.assets.push(asset);
         if !next.valid() {
             return Err(invalid(
-                "Empty tip or material capacity exceeded (32 items / 2 MiB masks)",
+                "Material capacity exceeded (32 items / 2 MiB masks)",
             ));
         }
         Ok(next)
@@ -702,6 +785,8 @@ mod format_tests {
         let mut big = Library::default();
         for n in 0..9 {
             big.assets.push(Asset {
+                density: Density::default(),
+                fibres: None,
                 id: FIRST_ID + n,
                 name: format!("Big {n}"),
                 kind: Kind::Tip,

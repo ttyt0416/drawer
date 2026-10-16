@@ -7,6 +7,8 @@ pub(super) struct Materials {
     path: String,
     name: String,
     kind: Kind,
+    density: drawer_core::material_library::Density,
+    fibres: drawer_core::fibres::Set,
     blocked: Option<String>,
     message: Option<String>,
 }
@@ -100,6 +102,32 @@ impl Drawer {
         self.materials.library = Arc::new(next);
         Ok(())
     }
+    fn fibre_material_ui(&mut self, ui: &mut egui::Ui) {
+        egui::CollapsingHeader::new("Owned fibre tip editor").show(ui,|ui|{
+            ui.label("Normalized positions ±1, width 0–2, length 0–4, angle ±180°, density 0–1. Up to 128 round-capped fibres. Empty/zero width makes no ink. Registration creates a read-only material snapshot.");
+            ui.horizontal_wrapped(|ui|{
+                if ui.add_enabled(self.materials.fibres.fibres.len()<128,egui::Button::new("Add fibre")).clicked(){self.materials.fibres.fibres.push(Default::default());}
+                if ui.button("Clear fibre draft").clicked(){self.materials.fibres=Default::default();}
+                if ui.button("Read own fibre JSON…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Drawer fibre v1",&["json"]).pick_file(){
+                    match drawer_core::fibres::Set::read(&path){Ok(set)=>self.materials.fibres=set,Err(e)=>self.materials.message=Some(e.to_string())}
+                }
+                if ui.add_enabled(self.storage.is_some() && self.materials.blocked.is_none(),egui::Button::new("Register fibre draft locally")).clicked(){
+                    let r=self.materials.library.register_fibres(&self.materials.name,self.materials.fibres.clone()).map_err(|e|e.to_string()).and_then(|next|self.publish_materials(next));
+                    self.materials.message=Some(match r{Ok(())=>"Fibre material registered; source and document preserved.".into(),Err(e)=>e});
+                }
+            });
+            let mut remove=None;
+            egui::ScrollArea::vertical().id_salt("fibre-rows").max_height(180.0).show(ui,|ui|{
+                for (n,f) in self.materials.fibres.fibres.iter_mut().enumerate(){ui.push_id(n,|ui|{ui.horizontal_wrapped(|ui|{
+                    ui.label(format!("{}",n+1));
+                    let [x,y]=&mut f.position;
+                    for (v,label,range) in [(x,"X",-1.0..=1.0),(y,"Y",-1.0..=1.0),(&mut f.thickness,"Width",0.0..=2.0),(&mut f.length,"Length",0.0..=4.0),(&mut f.angle,"Angle",-180.0..=180.0),(&mut f.density,"Density",0.0..=1.0)]{ui.add(egui::DragValue::new(v).prefix(format!("{label} ")).speed(0.01).range(range));}
+                    if ui.button("Remove").clicked(){remove=Some(n);}
+                });});}
+            });
+            if let Some(n)=remove{self.materials.fibres.fibres.remove(n);}
+        });
+    }
     pub(super) fn local_materials_ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -130,6 +158,27 @@ impl Drawer {
                     ui.selectable_value(&mut self.materials.kind, kind, kind.label());
                 }
             });
+        if self.materials.kind == Kind::Tip {
+            use drawer_core::material_library::Density;
+            egui::ComboBox::from_id_salt("material-density")
+                .selected_text(match self.materials.density {
+                    Density::DarknessOrAlpha => "Darkness / alpha density",
+                    Density::LumaOrAlpha => "Gray value / alpha density",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.materials.density,
+                        Density::DarknessOrAlpha,
+                        "Darkness / alpha (legacy)",
+                    );
+                    ui.selectable_value(
+                        &mut self.materials.density,
+                        Density::LumaOrAlpha,
+                        "Gray value / alpha (white = full, black = empty)",
+                    );
+                });
+        }
+        self.fibre_material_ui(ui);
         if let Some(e) = &self.materials.blocked {
             ui.colored_label(egui::Color32::YELLOW, e);
         }
@@ -143,10 +192,11 @@ impl Drawer {
             let result = self
                 .materials
                 .library
-                .import(
+                .import_density(
                     PathBuf::from(&self.materials.path).as_path(),
                     &self.materials.name,
                     self.materials.kind,
+                    self.materials.density,
                 )
                 .map_err(|e| e.to_string())
                 .and_then(|next| self.publish_materials(next));

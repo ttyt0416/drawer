@@ -109,6 +109,7 @@ try {
     if ($smokeResult -notmatch 'extended_brushes=true' -or $smokeResult -notmatch 'embedded_tips=7') { throw '마커·번짐·픽셀 펜 실행 시험 실패' }
     if ($smokeResult -notmatch 'tip_profile=true') { throw '최소 굵기·농도/팁 모양 시험 실패' }
     if ($smokeResult -notmatch 'stroke_filter=true') { throw '독립 위치/필압 평활 시험 실패' }
+    if ($smokeResult -notmatch 'tool_slots=true') { throw '농담·섬유·슬롯·오프라인 묶음 시험 실패' }
     if ($smokeResult -notmatch 'tool_modes=true') { throw '픽셀 덮어쓰기·알파 유지·수채 공급 시험 실패' }
     if ($smokeResult -notmatch 'user_tools=true') { throw '독립 사용자 도구·분류·그룹·참조 복원 시험 실패' }
     if ($smokeResult -notmatch 'velocity_pressure=true') { throw '속도 크기·농도·장치 필압·시각 경계 시험 실패' }

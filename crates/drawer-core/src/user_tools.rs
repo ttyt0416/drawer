@@ -314,6 +314,47 @@ impl Library {
             Ok(())
         })
     }
+    /// Drop before a stable target. Copy assigns a new ID and independent preset/default.
+    pub fn drop_before(&mut self, source: u64, target: u64, copy: bool) -> Result<u64, String> {
+        self.edit(|next| {
+            let category = next.entry(target).ok_or("Drop target missing")?.category;
+            next.entry(source).ok_or("Drag source missing")?;
+            if source == target {
+                return Ok(source);
+            }
+            let id = if copy {
+                next.duplicate(&[source], category)?[0]
+            } else {
+                source
+            };
+            let n = next.tools.iter().position(|t| t.id == id).unwrap();
+            let mut entry = next.tools.remove(n);
+            entry.category = category;
+            let to = next.tools.iter().position(|t| t.id == target).unwrap();
+            next.tools.insert(to, entry);
+            Ok(id)
+        })
+    }
+    pub fn encode(&self) -> io::Result<Vec<u8>> {
+        if !self.valid() {
+            return Err(io::Error::other("Invalid tools"));
+        }
+        let bytes = serde_json::to_vec(self).map_err(io::Error::other)?;
+        if bytes.len() > FILE_LIMIT {
+            return Err(io::Error::other("Tool group exceeds 4 MiB"));
+        }
+        Ok(bytes)
+    }
+    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        if bytes.len() > FILE_LIMIT {
+            return Err(io::Error::other("Tool group exceeds 4 MiB"));
+        }
+        let library: Self = serde_json::from_slice(bytes).map_err(io::Error::other)?;
+        if !library.valid() {
+            return Err(io::Error::other("Invalid tool group"));
+        }
+        Ok(library)
+    }
     pub fn reorder_category(&mut self, id: u64, delta: isize) -> Result<(), String> {
         self.edit(|next| {
             let n = next
@@ -598,6 +639,13 @@ impl Library {
             Ok(mapping)
         })
     }
+    pub(crate) fn portable(&self) -> Self {
+        let mut group = self.clone();
+        group.active = None;
+        group.cache.fill(None);
+        group.defaults.fill(None);
+        group
+    }
     pub fn group(&self, ids: &[u64], category: Option<u64>) -> Result<Self, String> {
         let mut group = self.clone();
         group.active = None;
@@ -660,6 +708,42 @@ impl Library {
             let _ = fs::remove_file(&temp);
         }
         result
+    }
+}
+
+/// Session-only list history. It never touches the drawing document's undo stack.
+#[derive(Clone, Default)]
+pub struct History {
+    undo: Vec<Library>,
+    redo: Vec<Library>,
+}
+impl History {
+    pub fn record(&mut self, before: Library, after: &Library) {
+        if before == *after {
+            return;
+        }
+        if self.undo.len() == 16 {
+            self.undo.remove(0);
+        }
+        self.undo.push(before);
+        self.redo.clear();
+    }
+    pub fn counts(&self) -> (usize, usize) {
+        (self.undo.len(), self.redo.len())
+    }
+    pub fn undo(&mut self, current: &mut Library) -> bool {
+        let Some(previous) = self.undo.pop() else {
+            return false;
+        };
+        self.redo.push(std::mem::replace(current, previous));
+        true
+    }
+    pub fn redo(&mut self, current: &mut Library) -> bool {
+        let Some(next) = self.redo.pop() else {
+            return false;
+        };
+        self.undo.push(std::mem::replace(current, next));
+        true
     }
 }
 

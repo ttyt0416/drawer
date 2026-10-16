@@ -9,6 +9,10 @@ pub(super) enum Action {
 }
 pub(super) struct Editor {
     pub draft: Library,
+    pub history: drawer_core::user_tools::History,
+    drag: Option<(u64, bool)>,
+    #[cfg(test)]
+    rows: Vec<(u64, egui::Rect, egui::Rect)>,
     pub original_active: Option<u64>,
     pub backup: Option<Box<Snapshot>>,
     selected: BTreeSet<u64>,
@@ -28,6 +32,10 @@ impl Editor {
             category: draft.categories.first().map(|c| c.id),
             destination: None,
             draft,
+            history: Default::default(),
+            drag: None,
+            #[cfg(test)]
+            rows: vec![],
             backup: None,
             selected: Default::default(),
             name: "New tool".into(),
@@ -37,6 +45,24 @@ impl Editor {
             replace: false,
             message: None,
         }
+    }
+    fn finish_drag(
+        &mut self,
+        target: Option<u64>,
+        ctrl: bool,
+        focused: bool,
+        cancel: bool,
+    ) -> Result<Option<u64>, String> {
+        let Some((source, copy)) = self.drag.take() else {
+            return Ok(None);
+        };
+        if cancel || !focused || (copy && !ctrl) {
+            return Ok(None);
+        }
+        let Some(target) = target else {
+            return Ok(None);
+        };
+        self.draft.drop_before(source, target, copy).map(Some)
     }
     fn show_result<T>(&mut self, result: Result<T, String>) {
         self.message = Some(match result {
@@ -126,8 +152,105 @@ impl Drawer {
             self.brush_presets.tools_requested = true;
         }
     }
+    fn tool_slot_rows(&mut self, ui: &mut egui::Ui, e: &mut Editor) {
+        ui.label("Drag a handle to insert before another slot. Hold Ctrl throughout a drag to copy. Escape, focus loss or releasing Ctrl cancels; drop outside the list cancels.");
+        #[cfg(test)]
+        {
+            e.rows.clear();
+        }
+        let mut target = None;
+        let position = ui.input(|i| i.pointer.interact_pos());
+        for t in e
+            .draft
+            .tools
+            .iter()
+            .filter(|t| Some(t.category) == e.category)
+        {
+            let response = ui.horizontal(|ui| {
+                let handle = ui.add(egui::Label::new("::").sense(egui::Sense::drag()));
+                if handle.drag_started_by(egui::PointerButton::Primary) {
+                    e.drag = Some((t.id, ui.input(|i| i.modifiers.ctrl)));
+                }
+                let mut selected = e.selected.contains(&t.id);
+                if ui
+                    .checkbox(
+                        &mut selected,
+                        format!("{} · {}", t.preset.name, t.preset.tip.label()),
+                    )
+                    .changed()
+                {
+                    if selected {
+                        e.selected.insert(t.id);
+                        e.name = t.preset.name.clone();
+                        e.properties = t.properties.clone();
+                    } else {
+                        e.selected.remove(&t.id);
+                    }
+                }
+                handle.rect
+            });
+            #[cfg(test)]
+            e.rows.push((t.id, response.response.rect, response.inner));
+            if position.is_some_and(|p| response.response.rect.contains(p)) {
+                target = Some(t.id);
+                if e.drag.is_some() {
+                    ui.painter().hline(
+                        response.response.rect.x_range(),
+                        response.response.rect.top(),
+                        egui::Stroke::new(2.0, ui.visuals().selection.bg_fill),
+                    );
+                }
+            }
+        }
+        let (released, ctrl, focused, escape) = ui.input(|i| {
+            (
+                i.pointer.button_released(egui::PointerButton::Primary),
+                i.modifiers.ctrl,
+                i.focused,
+                i.key_pressed(egui::Key::Escape),
+            )
+        });
+        if e.drag.is_some() && (escape || !focused || e.drag.is_some_and(|(_, copy)| copy && !ctrl))
+        {
+            let _ = e.finish_drag(None, ctrl, focused, true);
+            if escape {
+                ui.input_mut(|i| {
+                    let modifiers = i.modifiers;
+                    i.consume_key(modifiers, egui::Key::Escape);
+                });
+            }
+            e.message = Some("Slot drag cancelled; list preserved.".into());
+        } else if released {
+            let r = e.finish_drag(target, ctrl, focused, false);
+            if let Ok(Some(id)) = &r {
+                e.selected = BTreeSet::from([*id]);
+            }
+            if r.as_ref().is_err() || r.as_ref().is_ok_and(|v| v.is_some()) {
+                e.show_result(r);
+            }
+        }
+    }
     pub(super) fn user_tools_ui(&mut self, ui: &mut egui::Ui, e: &mut Editor) -> Option<Action> {
         let mut action = None;
+        let mut history_action = false;
+        ui.horizontal(|ui| {
+            let (undo, redo) = e.history.counts();
+            if ui
+                .add_enabled(undo > 0, egui::Button::new("Undo tool list"))
+                .clicked()
+            {
+                e.history.undo(&mut e.draft);
+                history_action = true;
+            }
+            if ui
+                .add_enabled(redo > 0, egui::Button::new("Redo tool list"))
+                .clicked()
+            {
+                e.history.redo(&mut e.draft);
+                history_action = true;
+            }
+        });
+        let before = e.draft.clone();
         let current = self.capture_workspace();
         ui.label("Independent local tools use one of the seven brush engines. Their names, IDs, categories, defaults and supported common properties are saved with settings. Picture undo stays separate.");
         if let Some(backup) = &e.backup {
@@ -179,29 +302,7 @@ impl Drawer {
             }
         });
         ui.separator();
-        for t in e
-            .draft
-            .tools
-            .iter()
-            .filter(|t| Some(t.category) == e.category)
-        {
-            let mut selected = e.selected.contains(&t.id);
-            if ui
-                .checkbox(
-                    &mut selected,
-                    format!("{} · {}", t.preset.name, t.preset.tip.label()),
-                )
-                .changed()
-            {
-                if selected {
-                    e.selected.insert(t.id);
-                    e.name = t.preset.name.clone();
-                    e.properties = t.properties.clone();
-                } else {
-                    e.selected.remove(&t.id);
-                }
-            }
-        }
+        self.tool_slot_rows(ui, e);
         ui.horizontal(|ui| {
             ui.label(format!("{} tools selected", e.selected.len()));
             if ui.button("Select this category").clicked() {
@@ -470,6 +571,37 @@ impl Drawer {
                 }
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Export portable tools + materials…").clicked()
+                && let Some(parent) = rfd::FileDialog::new().pick_folder()
+            {
+                let r = e
+                    .draft
+                    .group(&ids, if ids.is_empty() { e.category } else { None })
+                    .and_then(|group| {
+                        drawer_core::tool_bundle::export(
+                            &parent.join("Drawer-tool-bundle"),
+                            &group,
+                            &self.materials.library,
+                        )
+                        .map_err(|e| e.to_string())
+                    });
+                e.show_result(r);
+            }
+            if ui.button("Import portable tool bundle…").clicked()
+                && let Some(path) = rfd::FileDialog::new().pick_folder()
+            {
+                let r = drawer_core::tool_bundle::import(&path, &e.draft, &self.materials.library)
+                    .map_err(|e| e.to_string())
+                    .and_then(|(tools, materials)| {
+                        self.publish_materials(materials)?;
+                        e.draft = tools;
+                        Ok(())
+                    });
+                e.show_result(r);
+            }
+        });
+        ui.label("Portable export creates a new Drawer-tool-bundle folder inside the chosen folder. Import validates all files before registering materials and staging slots. Apply saves slots; Cancel keeps the previous slots. Registered materials remain local for reuse.");
         ui.label("Group JSON remaps imported tool/category IDs and preserves empty categories. Material IDs reference the local image library; image files are not included in this group format.");
         let mut preview = current.clone();
         preview.user_tools = e.draft.clone();
@@ -491,6 +623,10 @@ impl Drawer {
         }
         if let Some(message) = &e.message {
             ui.label(message);
+        }
+        e.selected.retain(|id| e.draft.entry(*id).is_some());
+        if !history_action {
+            e.history.record(before, &e.draft);
         }
         action
     }
@@ -768,5 +904,213 @@ mod tests {
         assert_eq!(std::fs::read(file).unwrap(), bytes);
         assert_eq!(std::fs::read(&temp).unwrap(), b"foreign");
         std::fs::remove_file(temp).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod slot_drag_tests {
+    use super::*;
+    fn frame(
+        ctx: &egui::Context,
+        app: &mut Drawer,
+        e: &mut Editor,
+        mut events: Vec<egui::Event>,
+        ctrl: bool,
+        focused: bool,
+    ) {
+        events.insert(
+            0,
+            egui::Event::ModifiersChanged(egui::Modifiers {
+                ctrl,
+                ..Default::default()
+            }),
+        );
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200.0, 1800.0),
+                )),
+                focused,
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                app.user_tools_ui(ui, e);
+            },
+        );
+        output.textures_delta.clear();
+    }
+    fn press(pos: egui::Pos2, pressed: bool, ctrl: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers {
+                ctrl,
+                ..Default::default()
+            },
+        }
+    }
+    #[test]
+    fn actual_slot_drag_copy_cancel_and_list_history_leave_picture_untouched() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(crate::tests::tiny_spec()).unwrap();
+        app.sync_tool_properties();
+        let before = app.documents[0].snapshot();
+        let s = app.capture_workspace();
+        let mut tools = s.user_tools.clone();
+        let mut ids = vec![];
+        for name in ["A", "B", "C"] {
+            ids.push(
+                tools
+                    .create_tool(
+                        1,
+                        Preset::capture(&s, BrushTip::Pen, name).unwrap(),
+                        Property::ALL.to_vec(),
+                    )
+                    .unwrap(),
+            );
+        }
+        let mut e = Editor::new(tools.clone(), BrushTip::Pen);
+        frame(&ctx, &mut app, &mut e, vec![], false, true);
+        frame(&ctx, &mut app, &mut e, vec![], false, true);
+        let start = e.rows.iter().find(|r| r.0 == ids[2]).unwrap().2.center();
+        let target = e.rows.iter().find(|r| r.0 == ids[0]).unwrap().1.center();
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![egui::Event::PointerMoved(start), press(start, true, false)],
+            false,
+            true,
+        );
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![egui::Event::PointerMoved(target)],
+            false,
+            true,
+        );
+        assert!(e.drag.is_some());
+        assert!(e.draft == tools);
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![press(target, false, false)],
+            false,
+            true,
+        );
+        assert_eq!(e.draft.tools[0].id, ids[2]);
+        assert_eq!(e.history.counts(), (1, 0));
+        assert!(e.history.undo(&mut e.draft));
+        assert!(e.draft == tools);
+        assert!(e.history.redo(&mut e.draft));
+        // Ctrl remains held until a valid drop: independent copy with a fresh ID.
+        let start = e.rows.iter().find(|r| r.0 == ids[0]).unwrap().2.center();
+        let target = e.rows.iter().find(|r| r.0 == ids[1]).unwrap().1.center();
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![egui::Event::PointerMoved(start), press(start, true, true)],
+            true,
+            true,
+        );
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![egui::Event::PointerMoved(target)],
+            true,
+            true,
+        );
+        frame(
+            &ctx,
+            &mut app,
+            &mut e,
+            vec![press(target, false, true)],
+            true,
+            true,
+        );
+        assert_eq!(e.draft.tools.len(), 4);
+        let copied = e.selected.iter().copied().next().unwrap();
+        assert!(!ids.contains(&copied));
+        let stable = e.draft.clone();
+        for mode in 0..4 {
+            frame(&ctx, &mut app, &mut e, vec![], true, true);
+            let start = e.rows.iter().find(|r| r.0 == ids[0]).unwrap().2.center();
+            let target = e.rows.iter().find(|r| r.0 == ids[1]).unwrap().1.center();
+            frame(
+                &ctx,
+                &mut app,
+                &mut e,
+                vec![egui::Event::PointerMoved(start), press(start, true, true)],
+                true,
+                true,
+            );
+            frame(
+                &ctx,
+                &mut app,
+                &mut e,
+                vec![egui::Event::PointerMoved(target)],
+                true,
+                true,
+            );
+            assert!(e.drag.is_some());
+            match mode {
+                0 => frame(&ctx, &mut app, &mut e, vec![], false, true),
+                1 => frame(
+                    &ctx,
+                    &mut app,
+                    &mut e,
+                    vec![egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: Default::default(),
+                    }],
+                    true,
+                    true,
+                ),
+                2 => frame(&ctx, &mut app, &mut e, vec![], true, false),
+                _ => frame(
+                    &ctx,
+                    &mut app,
+                    &mut e,
+                    vec![
+                        egui::Event::PointerMoved(egui::pos2(1190.0, 1790.0)),
+                        press(egui::pos2(1190.0, 1790.0), false, true),
+                    ],
+                    true,
+                    true,
+                ),
+            }
+            assert!(e.drag.is_none());
+            assert!(e.draft == stable);
+            frame(
+                &ctx,
+                &mut app,
+                &mut e,
+                vec![
+                    press(target, false, false),
+                    egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: Default::default(),
+                    },
+                ],
+                false,
+                true,
+            );
+        }
+        assert!(app.documents[0].snapshot() == before);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
     }
 }
