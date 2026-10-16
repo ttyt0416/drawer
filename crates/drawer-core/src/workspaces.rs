@@ -276,6 +276,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub color_picker: crate::color_selector::Settings,
+    #[serde(default)]
     pub locks: crate::tool_locks::Settings,
     #[serde(default)]
     pub user_tools: crate::user_tools::Library,
@@ -345,6 +347,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            color_picker: Default::default(),
             locks: Default::default(),
             user_tools: Default::default(),
             eyedropper: Default::default(),
@@ -407,6 +410,7 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.color_picker.valid()
             && self.eyedropper.valid()
             && self.user_tools.valid()
             && self.locks.valid()
@@ -486,6 +490,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.color_picker = incoming.color_picker;
             next.locks = incoming.locks.clone();
             next.user_tools = incoming.user_tools.clone();
             next.eyedropper = incoming.eyedropper.clone();

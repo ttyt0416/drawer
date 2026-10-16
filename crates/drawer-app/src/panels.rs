@@ -24,7 +24,7 @@ pub(super) struct Panels {
     pub targets: HashMap<u64, Target>,
     thumbnails: HashMap<ThumbnailKey, egui::TextureHandle>,
     strokes: Vec<egui::TextureHandle>,
-    previous_color: [u8; 4],
+    pub(super) previous_color: [u8; 4],
     #[cfg(test)]
     pub targets_buttons: HashMap<Target, egui::Rect>,
 }
@@ -313,16 +313,7 @@ impl Drawer {
                         });
                     }
                 }
-                Kind::Color => {
-                    let mut color = self.references.session.workspace.color;
-                    if ui
-                        .color_edit_button_srgba_unmultiplied(&mut color)
-                        .changed()
-                    {
-                        self.panels.previous_color = self.references.session.workspace.color;
-                        self.references.session.workspace.color = color;
-                    }
-                }
+                Kind::Color => self.color_controls(ui),
                 Kind::Layers | Kind::Timeline => self.panel_layers(ui, kind),
             }
             if cfg.properties == Bar::Bottom {

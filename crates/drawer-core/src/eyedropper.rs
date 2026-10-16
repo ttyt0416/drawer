@@ -52,6 +52,7 @@ impl Settings {
         } else {
             None
         };
+        let renderer = layer.is_none().then(|| crate::render::Renderer::new(doc));
         let center = point.map(|p| p.floor() as i64);
         let r = self.radius as i64;
         let mut count = 0u64;
@@ -61,7 +62,12 @@ impl Settings {
         for y in (center[1] - r).max(0)..=(center[1] + r).min(doc.height as i64 - 1) {
             for x in (center[0] - r).max(0)..=(center[0] + r).min(doc.width as i64 - 1) {
                 let pixel = layer.map_or_else(
-                    || doc.composite_pixel(x as u32, y as u32),
+                    || {
+                        renderer
+                            .as_ref()
+                            .unwrap()
+                            .pixel([x as f64 + 0.5, y as f64 + 0.5])
+                    },
                     |l| l.pixel(doc.width, doc.height, x, y),
                 );
                 has_color |= pixel != [0; 4];

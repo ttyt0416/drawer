@@ -278,6 +278,7 @@ impl Drawer {
             .name()
             .into();
         s.color = self.references.session.workspace.color;
+        s.color_picker.observe(s.color);
         s.eyedropper.observe(s.color);
         if let Some(tool) = s.user_tools.active_entry().cloned()
             && let Ok(p) =

@@ -278,3 +278,7 @@ crates/drawer-core/src/tonal_verify.rs
 crates/drawer-app/src/tonal.rs
 crates/drawer-app/src/tool_locks.rs
 docs/process/tonal-locks.md
+
+crates/drawer-core/src/color_selector.rs
+crates/drawer-app/src/color_selector.rs
+docs/process/color-selector.md
