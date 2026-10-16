@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 26] = [
+pub const EXTRA_COMMANDS: [&str; 30] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -33,6 +33,10 @@ pub const EXTRA_COMMANDS: [&str; 26] = [
     "new-canvas",
     "test-painting",
     "help",
+    "primary-color",
+    "secondary-color",
+    "swap-colors",
+    "transparent-color",
 ];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Item {
@@ -338,6 +342,10 @@ impl Settings {
             "new-canvas" => "New canvas",
             "test-painting" => "Popup test painting",
             "help" => "Local help",
+            "primary-color" => "Use primary drawing color",
+            "secondary-color" => "Use secondary drawing color",
+            "swap-colors" => "Swap primary and secondary colors",
+            "transparent-color" => "Toggle transparent shape eraser",
             "brush-grow" => "Increase brush size",
             "brush-shrink" => "Decrease brush size",
             "zoom-in" => "Zoom in",

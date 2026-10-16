@@ -120,3 +120,5 @@ pub mod color_selector;
 pub mod color_tables;
 
 pub mod related_colors;
+
+pub mod color_modes;

@@ -39,6 +39,8 @@ impl Default for Pixel {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub transparent: bool,
+    #[serde(default)]
     pub pixel: Pixel,
     pub minimum_size: f64,
     pub minimum_opacity: f64,
@@ -151,6 +153,7 @@ fn probe(
 }
 pub fn verify() -> Result<(), String> {
     let full = Settings {
+        transparent: false,
         minimum_size: 1.0,
         minimum_opacity: 1.0,
         pixel: Default::default(),
@@ -164,6 +167,7 @@ pub fn verify() -> Result<(), String> {
         return Err("Minimum equals maximum did not ignore zero pressure".into());
     }
     let floor = Settings {
+        transparent: false,
         minimum_size: 0.5,
         minimum_opacity: 0.4,
         pixel: Default::default(),
@@ -358,6 +362,7 @@ mod tests {
             );
         }
         let a = Settings {
+            transparent: false,
             minimum_size: 0.3,
             minimum_opacity: 0.6,
             ..Default::default()
@@ -469,6 +474,7 @@ mod tests {
             ..Default::default()
         };
         let p = Settings {
+            transparent: false,
             minimum_size: 0.4,
             minimum_opacity: 0.7,
             pixel: Default::default(),
@@ -638,6 +644,7 @@ mod tests {
                 sequence: Default::default(),
                 filters: Default::default(),
                 profile: Settings {
+                    transparent: false,
                     minimum_size: 1.0,
                     minimum_opacity: 1.0,
                     pixel: Default::default(),

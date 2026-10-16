@@ -192,7 +192,12 @@ impl Drawer {
         if let Some((action, key, repeat)) = action {
             if let Some(tip) = BrushTip::ALL.iter().find(|t| t.name() == action) {
                 self.press_tool(ctx, key, *tip, repeat);
-            } else {
+            } else if !repeat
+                || !matches!(
+                    action.as_str(),
+                    "primary-color" | "secondary-color" | "swap-colors" | "transparent-color"
+                )
+            {
                 self.execute_command(ctx, &action);
             }
         }
@@ -465,14 +470,10 @@ impl Drawer {
             }
             Kind::Color => {
                 if ui.small_button("Previous color").clicked() {
-                    std::mem::swap(
-                        &mut self.panels.previous_color,
-                        &mut self.references.session.workspace.color,
-                    );
+                    self.choose_color(self.panels.previous_color);
                 }
                 if ui.small_button("Black").clicked() {
-                    self.panels.previous_color = self.references.session.workspace.color;
-                    self.references.session.workspace.color = [0, 0, 0, 255];
+                    self.choose_color([0, 0, 0, 255]);
                 }
             }
             Kind::Layers | Kind::Timeline => {

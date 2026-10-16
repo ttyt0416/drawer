@@ -252,7 +252,6 @@ impl Workspaces {
             }
         });
     }
-    #[cfg(test)]
     pub fn input_idle(&self) -> bool {
         self.keys.is_empty() && self.buttons.is_empty() && self.pad_point.is_none()
     }
@@ -297,6 +296,7 @@ impl Drawer {
             .name()
             .into();
         s.color = self.references.session.workspace.color;
+        s.color_modes.observe(s.color);
         s.color_picker.observe(s.color);
         s.eyedropper.observe(s.color);
         if let Some(tool) = s.user_tools.active_entry().cloned()
@@ -973,14 +973,22 @@ impl Drawer {
                                     (pos.x - response.rect.min.x) as f64 / 3.0,
                                     (pos.y - response.rect.min.y) as f64 / 3.0,
                                 ];
-                                let clone_stamp = match self
+                                let clone_stamp = match if self
                                     .workspaces
                                     .store
                                     .current
-                                    .input
-                                    .clone_stamp
-                                    .resolve(anchor)
+                                    .color_modes
+                                    .transparent
                                 {
+                                    Ok(Default::default())
+                                } else {
+                                    self.workspaces
+                                        .store
+                                        .current
+                                        .input
+                                        .clone_stamp
+                                        .resolve(anchor)
+                                } {
                                     Ok(stamp) => stamp,
                                     Err(e) => {
                                         self.status = Some(e);
@@ -994,7 +1002,12 @@ impl Drawer {
                                     dynamics: self.workspaces.store.current.input.dynamics[n],
                                     sequence: self.workspaces.store.current.input.sequences[n],
                                     filters: self.workspaces.store.current.input.filters[n],
-                                    profile: self.workspaces.store.current.input.profiles[n],
+                                    profile: {
+                                        let mut p = self.workspaces.store.current.input.profiles[n];
+                                        p.transparent |=
+                                            self.workspaces.store.current.color_modes.transparent;
+                                        p
+                                    },
                                     texture: self.workspaces.store.current.input.textures[n],
                                     material: self.workspaces.store.current.input.materials[n],
                                     shape: drawer_core::brush_cursor::Shape {

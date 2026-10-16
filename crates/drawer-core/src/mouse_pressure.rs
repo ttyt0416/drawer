@@ -443,6 +443,7 @@ impl Replay {
             && !style.pixel_overwrite()
             && !style.dual_rgb()
             && !style.tonal()
+            && !style.erases()
             && !style.material.pigment()
             && !style.clone_stamp.enabled
             && !matches!(self.settings.effect, Effect::Blend | Effect::Smudge))

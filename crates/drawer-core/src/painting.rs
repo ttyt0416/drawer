@@ -72,11 +72,14 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn erases(&self) -> bool {
+        self.tip == BrushTip::Eraser || self.profile.transparent
+    }
     pub fn tonal(&self) -> bool {
         self.material.tonal.mode != crate::tonal::Mode::Off
             && !self.clone_stamp.enabled
             && !self.pixel_overwrite()
-            && self.tip != BrushTip::Eraser
+            && !self.erases()
     }
     pub fn advanced_texture(&self) -> bool {
         self.sequence.slots[..if self.sequence.enabled {
@@ -90,6 +93,7 @@ impl Style {
     }
     pub fn water_edges(&self) -> bool {
         !self.tonal()
+            && !self.erases()
             && self.material.mode == crate::brush_material::Mode::Water
             && self.material.edge > 0.0
             && !self.clone_stamp.enabled
@@ -101,11 +105,12 @@ impl Style {
             && self.variation.dual.active()
             && self.variation.dual.controls.rgb
             && !self.clone_stamp.enabled
-            && self.tip != BrushTip::Eraser
+            && !self.erases()
             && !self.pixel_overwrite()
     }
     pub fn pixel_overwrite(&self) -> bool {
-        self.tip == BrushTip::PixelPen
+        !self.profile.transparent
+            && self.tip == BrushTip::PixelPen
             && self.profile.pixel.overwrite
             && !self.clone_stamp.enabled
             && self.material.composition.mode == crate::brush_composite::Mode::Normal
@@ -135,6 +140,16 @@ impl Style {
         if self.clone_stamp.enabled && self.material.valid() {
             self.material = crate::brush_material::Settings {
                 alpha_lock: self.material.alpha_lock,
+                composition: crate::brush_composite::Settings {
+                    render_quality: self.material.composition.render_quality,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+        }
+        if self.profile.transparent && self.material.valid() {
+            self.clone_stamp = Default::default();
+            self.material = crate::brush_material::Settings {
                 composition: crate::brush_composite::Settings {
                     render_quality: self.material.composition.render_quality,
                     ..Default::default()
@@ -226,7 +241,7 @@ pub struct Stroke {
 impl Stroke {
     fn prepare_region(&mut self, doc: &Document, point: Point) -> Result<(), String> {
         if !self.region_prepared {
-            if doc.scene.lines.settings.clip_paint && self.style.tip != BrushTip::Eraser {
+            if doc.scene.lines.settings.clip_paint && !self.style.erases() {
                 let region = crate::line_regions::Region::build(doc, point)?;
                 let remaining = self.limit.saturating_mul(96).saturating_sub(region.bytes());
                 if remaining < 96 {
@@ -338,7 +353,7 @@ impl Stroke {
         if !(0.0..=1.0).contains(&strength) || point.iter().any(|v| !v.is_finite()) {
             return Err("Invalid stroke material".into());
         }
-        self.effect = if self.style.clone_stamp.enabled {
+        self.effect = if self.style.clone_stamp.enabled || self.style.profile.transparent {
             crate::mouse_pressure::Effect::Normal
         } else {
             effect
@@ -434,7 +449,8 @@ impl Stroke {
         cancel: impl Fn() -> bool,
     ) -> Result<(), String> {
         use crate::brush_material::Mode;
-        if self.style.tonal()
+        if self.style.profile.transparent
+            || self.style.tonal()
             || self.style.clone_stamp.enabled
             || self.style.pixel_overwrite()
             || self.style.material.composition.mode != crate::brush_composite::Mode::Normal
@@ -1493,7 +1509,7 @@ impl Stroke {
                     amount
                 } else {
                     let alpha = if self.style.tonal()
-                        || self.style.tip == BrushTip::Eraser
+                        || self.style.erases()
                         || matches!(
                             self.style.material.mode,
                             crate::brush_material::Mode::Smudge
@@ -1531,7 +1547,7 @@ impl Stroke {
                     composition
                         .mode
                         .compose(base, paint_color, amount, [x, y], composition.seed)
-                } else if self.style.tip == BrushTip::Eraser {
+                } else if self.style.erases() {
                     [
                         base[0],
                         base[1],

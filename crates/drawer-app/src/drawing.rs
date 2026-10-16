@@ -82,6 +82,7 @@ pub(super) struct Drawing {
     native_mouse: bool,
     pub settings: drawer_core::pointer_input::Settings,
     pub mode: super::precision::Mode,
+    pub transparent_mode: bool,
     pub connect_line: bool,
     pub opacity: Option<[f64; 7]>,
     pub hardness: Option<[f64; 7]>,
@@ -668,7 +669,12 @@ impl Drawing {
                 ui.ctx().request_repaint();
                 continue;
             }
-            style.clone_stamp = match self.clone_config.resolve(projection.point(pos)) {
+            style.profile.transparent |= self.transparent_mode;
+            style.clone_stamp = match if style.profile.transparent {
+                Ok(Default::default())
+            } else {
+                self.clone_config.resolve(projection.point(pos))
+            } {
                 Ok(stamp) => stamp,
                 Err(e) => {
                     self.error = Some(e);
@@ -704,6 +710,7 @@ impl Drawing {
             style = style.resolved();
             style.texture = self.textures[index];
             style.profile = self.profiles[index];
+            style.profile.transparent |= self.transparent_mode;
             style.filters = self.filters[index];
             style.sequence = self.sequences[index];
             style.dynamics = self.dynamics[index];
@@ -734,7 +741,11 @@ impl Drawing {
                         .get(&(doc.id, layer, style.tip))
                         .ok_or("Draw a starting stroke with this tool on this layer first")?;
                     let to = projection.point(pos);
-                    style.clone_stamp = self.clone_config.resolve(from)?;
+                    style.clone_stamp = if style.profile.transparent {
+                        Default::default()
+                    } else {
+                        self.clone_config.resolve(from)?
+                    };
                     style.smoothing = 0.0;
                     let config = self.mouse_settings[index];
                     let virtual_mouse = event.source.kind
@@ -894,6 +905,7 @@ impl Drawer {
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
         self.drawing.frame_time = ctx.input(|i| i.time);
+        self.drawing.transparent_mode = self.workspaces.store.current.color_modes.transparent;
         self.drawing.sample_on_release = self.workspaces.store.current.color_tables.auto_sample;
         self.drawing.sample_table = self.workspaces.store.current.color_tables.selected;
         if let Some((table, color)) = self.drawing.sampled.take()
@@ -932,8 +944,7 @@ impl Drawer {
             .eyedropper
             .observe(self.references.session.workspace.color);
         if let Some(color) = self.drawing.picked.take() {
-            self.references.session.workspace.color = color;
-            self.workspaces.store.current.eyedropper.observe(color);
+            self.choose_color(color);
         }
         self.drawing.eyedropper = self.workspaces.store.current.eyedropper.settings;
         self.drawing.settings = self.workspaces.store.current.pointer;
@@ -1592,6 +1603,7 @@ mod tests {
         app.workspaces.store.current.pressure.tools[0].size = true;
         app.workspaces.store.current.pressure.tools[0].opacity = true;
         let profile = Settings {
+            transparent: false,
             minimum_size: 0.5,
             minimum_opacity: 0.4,
             pixel: Default::default(),

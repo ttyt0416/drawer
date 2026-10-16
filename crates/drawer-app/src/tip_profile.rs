@@ -71,6 +71,7 @@ pub(super) fn smoke() -> Result<(), String> {
         ..Default::default()
     };
     s.profiles[0] = Settings {
+        transparent: false,
         minimum_size: 1.0,
         minimum_opacity: 1.0,
         pixel: Default::default(),

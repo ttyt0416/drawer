@@ -192,7 +192,14 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
-        if !BrushTip::ALL.iter().any(|t| t.name() == command) && !command.starts_with("cycle-") {
+        let color_command = matches!(
+            command,
+            "primary-color" | "secondary-color" | "swap-colors" | "transparent-color"
+        );
+        if !BrushTip::ALL.iter().any(|t| t.name() == command)
+            && !command.starts_with("cycle-")
+            && (!color_command || self.drawing.pending())
+        {
             self.finish_stroke();
         }
         if let Some(reason) = self.command_reason(command) {
@@ -201,6 +208,9 @@ impl Drawer {
         }
         let result = (|| -> Result<(), String> {
             match command {
+                "primary-color" | "secondary-color" | "swap-colors" | "transparent-color" => {
+                    self.color_mode_command(command)?
+                }
                 "brush-grow" | "brush-shrink" => {
                     let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size

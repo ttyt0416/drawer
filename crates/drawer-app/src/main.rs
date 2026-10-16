@@ -21,6 +21,7 @@ mod brush_presets;
 mod brush_variation;
 mod canvas_view;
 mod clone_stamp;
+mod color_modes;
 mod color_selector;
 mod color_tables;
 mod cursor_settings;
@@ -1279,6 +1280,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = color_modes::smoke(&root) {
+                    eprintln!("Drawing colors/transparent eraser: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = related_colors::smoke(&root) {
                     eprintln!("Intermediate/similar colors: {e}");
                     fail_smoke();
@@ -1450,7 +1455,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

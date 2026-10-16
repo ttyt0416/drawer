@@ -142,6 +142,8 @@ pub fn default_bindings() -> Vec<Binding> {
         ("8", false, false, "opacity-80"),
         ("9", false, false, "opacity-90"),
         ("0", false, false, "opacity-100"),
+        ("X", false, false, "swap-colors"),
+        ("C", false, false, "transparent-color"),
         ("L", false, false, "connect-line"),
         ("I", false, false, "Eyedropper"),
         ("M", false, false, "Move"),
@@ -298,6 +300,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub color_modes: crate::color_modes::Settings,
+    #[serde(default)]
     pub related_colors: crate::related_colors::Settings,
     #[serde(default)]
     pub color_tables: crate::color_tables::Settings,
@@ -375,6 +379,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            color_modes: Default::default(),
             related_colors: Default::default(),
             color_tables: Default::default(),
             mixer: Default::default(),
@@ -441,6 +446,7 @@ impl Snapshot {
             && self.display.valid()
             && self.interface.valid()
             && self.input.valid()
+            && self.color_modes.valid()
             && self.related_colors.valid()
             && self.color_tables.valid()
             && self.mixer.valid()
@@ -524,6 +530,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;
             next.color_tables = incoming.color_tables.clone();
             next.mixer = incoming.mixer.clone();

@@ -495,6 +495,7 @@ mod tests {
             pressure_strength: 0.85,
         };
         draft.profiles[0] = drawer_core::tip_profile::Settings {
+            transparent: false,
             minimum_size: 0.4,
             minimum_opacity: 0.7,
             pixel: Default::default(),

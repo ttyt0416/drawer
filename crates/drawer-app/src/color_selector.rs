@@ -11,6 +11,9 @@ pub(super) struct Fields {
 }
 impl Drawer {
     pub(super) fn choose_color(&mut self, color: [u8; 4]) {
+        self.workspaces.store.current.color_modes.observe(color);
+        self.workspaces.store.current.color_modes.transparent = false;
+        self.drawing.transparent_mode = false;
         if color != self.references.session.workspace.color {
             self.panels.previous_color = self.references.session.workspace.color;
             self.references.session.workspace.color = color;
@@ -22,6 +25,7 @@ impl Drawer {
         self.color_fields.error = None;
     }
     pub(super) fn color_controls(&mut self, ui: &mut egui::Ui) {
+        self.color_mode_controls(ui);
         let color = self.references.session.workspace.color;
         if self.color_fields.source != Some(color) {
             self.color_fields.source = Some(color);
