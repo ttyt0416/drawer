@@ -538,3 +538,12 @@ Watercolor의 Minimum pressure for foreground supply 기본값은0.2다. 보정�
 Brush presets → User tools and categories의 :: 손잡이로 슬롯을 정렬한다. Ctrl을 끝까지 누르면 복제한다. Esc·포커스 상실·Ctrl 놓침·목록 밖 놓기는 취소한다. Undo/Redo tool list는 그림 이력과 별개이며 Apply/Cancel은 기존 규칙을 따른다.
 
 다른 PC에는 Export portable tools + materials로 만든 새 Drawer-tool-bundle 폴더 전체를 옮긴다. Import portable tool bundle은 모든 파일을 검증하고 새 ID로 등록한다. 소재는 즉시 저장되고 슬롯은 Apply로 확정한다. 슬롯 삭제/Cancel은 등록 소재를 지우지 않는다. 기존 폴더에는 내보낼 수 없으므로 다른 빈 부모 위치를 고른다.
+
+
+## brush-behavior
+
+Tool input → Scatter, ribbon and repeating decorations에서 도구별 화면 픽셀 크기·최소1문서픽셀·간격 농도 보정·연속 분사·고정 산포점을 선택한다. 기본값은 모두끔이다. 화면 크기는 획 시작 배율에서 환산하며 이미 그린 획은 바꾸지 않는다.
+
+연속 분사는 버튼을 누른 동안 정지한 커서에도1–200회/초로 그린다. 놓으면 정지하고 한 번의 그림 Undo로 취소할 수 있다. Esc/포커스 상실은 진행 중 세션을 취소한다. 기존 Mouse spray와 함께 선택하면 Mouse spray의 입자 제어를 사용한다. 팝업 시험 영역에서도 시간 분사를 확인할 수 있다.
+
+고정 산포점은 같은 시드·팁·입자 위치를 유지한다. 간격 농도 보정은 기준0.15에 맞춰 누적 농도를 보정하며 팁 경계나 넓은 간격의 빈 공간까지 같게 만들지는 않는다.

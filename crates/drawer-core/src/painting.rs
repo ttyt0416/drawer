@@ -114,7 +114,7 @@ impl Style {
     }
     /// Conservative minor-axis spacing also covers a thin tip across its narrow direction.
     pub(crate) fn step(self, pressure_scale: f64) -> f64 {
-        (self.shape.size
+        (self.pattern.behavior.minimum(self.shape.size)
             * if self.pattern.mode == crate::brush_pattern::Mode::Decoration {
                 self.pattern.interval
             } else {
@@ -218,12 +218,16 @@ impl Stroke {
             } else {
                 1.0
             };
-        Ok(self.style.dynamics.size(
-            base,
-            self.style.pressure.device_response.map(pressure)?,
-            self.dynamics,
-            index,
-        ))
+        Ok(self
+            .style
+            .pattern
+            .behavior
+            .minimum(self.style.dynamics.size(
+                base,
+                self.style.pressure.device_response.map(pressure)?,
+                self.dynamics,
+                index,
+            )))
     }
     fn heading_to(&mut self, point: Point) {
         if let Some(from) = self.last {
@@ -892,6 +896,9 @@ impl Stroke {
             .dynamic_size(self.pressure, self.dynamic_index.saturating_sub(1))
             .unwrap_or(0.0)
             * self.scale;
+        if self.scale > 0.0 {
+            shape.size = self.style.pattern.behavior.minimum(shape.size);
+        }
         if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
             shape.size *= shape.aspect;
             shape.aspect = 1.0;
@@ -920,9 +927,18 @@ impl Stroke {
         }
         let pattern = self.style.pattern;
         for particle in 0..pattern.count {
-            let offset = pattern.offset(
+            let tip = if self.style.sequence.enabled {
+                self.sequence
+                    .clone()
+                    .next(self.style.sequence)
+                    .map_or(0, |slot| self.style.sequence.tips[slot])
+            } else {
+                self.style.tip as u32 + 1
+            };
+            let offset = pattern.offset_for_tip(
                 self.pattern_index,
                 particle,
+                tip,
                 self.style.shape.angle + self.style.dynamics.scatter_angle,
             );
             self.particle = Some([-offset[0], -offset[1]]);
@@ -962,6 +978,9 @@ impl Stroke {
             .color(self.style.color, self.dynamic_index);
         let mut shape = self.style.shape;
         shape.size = self.dynamic_size(pressure, self.dynamic_index)? * scale;
+        if scale > 0.0 {
+            shape.size = self.style.pattern.behavior.minimum(shape.size);
+        }
         shape.angle += self.rotation();
         self.dynamic_index = self.dynamic_index.saturating_add(1);
         let ribbon = if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
@@ -1261,14 +1280,37 @@ impl Stroke {
                 let composition = self.style.material.composition;
                 let special = composition.mode != crate::brush_composite::Mode::Normal;
                 let limited = special
-                    || self.style.dynamics.opacity_speed.enabled
+                    || (self.style.dynamics.opacity_speed.enabled
+                        && !self.style.pattern.behavior.continuous)
                     || self.style.clone_stamp.enabled
                     || self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon
                     || self.style.tip == BrushTip::PixelPen
                     || (self.style.pressure.opacity
                         && self.style.tip != BrushTip::Marker
-                        && self.style.tip != BrushTip::Smudge);
+                        && self.style.tip != BrushTip::Smudge
+                        && !self.style.pattern.behavior.continuous
+                        && !self.style.pattern.behavior.spacing_density);
                 let amount = amount * opacity;
+                let amount = if limited {
+                    amount
+                } else {
+                    let alpha = if self.style.tip == BrushTip::Eraser
+                        || matches!(
+                            self.style.material.mode,
+                            crate::brush_material::Mode::Smudge
+                                | crate::brush_material::Mode::RunningColor
+                        )
+                        || self.style.material.colorless
+                    {
+                        1.0
+                    } else {
+                        paint_color[3] as f64 / 255.0
+                    };
+                    self.style
+                        .pattern
+                        .behavior
+                        .corrected(amount, alpha, self.style.spacing)
+                };
                 let amount = if limited {
                     amount.max(old.map_or(0.0, |n| self.amounts[n]))
                 } else {

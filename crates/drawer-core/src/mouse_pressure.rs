@@ -351,7 +351,15 @@ impl Replay {
         &self.samples
     }
     pub fn spray_period(&self) -> Option<u32> {
-        (self.settings.effect == Effect::Spray).then_some(self.settings.spray_period_micros)
+        if self.settings.effect == Effect::Spray {
+            Some(self.settings.spray_period_micros)
+        } else {
+            self.style
+                .pattern
+                .behavior
+                .continuous
+                .then_some(self.style.pattern.behavior.period())
+        }
     }
     pub fn render(&self, doc: &Document, finalizing: bool) -> Result<Stroke, String> {
         self.render_cancel(doc, finalizing, || false)
@@ -446,6 +454,22 @@ impl Replay {
             if cancel() {
                 return Err("Timed mouse spray cancelled".into());
             }
+            if finalizing {
+                stroke.finish_material(doc, &cancel)?;
+            }
+            stroke.restore_input_trace(trace, self.style.smoothing);
+            return Ok(stroke);
+        }
+        if style.pattern.behavior.continuous {
+            self.continuous(
+                doc,
+                &mut stroke,
+                &points,
+                distance,
+                finalizing,
+                &inputs,
+                &cancel,
+            )?;
             if finalizing {
                 stroke.finish_material(doc, &cancel)?;
             }
@@ -589,6 +613,79 @@ impl Replay {
         }
         stroke.restore_input_trace(trace, self.style.smoothing);
         Ok(stroke)
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn continuous(
+        &self,
+        doc: &Document,
+        stroke: &mut Stroke,
+        points: &[(Point, f64, Option<u64>)],
+        total: f64,
+        finalizing: bool,
+        inputs: &[[f64; 2]],
+        cancel: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        let Some(&(first, distance, mut clock)) = points.first() else {
+            return Ok(());
+        };
+        let period = self.style.pattern.behavior.period() as u64;
+        let mut elapsed = 0u64;
+        let mut next = period;
+        let mut count = 0u64;
+        let mut emit = |point: Point, distance: f64, index: usize, t: f64| -> Result<(), String> {
+            if cancel() {
+                return Err("Continuous brush cancelled".into());
+            }
+            count += 1;
+            if count > 262144 {
+                return Err("Continuous brush dab limit".into());
+            }
+            let end = (index + 1).min(inputs.len() - 1);
+            let mut input = self.dynamic_inputs[index].interpolate(self.dynamic_inputs[end], t);
+            input.speed = self.dynamic_inputs[end].speed;
+            stroke.set_dynamic_input(input)?;
+            let turn = (inputs[end][1] - inputs[index][1] + 180.0).rem_euclid(360.0) - 180.0;
+            stroke.set_angle_offset(inputs[index][1] + turn * t)?;
+            let pressure = if self.native_pressure {
+                inputs[index][0] + (inputs[end][0] - inputs[index][0]) * t
+            } else {
+                self.settings.pressure(distance, total, finalizing, 1.0)
+            };
+            stroke.set_geometry_scale(self.ends.scale(distance, total, finalizing))?;
+            stroke.direct_dab(doc, point, point, pressure)
+        };
+        emit(first, distance, 0, 0.0)?;
+        for (index, pair) in points.windows(2).enumerate() {
+            let (from, a, _) = pair[0];
+            let (to, b, time) = pair[1];
+            let dt = match (clock, time) {
+                (Some(a), Some(b)) if b > a => b - a,
+                _ => 0,
+            };
+            if let Some(time) = time {
+                clock = Some(clock.map_or(time, |old| old.max(time)));
+            }
+            let previous = elapsed;
+            elapsed = elapsed
+                .checked_add(dt)
+                .ok_or("Continuous brush clock limit")?;
+            while next <= elapsed {
+                let t = (next - previous) as f64 / dt as f64;
+                emit(
+                    [
+                        from[0] + (to[0] - from[0]) * t,
+                        from[1] + (to[1] - from[1]) * t,
+                    ],
+                    a + (b - a) * t,
+                    index,
+                    t,
+                )?;
+                next = next
+                    .checked_add(period)
+                    .ok_or("Continuous brush clock limit")?;
+            }
+        }
+        Ok(())
     }
     fn spray(
         &self,

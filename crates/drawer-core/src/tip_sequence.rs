@@ -84,7 +84,7 @@ impl Settings {
         }
     }
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Sequence {
     at: u64,
     random: u64,

@@ -3,6 +3,7 @@ use drawer_core::workspaces::{self, Dock, Placement, Scope, Snapshot, Store};
 use std::collections::HashSet;
 
 struct PadPaint {
+    replay: Option<drawer_core::mouse_pressure::Replay>,
     last_input: Option<([f64; 2], u64)>,
     document: Document,
     stroke: drawer_core::painting::Stroke,
@@ -26,10 +27,25 @@ impl PadPaint {
         .map_err(|e| e.to_string())?;
         document.layers[0].pixels.clone_from_slice(pixels);
         style.shape.size = style.shape.size.clamp(0.1, 64.0);
+        let replay = if style.pattern.behavior.continuous {
+            Some(
+                drawer_core::mouse_pressure::Replay::begin(
+                    &document,
+                    0,
+                    style,
+                    Default::default(),
+                )?
+                .with_materials(materials.clone())?
+                .configure_input(Default::default(), true)?,
+            )
+        } else {
+            None
+        };
         let stroke =
             drawer_core::painting::Stroke::with_budget(&document, 0, style, pixels.len() * 128)?
                 .with_materials(materials)?;
         Ok(Self {
+            replay,
             last_input: None,
             document,
             stroke,
@@ -46,6 +62,19 @@ impl PadPaint {
                 None
             }
         });
+        if let Some(replay) = &mut self.replay {
+            replay.push_input(
+                drawer_core::mouse_pressure::Sample {
+                    point,
+                    micros: Some(micros),
+                },
+                1.0,
+                0.0,
+            )?;
+            self.stroke = replay.render(&self.document, false)?;
+            self.last_input = Some((point, micros));
+            return Ok(());
+        }
         self.stroke
             .set_dynamic_input(drawer_core::brush_dynamics::Input {
                 speed,
@@ -54,6 +83,24 @@ impl PadPaint {
         self.stroke.sample_pressure(&self.document, point, 1.0)?;
         self.last_input = Some((point, micros));
         Ok(())
+    }
+    fn tick(&mut self, micros: u64) -> Result<bool, String> {
+        let Some(replay) = &mut self.replay else {
+            return Ok(false);
+        };
+        let Some((point, last)) = self.last_input else {
+            return Ok(false);
+        };
+        if micros.saturating_sub(last) < replay.spray_period().unwrap_or(u32::MAX) as u64 {
+            return Ok(false);
+        }
+        replay.push_clock(drawer_core::mouse_pressure::Sample {
+            point,
+            micros: Some(micros),
+        })?;
+        self.stroke = replay.render(&self.document, false)?;
+        self.last_input = Some((point, micros));
+        Ok(true)
     }
     fn preview(&self) -> Vec<[u8; 4]> {
         let d = &self.document;
@@ -66,6 +113,12 @@ impl PadPaint {
             .collect()
     }
     fn finish(mut self) -> (Vec<[u8; 4]>, Option<String>) {
+        if let Some(replay) = &self.replay {
+            match replay.render(&self.document, true) {
+                Ok(stroke) => self.stroke = stroke,
+                Err(e) => return (self.document.layers.remove(0).pixels, Some(e)),
+            }
+        }
         let error = self.stroke.commit(&mut self.document).err();
         (self.document.layers.remove(0).pixels, error)
     }
@@ -886,7 +939,7 @@ impl Drawer {
                                         continue;
                                     }
                                 };
-                                let style = drawer_core::painting::Style {
+                                let mut style = drawer_core::painting::Style {
                                     clone_stamp,
                                     variation: self.workspaces.store.current.input.variations[n],
                                     pattern: self.workspaces.store.current.input.patterns[n],
@@ -917,6 +970,14 @@ impl Drawer {
                                         mapping
                                     },
                                 };
+                                style.shape.size = style
+                                    .pattern
+                                    .behavior
+                                    .document_size(
+                                        style.shape.size,
+                                        3.0 * ctx.pixels_per_point() as f64,
+                                    )
+                                    .unwrap_or(style.shape.size);
                                 match PadPaint::begin(
                                     &self.workspaces.store.current.scratchpad.pixels,
                                     style,
@@ -991,6 +1052,22 @@ impl Drawer {
                     self.workspaces.pad_point = None;
                     self.workspaces.pad_trace.clear();
                 }
+                if let Some(paint) = &mut self.workspaces.pad_style
+                    && paint.replay.is_some()
+                {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(16));
+                    match paint.tick(ctx.input(|i| (i.time.max(0.0) * 1e6) as u64)) {
+                        Ok(true) => {
+                            self.workspaces.pad_trace = paint.stroke.trace();
+                            self.workspaces.store.current.scratchpad.pixels = paint.preview();
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            self.status = Some(e);
+                            self.workspaces.cancel_pad();
+                        }
+                    }
+                }
                 if let Some(paint) = &self.workspaces.pad_style
                     && self.workspaces.store.current.behavior.brush_cursor
                 {
@@ -1039,6 +1116,34 @@ impl Drawer {
         }
         self.workspaces.store.current.scratchpad.visible = visible;
     }
+}
+
+pub(super) fn verify_continuous_pad(mut style: drawer_core::painting::Style) -> Result<(), String> {
+    style.shape.size = 1.0;
+    style.color = [220, 70, 30, 64];
+    style.pattern = Default::default();
+    style.pattern.behavior.continuous = true;
+    style.pattern.behavior.rate = 20;
+    style.pressure.size = false;
+    style.pressure.opacity = true;
+    let pixels = vec![[0; 4]; workspaces::PAD_SIZE[0] * workspaces::PAD_SIZE[1]];
+    let at = 8 * workspaces::PAD_SIZE[0] + 8;
+    let mut paint = PadPaint::begin(&pixels, style, Default::default())?;
+    paint.sample([8.5, 8.5], 0)?;
+    if paint.preview()[at][3] != 64 || !paint.tick(100000)? || paint.preview()[at][3] != 148 {
+        return Err("Test painting area did not emit while stationary".into());
+    }
+    let (finished, error) = paint.finish();
+    if error.is_some() || finished[at][3] != 148 {
+        return Err("Test painting release added an extra timed stamp".into());
+    }
+    let mut paint = PadPaint::begin(&pixels, style, Default::default())?;
+    paint.sample([8.5, 8.5], 0)?;
+    paint.tick(100000)?;
+    if paint.cancel() != pixels {
+        return Err("Test painting cancel retained timed pixels".into());
+    }
+    Ok(())
 }
 
 pub(super) fn shortcut(

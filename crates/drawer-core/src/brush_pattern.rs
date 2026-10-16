@@ -46,6 +46,8 @@ impl Decoration {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub behavior: crate::brush_behavior::Settings,
     pub mode: Mode,
     pub width: f64,
     pub count: u8,
@@ -57,6 +59,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            behavior: Default::default(),
             mode: Mode::Dabs,
             width: 16.0,
             count: 4,
@@ -78,12 +81,21 @@ impl Settings {
         *self == Self::default()
     }
     pub fn valid(self) -> bool {
-        (0.0..=4096.0).contains(&self.width)
+        self.behavior.valid()
+            && (0.0..=4096.0).contains(&self.width)
             && (1..=64).contains(&self.count)
             && (0.05..=1.0).contains(&self.aspect)
             && (0.25..=16.0).contains(&self.interval)
     }
     pub fn offset(self, group: u64, particle: u8, angle: f64) -> [f64; 2] {
+        self.offset_for_tip(group, particle, 0, angle)
+    }
+    pub fn offset_for_tip(self, group: u64, particle: u8, tip: u32, angle: f64) -> [f64; 2] {
+        let group = if self.behavior.fixed_scatter {
+            tip as u64
+        } else {
+            group
+        };
         let key = group.wrapping_mul(128).wrapping_add(particle as u64 * 2);
         let radius = self.width * 0.5 * random(self.seed, key).sqrt();
         let a = std::f64::consts::TAU * random(self.seed, key + 1);

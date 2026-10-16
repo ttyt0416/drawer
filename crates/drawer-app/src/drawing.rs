@@ -643,6 +643,17 @@ impl Drawing {
             style.opacity = self.opacity.unwrap_or([1.0; 7])[index];
             style.hardness = self.hardness.unwrap_or([1.0; 7])[index];
             style.spacing = self.spacing.unwrap_or([0.15; 7])[index];
+            style.shape.size = match style
+                .pattern
+                .behavior
+                .document_size(style.shape.size, projection.view.zoom)
+            {
+                Ok(size) => size,
+                Err(e) => {
+                    self.error = Some(e);
+                    continue;
+                }
+            };
             if self.connect_line {
                 self.ownership.clear();
                 self.connect_line = false;
@@ -673,10 +684,11 @@ impl Drawing {
                         || style.pressure.device_response
                             != drawer_core::pressure::Response::default()
                     {
-                        if virtual_mouse
-                            && config.effect == drawer_core::mouse_pressure::Effect::Spray
+                        if style.pattern.behavior.continuous
+                            || (virtual_mouse
+                                && config.effect == drawer_core::mouse_pressure::Effect::Spray)
                         {
-                            return Err("Timed spray needs a held stroke; select another mouse behavior to connect a line".into());
+                            return Err("Time emission needs a held stroke; select another mouse behavior to connect a line".into());
                         }
                         let mut replay = drawer_core::mouse_pressure::Replay::begin(
                             doc,

@@ -500,7 +500,17 @@ impl CanvasView {
         {
             let active_style = stroke.map(|s| s.style());
             let cursor_tool = active_style.map_or(document.tool, |s| s.tip);
-            let cursor_shape = stroke.map_or(self.brush_shape, |s| s.shape());
+            let mut cursor_shape = stroke.map_or(self.brush_shape, |s| s.shape());
+            if stroke.is_none() {
+                let n = drawer_core::assets::BrushTip::ALL
+                    .iter()
+                    .position(|t| *t == cursor_tool)
+                    .unwrap();
+                cursor_shape.size = paint.drawing.patterns[n]
+                    .behavior
+                    .document_size(cursor_shape.size, document.view.zoom)
+                    .unwrap_or(cursor_shape.size);
+            }
             let n = drawer_core::assets::BrushTip::ALL
                 .iter()
                 .position(|t| *t == cursor_tool)

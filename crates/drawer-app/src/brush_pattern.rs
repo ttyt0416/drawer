@@ -1,6 +1,38 @@
 use super::*;
 use drawer_core::brush_pattern::{Decoration, Mode, Settings};
 pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
+    ui.checkbox(
+        &mut s.behavior.screen_size,
+        "Keep size in physical screen pixels",
+    );
+    ui.checkbox(
+        &mut s.behavior.minimum_pixel,
+        "Minimum diameter: one document pixel",
+    );
+    ui.checkbox(
+        &mut s.behavior.spacing_density,
+        "Compensate density for path spacing",
+    );
+    ui.checkbox(
+        &mut s.behavior.continuous,
+        "Continuous emission while held (mouse or pen)",
+    );
+    if s.behavior.continuous {
+        super::edit::number(
+            ui,
+            &mut s.behavior.rate,
+            1.0..=200.0,
+            1.0,
+            " emissions per second",
+            "brush-pattern",
+        );
+        ui.label("Emits on press and at fixed time intervals, including while stationary. Time emission ignores path spacing compensation. Release stops; Escape/focus loss cancels the pending session. Existing Mouse spray keeps its own controls when selected.");
+    }
+    ui.checkbox(
+        &mut s.behavior.fixed_scatter,
+        "Keep scatter offsets fixed per tip and particle",
+    );
+    ui.label("Screen size resolves at press using physical display zoom; resolved diameter is capped at 4096 document px. Minimum applies after size dynamics; zero endpoint geometry remains empty. Spacing compensation uses .15 as its reference for accumulating coverage; capped/pixel/clone/special modes keep their coverage rules.");
     egui::ComboBox::from_id_salt("brush-pattern")
         .selected_text(s.mode.label())
         .show_ui(ui, |ui| {
