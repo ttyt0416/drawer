@@ -9,6 +9,7 @@ pub(super) enum Mode {
     Eyedropper,
     SelectRectangle,
     SelectLasso,
+    Fill,
 }
 #[derive(Default)]
 pub(super) struct Precision {
@@ -42,6 +43,7 @@ impl Drawer {
                 ("Eyedropper", Mode::Eyedropper),
                 ("Rectangle select", Mode::SelectRectangle),
                 ("Lasso select", Mode::SelectLasso),
+                ("Fill", Mode::Fill),
             ] {
                 if ui
                     .selectable_label(self.drawing.mode == mode, label)
@@ -77,6 +79,7 @@ impl Drawer {
             if let Some(n)=self.active {let d=&self.documents[n];for target in drawer_core::layer_pick::visible(d,self.workspaces.store.current.layer_pick){if ui.selectable_label(self.panels.targets.get(&d.id)==Some(&target),drawer_core::layer_pick::label(d,target)).clicked(){self.drawing.finish(&mut self.documents);self.panels.targets.insert(self.documents[n].id,target);break;}}}
             ui.label("Use the modifier with Move/selection tools. Empty space keeps the current layer. Raster drag uses one Undo; locked/non-raster targets remain selected without bypassing editing restrictions.");
         });
+        self.bucket_controls(ui);
         if ui.button("Page selections…").clicked() {
             self.execute_command(ui.ctx(), "selection-tools");
         }

@@ -35,6 +35,8 @@ fn dependencies(tip: BrushTip) -> (&'static str, &'static str) {
 #[serde(deny_unknown_fields)]
 pub struct Preset {
     #[serde(default)]
+    pub fill: crate::bucket::Settings,
+    #[serde(default)]
     pub locked: bool,
     pub version: u32,
     pub name: String,
@@ -113,7 +115,7 @@ impl Preset {
         crate::tip_texture::references(&self.sequence, &self.variation.dual.controls, self.overlay)
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.version != 1 || !valid_name(&self.name) {
+        if self.version != 1 || !valid_name(&self.name) || !self.fill.valid() {
             return Err("Invalid preset version/name (1–64 characters, no controls)".into());
         }
         let (tip, texture) = dependencies(self.tip);
@@ -161,6 +163,7 @@ impl Preset {
             texture: b.into(),
             values: Property::ALL.map(|p| settings.tools[&Tool::brush(tip)][&p].value),
             pressure: snapshot.pressure.tools[n],
+            fill: snapshot.input.fills[n],
             ends: snapshot.input.ends[n],
             mouse: snapshot.input.mouse_pressure[n],
             material: snapshot.input.materials[n],
@@ -208,6 +211,7 @@ impl Preset {
         next.pressure.tools[n] = self.pressure;
         next.input.ends[n] = self.ends;
         next.input.mouse_pressure[n] = self.mouse;
+        next.input.fills[n] = self.fill;
         next.input.materials[n] = self.material;
         next.input.textures[n] = self.overlay;
         next.input.profiles[n] = self.profile;

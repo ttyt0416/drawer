@@ -644,3 +644,8 @@ Raster drawing and erasing use the page selection’s coverage, including soft e
 
 Move boundary는 선택 테두리만, Move selected pixels는 선택된 픽셀을 원위치에서 잘라 옮깁니다. 드래그를 놓을 때 확정하고 Escape로 취소합니다. Copy selected pixels는 현재 래스터의 선택 범위를 복사하고 Paste to new layer는 새 레이어 배치를 미리 봅니다. 기본 키 설정의 Ctrl+C/V로도 실행합니다.
 Move/선택 도구에서 Alt+클릭으로 보이는 레이어를 고릅니다. Pick a visible layer on canvas에서 수정키·잠긴층·폴더 옵션과 겹친 후보 순환을 설정합니다. 빈 곳은 현재층을 유지하며 잠금은 그대로입니다.
+
+## bucket-fill | 채우기 도구·선택 채우기 | 채우기 틈 보정 엄격 알파 허용치 참조 경계
+
+Fill/G로 누르면 채우기 미리보기를 보고 캔버스 안에서 놓아 확정합니다. Escape나 캔버스 밖 놓기로 취소합니다. Fill options에서 현재/지정 래스터·보이는 합성 참조, 독립 색차/알파 허용치, Strict/Close gaps, 틈 폭·영역 확장·부분 알파 경계 보정을 선택합니다.
+Fill entire selection은 클릭/색차 탐색 없이 현재 선택 전체를 현재색 또는 투명색으로 채웁니다. 선택이 없으면 캔버스 전체이며 빈 선택은 바뀌지 않습니다. 옵션은 현재 도구와 로컬 프리셋에 저장합니다. 한 번의 Undo로 확정 결과를 되돌립니다.

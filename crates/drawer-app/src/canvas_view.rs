@@ -452,7 +452,8 @@ impl CanvasView {
         paint.drawing.refresh_movement(document);
         let document = paint
             .drawing
-            .movement_preview(document.id)
+            .bucket_preview(document.id)
+            .or_else(|| paint.drawing.movement_preview(document.id))
             .unwrap_or(document);
         let stroke = paint.drawing.preview(document.id);
         self.update_image(ui, document, stroke);
@@ -513,7 +514,9 @@ impl CanvasView {
         }
         if matches!(
             paint.drawing.mode,
-            crate::precision::Mode::SelectRectangle | crate::precision::Mode::SelectLasso
+            crate::precision::Mode::SelectRectangle
+                | crate::precision::Mode::SelectLasso
+                | crate::precision::Mode::Fill
         ) && response.hovered()
         {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Crosshair);
@@ -572,6 +575,7 @@ impl CanvasView {
                 crate::precision::Mode::SelectRectangle
                     | crate::precision::Mode::SelectLasso
                     | crate::precision::Mode::Move
+                    | crate::precision::Mode::Fill
             )
             && (relative_cursor.is_some()
                 || (ui.input(|i| i.pointer.latest_pos().is_some())

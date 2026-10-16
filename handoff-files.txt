@@ -320,3 +320,7 @@ crates/drawer-core/src/layer_pick.rs
 crates/drawer-app/src/movement.rs
 crates/drawer-app/src/selection_transfer.rs
 docs/process/selection-transfer.md
+
+crates/drawer-core/src/bucket.rs
+crates/drawer-app/src/bucket.rs
+docs/process/bucket-fill.md

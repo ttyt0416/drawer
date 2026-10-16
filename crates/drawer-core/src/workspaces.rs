@@ -147,6 +147,7 @@ pub fn default_bindings() -> Vec<Binding> {
         ("L", false, false, "connect-line"),
         ("I", false, false, "Eyedropper"),
         ("M", false, false, "Move"),
+        ("G", false, false, "bucket-tool"),
         ("C", true, false, "copy-selection"),
         ("V", true, false, "paste-selection"),
     ]

@@ -212,6 +212,8 @@ impl Drawer {
                         | "move-selected-pixels"
                         | "copy-selection"
                         | "paste-selection"
+                        | "bucket-tool"
+                        | "fill-selection"
                 )
             {
                 self.execute_command(ctx, &action);

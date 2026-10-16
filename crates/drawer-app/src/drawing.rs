@@ -1,3 +1,5 @@
+#[path = "bucket.rs"]
+pub(crate) mod bucket;
 #[path = "movement.rs"]
 mod movement;
 use super::*;
@@ -88,6 +90,10 @@ pub(super) struct Drawing {
     active: Option<Session>,
     selection: Option<SelectionGesture>,
     movement: Option<movement::Gesture>,
+    bucket: Option<bucket::Gesture>,
+    pub fill_settings: drawer_core::bucket::Settings,
+    pub fill_budget: usize,
+    pub fill_config: ([u8; 4], bool, bool),
     pub move_target: drawer_core::precision::Target,
     pub move_layer: Option<usize>,
     pub pick_settings: drawer_core::layer_pick::Settings,
@@ -175,9 +181,13 @@ impl Drawing {
             .map(|s| s.view)
             .or_else(|| self.selection.as_ref().map(|s| s.view))
             .or_else(|| self.movement.as_ref().map(|s| s.view))
+            .or_else(|| self.bucket.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
-        self.active.is_some() || self.selection.is_some() || self.movement.is_some()
+        self.active.is_some()
+            || self.selection.is_some()
+            || self.movement.is_some()
+            || self.bucket.is_some()
     }
     pub fn changed(&self, document: u64) -> bool {
         self.active
@@ -196,6 +206,7 @@ impl Drawing {
     fn cancel(&mut self) {
         self.selection = None;
         self.movement = None;
+        self.bucket = None;
         self.sample_pending = None;
         self.clone_pick = false;
         self.active = None;
@@ -273,6 +284,7 @@ impl Drawing {
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.selection = None;
         self.movement = None;
+        self.bucket = None;
         self.controls.reset();
         self.touch.clear_touches();
         self.ownership.clear();
@@ -290,6 +302,7 @@ impl Drawing {
     fn finish_document(&mut self, doc: &mut Document) {
         self.selection = None;
         self.movement = None;
+        self.bucket = None;
         self.ownership.clear();
         if let Some(s) = self.active.take() {
             self.commit_session(s, doc);
@@ -614,6 +627,7 @@ impl Drawing {
         }) {
             self.cancel();
         }
+        self.advance_bucket(ctx, documents);
         self.advance_movement(ctx, documents);
         for n in 0..self.events.len() {
             let Some(id) = self.selection.as_ref().map(|s| s.document) else {
@@ -731,6 +745,25 @@ impl Drawing {
                 continue;
             }
             if self
+                .bucket
+                .as_ref()
+                .is_some_and(|s| s.document == doc.id && s.view == view)
+            {
+                if !enabled
+                    || self
+                        .bucket
+                        .as_ref()
+                        .is_some_and(|s| s.projection != projection)
+                {
+                    self.cancel();
+                } else {
+                    self.receive_bucket(n, doc);
+                    if self.events[n].1 {
+                        continue;
+                    }
+                }
+            }
+            if self
                 .movement
                 .as_ref()
                 .is_some_and(|s| s.document == doc.id && s.view == view)
@@ -825,6 +858,22 @@ impl Drawing {
                     self.ownership.clear();
                     continue;
                 }
+            }
+            if self.mode == super::precision::Mode::Fill {
+                if let Err(e) = self.begin_bucket(
+                    doc,
+                    view,
+                    layer,
+                    event.source,
+                    projection,
+                    ui.ctx().content_rect(),
+                    projection.point(pos),
+                    style,
+                ) {
+                    self.error = Some(e);
+                    self.ownership.clear();
+                }
+                continue;
             }
             let mut style = style;
             if matches!(
@@ -1153,6 +1202,19 @@ impl Drawer {
             }
         }
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
+        let fill_slot = BrushTip::ALL
+            .iter()
+            .position(|t| *t == self.selected)
+            .unwrap();
+        self.drawing.fill_config = (
+            self.references.session.workspace.color,
+            self.workspaces.store.current.color_modes.transparent
+                || self.workspaces.store.current.input.profiles[fill_slot].transparent,
+            self.workspaces.store.current.input.materials[fill_slot].alpha_lock,
+        );
+        self.drawing.fill_settings = self.workspaces.store.current.input.fills[fill_slot];
+        self.drawing.fill_budget = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.move_target = self.precision.target;
         self.drawing.move_layer = self.active.and_then(|n| {

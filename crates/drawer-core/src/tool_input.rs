@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default, deserialize_with = "crate::brush_slots::read")]
+    pub fills: [crate::bucket::Settings; 7],
     pub version: u32,
     pub hold_millis: u32,
     pub drag_pixels: f64,
@@ -42,6 +44,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            fills: [Default::default(); 7],
             version: 1,
             hold_millis: 300,
             drag_pixels: 4.0,
@@ -63,7 +66,8 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        self.version == 1
+        self.fills.iter().all(|s| s.valid())
+            && self.version == 1
             && self.clone_stamp.valid()
             && self.ends.iter().all(|s| s.valid())
             && self.materials.iter().all(|s| s.valid())

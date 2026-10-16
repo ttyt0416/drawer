@@ -134,3 +134,5 @@ pub mod selection_paint;
 pub mod selection_transfer;
 
 pub mod layer_pick;
+
+pub mod bucket;

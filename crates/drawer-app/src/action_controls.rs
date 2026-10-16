@@ -203,6 +203,7 @@ impl Drawer {
                 | "Move"
                 | "move-selection-boundary"
                 | "move-selected-pixels"
+                | "bucket-tool"
         );
         if !BrushTip::ALL.iter().any(|t| t.name() == command)
             && !command.starts_with("cycle-")
@@ -219,6 +220,12 @@ impl Drawer {
                 "primary-color" | "secondary-color" | "swap-colors" | "transparent-color" => {
                     self.color_mode_command(command)?
                 }
+                "bucket-tool" => {
+                    self.restore_locked_tool();
+                    self.drawing.mode = super::precision::Mode::Fill;
+                    self.drawing.connect_line = false;
+                }
+                "fill-selection" => self.fill_selection()?,
                 "pick-next-layer" => {
                     let n = self.active.ok_or("Open a page first")?;
                     let doc = &self.documents[n];
