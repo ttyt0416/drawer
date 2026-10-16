@@ -8,6 +8,7 @@ enum Pending {
     File(Preset, PathBuf),
 }
 struct Editor {
+    abr: super::abr::Editor,
     draft: Book,
     name: String,
     selected: Option<usize>,
@@ -116,6 +117,7 @@ impl Drawer {
         }
         self.sync_tool_properties();
         let mut e = self.brush_presets.editor.take().unwrap_or_else(|| Editor {
+            abr: Default::default(),
             draft: self.workspaces.store.current.brushes.clone(),
             name: self.selected.label().into(),
             selected: None,
@@ -154,6 +156,7 @@ impl Drawer {
     });
     if ui.button("Read local brush preset into draft…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Local brush preset",&["json"]).pick_file(){match Preset::read(&path){Ok(p)=>if e.draft.contains(&p.name){e.pending=Some(Pending::Collection(p));}else if let Err(err)=e.draft.put(p,false){self.status=Some(err);},Err(err)=>self.status=Some(err.to_string())}}
     if let Some(p)=&e.restore{for source in p.sequence.missing().into_iter().filter(|id|self.materials.library.get(*id,drawer_core::material_library::Kind::Tip).is_none()){ui.colored_label(egui::Color32::YELLOW,drawer_core::tip_sequence::Settings::label(source));}if p.overlay.missing()&&self.materials.library.get(p.overlay.source,drawer_core::material_library::Kind::Texture).is_none(){ui.colored_label(egui::Color32::YELLOW,p.overlay.label());}ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
+    ui.collapsing("Import ABR tips",|ui|self.abr_ui(ui,&mut e.abr,&mut e.draft));
     ui.separator();ui.heading("Quick size order");let mut movement=None;let mut remove=None;
     for(n,size)in e.draft.sizes.iter().enumerate(){ui.push_id(("size",n),|ui|{ui.horizontal(|ui|{ui.label(format!("{size} px"));if ui.add_enabled(n>0,egui::Button::new("Up")).clicked(){movement=Some((n,-1));}
     if ui.add_enabled(n+1<e.draft.sizes.len(),egui::Button::new("Down")).clicked(){movement=Some((n,1));}
@@ -275,6 +278,54 @@ mod tests {
     use super::*;
     use crate::tests::{TestDirectory, click, frame, tiny_spec};
     #[test]
+    fn abr_preset_draft_cancel_apply_and_original_preservation() {
+        let root = TestDirectory::new();
+        drawer_core::abr::verify(&root.0).unwrap();
+        let source = root.0.join("independent-brush.abr");
+        let original = std::fs::read(&source).unwrap();
+        let report = drawer_core::abr::Report::read(&source).unwrap();
+        let ctx = egui::Context::default();
+        let user = root.0.join("user");
+        let mut app = Drawer::new(&ctx, None).with_storage(UserStorage::at(user.clone()).unwrap());
+        app.create_canvas(tiny_spec()).unwrap();
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let baseline = app.capture_workspace();
+        let document = app.documents[0].snapshot();
+        let mut book = baseline.brushes.clone();
+        app.stage_abr(&report, 1, "Converted", &mut book).unwrap();
+        let editor = || Editor {
+            abr: Default::default(),
+            draft: book.clone(),
+            name: String::new(),
+            selected: None,
+            restore: None,
+            pending: None,
+        };
+        app.brush_presets.open = true;
+        app.brush_presets.editor = Some(editor());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let cancel = app.brush_presets.cancel.unwrap();
+        click(&ctx, &mut app, cancel);
+        assert!(app.capture_workspace() == baseline);
+        assert_eq!(app.materials.library.assets().len(), 1);
+        app.brush_presets.open = true;
+        app.brush_presets.editor = Some(editor());
+        frame(&ctx, &mut app, vec![]);
+        frame(&ctx, &mut app, vec![]);
+        let apply = app.brush_presets.apply.unwrap();
+        click(&ctx, &mut app, apply);
+        assert!(!app.brush_presets.open);
+        let restart = Drawer::new(&egui::Context::default(), None)
+            .with_storage(UserStorage::at(user).unwrap());
+        assert_eq!(restart.capture_workspace().brushes, book);
+        assert_eq!(restart.materials.library.assets().len(), 1);
+        assert!(app.documents[0].snapshot() == document);
+        assert_eq!(app.documents[0].history_counts(), (0, 0));
+        assert_eq!(std::fs::read(source).unwrap(), original);
+    }
+    #[test]
     fn quick_size_minimum_maximum_duplicate_other_values_and_non_brush() {
         smoke().unwrap();
     }
@@ -304,6 +355,7 @@ mod tests {
         draft.move_size(0, 1);
         draft.remove_size(2);
         let editor = || Editor {
+            abr: Default::default(),
             draft: draft.clone(),
             name: "Local pencil".into(),
             selected: Some(0),
@@ -359,6 +411,7 @@ mod tests {
         let mut book = Book::default();
         book.put(original.clone(), false).unwrap();
         let editor = |pending| Editor {
+            abr: Default::default(),
             draft: book.clone(),
             name: "Ink".into(),
             selected: Some(0),

@@ -217,6 +217,29 @@ impl Library {
                 }
             })
             .collect();
+        self.register_mask(name, kind, image.width, image.height, values)
+    }
+    /// Register independently decoded mask bytes; validation and publication stay separate.
+    pub fn register_mask(
+        &self,
+        name: &str,
+        kind: Kind,
+        width: u32,
+        height: u32,
+        values: Vec<u8>,
+    ) -> io::Result<Self> {
+        let name = name.trim();
+        if !self.valid()
+            || !valid_name(name)
+            || self
+                .assets
+                .iter()
+                .any(|a| a.name.to_lowercase() == name.to_lowercase())
+        {
+            return Err(invalid(
+                "Invalid library or duplicate/invalid material name",
+            ));
+        }
         let mut next = self.clone();
         let id = next.next_id;
         next.next_id = next
@@ -227,8 +250,8 @@ impl Library {
             id,
             name: name.into(),
             kind,
-            width: image.width,
-            height: image.height,
+            width,
+            height,
             values,
         });
         if !next.valid() {

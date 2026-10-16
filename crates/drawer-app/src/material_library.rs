@@ -77,7 +77,7 @@ impl Drawer {
             };
         }
     }
-    fn publish_materials(&mut self, next: Library) -> Result<(), String> {
+    pub(super) fn publish_materials(&mut self, next: Library) -> Result<(), String> {
         if let Some(e) = &self.materials.blocked {
             return Err(e.clone());
         }

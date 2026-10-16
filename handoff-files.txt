@@ -224,3 +224,7 @@ docs/process/clone-stamp.md
 crates/drawer-core/src/material_library.rs
 crates/drawer-app/src/material_library.rs
 docs/process/image-materials.md
+
+crates/drawer-core/src/abr.rs
+crates/drawer-app/src/abr.rs
+docs/process/abr-import.md
