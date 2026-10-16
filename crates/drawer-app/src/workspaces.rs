@@ -8,7 +8,11 @@ struct PadPaint {
     stroke: drawer_core::painting::Stroke,
 }
 impl PadPaint {
-    fn begin(pixels: &[[u8; 4]], mut style: drawer_core::painting::Style) -> Result<Self, String> {
+    fn begin(
+        pixels: &[[u8; 4]],
+        mut style: drawer_core::painting::Style,
+        materials: std::sync::Arc<drawer_core::material_library::Library>,
+    ) -> Result<Self, String> {
         let size = workspaces::PAD_SIZE;
         let mut document = Document::create(
             CanvasSpec {
@@ -23,7 +27,8 @@ impl PadPaint {
         document.layers[0].pixels.clone_from_slice(pixels);
         style.shape.size = style.shape.size.clamp(0.1, 64.0);
         let stroke =
-            drawer_core::painting::Stroke::with_budget(&document, 0, style, pixels.len() * 128)?;
+            drawer_core::painting::Stroke::with_budget(&document, 0, style, pixels.len() * 128)?
+                .with_materials(materials)?;
         Ok(Self {
             last_input: None,
             document,
@@ -900,6 +905,7 @@ impl Drawer {
                                 match PadPaint::begin(
                                     &self.workspaces.store.current.scratchpad.pixels,
                                     style,
+                                    self.materials.library.clone(),
                                 ) {
                                     Ok(paint) => self.workspaces.pad_style = Some(paint),
                                     Err(e) => self.status = Some(e),
@@ -981,7 +987,7 @@ impl Drawer {
                         self.workspaces.store.current.cursors.tools[n],
                         paint.stroke.shape(),
                         crate::cursor_settings::Projection {
-                            square: style.profile.square(paint.stroke.mask_tip()),
+                            square: paint.stroke.mask_is_square(),
                             view: drawer_core::view::View {
                                 zoom: 3.0 * ui.ctx().pixels_per_point() as f64,
                                 ..Default::default()

@@ -27,6 +27,7 @@ mod image_import_dialog;
 mod information;
 mod input_replay;
 mod layout;
+mod material_library;
 mod mouse_pressure;
 mod movie_dialog;
 mod navigator_panel;
@@ -113,6 +114,7 @@ struct Drawer {
     workspaces: workspaces::Workspaces,
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
+    materials: material_library::Materials,
     properties: tool_properties::Properties,
     brush_presets: brush_presets::Presets,
     preferences: preferences::Preferences,
@@ -226,6 +228,7 @@ impl Drawer {
             workspaces: Default::default(),
             controls: Default::default(),
             tool_input: Default::default(),
+            materials: Default::default(),
             properties: Default::default(),
             brush_presets: Default::default(),
             preferences: Default::default(),
@@ -409,6 +412,7 @@ impl Drawer {
         if let Some(active) = self.active {
             self.documents[active].tool = self.selected;
         }
+        self.load_materials(&storage);
         self.load_workspaces(&storage);
         self.storage = Some(storage);
         self
@@ -1237,6 +1241,10 @@ impl eframe::App for Drawer {
                     eprintln!("Independent pigment controls: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = material_library::smoke(&root) {
+                    eprintln!("Local image materials: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = clone_stamp::smoke() {
                     eprintln!("Clone stamp: {e}");
                     fail_smoke();
@@ -1344,7 +1352,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

@@ -155,6 +155,7 @@ pub struct Replay {
     native_pressure: bool,
     inputs: Vec<[f64; 2]>,
     dynamic_inputs: Vec<crate::brush_dynamics::Input>,
+    materials: std::sync::Arc<crate::material_library::Library>,
 }
 impl Replay {
     pub fn begin(
@@ -199,7 +200,18 @@ impl Replay {
             native_pressure: false,
             inputs: vec![],
             dynamic_inputs: vec![],
+            materials: Default::default(),
         })
+    }
+    pub fn with_materials(
+        mut self,
+        materials: std::sync::Arc<crate::material_library::Library>,
+    ) -> Result<Self, String> {
+        if !self.samples.is_empty() || !materials.valid() {
+            return Err("Material snapshot must be valid and set before input".into());
+        }
+        self.materials = materials;
+        Ok(self)
     }
     pub fn configure_input(
         mut self,
@@ -412,7 +424,8 @@ impl Replay {
         if self.settings.effect == Effect::Spray {
             style.shape.size = (style.shape.size * 0.15).max(0.1);
         }
-        let mut stroke = Stroke::with_budget(doc, self.layer, style, self.budget)?;
+        let mut stroke = Stroke::with_budget(doc, self.layer, style, self.budget)?
+            .with_materials(self.materials.clone())?;
         stroke.set_seed(self.settings.seed);
         if let Some((point, _, _)) = points.first() {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;

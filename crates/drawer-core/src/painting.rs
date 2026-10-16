@@ -152,6 +152,8 @@ pub struct Stroke {
     dab_color: [u8; 4],
     sequence: crate::tip_sequence::Sequence,
     mask_tip: BrushTip,
+    mask_square: bool,
+    materials: std::sync::Arc<crate::material_library::Library>,
     last_stamp_pressure: f64,
     scale: f64,
     last_scale: f64,
@@ -210,6 +212,16 @@ impl Stroke {
                 self.heading = Some(delta[1].atan2(delta[0]).to_degrees());
             }
         }
+    }
+    pub fn with_materials(
+        mut self,
+        materials: std::sync::Arc<crate::material_library::Library>,
+    ) -> Result<Self, String> {
+        if self.last.is_some() || !self.changes.is_empty() || !materials.valid() {
+            return Err("Material snapshot must be valid and set before the stroke".into());
+        }
+        self.materials = materials;
+        Ok(self)
     }
     pub fn dab_count(&self) -> u32 {
         self.dabs
@@ -423,7 +435,17 @@ impl Stroke {
         }
         let mut positions: Vec<_> = positions.into_iter().collect();
         positions.sort_unstable();
-        self.pixel_work = self.pixel_work.saturating_add(positions.len() as u64 * 9);
+        self.pixel_work = self.pixel_work.saturating_add(
+            positions.len() as u64
+                * (9 + u64::from(
+                    self.materials
+                        .get(
+                            self.style.texture.source,
+                            crate::material_library::Kind::Texture,
+                        )
+                        .is_some(),
+                )),
+        );
         if self.pixel_work > 64 * 1024 * 1024 {
             return Err(
                 "Final diffusion pixel-work budget exceeded; pending stroke cancelled".into(),
@@ -474,7 +496,9 @@ impl Stroke {
                 original,
                 desired,
                 self.style.opacity
-                    * self.style.texture.factor([x as f64 + 0.5, y as f64 + 0.5])
+                    * self
+                        .materials
+                        .factor(self.style.texture, [x as f64 + 0.5, y as f64 + 0.5])
                     * doc
                         .scene
                         .selection_coverage([x as f64 + 0.5, y as f64 + 0.5])
@@ -580,6 +604,8 @@ impl Stroke {
             dab_color: style.color,
             sequence: Default::default(),
             mask_tip: style.tip,
+            mask_square: style.profile.square(style.tip),
+            materials: Default::default(),
             last_stamp_pressure: 1.0,
             scale: 1.0,
             last_scale: 1.0,
@@ -817,6 +843,9 @@ impl Stroke {
     pub fn preview_key(&self) -> (u64, u64) {
         (self.nonce, self.preview_revision)
     }
+    pub fn mask_is_square(&self) -> bool {
+        self.mask_square
+    }
     pub fn mask_tip(&self) -> BrushTip {
         self.mask_tip
     }
@@ -925,15 +954,24 @@ impl Stroke {
         if shape.size == 0.0 || opacity == 0.0 || self.style.opacity == 0.0 {
             return Ok(());
         }
-        let mask_tip = if self.style.sequence.enabled {
+        let source = if self.style.sequence.enabled {
             let Some(slot) = self.sequence.next(self.style.sequence) else {
                 return Ok(());
             };
-            self.style.sequence.tip(slot, self.style.tip)
+            Some((slot, self.style.sequence.tips[slot]))
         } else {
-            self.style.tip
+            None
         };
+        let materials = self.materials.clone();
+        let bitmap =
+            source.and_then(|(_, id)| materials.get(id, crate::material_library::Kind::Tip));
+        let mask_tip = source.map_or(self.style.tip, |(slot, _)| {
+            self.style.sequence.tip(slot, self.style.tip)
+        });
+        let bitmap_square =
+            bitmap.is_some() && self.style.profile.image == crate::tip_profile::Image::Native;
         self.mask_tip = mask_tip;
+        self.mask_square = bitmap_square || self.style.profile.square(mask_tip);
         let pixel_tip = self.style.tip == BrushTip::PixelPen || mask_tip == BrushTip::PixelPen;
         let (center, radius, minor) = if pixel_tip {
             let width = shape.size.round().max(1.0);
@@ -964,7 +1002,7 @@ impl Stroke {
         };
         let (sin, cos) = shape.angle.to_radians().sin_cos();
         let extra = radius * self.style.variation.dual.extra_radius();
-        let extent = if self.style.profile.square(mask_tip) {
+        let extent = if bitmap_square || self.style.profile.square(mask_tip) {
             [
                 radius * cos.abs() + minor * sin.abs() + 1.0,
                 radius * sin.abs() + minor * cos.abs() + 1.0,
@@ -1003,7 +1041,20 @@ impl Stroke {
         } else {
             0
         };
-        self.pixel_work = self.pixel_work.saturating_add(work);
+        let samples = 1
+            + if bitmap.is_some() { 4 } else { 0 }
+            + if materials
+                .get(
+                    self.style.texture.source,
+                    crate::material_library::Kind::Texture,
+                )
+                .is_some()
+            {
+                1
+            } else {
+                0
+            };
+        self.pixel_work = self.pixel_work.saturating_add(work.saturating_mul(samples));
         if self.pixel_work > 64 * 1024 * 1024 {
             return Err("Stroke pixel-work budget exceeded; pending stroke cancelled".into());
         }
@@ -1076,7 +1127,7 @@ impl Stroke {
                         (self.style.pattern.decoration.distance(q), minor)
                     } else {
                         (
-                            if self.style.profile.square(mask_tip) {
+                            if bitmap_square || self.style.profile.square(mask_tip) {
                                 q[0].abs().max(q[1].abs())
                             } else {
                                 q[0].hypot(q[1])
@@ -1128,6 +1179,7 @@ impl Stroke {
                             * 0.65
                     }
                 };
+                let amount = amount * bitmap.map_or(1.0, |asset| asset.tip(q));
                 let amount = if self.style.variation.dual.active() {
                     self.style.variation.dual.combine(
                         amount,
@@ -1193,7 +1245,9 @@ impl Stroke {
                 let mut result = mix(
                     original,
                     next,
-                    mask as f64 / 255.0 * self.style.opacity * self.style.texture.factor(point),
+                    mask as f64 / 255.0
+                        * self.style.opacity
+                        * self.materials.factor(self.style.texture, point),
                 );
                 if self.style.material.alpha_lock {
                     result[3] = original[3];

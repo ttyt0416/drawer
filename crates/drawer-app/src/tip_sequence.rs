@@ -1,6 +1,10 @@
 use super::*;
 use drawer_core::tip_sequence::{Order, Settings};
-pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
+pub(super) fn settings_ui(
+    ui: &mut egui::Ui,
+    s: &mut Settings,
+    library: &drawer_core::material_library::Library,
+) {
     crate::help::checkbox(
         ui,
         &mut s.enabled,
@@ -29,10 +33,25 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
             ui.horizontal_wrapped(|ui| {
                 ui.label(format!("Tip {}", n + 1));
                 egui::ComboBox::from_id_salt("mask")
-                    .selected_text(Settings::label(s.tips[n]))
+                    .selected_text(
+                        library
+                            .label(s.tips[n], drawer_core::material_library::Kind::Tip)
+                            .unwrap_or_else(|| Settings::label(s.tips[n])),
+                    )
                     .show_ui(ui, |ui| {
                         for source in 0..=BrushTip::ALL.len() as u32 {
                             ui.selectable_value(&mut s.tips[n], source, Settings::label(source));
+                        }
+                        for a in library
+                            .assets()
+                            .iter()
+                            .filter(|a| a.kind == drawer_core::material_library::Kind::Tip)
+                        {
+                            ui.selectable_value(
+                                &mut s.tips[n],
+                                a.id,
+                                format!("{} (#{})", a.name, a.id),
+                            );
                         }
                     });
                 if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
@@ -70,7 +89,11 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings) {
         s.tips[s.count as usize] = 0;
         s.count += 1;
     }
-    for source in s.missing() {
+    for source in s.missing().into_iter().filter(|id| {
+        library
+            .get(*id, drawer_core::material_library::Kind::Tip)
+            .is_none()
+    }) {
         ui.colored_label(egui::Color32::YELLOW, Settings::label(source));
     }
     ui.label("Do not repeat keeps the last mask. One time only / one random cycle stop after one pass. Mask choice does not turn a color brush into an eraser.");

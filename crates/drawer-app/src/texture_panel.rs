@@ -29,15 +29,47 @@ impl Textures {
     }
 }
 pub(super) fn pattern_ui(ui: &mut egui::Ui, p: &mut Pattern) {
+    pattern_ui_inner(ui, p, None);
+}
+pub(super) fn brush_pattern_ui(
+    ui: &mut egui::Ui,
+    p: &mut Pattern,
+    library: &drawer_core::material_library::Library,
+) {
+    pattern_ui_inner(ui, p, Some(library));
+}
+fn pattern_ui_inner(
+    ui: &mut egui::Ui,
+    p: &mut Pattern,
+    library: Option<&drawer_core::material_library::Library>,
+) {
     egui::ComboBox::from_id_salt("texture-source")
-        .selected_text(p.label())
+        .selected_text(
+            library
+                .and_then(|l| l.label(p.source, drawer_core::material_library::Kind::Texture))
+                .unwrap_or_else(|| p.label()),
+        )
         .show_ui(ui, |ui| {
             for n in 0..=3 {
                 let candidate = Pattern { source: n, ..*p };
                 ui.selectable_value(&mut p.source, n, candidate.label());
             }
+            if let Some(library) = library {
+                for a in library
+                    .assets()
+                    .iter()
+                    .filter(|a| a.kind == drawer_core::material_library::Kind::Texture)
+                {
+                    ui.selectable_value(&mut p.source, a.id, format!("{} (#{})", a.name, a.id));
+                }
+            }
         });
-    if p.missing() {
+    if p.missing()
+        && library.is_none_or(|l| {
+            l.get(p.source, drawer_core::material_library::Kind::Texture)
+                .is_none()
+        })
+    {
         ui.colored_label(egui::Color32::YELLOW, p.label());
     }
     super::edit::number(

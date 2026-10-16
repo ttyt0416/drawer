@@ -88,6 +88,7 @@ pub(super) struct Drawing {
     pub variations: [drawer_core::brush_variation::Settings; 7],
     pub picked: Option<[u8; 4]>,
     pub clone_config: drawer_core::clone_stamp::Settings,
+    pub assets: std::sync::Arc<drawer_core::material_library::Library>,
     pub clone_pick: bool,
     pub picked_origin: Option<Point>,
     endpoints: std::collections::HashMap<(u64, usize, BrushTip), Point>,
@@ -675,6 +676,7 @@ impl Drawing {
                                 Default::default()
                             },
                         )?
+                        .with_materials(self.assets.clone())?
                         .configure_input(self.ends[index], !virtual_mouse)?;
                         for point in [from, to] {
                             replay.push_dynamic(
@@ -716,6 +718,7 @@ impl Drawing {
             match layer
                 .ok_or_else(|| "Select a raster layer to paint".to_string())
                 .and_then(|layer| Stroke::begin(doc, layer, style))
+                .and_then(|stroke| stroke.with_materials(self.assets.clone()))
             {
                 Ok(stroke) => {
                     let config = self.mouse_settings[index];
@@ -745,6 +748,7 @@ impl Drawing {
                                 Default::default()
                             },
                         )
+                        .and_then(|r| r.with_materials(self.assets.clone()))
                         .and_then(|r| r.configure_input(self.ends[index], !virtual_mouse))
                         {
                             Ok(mouse) => Some(mouse),
@@ -804,6 +808,7 @@ impl Drawer {
         self.drawing.dynamics = self.workspaces.store.current.input.dynamics;
         self.drawing.patterns = self.workspaces.store.current.input.patterns;
         self.drawing.variations = self.workspaces.store.current.input.variations;
+        self.drawing.assets = self.materials.library.clone();
         if let Some(origin) = self.drawing.picked_origin.take() {
             self.workspaces.store.current.input.clone_stamp.origin = Some(origin);
             self.status = Some(format!(

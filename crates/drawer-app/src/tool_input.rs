@@ -178,14 +178,15 @@ impl Drawer {
                     ui.label(tip.label());super::tip_sequence::ends_ui(ui,&mut draft.ends[n]);
                 });}
             });
+            ui.collapsing("Local image materials",|ui|self.local_materials_ui(ui,&mut draft));
             ui.collapsing("Clone stamp source",|ui|super::clone_stamp::settings_ui(ui,&mut draft.clone_stamp));
             ui.collapsing("Color variation and dual tip masks",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-variation",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_variation::settings_ui(ui,&mut draft.variations[n]));});}});
             ui.collapsing("Scatter, ribbon and repeating decorations",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-pattern",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_pattern::settings_ui(ui,&mut draft.patterns[n]));});}});
             ui.collapsing("Tip direction, size dynamics and spacing",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-dynamics",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_dynamics::settings_ui(ui,&mut draft.dynamics[n]));});}});
-            ui.collapsing("Multiple local tips and order",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-sequence",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_sequence::settings_ui(ui,&mut draft.sequences[n]));});}});
+            ui.collapsing("Multiple local tips and order",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-sequence",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_sequence::settings_ui(ui,&mut draft.sequences[n],&self.materials.library));});}});
             ui.collapsing("Independent position and device pressure filters",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("stroke-filter",n),|ui|{ui.collapsing(tip.label(),|ui|super::stroke_filter::settings_ui(ui,&mut draft.filters[n]));});}});
             ui.collapsing("Tip images and minimum outputs",|ui|{for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("tip-profile",n),|ui|{ui.collapsing(tip.label(),|ui|super::tip_profile::settings_ui(ui,&mut draft.profiles[n],tip));});}});
-            ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::pattern_ui(ui,&mut draft.textures[n]));});}});
+            ui.collapsing("Brush texture — all drawing devices",|ui| {for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("brush-texture",n),|ui|{ui.collapsing(tip.label(),|ui|super::texture_panel::brush_pattern_ui(ui,&mut draft.textures[n],&self.materials.library));});}});
             ui.collapsing("Brush pigment and water — all drawing devices",|ui| {
                 for(n,tip)in BrushTip::ALL.into_iter().enumerate(){ui.push_id(("pigment",n),|ui|{ui.collapsing(tip.label(),|ui|super::brush_material::settings_ui(ui,&mut draft.materials[n],tip));});}
             });

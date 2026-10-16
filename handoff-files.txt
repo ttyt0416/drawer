@@ -220,3 +220,7 @@ docs/process/brush-variation.md
 crates/drawer-core/src/clone_stamp.rs
 crates/drawer-app/src/clone_stamp.rs
 docs/process/clone-stamp.md
+
+crates/drawer-core/src/material_library.rs
+crates/drawer-app/src/material_library.rs
+docs/process/image-materials.md

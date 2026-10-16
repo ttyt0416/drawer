@@ -30,12 +30,24 @@ pub(super) fn run(
     cancel: &AtomicBool,
     progress: &AtomicUsize,
 ) -> Result<Outcome, String> {
+    run_with_materials(sequence, Arc::default(), cancel, progress)
+}
+pub(super) fn run_with_materials(
+    sequence: &Sequence,
+    materials: Arc<drawer_core::material_library::Library>,
+    cancel: &AtomicBool,
+    progress: &AtomicUsize,
+) -> Result<Outcome, String> {
+    if !materials.valid() {
+        return Err("Invalid local replay material snapshot".into());
+    }
     sequence.validate()?;
     if cancel.load(Ordering::Relaxed) {
         return Err("Virtual replay cancelled".into());
     }
     let ctx = egui::Context::default();
     let mut app = Drawer::new(&ctx, None);
+    app.materials.library = materials;
     app.create_canvas(CanvasSpec {
         width: sequence.width,
         height: sequence.height,
@@ -177,7 +189,7 @@ pub(super) struct Editor {
     run_button: Option<egui::Rect>,
 }
 impl Editor {
-    fn start(&mut self) {
+    fn start(&mut self, materials: Arc<drawer_core::material_library::Library>) {
         self.result = None;
         self.texture = None;
         if let Err(e) = self.sequence.validate() {
@@ -191,7 +203,7 @@ impl Editor {
         let flag = cancel.clone();
         let count = progress.clone();
         let thread = std::thread::spawn(move || {
-            let _ = tx.send(run(&sequence, &flag, &count));
+            let _ = tx.send(run_with_materials(&sequence, materials, &flag, &count));
         });
         self.job = Some(Job {
             rx,
@@ -299,7 +311,7 @@ impl Drawer {
             job.cancel.store(true, Ordering::Relaxed);
         }
         if start {
-            self.replay.start();
+            self.replay.start(self.materials.library.clone());
             ctx.request_repaint();
         }
     }

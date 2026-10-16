@@ -565,9 +565,8 @@ impl CanvasView {
                     appearance,
                     cursor_shape,
                     crate::cursor_settings::Projection {
-                        square: active_style
-                            .map_or(self.profiles[n], |s| s.profile)
-                            .square(stroke.map_or(cursor_tool, |s| s.mask_tip())),
+                        square: stroke
+                            .map_or(self.profiles[n].square(cursor_tool), |s| s.mask_is_square()),
                         view: document.view,
                         size,
                         center,

@@ -176,15 +176,7 @@ impl Drawer {
         let mut document =
             drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;
-        let mut missing = document.scene.paper.missing();
-        for record in &document.scene.mouse_strokes {
-            for source in record.style.sequence.missing() {
-                let note = drawer_core::tip_sequence::Settings::label(source);
-                if missing.len() < 8 && !missing.contains(&note) {
-                    missing.push(note);
-                }
-            }
-        }
+        let missing = self.material_dependencies(&document);
         if !missing.is_empty() {
             self.status = Some(missing.join("; "));
         }
