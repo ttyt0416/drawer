@@ -208,6 +208,7 @@ impl Drawer {
                     .clamp(0.1, 4096.0);
                 }
                 "Move" | "Eyedropper" => {
+                    self.restore_locked_tool();
                     self.drawing.mode = if command == "Move" {
                         super::precision::Mode::Move
                     } else {

@@ -75,6 +75,11 @@ impl Editor {
 }
 impl Drawer {
     pub(super) fn select_user_tool(&mut self, id: u64) -> Result<(), String> {
+        if self.workspaces.store.current.user_tools.active == Some(id) {
+            self.drawing.mode = super::precision::Mode::Paint;
+            return Ok(());
+        }
+        self.restore_locked_tool();
         self.finish_stroke();
         self.sync_tool_properties();
         let current = self.capture_workspace();
@@ -416,6 +421,16 @@ impl Drawer {
             {
                 let r = e.draft.reset_tool(single.unwrap());
                 e.show_result(r);
+            }
+            if let Some(id) = single {
+                let mut locked = e.draft.entry(id).unwrap().preset.locked;
+                if ui
+                    .checkbox(&mut locked, "Lock selected stored preset")
+                    .changed()
+                {
+                    let r = e.draft.lock_tool(id, locked, None);
+                    e.show_result(r);
+                }
             }
             for (delta, label) in [(-1, "Tool earlier"), (1, "Tool later")] {
                 if ui

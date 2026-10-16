@@ -34,6 +34,8 @@ fn dependencies(tip: BrushTip) -> (&'static str, &'static str) {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Preset {
+    #[serde(default)]
+    pub locked: bool,
     pub version: u32,
     pub name: String,
     pub tip: BrushTip,
@@ -126,6 +128,7 @@ impl Preset {
         let n = BrushTip::ALL.iter().position(|t| *t == tip).unwrap();
         let (a, b) = dependencies(tip);
         let p = Self {
+            locked: false,
             version: 1,
             name: name.trim().into(),
             tip,
@@ -225,6 +228,9 @@ impl Preset {
     /// false creates atomically without replacing a concurrently created destination.
     pub fn save(&self, path: &Path, overwrite: bool) -> io::Result<()> {
         let bytes = self.encode()?;
+        if overwrite && path.try_exists()? && Self::read(path)?.locked {
+            return Err(io::Error::other("Locked preset file: save a separate copy"));
+        }
         if !overwrite && path.try_exists()? {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
@@ -301,6 +307,9 @@ impl Book {
             .iter()
             .position(|p| name_key(&p.name) == name_key(&preset.name))
         {
+            if self.presets[n].locked {
+                return Err("Unlock the stored preset or save under a different name".into());
+            }
             if !overwrite {
                 return Err("A preset with this name exists; confirm replacement".into());
             }

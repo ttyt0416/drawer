@@ -151,6 +151,19 @@ impl Library {
         }
         let mut next = self.clone();
         let value = f(&mut next)?;
+        for old in self.tools.iter().filter(|t| t.preset.locked) {
+            if let Some(new) = next.entry(old.id) {
+                let mut expected = old.preset.clone();
+                expected.locked = new.preset.locked;
+                if new.preset != expected
+                    || new.default != old.default
+                    || new.properties != old.properties
+                    || new.default_properties != old.default_properties
+                {
+                    return Err("Unlock this stored user tool before changing its preset".into());
+                }
+            }
+        }
         if !next.valid() {
             return Err(
                 "Duplicate/invalid name, reference or tool/category capacity exceeded".into(),
@@ -402,6 +415,9 @@ impl Library {
         })
     }
     pub fn reset_tool(&mut self, id: u64) -> Result<(), String> {
+        if self.entry(id).is_some_and(|t| t.preset.locked) {
+            return Err("Unlock this tool before resetting its preset".into());
+        }
         self.edit(|next| {
             let t = next
                 .tools
@@ -434,10 +450,38 @@ impl Library {
         )?;
         Preset::capture(&base, tip, &format!("Default {}", tip.label()))
     }
+    pub fn lock_tool(
+        &mut self,
+        id: u64,
+        locked: bool,
+        preset: Option<Preset>,
+    ) -> Result<(), String> {
+        self.edit(|next| {
+            let t = next
+                .tools
+                .iter_mut()
+                .find(|t| t.id == id)
+                .ok_or("Tool missing")?;
+            if locked
+                && !t.preset.locked
+                && let Some(p) = preset
+            {
+                if p.tip != t.preset.tip {
+                    return Err("Tool base mismatch".into());
+                }
+                t.preset = p;
+            }
+            t.preset.locked = locked;
+            Ok(())
+        })
+    }
     pub fn update_active(&mut self, preset: Preset) -> Result<(), String> {
         self.edit(|next| {
             let id = next.active.ok_or("No active user tool")?;
             let t = next.tools.iter_mut().find(|t| t.id == id).unwrap();
+            if t.preset.locked {
+                return Err("Locked user preset: temporary settings were not saved".into());
+            }
             if t.preset.tip != preset.tip {
                 return Err("Active tool base changed".into());
             }

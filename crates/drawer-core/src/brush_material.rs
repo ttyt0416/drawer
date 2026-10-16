@@ -31,6 +31,8 @@ impl Mode {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub tonal: crate::tonal::Settings,
+    #[serde(default)]
     pub edge: f64,
     #[serde(default)]
     pub brightness: f64,
@@ -57,6 +59,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            tonal: Default::default(),
             edge: 0.0,
             brightness: 0.0,
             supply_threshold: 0.2,
@@ -78,18 +81,19 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        [
-            self.edge,
-            self.brightness,
-            self.supply,
-            self.supply_threshold,
-            self.mixing,
-            self.retention,
-            self.water,
-            self.dilution,
-        ]
-        .iter()
-        .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+        self.tonal.valid()
+            && [
+                self.edge,
+                self.brightness,
+                self.supply,
+                self.supply_threshold,
+                self.mixing,
+                self.retention,
+                self.water,
+                self.dilution,
+            ]
+            .iter()
+            .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
             && self.composition.valid()
             && self.smudge_distance.is_finite()
             && (0.0..=4096.0).contains(&self.smudge_distance)
@@ -330,6 +334,7 @@ pub fn verify() -> Result<(), String> {
 
 fn verify_numeric_controls() -> Result<(), String> {
     let base = Settings {
+        tonal: Default::default(),
         edge: 0.0,
         brightness: 0.0,
         supply_threshold: 0.2,

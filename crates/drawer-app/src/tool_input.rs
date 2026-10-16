@@ -15,6 +15,20 @@ pub(super) struct ToolInput {
 impl Drawer {
     fn runtime_tool(&mut self, tool: BrushTip, document: Option<u64>) {
         self.sync_tool_properties();
+        if tool != self.selected {
+            let current = self.capture_workspace();
+            if drawer_core::tool_locks::baseline(&current, self.selected).is_some() {
+                match drawer_core::tool_locks::restore_current(&current, self.selected) {
+                    Ok(next) => {
+                        self.panels.settings = next.panels;
+                        self.workspaces.store.current = next;
+                        self.reset_property_runtime();
+                    }
+                    Err(e) => self.status = Some(e),
+                }
+            }
+        }
+
         if let Some(id) = document {
             if let Some(n) = self.documents.iter().position(|d| d.id == id) {
                 self.documents[n].tool = tool;

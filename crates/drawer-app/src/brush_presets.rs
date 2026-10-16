@@ -162,6 +162,7 @@ impl Drawer {
     }
     ui.separator();
     for(n,p)in e.draft.presets.iter().enumerate(){if ui.selectable_label(e.selected==Some(n),format!("{} — {} · {} px",p.name,p.tip.label(),p.values[0])).clicked(){e.selected=Some(n);}}
+    if let Some(n)=e.selected && let Some(p)=e.draft.presets.get_mut(n) && ui.checkbox(&mut p.locked,"Lock selected saved preset").changed() && let Some(r)=&mut e.restore && r.name==p.name {r.locked=p.locked;}
     let selected=e.selected.and_then(|n|e.draft.presets.get(n)).cloned();
     ui.add_enabled_ui(selected.is_some(),|ui|{
      ui.horizontal(|ui|{
@@ -195,7 +196,7 @@ impl Drawer {
                 let mut next = e.tools.draft.apply_to(base)?;
                 if let Some(p) = &e.restore {
                     next = next.user_tools.deactivate(&next)?;
-                    next = p.apply(&next)?;
+                    next = drawer_core::tool_locks::apply_preset(&next, p)?;
                 }
                 next.brushes = e.draft.clone();
                 Ok::<_, String>(next)

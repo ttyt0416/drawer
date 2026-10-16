@@ -351,6 +351,13 @@ impl Drawer {
 
                 self.workspaces.reports = store.current.recover(&self.display.monitors);
                 // Also validate bindings on restart; a damaged collection never silently overwrites keys.
+                match drawer_core::tool_locks::for_storage(&store.current) {
+                    Ok(current) => store.current = current,
+                    Err(e) => {
+                        self.status = Some(format!("Locked tool settings unavailable: {e}"));
+                        return;
+                    }
+                }
                 match workspaces::validate_bindings(&store.current.bindings) {
                     Ok(()) => {
                         self.restore_workspace(&store.current);

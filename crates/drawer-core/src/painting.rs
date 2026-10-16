@@ -72,6 +72,12 @@ fn default_spacing() -> f64 {
     0.15
 }
 impl Style {
+    pub fn tonal(&self) -> bool {
+        self.material.tonal.mode != crate::tonal::Mode::Off
+            && !self.clone_stamp.enabled
+            && !self.pixel_overwrite()
+            && self.tip != BrushTip::Eraser
+    }
     pub fn advanced_texture(&self) -> bool {
         self.sequence.slots[..if self.sequence.enabled {
             self.sequence.count as usize
@@ -83,14 +89,16 @@ impl Style {
             || (self.variation.dual.active() && self.variation.dual.controls.texture.is_some())
     }
     pub fn water_edges(&self) -> bool {
-        self.material.mode == crate::brush_material::Mode::Water
+        !self.tonal()
+            && self.material.mode == crate::brush_material::Mode::Water
             && self.material.edge > 0.0
             && !self.clone_stamp.enabled
             && !self.pixel_overwrite()
             && self.material.composition.mode == crate::brush_composite::Mode::Normal
     }
     pub fn dual_rgb(&self) -> bool {
-        self.variation.dual.active()
+        !self.tonal()
+            && self.variation.dual.active()
             && self.variation.dual.controls.rgb
             && !self.clone_stamp.enabled
             && self.tip != BrushTip::Eraser
@@ -426,7 +434,8 @@ impl Stroke {
         cancel: impl Fn() -> bool,
     ) -> Result<(), String> {
         use crate::brush_material::Mode;
-        if self.style.clone_stamp.enabled
+        if self.style.tonal()
+            || self.style.clone_stamp.enabled
             || self.style.pixel_overwrite()
             || self.style.material.composition.mode != crate::brush_composite::Mode::Normal
         {
@@ -1465,8 +1474,10 @@ impl Stroke {
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
                 let composition = self.style.material.composition;
-                let special = composition.mode != crate::brush_composite::Mode::Normal;
-                let limited = special
+                let special =
+                    !self.style.tonal() && composition.mode != crate::brush_composite::Mode::Normal;
+                let limited = self.style.tonal()
+                    || special
                     || (self.style.dynamics.opacity_speed.enabled
                         && !self.style.pattern.behavior.continuous)
                     || self.style.clone_stamp.enabled
@@ -1481,7 +1492,8 @@ impl Stroke {
                 let amount = if limited {
                     amount
                 } else {
-                    let alpha = if self.style.tip == BrushTip::Eraser
+                    let alpha = if self.style.tonal()
+                        || self.style.tip == BrushTip::Eraser
                         || matches!(
                             self.style.material.mode,
                             crate::brush_material::Mode::Smudge
@@ -1513,6 +1525,8 @@ impl Stroke {
                     }
                 } else if self.style.pixel_overwrite() {
                     self.dab_color
+                } else if self.style.tonal() {
+                    self.style.material.tonal.apply(base, amount)
                 } else if special {
                     composition
                         .mode

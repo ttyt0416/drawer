@@ -145,7 +145,9 @@ impl<'a> Renderer<'a> {
         for (layer, bounds) in scene.lines.layers.iter().zip(&self.vector_bounds) {
             if !layer.hidden {
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
-                    if bounds.contains(original) && path.hit(original) {
+                    if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
+                        && path.hit(original)
+                    {
                         result = over(result, path.color);
                     }
                 }

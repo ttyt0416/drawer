@@ -276,6 +276,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub locks: crate::tool_locks::Settings,
+    #[serde(default)]
     pub user_tools: crate::user_tools::Library,
     #[serde(default)]
     pub eyedropper: crate::eyedropper::State,
@@ -343,6 +345,7 @@ impl Default for Snapshot {
             interpolation: Default::default(),
             aids: Default::default(),
             tool: "Pen".into(),
+            locks: Default::default(),
             user_tools: Default::default(),
             eyedropper: Default::default(),
             color: [0, 0, 0, 255],
@@ -406,6 +409,8 @@ impl Snapshot {
             && self.input.valid()
             && self.eyedropper.valid()
             && self.user_tools.valid()
+            && self.locks.valid()
+            && (self.locks.empty() || self.properties.as_ref().is_some_and(|p| p.version == 2))
             && self.pointer.valid()
             && self.pressure.valid()
             && self.help.valid()
@@ -436,7 +441,10 @@ impl Snapshot {
         if !self.valid() {
             return Err(io::Error::other("Invalid workspace"));
         }
-        write_json(path, self)
+        write_json(
+            path,
+            &crate::tool_locks::for_storage(self).map_err(io::Error::other)?,
+        )
     }
     pub fn merge(
         &self,
@@ -478,6 +486,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.locks = incoming.locks.clone();
             next.user_tools = incoming.user_tools.clone();
             next.eyedropper = incoming.eyedropper.clone();
             next.preferences = incoming.preferences.clone();
@@ -631,7 +640,12 @@ impl Store {
                 &read_bytes(&path)?,
             )?;
         }
-        write_json(&path, self)
+        let mut disk = self.clone();
+        disk.current = crate::tool_locks::for_storage(&disk.current).map_err(io::Error::other)?;
+        for n in &mut disk.named {
+            n.snapshot = crate::tool_locks::for_storage(&n.snapshot).map_err(io::Error::other)?;
+        }
+        write_json(&path, &disk)
     }
     pub fn save_named(&mut self, name: &str, snapshot: Snapshot) -> io::Result<()> {
         if !valid_name(name)

@@ -110,6 +110,15 @@ impl Drawer {
         }
         self.sync_tool_properties();
         self.sync_active_view();
+        if self
+            .documents
+            .iter()
+            .find(|d| d.id == self.tabs[index].document_id)
+            .is_some_and(|d| d.tool != self.selected)
+        {
+            self.restore_locked_tool();
+            self.leave_user_tool();
+        }
         self.active_tab = Some(index);
         self.active = self
             .documents
@@ -139,6 +148,14 @@ impl Drawer {
         self.select_tab(self.tabs.len() - 1);
     }
     pub(super) fn set_tool(&mut self, tip: BrushTip) {
+        if self.selected == tip
+            && self.workspaces.store.current.user_tools.active.is_none()
+            && drawer_core::tool_locks::baseline(&self.workspaces.store.current, tip).is_some()
+        {
+            self.drawing.mode = super::precision::Mode::Paint;
+            return;
+        }
+        self.restore_locked_tool();
         self.leave_user_tool();
         self.precision.finish();
         self.drawing.mode = super::precision::Mode::Paint;

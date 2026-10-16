@@ -109,3 +109,8 @@ pub mod line_regions;
 pub mod line_tools;
 
 pub mod line_tools_verify;
+
+pub mod tonal;
+pub mod tool_locks;
+
+pub mod tonal_verify;

@@ -383,4 +383,12 @@ mod tests {
         assert_eq!(d.history_counts(), (0, 0));
         assert!(d.layers[0].pixels.iter().all(|p| *p == [0; 4]));
     }
+    #[test]
+    fn vector_preview_includes_the_exact_outer_edge() {
+        let d = fixture().unwrap();
+        let r = crate::render::Renderer::new(&d);
+        assert_eq!(r.pixel([7.5, 20.5]), [0, 0, 0, 255]);
+        assert_eq!(r.pixel([8.5, 20.5]), [0, 0, 0, 255]);
+        assert_eq!(r.pixel([8.5001, 20.5]), [0; 4]);
+    }
 }

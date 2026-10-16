@@ -442,6 +442,7 @@ impl Replay {
             && style.material.composition.mode != crate::brush_composite::Mode::ReplaceAlpha
             && !style.pixel_overwrite()
             && !style.dual_rgb()
+            && !style.tonal()
             && !style.material.pigment()
             && !style.clone_stamp.enabled
             && !matches!(self.settings.effect, Effect::Blend | Effect::Smudge))

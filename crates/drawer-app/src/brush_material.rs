@@ -21,6 +21,12 @@ pub(super) fn settings_ui(ui: &mut egui::Ui, s: &mut Settings, tip: BrushTip, ov
         ui.label("Eraser removes alpha. Pigment mixing controls belong to color brushes.");
         return;
     }
+    ui.collapsing("Dodge and burn",|ui|{
+        egui::ComboBox::from_id_salt("tonal-mode").selected_text(s.tonal.mode.label()).show_ui(ui,|ui|{for mode in drawer_core::tonal::Mode::ALL{ui.selectable_value(&mut s.tonal.mode,mode,mode.label());}});
+        egui::ComboBox::from_id_salt("tonal-band").selected_text(s.tonal.band.label()).show_ui(ui,|ui|{for band in drawer_core::tonal::Band::ALL{ui.selectable_value(&mut s.tonal.band,band,band.label());}});
+        super::edit::slider(ui,&mut s.tonal.strength,0.0..=1.0,"Tone strength","tonal-locks");
+        ui.label("Dodge/burn uses the stroke's original luminance band, preserves alpha, and takes priority over pigment/composition. Eraser, clone and pixel overwrite retain their own behavior.");
+    });
     egui::ComboBox::from_id_salt("brush-composition")
         .selected_text(s.composition.mode.label())
         .show_ui(ui, |ui| {
