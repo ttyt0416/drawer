@@ -200,6 +200,13 @@ impl Drawer {
                         | "swap-colors"
                         | "transparent-color"
                         | "screen-eyedropper"
+                        | "select-rectangle"
+                        | "select-lasso"
+                        | "selection-clear"
+                        | "selection-invert"
+                        | "selection-reselect"
+                        | "selection-save"
+                        | "duplicate-page"
                 )
             {
                 self.execute_command(ctx, &action);

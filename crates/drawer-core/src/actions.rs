@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 31] = [
+pub const EXTRA_COMMANDS: [&str; 39] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -38,6 +38,14 @@ pub const EXTRA_COMMANDS: [&str; 31] = [
     "swap-colors",
     "transparent-color",
     "screen-eyedropper",
+    "select-rectangle",
+    "select-lasso",
+    "selection-clear",
+    "selection-invert",
+    "selection-reselect",
+    "selection-tools",
+    "selection-save",
+    "duplicate-page",
 ];
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Item {
@@ -346,6 +354,14 @@ impl Settings {
             "primary-color" => "Use primary drawing color",
             "secondary-color" => "Use secondary drawing color",
             "swap-colors" => "Swap primary and secondary colors",
+            "select-rectangle" => "Rectangle selection",
+            "select-lasso" => "Lasso selection",
+            "selection-clear" => "Deselect",
+            "selection-invert" => "Invert page selection",
+            "selection-reselect" => "Reselect previous page selection",
+            "selection-tools" => "Page selections",
+            "selection-save" => "Save named page selection",
+            "duplicate-page" => "Duplicate page as document",
             "screen-eyedropper" => "Sample entire screen (display RGB)",
             "transparent-color" => "Toggle transparent shape eraser",
             "brush-grow" => "Increase brush size",

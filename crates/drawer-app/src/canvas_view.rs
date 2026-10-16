@@ -493,6 +493,26 @@ impl CanvasView {
                 painter.circle_stroke(p, 3.0, egui::Stroke::new(1.5, egui::Color32::LIGHT_BLUE));
             }
         }
+        if let Some(points) = paint.drawing.selection_preview(document.id) {
+            let points = points
+                .into_iter()
+                .map(|p| {
+                    let p = document.view.document_to_screen(p, size, center, ppp);
+                    egui::pos2(p[0] as f32, p[1] as f32)
+                })
+                .collect();
+            painter.add(egui::Shape::line(
+                points,
+                egui::Stroke::new(1.5, egui::Color32::LIGHT_BLUE),
+            ));
+        }
+        if matches!(
+            paint.drawing.mode,
+            crate::precision::Mode::SelectRectangle | crate::precision::Mode::SelectLasso
+        ) && response.hovered()
+        {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::Crosshair);
+        }
         self.paint_aids(ui, document, rect, aids, ppp);
         self.first_point = None;
         if input_active
@@ -533,6 +553,10 @@ impl CanvasView {
             .pen_cursor(paint.view)
             .filter(|p| rect.contains(*p));
         if input_active
+            && !matches!(
+                paint.drawing.mode,
+                crate::precision::Mode::SelectRectangle | crate::precision::Mode::SelectLasso
+            )
             && (relative_cursor.is_some()
                 || (ui.input(|i| i.pointer.latest_pos().is_some())
                     && (response.hovered() || response.dragged())))

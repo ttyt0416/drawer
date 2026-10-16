@@ -7,6 +7,8 @@ pub(super) enum Mode {
     Paint,
     Move,
     Eyedropper,
+    SelectRectangle,
+    SelectLasso,
 }
 #[derive(Default)]
 pub(super) struct Precision {
@@ -38,6 +40,8 @@ impl Drawer {
                 ("Paint", Mode::Paint),
                 ("Move", Mode::Move),
                 ("Eyedropper", Mode::Eyedropper),
+                ("Rectangle select", Mode::SelectRectangle),
+                ("Lasso select", Mode::SelectLasso),
             ] {
                 if ui
                     .selectable_label(self.drawing.mode == mode, label)
@@ -52,6 +56,9 @@ impl Drawer {
         });
         if self.drawing.mode == Mode::Eyedropper {
             self.eyedropper_controls(ui);
+        }
+        if ui.button("Page selections…").clicked() {
+            self.execute_command(ui.ctx(), "selection-tools");
         }
         if ui.button("Line references and vector layers…").clicked() {
             self.finish_stroke();

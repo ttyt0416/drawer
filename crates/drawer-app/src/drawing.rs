@@ -46,6 +46,16 @@ pub(super) struct PaintInput<'a> {
     pub layer: Option<usize>,
     pub color: [u8; 4],
 }
+struct SelectionGesture {
+    document: u64,
+    revision: u64,
+    view: u64,
+    source: drawer_core::pointer_input::Source,
+    projection: Projection,
+    root: egui::Rect,
+    mode: super::precision::Mode,
+    points: Vec<Point>,
+}
 struct Session {
     stroke: Stroke,
     mouse: Option<drawer_core::mouse_pressure::Replay>,
@@ -74,6 +84,7 @@ pub(super) struct Drawing {
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
     frame_time: f64,
     active: Option<Session>,
+    selection: Option<SelectionGesture>,
     ownership: drawer_core::pointer_input::Ownership,
     events: Vec<(drawer_core::touch::Effect, bool)>,
     pub incoming: Vec<drawer_core::pointer_input::Event>,
@@ -151,10 +162,13 @@ impl Drawing {
         self.native_mouse = true;
     }
     pub fn active_view(&self) -> Option<u64> {
-        self.active.as_ref().map(|s| s.view)
+        self.active
+            .as_ref()
+            .map(|s| s.view)
+            .or_else(|| self.selection.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
-        self.active.is_some()
+        self.active.is_some() || self.selection.is_some()
     }
     pub fn changed(&self, document: u64) -> bool {
         self.active
@@ -171,6 +185,7 @@ impl Drawing {
         self.sample_pending = None;
     }
     fn cancel(&mut self) {
+        self.selection = None;
         self.sample_pending = None;
         self.clone_pick = false;
         self.active = None;
@@ -246,6 +261,7 @@ impl Drawing {
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.selection = None;
         self.controls.reset();
         self.touch.clear_touches();
         self.ownership.clear();
@@ -261,6 +277,7 @@ impl Drawing {
         }
     }
     fn finish_document(&mut self, doc: &mut Document) {
+        self.selection = None;
         self.ownership.clear();
         if let Some(s) = self.active.take() {
             self.commit_session(s, doc);
@@ -414,6 +431,85 @@ impl Drawing {
             }
         }
     }
+    pub(super) fn selection_preview(&self, document: u64) -> Option<Vec<Point>> {
+        let s = self.selection.as_ref().filter(|s| s.document == document)?;
+        if s.mode == super::precision::Mode::SelectRectangle {
+            let a = s.points[0];
+            let b = *s.points.last()?;
+            Some(vec![a, [b[0], a[1]], b, [a[0], b[1]], a])
+        } else {
+            let mut p = s.points.clone();
+            if let Some(first) = p.first().copied() {
+                p.push(first);
+            }
+            Some(p)
+        }
+    }
+    fn receive_selection(&mut self, index: usize, doc: &mut Document) {
+        use drawer_core::pointer_input::Phase;
+        let drawer_core::touch::Effect::Pointer(event) = self.events[index].0 else {
+            return;
+        };
+        let Some(mut s) = self.selection.take() else {
+            return;
+        };
+        if s.document != doc.id || s.source != event.source {
+            self.selection = Some(s);
+            return;
+        }
+        self.events[index].1 = true;
+        if s.revision != doc.revision
+            || s.mode != self.mode
+            || s.projection.view != doc.view
+            || event.phase == Phase::Cancel
+        {
+            self.ownership.clear();
+            return;
+        }
+        if matches!(event.phase, Phase::Move | Phase::Up) {
+            let p = s.projection.point(egui::pos2(
+                event.position[0] as f32,
+                event.position[1] as f32,
+            ));
+            if p.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
+                self.error = Some("Selection point is outside supported coordinates".into());
+                self.ownership.clear();
+                return;
+            }
+            if s.mode == super::precision::Mode::SelectRectangle {
+                if s.points.len() == 1 {
+                    s.points.push(p);
+                } else {
+                    s.points[1] = p;
+                }
+            } else if s
+                .points
+                .last()
+                .is_none_or(|v| (v[0] - p[0]).hypot(v[1] - p[1]) >= 0.25)
+                || event.phase == Phase::Up
+            {
+                if s.points.len() == 4096 {
+                    self.error = Some("Lasso path limit reached; prior selection kept".into());
+                    self.ownership.clear();
+                    return;
+                }
+                s.points.push(p);
+            }
+        }
+        if event.phase == Phase::Up {
+            self.ownership.clear();
+            let result = if s.mode == super::precision::Mode::SelectRectangle {
+                drawer_core::selection_tools::rectangle(doc, s.points[0], *s.points.last().unwrap())
+            } else {
+                drawer_core::selection_tools::lasso(doc, &s.points)
+            };
+            if let Err(e) = result {
+                self.error = Some(e);
+            }
+            return;
+        }
+        self.selection = Some(s);
+    }
     fn receive(&mut self, index: usize, doc: &mut Document) {
         use drawer_core::pointer_input::Decision;
         let drawer_core::touch::Effect::Pointer(event) = self.events[index].0 else {
@@ -498,6 +594,23 @@ impl Drawing {
                 i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
             });
             return;
+        }
+        if self.selection.as_ref().is_some_and(|s| {
+            s.mode != self.mode
+                || s.root != ctx.content_rect()
+                || (s.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8
+        }) {
+            self.cancel();
+        }
+        for n in 0..self.events.len() {
+            let Some(id) = self.selection.as_ref().map(|s| s.document) else {
+                break;
+            };
+            let Some(doc) = documents.iter_mut().find(|d| d.id == id) else {
+                self.cancel();
+                break;
+            };
+            self.receive_selection(n, doc);
         }
         for n in 0..self.events.len() {
             if matches!(self.events[n].0, drawer_core::touch::Effect::Motion(_)) {
@@ -604,6 +717,25 @@ impl Drawing {
                 }
                 continue;
             }
+            if self
+                .selection
+                .as_ref()
+                .is_some_and(|s| s.document == doc.id && s.view == view)
+            {
+                if !enabled
+                    || self
+                        .selection
+                        .as_ref()
+                        .is_some_and(|s| s.projection != projection)
+                {
+                    self.cancel();
+                } else {
+                    self.receive_selection(n, doc);
+                    if self.events[n].1 {
+                        continue;
+                    }
+                }
+            }
             if self.pending() {
                 if self.active_view() == Some(view) {
                     self.receive(n, doc);
@@ -624,6 +756,23 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
+            if matches!(
+                self.mode,
+                super::precision::Mode::SelectRectangle | super::precision::Mode::SelectLasso
+            ) {
+                let point = projection.point(pos);
+                self.selection = Some(SelectionGesture {
+                    document: doc.id,
+                    revision: doc.revision,
+                    view,
+                    source: event.source,
+                    projection,
+                    root: ui.ctx().content_rect(),
+                    mode: self.mode,
+                    points: vec![point],
+                });
+                continue;
+            }
             if self.mode != super::precision::Mode::Paint {
                 if self.mode == super::precision::Mode::Eyedropper {
                     let point = projection.point(pos);

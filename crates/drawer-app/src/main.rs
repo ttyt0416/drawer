@@ -54,6 +54,7 @@ mod related_colors;
 mod revert;
 mod screen_mode;
 mod screen_sample;
+mod selection_tools;
 mod size_fields;
 mod sizing_dialog;
 mod soft_proof;
@@ -152,6 +153,7 @@ struct Drawer {
     color_tables: color_tables::Tables,
     screen_sampler: screen_sample::Screen,
     proof_editor: soft_proof::Runtime,
+    selection_panel: selection_tools::Panel,
     mixer: mixing_pad::Runtime,
     related: related_colors::Related,
     replay: input_replay::Editor,
@@ -273,6 +275,7 @@ impl Drawer {
             color_tables: Default::default(),
             screen_sampler: Default::default(),
             proof_editor: Default::default(),
+            selection_panel: Default::default(),
             mixer: Default::default(),
             related: Default::default(),
             replay: Default::default(),
@@ -598,6 +601,7 @@ impl Drawer {
         self.mixing_pad(ui.ctx());
         self.related_colors_window(ui.ctx());
         self.proof_window(ui.ctx());
+        self.selection_window(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
@@ -1295,6 +1299,10 @@ impl eframe::App for Drawer {
                     eprintln!("HSL/editable swatches: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = selection_tools::smoke(&root) {
+                    eprintln!("Page selections: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = soft_proof::smoke(&root) {
                     eprintln!("Soft proof/tone preview: {e}");
                     fail_smoke();
@@ -1478,7 +1486,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

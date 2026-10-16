@@ -531,6 +531,7 @@ pub fn prepare(
     let translation = transform.map(source.scene.selection_translation);
     let origin = transform.map([0.0; 2]);
     result.scene.selection_translation = [translation[0] - origin[0], translation[1] - origin[1]];
+    result.scene.selections.transform_translation(transform);
     if !result.scene.valid() {
         return Err("The resulting geometry exceeds the supported coordinate range.".into());
     }

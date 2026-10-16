@@ -192,13 +192,18 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
-        let color_command = matches!(
+        let preserve_prepared_contact = matches!(
             command,
-            "primary-color" | "secondary-color" | "swap-colors" | "transparent-color"
+            "primary-color"
+                | "secondary-color"
+                | "swap-colors"
+                | "transparent-color"
+                | "select-rectangle"
+                | "select-lasso"
         );
         if !BrushTip::ALL.iter().any(|t| t.name() == command)
             && !command.starts_with("cycle-")
-            && (!color_command || self.drawing.pending())
+            && (!preserve_prepared_contact || self.drawing.pending())
         {
             self.finish_stroke();
         }
@@ -212,6 +217,9 @@ impl Drawer {
                     self.color_mode_command(command)?
                 }
                 "screen-eyedropper" => self.begin_screen_sample(ctx)?,
+                "select-rectangle" | "select-lasso" | "selection-clear" | "selection-invert"
+                | "selection-reselect" | "selection-tools" | "selection-save"
+                | "duplicate-page" => self.selection_command(command)?,
                 "brush-grow" | "brush-shrink" => {
                     let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size

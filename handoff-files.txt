@@ -306,3 +306,7 @@ docs/process/screen-sampling.md
 crates/drawer-core/src/soft_proof.rs
 crates/drawer-app/src/soft_proof.rs
 docs/process/soft-proof.md
+
+crates/drawer-core/src/selection_tools.rs
+crates/drawer-app/src/selection_tools.rs
+docs/process/page-selections.md

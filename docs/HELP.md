@@ -629,3 +629,9 @@ Sampler and used colors offers composite reference/excluded layers and separate 
 Color proof and tone preview edits each canvas view or the separate display view independently. Preview draft changes display only; Save view preview settings keeps local values; Cancel/Escape restores the saved preview. Choose a local RGB/Gray/CMYK ICC with usable transforms in both directions. Preview/Save reloads the file. Missing or unsupported ICC displays an error and preserves document pixels.
 
 Apply tone/levels to selected raster is a separate drawing command: it bakes only the curve/levels into the active selected layer and selection, preserves alpha and sRGB, and creates one drawing Undo. Activate the view being edited first. Its tone preview then resets to avoid applying the adjustment twice. ICC simulation stays view-only. The preview uses an 8-bit ICC gamut round trip; it does not promise calibrated monitor or print matching.
+
+## Rectangle, lasso and page selections
+
+Choose Rectangle select or Lasso select in Precision tools or Commands. Drag and release on the canvas; Escape/focus loss cancels the preview. Deselect removes restrictions, Invert complements the current page mask, and Reselect restores this page’s previous selection. Edges use 4×4 coverage. Selections use drawing Undo and never change raster/cell pixels by themselves.
+
+Page selections saves/replaces named masks (16 per page), loads/removes them, and duplicates a page as a separate document with independent selection identity. Cells and frames share their page’s selection. Saved/previous masks reopen with the document. Out-of-range or oversized shapes are rejected with the previous selection preserved.

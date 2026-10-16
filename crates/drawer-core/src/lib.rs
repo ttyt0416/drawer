@@ -126,3 +126,5 @@ pub mod color_modes;
 pub mod screen_sample;
 
 pub mod soft_proof;
+
+pub mod selection_tools;
