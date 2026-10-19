@@ -678,3 +678,8 @@ Selection mask layers에서 이름을 입력해 Save / replace selection mask la
 
 스포이트로 색을 고른 뒤 Color range의 Use current drawing color를 누릅니다. RGB tolerance 0은 정확한 색,255는 모든 보이는 색입니다. Include fully transparent pixels는 숨은 RGB와 무관하게 알파0도 포함합니다.
 Current/Composite와 선택 합성 연산을 고르고 Apply color range로 적용합니다. 떨어진 같은 색도 선택하며 그림 픽셀은 바뀌지 않습니다. Cancel/Escape는 취소하고 Undo로 선택 변경을 되돌립니다.
+
+## selection-border | 선택 테두리 그리기 | 선택 테두리 안쪽 중앙 바깥쪽 폭 색
+
+Draw selection border에서 Inside/Center/Outside 정렬,문서 픽셀 폭과색을 고른 뒤 Draw border를 누릅니다. 구멍의 경계도 그리며 원래 선택은 유지합니다. 바깥쪽 선은 선택 밖에 그려지고 결과는 캔버스에 잘립니다.
+Cancel/Escape는 취소하고 Undo는 테두리 전체를 되돌립니다. 빈 선택은 바뀌지 않으며 숨긴/잠긴 대상에는 그리지 않습니다.

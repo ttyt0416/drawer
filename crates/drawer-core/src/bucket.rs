@@ -306,6 +306,30 @@ pub fn prepare(
             .selection_coverage([x as f64 + 0.5, y as f64 + 0.5]) as u32;
         ((mask * region.as_ref().map_or(255, |r| r.coverage(x, y)) as u32 + 127) / 255) as u8
     };
+    paint_coverage(doc, layer, color, erase, alpha_lock, coverage)
+}
+pub(crate) fn paint_coverage(
+    doc: &Document,
+    layer: usize,
+    color: [u8; 4],
+    erase: bool,
+    alpha_lock: bool,
+    coverage: impl Fn(u32, u32) -> u8,
+) -> Result<DocumentState, String> {
+    let raster = doc
+        .layers
+        .get(layer)
+        .ok_or("Select a raster paint target")?;
+    if raster.locked
+        || !doc.scene.paper.raster_visible(layer, doc.layers.len())
+        || !raster.valid(doc.width, doc.height)
+        || !doc.scene.valid()
+    {
+        return Err("Paint target is hidden, locked or invalid".into());
+    }
+    if doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+        return Err("Paint snapshot exceeds undo budget".into());
+    }
     let mut min = [doc.width as i64, doc.height as i64];
     let mut max = [0i64; 2];
     let count = doc.width as usize * doc.height as usize;

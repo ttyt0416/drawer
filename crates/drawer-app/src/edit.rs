@@ -1,5 +1,16 @@
 //! Local text editing: draft values, field undo and clipboard failure preservation.
 use eframe::egui;
+/// The picker round-trip can quantize an unchanged RGBA value; commit only user edits.
+pub(super) fn rgba(ui: &mut egui::Ui, value: &mut [u8; 4]) {
+    let mut draft = *value;
+    if ui
+        .color_edit_button_srgba_unmultiplied(&mut draft)
+        .changed()
+    {
+        *value = draft;
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum Rule {
     Text,

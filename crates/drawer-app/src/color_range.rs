@@ -60,7 +60,7 @@ impl Drawer {
         self.color_range.apply = None;
         egui::Window::new("Color range selection").open(&mut open).collapsible(false).show(ctx,|ui| {
             ui.label("Sample a color with the eyedropper, then use Current drawing color here. RGB distance uses the largest channel difference; source alpha above zero does not change the match.");
-            ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);
+            super::edit::rgba(ui,&mut e.settings.color);
             if ui.button("Use current drawing color").clicked(){e.settings.color=self.references.session.workspace.color;}
             ui.add(egui::Slider::new(&mut e.settings.tolerance,0..=255).text("RGB tolerance"));ui.checkbox(&mut e.settings.include_transparent,"Include fully transparent pixels (any hidden RGB)");
             egui::ComboBox::from_id_salt("color-range-reference").selected_text(format!("{:?}",e.settings.reference)).show_ui(ui,|ui|{for r in [Reference::Current,Reference::Composite]{ui.selectable_value(&mut e.settings.reference,r,format!("{r:?}"));}});
@@ -108,7 +108,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
             .as_mut()
             .ok_or("Color range command missing")?
             .settings = Settings {
-            color: [10, 20, 30, 255],
+            color: [10, 20, 30, 128],
             reference,
             ..Default::default()
         };

@@ -347,3 +347,7 @@ docs/process/quick-mask.md
 crates/drawer-core/src/color_range.rs
 crates/drawer-app/src/color_range.rs
 docs/process/color-range.md
+
+crates/drawer-core/src/selection_border.rs
+crates/drawer-app/src/selection_border.rs
+docs/process/selection-border.md

@@ -95,6 +95,7 @@ impl Drawer {
         ui.horizontal_wrapped(|ui| {
             for (command, label) in [
                 ("color-range", "Color range…"),
+                ("selection-border", "Draw selection border…"),
                 ("selection-expand", "Expand selection…"),
                 ("selection-shrink", "Shrink selection…"),
                 ("selection-feather", "Feather selection…"),

@@ -177,6 +177,7 @@ impl Drawer {
             || self.ruler_tools.open
             || self.selection_filter.draft.is_some()
             || self.color_range.draft.is_some()
+            || self.selection_border.draft.is_some()
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()

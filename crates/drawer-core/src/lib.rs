@@ -144,3 +144,5 @@ pub mod selection_geometry;
 pub mod rulers;
 
 pub mod color_range;
+
+pub mod selection_border;
