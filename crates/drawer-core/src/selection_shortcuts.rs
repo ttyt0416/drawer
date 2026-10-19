@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
     Clear,
+    DeleteOutside,
     Invert,
     Reselect,
     Outline,
@@ -22,8 +23,9 @@ pub enum Command {
     Redo,
 }
 impl Command {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Clear,
+        Self::DeleteOutside,
         Self::Invert,
         Self::Reselect,
         Self::Outline,
@@ -40,6 +42,7 @@ impl Command {
     pub fn action(self) -> &'static str {
         match self {
             Self::Clear => "selection-clear",
+            Self::DeleteOutside => "delete-outside-selection",
             Self::Invert => "selection-invert",
             Self::Reselect => "selection-reselect",
             Self::Outline => "selection-outline",
@@ -57,6 +60,7 @@ impl Command {
     pub fn label(self) -> &'static str {
         match self {
             Self::Clear => "Deselect",
+            Self::DeleteOutside => "Delete outside",
             Self::Invert => "Invert",
             Self::Reselect => "Reselect",
             Self::Outline => "Outline",

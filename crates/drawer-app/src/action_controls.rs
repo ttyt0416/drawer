@@ -169,6 +169,27 @@ impl Drawer {
             return Some(format!("Command unavailable: {command}"));
         }
         match command {
+            "delete-outside-selection" => {
+                let Some(n) = self.active else {
+                    return Some("Open a page first".into());
+                };
+                let d = &self.documents[n];
+                let layer = match self
+                    .panels
+                    .targets
+                    .get(&d.id)
+                    .copied()
+                    .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+                {
+                    drawer_core::thumbnail::Target::Raster(i) => i,
+                    _ => return Some("Choose a raster target".into()),
+                };
+                if drawer_core::magnetic_lasso::can_delete_outside(d, layer) {
+                    None
+                } else {
+                    Some("A nonempty selection and unlocked raster target are required".into())
+                }
+            }
             "save" | "save-as" | "view-center" | "view-reset" | "zoom-in" | "zoom-out"
                 if self.active.is_none() =>
             {
@@ -353,11 +374,17 @@ impl Drawer {
                         _ => drawer_core::selection_filter::Operation::Feather,
                     })?,
                 "screen-eyedropper" => self.begin_screen_sample(ctx)?,
-                "select-rectangle" | "select-lasso" | "select-ellipse" | "select-polygon"
-                | "selection-clear" | "selection-invert" | "selection-reselect"
-                | "selection-tools" | "selection-save" | "duplicate-page" => {
-                    self.selection_command(command)?
-                }
+                "select-rectangle"
+                | "select-lasso"
+                | "select-ellipse"
+                | "select-polygon"
+                | "selection-clear"
+                | "selection-invert"
+                | "selection-reselect"
+                | "selection-tools"
+                | "selection-save"
+                | "duplicate-page"
+                | "delete-outside-selection" => self.selection_command(command)?,
                 "brush-grow" | "brush-shrink" => {
                     let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size

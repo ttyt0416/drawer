@@ -401,3 +401,8 @@ crates/drawer-core/src/selection_shortcuts.rs
 crates/drawer-core/src/selection_shortcuts_verify.rs
 crates/drawer-app/src/selection_shortcuts.rs
 docs/process/selection-shortcuts.md
+
+crates/drawer-core/src/magnetic_lasso.rs
+crates/drawer-core/src/magnetic_lasso_verify.rs
+crates/drawer-app/src/magnetic_lasso.rs
+docs/process/magnetic-lasso.md

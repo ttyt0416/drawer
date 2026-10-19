@@ -10,7 +10,7 @@ pub(super) struct Panel {
     apply: Option<egui::Rect>,
     confirm: Option<egui::Rect>,
     settings_apply: Option<egui::Rect>,
-    buttons: Vec<(Command, egui::Rect)>,
+    pub(super) buttons: Vec<(Command, egui::Rect)>,
 }
 struct Draft {
     id: u64,
@@ -94,7 +94,10 @@ impl Drawer {
                 .show(ctx, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         for c in commands {
-                            let r = ui.button(c.label());
+                            let r = ui.add_enabled(
+                                self.command_reason(c.action()).is_none(),
+                                egui::Button::new(c.label()),
+                            );
                             self.selection_shortcuts.buttons.push((c, r.rect));
                             if r.clicked() {
                                 action = Some(c.action());

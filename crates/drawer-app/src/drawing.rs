@@ -1,5 +1,7 @@
 #[path = "bucket.rs"]
 pub(crate) mod bucket;
+#[path = "magnetic_lasso.rs"]
+pub(crate) mod magnetic_lasso;
 #[path = "movement.rs"]
 mod movement;
 #[path = "selection_edit.rs"]
@@ -104,6 +106,8 @@ pub(super) struct Drawing {
     frame_time: f64,
     active: Option<Session>,
     selection: Option<SelectionGesture>,
+    lasso: Option<Box<magnetic_lasso::Gesture>>,
+    pub lasso_settings: drawer_core::magnetic_lasso::Settings,
     movement: Option<movement::Gesture>,
     bucket: Option<bucket::Gesture>,
     selection_edit: Option<selection_edit::Gesture>,
@@ -200,6 +204,7 @@ impl Drawing {
             .as_ref()
             .map(|s| s.view)
             .or_else(|| self.selection.as_ref().map(|s| s.view))
+            .or_else(|| self.lasso.as_ref().map(|s| s.view))
             .or_else(|| self.movement.as_ref().map(|s| s.view))
             .or_else(|| self.bucket.as_ref().map(|s| s.view))
             .or_else(|| self.selection_edit.as_ref().map(|s| s.view))
@@ -207,6 +212,7 @@ impl Drawing {
     pub fn pending(&self) -> bool {
         self.active.is_some()
             || self.selection.is_some()
+            || self.lasso.is_some()
             || self.movement.is_some()
             || self.bucket.is_some()
             || self.selection_edit.is_some()
@@ -227,6 +233,7 @@ impl Drawing {
     }
     fn cancel(&mut self) {
         self.selection = None;
+        self.lasso = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -306,6 +313,7 @@ impl Drawing {
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.selection = None;
+        self.lasso = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -325,6 +333,7 @@ impl Drawing {
     }
     fn finish_document(&mut self, doc: &mut Document) {
         self.selection = None;
+        self.lasso = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -488,6 +497,9 @@ impl Drawing {
     }
     pub(super) fn selection_preview(&self, document: u64) -> Option<Vec<Point>> {
         use super::precision::Mode;
+        if let Some(points) = self.lasso_preview(document) {
+            return Some(points);
+        }
         let s = self.selection.as_ref().filter(|s| s.document == document)?;
         if let Some(shape) = s.shape {
             let mut points = s.points.clone();
@@ -891,6 +903,7 @@ impl Drawing {
                 });
             }
         }
+        self.advance_lasso(ctx, documents);
         self.advance_selection_edit(ctx, documents);
         self.advance_bucket(ctx, documents);
         self.advance_movement(ctx, documents);
@@ -1095,6 +1108,29 @@ impl Drawing {
                     }
                 }
             }
+            if self
+                .lasso
+                .as_ref()
+                .is_some_and(|g| g.document == doc.id && g.view == view)
+            {
+                let pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
+                let inside = rect.contains(pos)
+                    && ui.clip_rect().contains(pos)
+                    && ui.ctx().layer_id_at(pos) == Some(response.layer_id);
+                if !enabled
+                    || self
+                        .lasso
+                        .as_ref()
+                        .is_some_and(|g| g.projection != projection)
+                {
+                    self.cancel();
+                } else {
+                    self.receive_lasso(n, doc, inside);
+                    if self.events[n].1 {
+                        continue;
+                    }
+                }
+            }
             if self.pending() {
                 if self.active_view() == Some(view) {
                     self.receive(n, doc);
@@ -1196,6 +1232,21 @@ impl Drawing {
                 || self.mode.creation_shape()
             {
                 let point = projection.point(pos);
+                if self.uses_lasso() {
+                    if let Err(err) = self.begin_lasso(
+                        doc,
+                        view,
+                        projection,
+                        ui.ctx().content_rect(),
+                        layer,
+                        event.source,
+                        point,
+                    ) {
+                        self.error = Some(err);
+                        self.ownership.clear();
+                    }
+                    continue;
+                }
                 let fill = if self.mode.enclosure_fill() {
                     let Some(layer) = layer else {
                         self.error = Some("Choose a raster fill target".into());
@@ -1637,6 +1688,7 @@ impl Drawer {
         self.drawing.snap_disabled = super::snapping::disabled(ctx, self.drawing.snap_settings);
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
         self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
+        self.drawing.lasso_settings = self.workspaces.store.current.magnetic_lasso;
         self.drawing.enclosure_settings = self.workspaces.store.current.enclosure;
         self.drawing.shape_settings = self.workspaces.store.current.shapes;
         self.drawing.shape_target = self.active.and_then(|n| {

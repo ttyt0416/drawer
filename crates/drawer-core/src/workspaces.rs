@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub magnetic_lasso: crate::magnetic_lasso::Settings,
+    #[serde(default)]
     pub selection_shortcuts: crate::selection_shortcuts::Settings,
     #[serde(default = "selection_outline_default")]
     pub selection_outline: bool,
@@ -418,6 +420,7 @@ impl Default for Snapshot {
             snapping: Default::default(),
             selection_outline: true,
             selection_shortcuts: Default::default(),
+            magnetic_lasso: Default::default(),
             shapes_vector: false,
             layer_pick: Default::default(),
             color_modes: Default::default(),
@@ -477,7 +480,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.selection_shortcuts.valid()
+        if !self.magnetic_lasso.valid()
+            || !self.selection_shortcuts.valid()
             || !self.selection_edit.valid()
             || !self.enclosure.valid()
             || !self.gradient_presets.valid()
@@ -582,6 +586,7 @@ impl Snapshot {
         }
         if scope.other {
             next.selection_edit = incoming.selection_edit;
+            next.magnetic_lasso = incoming.magnetic_lasso;
             next.color_range = incoming.color_range;
             next.enclosure = incoming.enclosure;
             next.gradient_presets = incoming.gradient_presets.clone();

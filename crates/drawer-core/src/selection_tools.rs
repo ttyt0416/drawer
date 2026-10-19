@@ -60,6 +60,8 @@ pub struct Data {
     pub page: Option<String>,
     pub next_id: u64,
     pub last: Option<Shape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_cleared: Option<Shape>,
     pub saved: Vec<Named>,
 }
 impl Default for Data {
@@ -68,6 +70,7 @@ impl Default for Data {
             page: None,
             next_id: 1,
             last: None,
+            last_cleared: None,
             saved: vec![],
         }
     }
@@ -94,8 +97,10 @@ impl Data {
             && self.page.as_ref().is_none_or(|s| {
                 !s.is_empty() && s.len() <= 96 && s.is_ascii() && !s.chars().any(char::is_control)
             })
-            && (self.page.is_some() || (self.last.is_none() && self.saved.is_empty()))
+            && (self.page.is_some()
+                || (self.last.is_none() && self.last_cleared.is_none() && self.saved.is_empty()))
             && self.last.as_ref().is_none_or(Shape::valid)
+            && self.last_cleared.as_ref().is_none_or(Shape::valid)
             && self.saved.iter().all(|n| {
                 n.id > 0
                     && n.id < self.next_id
@@ -116,6 +121,7 @@ impl Data {
     pub fn size_bytes(&self) -> usize {
         self.page.as_ref().map_or(0, String::len)
             + self.last.as_ref().map_or(0, Shape::bytes)
+            + self.last_cleared.as_ref().map_or(0, Shape::bytes)
             + self
                 .saved
                 .iter()
@@ -127,6 +133,7 @@ impl Data {
         for s in self
             .last
             .iter_mut()
+            .chain(self.last_cleared.iter_mut())
             .chain(self.saved.iter_mut().map(|n| &mut n.shape))
         {
             let p = t.map(s.translation);
@@ -163,10 +170,13 @@ pub fn prepare_shape(doc: &Document, shape: Shape) -> Result<Scene, String> {
     scene.selections.last = if shape.restricted() {
         Some(shape.clone())
     } else if old.restricted() {
-        Some(old)
+        Some(old.clone())
     } else {
         scene.selections.last.clone()
     };
+    if !shape.restricted() && old.restricted() {
+        scene.selections.last_cleared = Some(old);
+    }
     shape.put(&mut scene);
     if !scene.valid()
         || serde_json::to_vec(&scene).map_err(|e| e.to_string())?.len() > 4 * 1024 * 1024
@@ -186,8 +196,10 @@ pub fn reselect(doc: &mut Document) -> Result<bool, String> {
     let last = doc
         .scene
         .selections
-        .last
-        .clone()
+        .last_cleared
+        .as_ref()
+        .or(doc.scene.selections.last.as_ref())
+        .cloned()
         .ok_or("No previous selection on this page")?;
     selected(doc, last)
 }

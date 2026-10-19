@@ -43,6 +43,19 @@ impl Drawer {
             "selection-reselect" => {
                 core::reselect(d)?;
             }
+            "delete-outside-selection" => {
+                let layer = match self
+                    .panels
+                    .targets
+                    .get(&d.id)
+                    .copied()
+                    .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+                {
+                    drawer_core::thumbnail::Target::Raster(i) => i,
+                    _ => return Err("Choose a raster target".into()),
+                };
+                d.commit_state(drawer_core::magnetic_lasso::delete_outside(d, layer)?)?;
+            }
             "selection-save" => {
                 core::save_named(d, &self.selection_panel.name)?;
             }
@@ -63,6 +76,12 @@ impl Drawer {
         if s.combine != old {
             self.finish_stroke();
         }
+        if matches!(
+            self.drawing.mode,
+            super::precision::Mode::SelectLasso | super::precision::Mode::SelectPolygon
+        ) {
+            self.magnetic_lasso_controls(ui);
+        }
         if self.drawing.mode == super::precision::Mode::SelectPolygon {
             ui.label("Click vertices; Enter closes; Backspace removes a vertex; Escape cancels.");
         }
@@ -80,6 +99,7 @@ impl Drawer {
 if ui.button("Selection from vector / ruler contour…").clicked(){command=Some("contour-selection");}});
             ui.label("Drag rectangles, ellipses or lassos and release. Polygon: click vertices, Enter to close; Backspace removes the last vertex. Escape/focus loss cancels. Edges use 4×4 coverage samples; no painting pixels change.");
             self.shape_selection_controls(ui);
+            if ui.add_enabled(self.command_reason("delete-outside-selection").is_none(),egui::Button::new("Delete outside selection")).clicked(){command=Some("delete-outside-selection");}
             let Some(n)=self.active else{ui.label("Open a page first");return;};let d=&self.documents[n];
             ui.label(format!("Page: {} · frame {}. Selection stays with this page when cells/frames change.",d.title,d.current_frame+1));
             super::edit::text(ui,&mut self.selection_panel.name,"selection-tools");if ui.button("Save / replace selection mask layer").clicked(){command=Some("selection-save");}

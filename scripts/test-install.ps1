@@ -117,6 +117,7 @@ try {
     if ($smokeResult -notmatch 'related_colors=true') { throw '중간색·유사색 격자·키보드 선택 검증 실패' }
     if ($smokeResult -notmatch 'transparency_fill_wand=true') { throw '채우기·마술봉 투명도 독립 판정 검증 실패' }
     if ($smokeResult -notmatch 'selection_shortcuts=true') { throw '선택 바로가기·윤곽 변환 검증 실패' }
+    if ($smokeResult -notmatch 'magnetic_lasso=true') { throw '마그네틱 올가미·바깥 삭제 검증 실패' }
     if ($smokeResult -notmatch 'layer_selection=true') { throw '레이어 알파·벡터 선택·윤곽 숨김과 칠 제한 검증 실패' }
     if ($smokeResult -notmatch 'drawing_snapping=true') { throw '스냅 우선순위·확대·수정키 복원 검증 실패' }
     if ($smokeResult -notmatch 'object_alignment=true') { throw '개체 정렬·균등 간격·한 취소 검증 실패' }

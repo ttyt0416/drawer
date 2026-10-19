@@ -181,3 +181,7 @@ pub mod transparency_verify;
 pub mod selection_shortcuts;
 
 pub mod selection_shortcuts_verify;
+
+pub mod magnetic_lasso;
+
+pub mod magnetic_lasso_verify;
