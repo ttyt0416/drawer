@@ -229,12 +229,14 @@ impl Drawer {
             ui.add(egui::Slider::new(&mut s.color_tolerance,0.0..=1.0).text("Color tolerance"));ui.add(egui::Slider::new(&mut s.alpha_tolerance,0.0..=1.0).text("Alpha tolerance"));
             ui.add_enabled_ui(s.mode==Mode::CloseGaps,|ui|{ui.add(egui::Slider::new(&mut s.gap,0..=32).text("Maximum gap pixels"));});
             ui.add(egui::Slider::new(&mut s.expand,0..=32).text("Expand pixels"));ui.checkbox(&mut s.antialias,"Antialias partial-alpha edges");
+            super::super::extended_fill::controls(ui,&mut s.advanced);
             let mut tags_changed=false;
             if let Some(n)=self.active{match reference_controls(ui,&mut self.documents[n],s){Ok(changed)=>tags_changed=changed,Err(e)=>self.status=Some(e)}}
             if *s!=before||tags_changed{self.finish_stroke();}
             ui.checkbox(&mut self.workspaces.store.current.input.materials[slot].alpha_lock,"Protect target alpha");
             ui.horizontal(|ui|{for(c,label)in[("bucket-tool","Fill tool (G)"),("fill-selection","Fill entire selection")]{if ui.button(label).clicked(){self.execute_command(ui.ctx(),c);}}});
             ui.label("Press to preview; release inside the canvas to fill once. Escape/focus loss cancels. Alpha/color thresholds, gap closure, expansion and edge coverage are independent. Options are stored per tool preset.");
+            if ui.button("Set animation output frame…").clicked(){self.execute_command(ui.ctx(),"animation-output-frame");}
         });
     }
 }

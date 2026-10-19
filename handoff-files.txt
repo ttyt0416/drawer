@@ -406,3 +406,9 @@ crates/drawer-core/src/magnetic_lasso.rs
 crates/drawer-core/src/magnetic_lasso_verify.rs
 crates/drawer-app/src/magnetic_lasso.rs
 docs/process/magnetic-lasso.md
+
+crates/drawer-core/src/animation_output.rs
+crates/drawer-core/src/extended_fill.rs
+crates/drawer-core/src/extended_fill_verify.rs
+crates/drawer-app/src/extended_fill.rs
+docs/process/extended-fill.md

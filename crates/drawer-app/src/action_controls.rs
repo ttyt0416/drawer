@@ -366,6 +366,7 @@ impl Drawer {
                     self.drawing.connect_line = false;
                 }
                 "contour-selection" => self.begin_contour_selection()?,
+                "animation-output-frame" => self.begin_animation_output()?,
                 "selection-shortcuts" => self.edit_selection_shortcuts(),
                 "selection-expand" | "selection-shrink" | "selection-feather" => self
                     .begin_selection_filter(match command {

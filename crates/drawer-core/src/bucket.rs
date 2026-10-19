@@ -34,6 +34,8 @@ pub enum Expansion {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub advanced: crate::extended_fill::Settings,
+    #[serde(default)]
     pub exclude: crate::fill_reference::Filter,
     #[serde(default)]
     pub selected: [u64; 4],
@@ -54,6 +56,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            advanced: Default::default(),
             exclude: Default::default(),
             selected: [0; 4],
             selected_vectors: [0; 4],
@@ -71,9 +74,10 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        [self.color_tolerance, self.alpha_tolerance]
-            .iter()
-            .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+        self.advanced.valid()
+            && [self.color_tolerance, self.alpha_tolerance]
+                .iter()
+                .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
             && self.gap <= 32
             && self.expand <= 32
             && !matches!(self.reference,Reference::Layer(n)|Reference::Folder(n) if n>=256)
@@ -114,19 +118,23 @@ impl Region {
         let count = doc.width as usize * doc.height as usize;
         if count > 4 * 1024 * 1024
             || count
-                .saturating_mul(12)
+                .saturating_mul(24)
                 .saturating_add(doc.resident_bytes())
                 > DEFAULT_DOCUMENT_BUDGET
         {
             return Err("Fill region exceeds the work/memory limit".into());
         }
+        let frame = crate::extended_fill::frame(doc, s.advanced)?;
+        let connected = connected && s.advanced.connected;
         let sampler = crate::fill_reference::Sampler::new(doc, active, s)?;
         let sample = |x, y| sampler.pixel(x, y);
         let start = seed[1].floor() as usize * doc.width as usize + seed[0].floor() as usize;
         let origin = sample(seed[0].floor() as u32, seed[1].floor() as u32);
-        let transparent = origin[3] as f64 / 255.0 <= s.alpha_tolerance;
+        let transparent = s.advanced.transparent(origin, s.alpha_tolerance);
         let mut eligible = vec![0u8; count];
         let mut alpha = vec![0u8; count];
+        let mut domain = vec![0u8; count];
+        let mut writable = vec![0u8; count];
         let mut brightness = vec![255u8; count];
         for y in 0..doc.height {
             for x in 0..doc.width {
@@ -135,13 +143,13 @@ impl Region {
                 alpha[i] = p[3];
                 let rgb = (p[0] as u32 * 54 + p[1] as u32 * 183 + p[2] as u32 * 19 + 128) / 256;
                 brightness[i] = (255 - ((255 - rgb) * p[3] as u32 + 127) / 255) as u8;
-                eligible[i] = u8::from(if transparent {
-                    p[3] as f64 / 255.0 <= s.alpha_tolerance
-                } else {
-                    p[3] as f64 / 255.0 > s.alpha_tolerance
-                        && (0..3)
-                            .all(|n| p[n].abs_diff(origin[n]) as f64 / 255.0 <= s.color_tolerance)
-                });
+                domain[i] = u8::from(crate::extended_fill::inside(
+                    doc,
+                    frame,
+                    [x as f64 + 0.5, y as f64 + 0.5],
+                ));
+                writable[i] = u8::from(s.advanced.writable(p, s.alpha_tolerance));
+                eligible[i] = u8::from(domain[i] != 0 && s.advanced.eligible(p, origin, s));
             }
         }
         let mut closed = eligible.clone();
@@ -175,37 +183,56 @@ impl Region {
                 }
             }
         }
-        if closed[start] == 0 {
-            return Err("The seed lies on a closed gap; choose the interior".into());
+        if domain[start] == 0 {
+            return Err("Fill seed is outside the active output frame".into());
         }
-        let mut queue = Vec::<u32>::new();
-        queue
-            .try_reserve_exact(count)
-            .map_err(|_| "Fill queue allocation failed")?;
-        queue.push(start as u32);
-        closed[start] = 2;
-        let mut head = 0;
-        while connected && head < queue.len() {
-            let p = queue[head] as usize;
-            head += 1;
-            for q in neighbors(p, doc.width as usize, doc.height as usize)
-                .into_iter()
-                .flatten()
-            {
-                if closed[q] == 1 {
-                    closed[q] = 2;
-                    queue.push(q as u32);
+        let mut queue = if s.advanced.target.enclosed() {
+            crate::extended_fill::enclosed(
+                &mut closed,
+                &domain,
+                doc.width as usize,
+                doc.height as usize,
+                start,
+                connected,
+            )?
+        } else {
+            if connected && closed[start] == 0 {
+                return Err("Seed is outside the target color domain or on a closed gap".into());
+            }
+            let mut queue = Vec::<u32>::new();
+            queue
+                .try_reserve_exact(count)
+                .map_err(|_| "Fill queue allocation failed")?;
+            if connected {
+                queue.push(start as u32);
+                closed[start] = 2;
+                let mut head = 0;
+                while head < queue.len() {
+                    let p = queue[head] as usize;
+                    head += 1;
+                    for q in neighbors(p, doc.width as usize, doc.height as usize)
+                        .into_iter()
+                        .flatten()
+                    {
+                        if closed[q] == 1 {
+                            closed[q] = 2;
+                            queue.push(q as u32);
+                        }
+                    }
+                }
+            } else {
+                for (i, value) in closed.iter_mut().enumerate() {
+                    if *value != 0 {
+                        *value = 2;
+                        queue.push(i as u32);
+                    }
                 }
             }
-        }
-        if !connected {
-            queue.clear();
-            for (i, value) in closed.iter_mut().enumerate() {
-                if *value != 0 {
-                    *value = 2;
-                    queue.push(i as u32);
-                }
-            }
+            queue
+        };
+        let mut edge_settings = s;
+        if s.advanced.include_outlines {
+            edge_settings.expand = edge_settings.expand.max(s.advanced.outline_distance);
         }
         let distance = expand_region(
             &mut queue,
@@ -213,7 +240,7 @@ impl Region {
             &brightness,
             doc.width as usize,
             doc.height as usize,
-            s,
+            edge_settings,
         )?;
         let mut coverage = vec![0u8; count];
         for &p in &queue {
@@ -230,6 +257,11 @@ impl Region {
                         coverage[q] = coverage[q].max(255 - alpha[q]);
                     }
                 }
+            }
+        }
+        for (i, c) in coverage.iter_mut().enumerate() {
+            if domain[i] == 0 || writable[i] == 0 {
+                *c = 0;
             }
         }
         Ok(Self {

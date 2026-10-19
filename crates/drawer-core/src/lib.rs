@@ -185,3 +185,8 @@ pub mod selection_shortcuts_verify;
 pub mod magnetic_lasso;
 
 pub mod magnetic_lasso_verify;
+
+pub mod animation_output;
+pub mod extended_fill;
+
+pub mod extended_fill_verify;

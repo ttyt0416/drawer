@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 75] = [
+pub const EXTRA_COMMANDS: [&str; 76] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -73,6 +73,7 @@ pub const EXTRA_COMMANDS: [&str; 75] = [
     "contour-selection",
     "selection-shortcuts",
     "delete-outside-selection",
+    "animation-output-frame",
     "vector-selection-clear",
     "selection-outline",
     "alpha-selection-replace",

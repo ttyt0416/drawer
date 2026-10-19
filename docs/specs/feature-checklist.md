@@ -1044,7 +1044,7 @@
   저장·취소: 선택 마스크와 편집 픽셀 저장; 선택과 바깥 삭제 각각 직전 상태 복원  
   완료 검증: 전체/부분/빈 선택·선택없음·반투명 선택에서 바깥 삭제와 일반 지우기를 비교한다. 재선택은 복수 해제/문서 전환에서 해당 문서의 마지막 마스크만 복원해야 한다. 겹친 두 선택 마스크로 네 집합 연산 검증; 다중입력 중 취소·점 삭제·닫기·자석 제한 범위·벡터 경로 스냅 조합 검사.
 
-- [ ] **112.** 벡터 중심선까지 채우기, 연결된 픽셀만 처리, 캔버스/애니 프레임을 경계로 참조, 특정 색 제외·윤곽 포함
+- [x] **112.** 벡터 중심선까지 채우기, 연결된 픽셀만 처리, 캔버스/애니 프레임을 경계로 참조, 특정 색 제외·윤곽 포함
 
   입력·결과: 채우기 경계는 캔버스 또는 활성 애니메이션 출력 프레임으로 선택하며 밖은 닫힌 장벽으로 취급한다. 벡터는 표시 외곽 또는 중심선까지 채우기를 선택한다. 연결만은 클릭점 연결성분, 전체는 같은 조건의 분리 영역 모두를 대상으로 한다. 제외색은 허용치 안의 색을 쓰기 대상에서 제외하고 윤곽 포함 옵션은 경계선 밑까지 확장하되 선택마스크를 넘지 않는다.  
   필수 옵션: 채움 대상색·둘러싸인 영역 판정 — Target all colors, Only transparent, Other than transparent, Area surrounded by transparent, Only black, Other than black, Area surrounded by black, Only white and transparent, Other than white and transparent, Area surrounded by white and transparent, Treat semi-transparent as transparent, All enclosed areas except transparency, All enclosed areas including transparency. 모든 색·투명·검정·흰색+투명 및 그 반대/둘러싸인 영역을 구분한다. 반투명을 투명으로 다루는 스위치는 대상색 선택과 독립한다.  

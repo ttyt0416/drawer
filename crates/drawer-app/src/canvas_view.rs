@@ -944,6 +944,7 @@ impl CanvasView {
                 egui::Color32::WHITE,
             );
         }
+        crate::extended_fill::paint_frame(&painter, document, view, rect, ppp);
         (self.selection_edges, self.vector_selection_marks) = crate::layer_selection::paint(
             &painter,
             document,

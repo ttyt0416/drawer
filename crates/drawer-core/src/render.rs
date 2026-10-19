@@ -209,6 +209,21 @@ impl<'a> Renderer<'a> {
                     .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
             {
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
+                    if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
+                        if path.segments().any(|(a, b)| {
+                            distance(point, scene.transform.map(a), scene.transform.map(b)) <= 0.5
+                        }) {
+                            result = over(
+                                result,
+                                if path.stroke {
+                                    path.color
+                                } else {
+                                    path.fill.unwrap_or(path.color)
+                                },
+                            );
+                        }
+                        continue;
+                    }
                     if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
                     {
                         result = over(result, path.pixel(original));
