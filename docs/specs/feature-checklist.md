@@ -987,7 +987,7 @@
   저장·취소: 프리셋 S; 문서 그라데이션 변경 D  
   완료 검증: 0/1 위치·같은 위치 두 지점·최소 두 지점·불투명도 범위; 원색→원색·불투명→투명 그라데이션의 중간색/밴딩/밝기를 비교하고 노드 혼합 곡선 저장 확인.
 
-- [ ] **105.** 사각형·타원·다각형·다중 선분·베지어 도형 작성
+- [x] **105.** 사각형·타원·다각형·다중 선분·베지어 도형 작성
 
   입력·결과: 도형을 래스터 또는 벡터로 생성하고 선/채움·폭·모서리·베지어 제어  
   필수 옵션: 곡선·도형 정의와 입력 방법 — Straight line, Spline, Quadratic Bezier, Cubic Bezier, By click, By drag, Create fill, Create line, Create both line and fill, Free, Specified ratio, Specify length. 직선·스플라인·2차/3차 베지어, 클릭/드래그 제어점 입력, 선/면/둘다, 자유비율/고정비율/고정길이를 각각 명시한다.  

@@ -16,11 +16,23 @@ pub enum Target {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Path {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<[u8; 4]>,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub stroke: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<crate::shapes::Definition>,
     pub id: u64,
     pub points: Vec<Point>,
     pub closed: bool,
     pub width: f64,
     pub color: [u8; 4],
+}
+fn yes() -> bool {
+    true
+}
+fn is_true(v: &bool) -> bool {
+    *v
 }
 impl Path {
     pub fn segments(&self) -> impl Iterator<Item = (Point, Point)> + '_ {
@@ -41,8 +53,28 @@ impl Path {
         crate::scene::Rect { min, max }
     }
     pub fn hit(&self, p: Point) -> bool {
-        self.segments()
-            .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+        self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
+            || self.stroke
+                && self
+                    .segments()
+                    .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+    }
+    pub fn pixel(&self, p: Point) -> [u8; 4] {
+        let fill = if self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
+        {
+            self.fill.unwrap_or([0; 4])
+        } else {
+            [0; 4]
+        };
+        if self.stroke
+            && self
+                .segments()
+                .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+        {
+            crate::render::over(fill, self.color)
+        } else {
+            fill
+        }
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -131,6 +163,11 @@ impl Data {
                             && p.points.len() >= if p.closed { 3 } else { 2 }
                             && p.points.len() <= 4096
                             && p.points.iter().copied().all(point_valid)
+                            && (p.stroke || p.fill.is_some())
+                            && (p.fill.is_none() || p.closed)
+                            && p.definition
+                                .as_ref()
+                                .is_none_or(crate::shapes::Definition::valid)
                             && (0.1..=512.0).contains(&p.width)
                     })
             })
@@ -155,7 +192,13 @@ impl Data {
                         + l.name.len()
                         + l.paths
                             .iter()
-                            .map(|p| std::mem::size_of::<Path>() + p.points.len() * 16)
+                            .map(|p| {
+                                std::mem::size_of::<Path>()
+                                    + p.points.len() * 16
+                                    + p.definition
+                                        .as_ref()
+                                        .map_or(0, crate::shapes::Definition::bytes)
+                            })
                             .sum::<usize>()
                 })
                 .sum::<usize>()
@@ -204,6 +247,9 @@ impl Data {
             return Err("Vector target is hidden or locked".into());
         }
         l.paths.push(Path {
+            fill: None,
+            stroke: true,
+            definition: None,
             id,
             points,
             closed,
@@ -383,6 +429,9 @@ pub(crate) fn cut(
     if best.0 > r + path.width / 2.0 * maximum_scale(transform) {
         return Ok(None);
     }
+    if path.fill.is_some() {
+        return Err("Intersection erasing requires an outline path; filled shapes are kept".into());
+    }
     let total = *lengths.last().unwrap();
     if total < 1e-8 {
         return Ok(Some(vec![]));
@@ -525,6 +574,9 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
                         for points in parts {
                             let id = after.lines.id()?;
                             paths.push(Path {
+                                fill: None,
+                                stroke: true,
+                                definition: None,
                                 id,
                                 points,
                                 closed: false,

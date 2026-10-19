@@ -210,9 +210,8 @@ impl<'a> Renderer<'a> {
             {
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
                     if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
-                        && path.hit(original)
                     {
-                        result = over(result, path.color);
+                        result = over(result, path.pixel(original));
                     }
                 }
             }
@@ -277,7 +276,7 @@ impl<'a> Renderer<'a> {
         Ok((width, height, pixels))
     }
 }
-fn over(destination: [u8; 4], source: [u8; 4]) -> [u8; 4] {
+pub(crate) fn over(destination: [u8; 4], source: [u8; 4]) -> [u8; 4] {
     let sa = source[3] as f64 / 255.0;
     let da = destination[3] as f64 / 255.0;
     let alpha = sa + da * (1.0 - sa);

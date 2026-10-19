@@ -193,6 +193,9 @@ pub(crate) fn prepare(
                                     for points in parts {
                                         let id = lines.id()?;
                                         next.push(Path {
+                                            fill: None,
+                                            stroke: true,
+                                            definition: None,
                                             id,
                                             points,
                                             closed: false,

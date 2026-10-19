@@ -65,6 +65,7 @@ struct SelectionGesture {
     combine: drawer_core::selection_edit::Combine,
     frame: u32,
     fill: Option<super::enclosure::Fill>,
+    shape: Option<super::shapes::Capture>,
 }
 struct Session {
     stroke: Stroke,
@@ -104,6 +105,8 @@ pub(super) struct Drawing {
     pub selection_settings: drawer_core::selection_edit::Settings,
     pub fill_settings: drawer_core::bucket::Settings,
     pub enclosure_settings: drawer_core::enclosure::Settings,
+    pub shape_settings: drawer_core::shapes::Settings,
+    pub shape_target: Option<drawer_core::shapes::Target>,
     pub fill_budget: usize,
     pub fill_config: ([u8; 4], bool, bool),
     pub move_target: drawer_core::precision::Target,
@@ -476,6 +479,26 @@ impl Drawing {
     pub(super) fn selection_preview(&self, document: u64) -> Option<Vec<Point>> {
         use super::precision::Mode;
         let s = self.selection.as_ref().filter(|s| s.document == document)?;
+        if let Some(shape) = s.shape {
+            let mut points = s.points.clone();
+            if s.mode.click_points()
+                && let Some(p) = s.hover
+                && points.last() != Some(&p)
+            {
+                points.push(p);
+            }
+            return Some(
+                match drawer_core::shapes::geometry(shape.settings, &points) {
+                    Ok(mut g) => {
+                        if g.closed {
+                            g.points.push(g.points[0]);
+                        }
+                        g.points
+                    }
+                    Err(_) => points,
+                },
+            );
+        }
         if s.mode.box_selection() {
             let a = s.points[0];
             let b = *s.points.last()?;
@@ -496,7 +519,7 @@ impl Drawing {
             );
         }
         let mut p = s.points.clone();
-        if s.mode == Mode::SelectPolygon
+        if s.mode.click_points()
             && let Some(h) = s.hover
         {
             p.push(h);
@@ -506,7 +529,30 @@ impl Drawing {
         }
         Some(p)
     }
-    fn commit_shape(s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
+    fn commit_shape(&mut self, s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
+        if let Some(shape) = s.shape {
+            let state = drawer_core::shapes::prepare(doc, shape.target, &s.points, shape.settings)?;
+            if state
+                .memory_bytes()
+                .saturating_mul(2)
+                .saturating_add(doc.memory_bytes())
+                > shape.budget
+            {
+                return Err("Shape exceeds workspace memory".into());
+            }
+            let new_id = if shape.target == drawer_core::shapes::Target::Vector(None) {
+                state.scene.lines.layers.last().map(|l| l.id)
+            } else {
+                None
+            };
+            let changed = doc.commit_state(state)?;
+            if changed && let Some(id) = new_id {
+                self.picked_layer =
+                    Some((doc.id, drawer_core::thumbnail::Target::Vector(id), false));
+            }
+            return Ok(changed);
+        }
+
         if let Some(fill) = s.fill {
             let state = drawer_core::enclosure::prepare(
                 doc,
@@ -556,7 +602,6 @@ impl Drawing {
         doc.edit_scene(scene)
     }
     fn receive_selection(&mut self, index: usize, doc: &mut Document, canvas: bool) {
-        use super::precision::Mode;
         use drawer_core::pointer_input::{Decision, Phase};
         if self.events[index].1 {
             return;
@@ -567,7 +612,7 @@ impl Drawing {
         let Some(mut s) = self.selection.take() else {
             return;
         };
-        let polygon = s.mode == Mode::SelectPolygon;
+        let polygon = s.mode.click_points();
         if s.document != doc.id
             || (if polygon {
                 s.source.kind != event.source.kind || s.source.device != event.source.device
@@ -585,6 +630,7 @@ impl Drawing {
             || s.mode != self.mode
             || s.combine != self.selection_settings.combine
             || self.enclosure_changed(s.fill)
+            || self.shape_changed(s.shape)
             || s.projection.view != doc.view
             || event.phase == Phase::Cancel
         {
@@ -613,7 +659,7 @@ impl Drawing {
                     .last()
                     .is_none_or(|v| (v[0] - p[0]).hypot(v[1] - p[1]) >= 0.25)
             {
-                if s.points.len() == 4096 {
+                if s.points.len() == if s.shape.is_some() { 128 } else { 4096 } {
                     self.error = Some("Polygon vertex limit; prior selection kept".into());
                     self.ownership.clear();
                     return;
@@ -628,7 +674,7 @@ impl Drawing {
             return;
         }
         if matches!(event.phase, Phase::Move | Phase::Up) {
-            if s.mode.box_selection() {
+            if s.mode.box_selection() || s.shape.is_some_and(|s| s.settings.kind.is_box()) {
                 if s.points.len() == 1 {
                     s.points.push(p);
                 } else {
@@ -640,7 +686,7 @@ impl Drawing {
                 .is_none_or(|v| (v[0] - p[0]).hypot(v[1] - p[1]) >= 0.25)
                 || event.phase == Phase::Up
             {
-                if s.points.len() == 4096 {
+                if s.points.len() == if s.shape.is_some() { 128 } else { 4096 } {
                     self.error = Some("Lasso path limit; prior selection kept".into());
                     self.ownership.clear();
                     return;
@@ -650,7 +696,7 @@ impl Drawing {
         }
         if event.phase == Phase::Up {
             self.ownership.clear();
-            if let Err(e) = Self::commit_shape(&s, doc) {
+            if let Err(e) = self.commit_shape(&s, doc) {
                 self.error = Some(e);
             }
         } else {
@@ -746,6 +792,7 @@ impl Drawing {
             s.mode != self.mode
                 || s.combine != self.selection_settings.combine
                 || self.enclosure_changed(s.fill)
+                || self.shape_changed(s.shape)
                 || documents
                     .iter()
                     .find(|d| d.id == s.document)
@@ -762,7 +809,7 @@ impl Drawing {
         if self
             .selection
             .as_ref()
-            .is_some_and(|s| s.mode == super::precision::Mode::SelectPolygon)
+            .is_some_and(|s| s.mode.click_points())
         {
             if ctx.input(|i| i.key_pressed(egui::Key::Backspace)) {
                 let s = self.selection.as_mut().unwrap();
@@ -776,7 +823,7 @@ impl Drawing {
             if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let s = self.selection.take().unwrap();
                 if let Some(doc) = documents.iter_mut().find(|d| d.id == s.document)
-                    && let Err(e) = Self::commit_shape(&s, doc)
+                    && let Err(e) = self.commit_shape(&s, doc)
                 {
                     self.error = Some(e);
                     self.selection = Some(s);
@@ -1087,7 +1134,10 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
-            if self.mode.shape_selection() || self.mode.enclosure_fill() {
+            if self.mode.shape_selection()
+                || self.mode.enclosure_fill()
+                || self.mode.creation_shape()
+            {
                 let point = projection.point(pos);
                 let fill = if self.mode.enclosure_fill() {
                     let Some(layer) = layer else {
@@ -1115,6 +1165,20 @@ impl Drawing {
                 } else {
                     None
                 };
+                let shape = if self.mode.creation_shape() {
+                    let Some(target) = self.shape_target else {
+                        self.error = Some("Choose a raster or vector shape target".into());
+                        self.ownership.clear();
+                        continue;
+                    };
+                    Some(super::shapes::Capture {
+                        settings: self.shape_settings,
+                        target,
+                        budget: self.fill_budget,
+                    })
+                } else {
+                    None
+                };
                 self.selection = Some(SelectionGesture {
                     document: doc.id,
                     revision: doc.revision,
@@ -1124,6 +1188,7 @@ impl Drawing {
                     root: ui.ctx().content_rect(),
                     mode: self.mode,
                     fill,
+                    shape,
                     points: vec![point],
                     hover: None,
                     combine: self.selection_settings.combine,
@@ -1464,6 +1529,28 @@ impl Drawer {
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
         self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
         self.drawing.enclosure_settings = self.workspaces.store.current.enclosure;
+        self.drawing.shape_settings = self.workspaces.store.current.shapes;
+        self.drawing.shape_target = self.active.and_then(|n| {
+            let target = self
+                .panels
+                .targets
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0));
+            if self.workspaces.store.current.shapes_vector {
+                Some(drawer_core::shapes::Target::Vector(match target {
+                    drawer_core::thumbnail::Target::Vector(id) => Some(id),
+                    _ => None,
+                }))
+            } else {
+                match target {
+                    drawer_core::thumbnail::Target::Raster(n) => {
+                        Some(drawer_core::shapes::Target::Raster(n))
+                    }
+                    _ => None,
+                }
+            }
+        });
         let fill_slot = BrushTip::ALL
             .iter()
             .position(|t| *t == self.selected)

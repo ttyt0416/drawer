@@ -371,3 +371,8 @@ crates/drawer-core/src/gradient_ramp.rs
 crates/drawer-core/src/gradient_ramp_verify.rs
 crates/drawer-app/src/gradient_ramp.rs
 docs/process/gradient-stops.md
+
+crates/drawer-core/src/shapes.rs
+crates/drawer-core/src/shapes_verify.rs
+crates/drawer-app/src/shapes.rs
+docs/process/shape-creation.md

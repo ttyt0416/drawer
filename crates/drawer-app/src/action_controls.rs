@@ -257,6 +257,17 @@ impl Drawer {
                 "color-range" => self.begin_color_range()?,
                 "selection-border" => self.begin_selection_border()?,
                 "gradient-tool" => self.begin_gradient()?,
+                "shape-tool" => {
+                    self.restore_locked_tool();
+                    self.drawing.mode = if self.workspaces.store.current.shapes.input
+                        == drawer_core::shapes::Input::ByClick
+                    {
+                        super::precision::Mode::ShapeClick
+                    } else {
+                        super::precision::Mode::ShapeDrag
+                    };
+                    self.drawing.connect_line = false;
+                }
                 "bucket-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = super::precision::Mode::Fill;

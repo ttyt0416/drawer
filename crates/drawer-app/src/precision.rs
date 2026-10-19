@@ -16,8 +16,16 @@ pub(super) enum Mode {
     EncloseFill,
     Wand,
     SelectionBrush,
+    ShapeClick,
+    ShapeDrag,
 }
 impl Mode {
+    pub(super) fn creation_shape(self) -> bool {
+        matches!(self, Self::ShapeClick | Self::ShapeDrag)
+    }
+    pub(super) fn click_points(self) -> bool {
+        matches!(self, Self::SelectPolygon | Self::ShapeClick)
+    }
     pub(super) fn enclosure_fill(self) -> bool {
         matches!(self, Self::LassoFill | Self::EncloseFill)
     }
@@ -54,6 +62,7 @@ fn arrow(key: egui::Key) -> Option<[i64; 2]> {
 impl Drawer {
     pub(super) fn precision_controls(&mut self, ui: &mut egui::Ui) {
         self.enclosure_controls(ui);
+        self.shapes_controls(ui);
         ui.horizontal_wrapped(|ui| {
             for (label, mode) in [
                 ("Paint", Mode::Paint),

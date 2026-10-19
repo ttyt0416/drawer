@@ -79,7 +79,32 @@ impl Region {
                     }
                     used = true;
                     for path in &l.paths {
-                        if path.color[3] == 0 {
+                        if let Some(fill) = path.fill {
+                            for y in 0..doc.height {
+                                for x in 0..doc.width {
+                                    work = work.saturating_add(path.points.len());
+                                    if work > 64 * 1024 * 1024 {
+                                        return Err("Reference region work limit".into());
+                                    }
+                                    let point = doc
+                                        .scene
+                                        .transform
+                                        .inverse()
+                                        .map([x as f64 + 0.5, y as f64 + 0.5]);
+                                    if crate::shapes::contains(&path.points, point) {
+                                        let p = fill;
+                                        let lum = (54 * p[0] as u32
+                                            + 183 * p[1] as u32
+                                            + 19 * p[2] as u32)
+                                            / 256;
+                                        if (255 - lum) * p[3] as u32 / 255 >= s.darkness as u32 {
+                                            bits[y as usize * doc.width as usize + x as usize] = 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if !path.stroke || path.color[3] == 0 {
                             continue;
                         }
                         for (a, b) in path.segments() {
