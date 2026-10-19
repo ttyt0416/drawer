@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 64] = [
+pub const EXTRA_COMMANDS: [&str; 65] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -68,6 +68,7 @@ pub const EXTRA_COMMANDS: [&str; 64] = [
     "selection-border",
     "gradient-tool",
     "shape-tool",
+    "align-objects",
     "wand-tool",
     "selection-brush-tool",
     "selection-erase-tool",
@@ -367,6 +368,9 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "gradient-tool" => "Gradient and freeform gradient",
+            "shape-tool" => "Draw shape",
+            "align-objects" => "Align and distribute objects",
             "save-as" => "Save as",
             "undo" => "Undo",
             "redo" => "Redo",

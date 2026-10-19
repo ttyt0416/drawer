@@ -257,6 +257,7 @@ impl Drawer {
                 "color-range" => self.begin_color_range()?,
                 "selection-border" => self.begin_selection_border()?,
                 "gradient-tool" => self.begin_gradient()?,
+                "align-objects" => self.begin_alignment()?,
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

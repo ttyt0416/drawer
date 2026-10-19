@@ -114,6 +114,7 @@ impl Drawer {
                 ("color-range", "Color range…"),
                 ("selection-border", "Draw selection border…"),
                 ("gradient-tool", "Gradient…"),
+                ("align-objects", "Align/distribute objects…"),
                 ("selection-expand", "Expand selection…"),
                 ("selection-shrink", "Shrink selection…"),
                 ("selection-feather", "Feather selection…"),

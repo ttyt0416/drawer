@@ -163,3 +163,6 @@ pub mod gradient_ramp_verify;
 pub mod shapes;
 
 pub mod shapes_verify;
+
+pub mod alignment;
+pub mod alignment_verify;

@@ -376,3 +376,8 @@ crates/drawer-core/src/shapes.rs
 crates/drawer-core/src/shapes_verify.rs
 crates/drawer-app/src/shapes.rs
 docs/process/shape-creation.md
+
+crates/drawer-core/src/alignment.rs
+crates/drawer-core/src/alignment_verify.rs
+crates/drawer-app/src/alignment.rs
+docs/process/object-alignment.md

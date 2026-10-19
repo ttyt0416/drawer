@@ -179,6 +179,7 @@ impl Drawer {
             || self.color_range.draft.is_some()
             || self.selection_border.draft.is_some()
             || self.gradient.draft.is_some()
+            || self.alignment.draft.is_some()
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
