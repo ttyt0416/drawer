@@ -90,6 +90,8 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub quick_mask: bool,
+    pub quick_previous: Option<super::precision::Mode>,
     pub ruler_disabled: bool,
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
     frame_time: f64,
@@ -1394,6 +1396,11 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        if self.drawing.quick_mask {
+            self.drawing.mode = super::precision::Mode::SelectionBrush;
+            self.drawing.connect_line = false;
+        }
+
         if let Some((id, target, moving)) = self.drawing.picked_layer.take() {
             self.panels.targets.insert(id, target);
             if moving {

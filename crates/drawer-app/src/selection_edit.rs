@@ -46,7 +46,11 @@ impl Drawing {
         }
         let settings = self.selection_settings;
         let mut brush = if self.mode == Mode::SelectionBrush {
-            Some(Brush::begin(doc, settings)?)
+            Some(if self.quick_mask {
+                Brush::begin_mask(doc, settings)?
+            } else {
+                Brush::begin(doc, settings)?
+            })
         } else {
             None
         };

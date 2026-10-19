@@ -668,3 +668,8 @@ Selection 연산에서 Replace/추가 Add/빼기 Subtract/교차 Intersect를 �
 ## selection-boundary | 선택 확대·축소·경계 흐림 | 팽창 침식 흐림 반경
 
 Expand selection/Shrink selection/Feather selection에서 반경을 정하고 Apply selection boundary를 누릅니다. 반경은 문서 픽셀0~64이며0은 선택을 그대로 유지합니다. 확대·축소는 정사각형 이웃, 흐림은 상자 평균을 사용합니다. Cancel/Escape는 취소하고 Undo는 적용 전체를 되돌립니다. 그림 픽셀은 바뀌지 않습니다.
+
+## quick-mask | 퀵 마스크·선택 마스크 레이어 | 퀵 마스크 빨간 선택 저장 복원
+
+Quick mask/Shift+Q를 켜면 선택 강도가 빨갛게 보입니다. J로 선택을 칠하고 Shift+J로 지우며 지름·경도·강도를 조절합니다. 다시 끄면 선택을 유지하고 이전 도구로 돌아갑니다. 그림 픽셀은 바뀌지 않습니다.
+Selection mask layers에서 이름을 입력해 Save / replace selection mask layer로 저장합니다. Load mask layer로 반투명 강도까지 복원하고 Remove mask layer로 삭제합니다. 마스크 층은 페이지당16개이며 문서와 함께 로컬에 저장됩니다.

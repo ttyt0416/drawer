@@ -461,6 +461,9 @@ impl CanvasView {
         self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
+        if paint.drawing.quick_mask {
+            crate::quick_mask::paint(&painter, document, size, center, ppp);
+        }
         if let Some(start) = self.area_start
             && let Some(end) = response.interact_pointer_pos()
         {

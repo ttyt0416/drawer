@@ -207,6 +207,7 @@ impl Drawer {
                 | "move-selected-pixels"
                 | "bucket-tool"
                 | "ruler-snap"
+                | "quick-mask"
                 | "wand-tool"
                 | "selection-brush-tool"
                 | "selection-erase-tool"
@@ -250,6 +251,7 @@ impl Drawer {
                         }
                     ));
                 }
+                "quick-mask" => self.toggle_quick_mask(),
                 "bucket-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = super::precision::Mode::Fill;

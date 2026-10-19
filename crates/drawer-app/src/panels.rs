@@ -219,6 +219,7 @@ impl Drawer {
                         | "bucket-tool"
                         | "fill-selection"
                         | "ruler-snap"
+                        | "quick-mask"
                         | "wand-tool"
                         | "selection-brush-tool"
                         | "selection-erase-tool"

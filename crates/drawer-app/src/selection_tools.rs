@@ -3,7 +3,7 @@ use drawer_core::selection_tools as core;
 #[derive(Default)]
 pub(super) struct Panel {
     pub open: bool,
-    name: String,
+    pub(super) name: String,
 }
 impl Drawer {
     pub(super) fn selection_command(&mut self, command: &str) -> Result<(), String> {
@@ -80,9 +80,9 @@ impl Drawer {
             self.shape_selection_controls(ui);
             let Some(n)=self.active else{ui.label("Open a page first");return;};let d=&self.documents[n];
             ui.label(format!("Page: {} · frame {}. Selection stays with this page when cells/frames change.",d.title,d.current_frame+1));
-            super::edit::text(ui,&mut self.selection_panel.name,"selection-tools");if ui.button("Save / replace named page selection").clicked(){command=Some("selection-save");}
-            for s in &d.scene.selections.saved{ui.push_id((d.id,s.id),|ui|{ui.horizontal_wrapped(|ui|{ui.label(&s.name);if ui.button("Load selection").clicked(){named=Some((s.id,true));}
-            if ui.button("Remove saved selection").clicked(){named=Some((s.id,false));}});});}
+            super::edit::text(ui,&mut self.selection_panel.name,"selection-tools");if ui.button("Save / replace selection mask layer").clicked(){command=Some("selection-save");}
+            for s in &d.scene.selections.saved{ui.push_id((d.id,s.id),|ui|{ui.horizontal_wrapped(|ui|{ui.label(&s.name);if ui.button("Load mask layer").clicked(){named=Some((s.id,true));}
+            if ui.button("Remove mask layer").clicked(){named=Some((s.id,false));}});});}
             if ui.button("Duplicate page as separate document").clicked(){command=Some("duplicate-page");}
             ui.label("Selection changes use drawing Undo/Redo. Named selections and the previous selection are saved in the page. A copied page receives independent selection identity.");
         });

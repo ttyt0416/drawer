@@ -125,6 +125,7 @@ pub fn default_bindings() -> Vec<Binding> {
         ("T", false, false, "cycle-next:1"),
         ("T", false, true, "cycle-prev:1"),
         ("Q", false, false, "quick:2"),
+        ("Q", false, true, "quick-mask"),
         ("R", false, false, "radial:4"),
         ("F1", false, false, "help"),
         ("F12", false, false, "screen-mode"),

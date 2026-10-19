@@ -340,3 +340,6 @@ docs/process/geometric-selection.md
 crates/drawer-core/src/selection_filter.rs
 crates/drawer-app/src/selection_filter.rs
 docs/process/selection-boundary.md
+
+crates/drawer-app/src/quick_mask.rs
+docs/process/quick-mask.md

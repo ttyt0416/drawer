@@ -224,6 +224,7 @@ pub fn wand(doc: &Document, layer: usize, seed: Point, s: Settings) -> Result<Sc
 }
 pub struct Brush {
     page: String,
+    mask_mode: bool,
     document: u64,
     revision: u64,
     grid: Grid,
@@ -243,6 +244,7 @@ impl Brush {
         let base = grid.base(doc, !s.erase);
         let paint = vec![0; base.len()];
         Ok(Self {
+            mask_mode: false,
             page: doc
                 .scene
                 .selections
@@ -259,6 +261,12 @@ impl Brush {
             work: 0,
             version: 0,
         })
+    }
+    pub fn begin_mask(doc: &Document, s: Settings) -> Result<Self, String> {
+        let mut brush = Self::begin(doc, s)?;
+        brush.base = brush.grid.base(doc, false);
+        brush.mask_mode = true;
+        Ok(brush)
     }
     pub fn version(&self) -> u64 {
         self.version
@@ -371,6 +379,9 @@ impl Brush {
             .zip(&self.paint)
             .map(|(a, b)| operation.coverage(*a, *b))
             .collect::<Vec<_>>();
+        if self.mask_mode && values == self.base {
+            return Ok(doc.scene.clone());
+        }
         let mut scene = self.grid.scene(doc, &values)?;
         scene.selections.page = Some(self.page.clone());
         Ok(scene)

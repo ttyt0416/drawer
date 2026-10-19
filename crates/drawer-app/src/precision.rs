@@ -72,6 +72,20 @@ impl Drawer {
                 }
             }
         });
+        ui.horizontal(|ui| {
+            if ui
+                .selectable_label(self.drawing.quick_mask, "Quick mask (Shift+Q)")
+                .clicked()
+            {
+                self.execute_command(ui.ctx(), "quick-mask");
+            }
+            if ui.button("Selection mask layers…").clicked() {
+                self.execute_command(ui.ctx(), "selection-tools");
+            }
+        });
+        if self.drawing.quick_mask {
+            ui.label("Red overlay = selected strength. Paint the mask; J adds and Shift+J erases. Exit Quick mask to restore the previous tool.");
+        }
         if self.drawing.mode.shape_selection() {
             self.shape_selection_controls(ui);
         }
