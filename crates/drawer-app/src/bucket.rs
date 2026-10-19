@@ -254,7 +254,8 @@ pub(crate) fn reference_controls(
         });
         egui::ComboBox::from_id_salt("fill-expansion-shape").selected_text(format!("Expansion: {:?}",s.expansion)).show_ui(ui,|ui|{for (op,label) in [(core::Expansion::Diamond,"Legacy diamond"),(core::Expansion::Rectangle,"Rectangle"),(core::Expansion::Round,"Round"),(core::Expansion::Darkest,"To darkest pixel")]{ui.selectable_value(&mut s.expansion,op,label);}});
         ui.checkbox(&mut s.fill_narrow,"Fill narrow areas");
-        ui.label("Reference/draft/role tags are saved with this page and use drawing Undo. Selected sets and exclusions are saved per tool. Hidden layers are excluded. Text/Balloon/Paper describe the layer's content; role tags do not change its pixels.");
+        ui.checkbox(&mut s.include_hidden,"Include hidden reference layers (fill and color selection)");
+        ui.label("Reference/draft/role tags are saved with this page and use drawing Undo. Selected sets, hidden-reference inclusion and exclusions are saved per tool. Output draft inclusion is a separate page setting. Role tags do not change original pixels.");
         for (i,layer) in doc.layers.iter().enumerate() {
             ui.push_id(("fill-raster",i),|ui| {
                 let mut tags=doc.scene.paper.layers.get(&i).map_or(Tags::default(),|p|p.fill);let old=tags;

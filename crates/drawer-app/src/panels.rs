@@ -468,6 +468,12 @@ impl Drawer {
         if !rows.iter().any(|(target, _)| *target == selected) {
             ui.label("Selection is outside this list.");
         }
+        if kind != Kind::Timeline
+            && ui.button("Reference / draft roles").clicked()
+            && let Err(e) = self.begin_layer_roles()
+        {
+            self.status = Some(e);
+        }
     }
     fn panel_properties(&mut self, ui: &mut egui::Ui, kind: Kind) {
         match kind {

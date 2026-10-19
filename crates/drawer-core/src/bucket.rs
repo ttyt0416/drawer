@@ -34,6 +34,8 @@ pub enum Expansion {
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     #[serde(default)]
+    pub include_hidden: bool,
+    #[serde(default)]
     pub advanced: crate::extended_fill::Settings,
     #[serde(default)]
     pub exclude: crate::fill_reference::Filter,
@@ -56,6 +58,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            include_hidden: false,
             advanced: Default::default(),
             exclude: Default::default(),
             selected: [0; 4],

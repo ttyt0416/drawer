@@ -599,6 +599,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
         return Err("Bake the clipping base and its run together; keep this layer editable".into());
     }
     let indices = graph.raster_indices(node);
+    let roles = crate::layer_roles::common(doc, indices.iter().copied())?;
     let members = indices
         .iter()
         .map(|n| crate::layer_properties::raster(doc, *n))
@@ -650,6 +651,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             properties.hidden = false;
             after.scene.layer_properties.set(target, properties);
             after.scene.mouse_strokes.retain(|s| s.layer != n);
+            crate::layer_roles::put_raster(&mut after, n, roles);
         }
         Node::Folder(folder) => {
             after.scene.layer_ids.initialize(doc.layers.len())?;
@@ -736,6 +738,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             after.scene.rulers = rulers;
             after.layers = layers;
             after.scene.paper = g;
+            crate::layer_roles::put_raster(&mut after, replacement, roles);
             crate::ruler_scope::remap_rasters(
                 &mut after.scene,
                 &map,

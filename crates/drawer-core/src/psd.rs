@@ -35,7 +35,8 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
     Ok(u32::from_be_bytes(b))
 }
 pub fn layers_supported(d: &Document) -> bool {
-    d.animation.is_none()
+    (d.scene.include_drafts_in_output || !crate::layer_roles::has_drafts(d))
+        && d.animation.is_none()
         && d.scene.objects.is_empty()
         && d.scene.lines.layers.is_empty()
         && d.scene.worlds.is_empty()
@@ -95,7 +96,26 @@ pub fn export(
     if path.exists() && !replace {
         return Err(error("Existing PSD requires explicit replacement"));
     }
-    let (_, _, merged) = Renderer::new(d).output(d.dpi, budget / 4).map_err(error)?;
+    if choice == Choice::RenderedLayers
+        && !d.scene.include_drafts_in_output
+        && crate::layer_roles::has_drafts(d)
+    {
+        return Err(error(
+            "Draft-excluding output requires Rendered image; keep the .drawer source or explicitly include drafts",
+        ));
+    }
+    let extra = if !d.scene.include_drafts_in_output && crate::layer_roles::has_drafts(d) {
+        d.memory_bytes().saturating_mul(2)
+    } else {
+        0
+    };
+    if extra > budget / 2 {
+        return Err(error("Draft output snapshot exceeds export memory"));
+    }
+    let (_, _, merged) = Renderer::for_export(d)
+        .map_err(error)?
+        .output(d.dpi, budget.saturating_sub(extra) / 4)
+        .map_err(error)?;
     let layers = match choice {
         Choice::RenderedLayers => {
             if !layers_supported(d) {

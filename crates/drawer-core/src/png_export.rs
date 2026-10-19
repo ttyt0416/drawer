@@ -46,8 +46,18 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
             "Choose another filename to preserve the original document.",
         ));
     }
-    let (width, height, pixels) = Renderer::new(document)
-        .output(document.dpi, budget / 2)
+    let extra =
+        if !document.scene.include_drafts_in_output && crate::layer_roles::has_drafts(document) {
+            document.memory_bytes().saturating_mul(2)
+        } else {
+            0
+        };
+    if extra > budget / 2 {
+        return Err(invalid("Draft output snapshot exceeds export memory"));
+    }
+    let (width, height, pixels) = Renderer::for_export(document)
+        .map_err(|e| invalid(&e))?
+        .output(document.dpi, budget.saturating_sub(extra) / 2)
         .map_err(|e| invalid(&e))?;
     let mut bytes = Vec::new();
     bytes

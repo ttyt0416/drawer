@@ -59,7 +59,7 @@ pub fn select(bits: &mut [u64; 4], n: usize, on: bool) {
         }
     }
 }
-fn in_folder(doc: &Document, folder: usize, layer: usize, depth: usize) -> bool {
+pub(crate) fn in_folder(doc: &Document, folder: usize, layer: usize, depth: usize) -> bool {
     depth < 16
         && doc.scene.paper.folders.get(folder).is_some_and(|f| {
             f.children.iter().any(|n| match *n {
@@ -72,12 +72,8 @@ pub fn raster(doc: &Document, n: usize, active: usize, s: Settings) -> bool {
     let Some(layer) = doc.layers.get(n) else {
         return false;
     };
-    let tags = doc
-        .scene
-        .paper
-        .layers
-        .get(&n)
-        .map_or(Tags::default(), |p| p.fill);
+    let target = crate::layer_properties::raster(doc, n);
+    let tags = crate::layer_roles::tags(doc, target);
     let scope = match s.reference {
         Reference::Active => n == active,
         Reference::Layer(i) => n == i as usize,
@@ -87,9 +83,12 @@ pub fn raster(doc: &Document, n: usize, active: usize, s: Settings) -> bool {
         Reference::Folder(i) => in_folder(doc, i as usize, n, 0),
     };
     scope
-        && doc.scene.paper.raster_visible(n, doc.layers.len())
+        && (s.include_hidden || doc.scene.paper.raster_visible(n, doc.layers.len()))
         && !(s.exclude.editing && n == active)
-        && s.exclude.accepts(tags, layer.locked)
+        && s.exclude.accepts(
+            tags,
+            layer.locked || crate::layer_properties::inherited(doc, target).locked,
+        )
 }
 pub fn vector(layer: &crate::line_tools::Layer, index: usize, s: Settings) -> bool {
     let scope = match s.reference {
@@ -98,7 +97,7 @@ pub fn vector(layer: &crate::line_tools::Layer, index: usize, s: Settings) -> bo
         Reference::Selected => selected(s.selected_vectors, index),
         _ => false,
     };
-    scope && !layer.hidden && s.exclude.accepts(layer.fill, layer.locked)
+    scope && (s.include_hidden || !layer.hidden) && s.exclude.accepts(layer.fill, layer.locked)
 }
 pub fn object(object: &PageObject, s: Settings) -> bool {
     s.reference == Reference::Composite
@@ -183,6 +182,7 @@ impl<'a> Sampler<'a> {
             || count
                 .saturating_mul(12)
                 .saturating_add(doc.resident_bytes())
+                .saturating_add(doc.memory_bytes().saturating_mul(2))
                 > crate::document::DEFAULT_DOCUMENT_BUDGET
         {
             return Err("Fill reference exceeds work/memory limit".into());
@@ -225,7 +225,8 @@ impl<'a> Sampler<'a> {
             raw,
             renderer: raw
                 .is_none()
-                .then(|| crate::render::Renderer::fill(doc, active, s)),
+                .then(|| crate::render::Renderer::fill(doc, active, s))
+                .transpose()?,
         })
     }
     pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {

@@ -264,6 +264,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
                     p::set_state(d, &mut state, t, v)?;
                 }
             }
+            crate::layer_roles::inherit_unwrap(d, &mut state, folder);
             state.scene.paper.folders[folder].children.clear();
             state.scene.paper.folders[folder].paper = Default::default();
             state.scene.paper.folders[folder].through = false;

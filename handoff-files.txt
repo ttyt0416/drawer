@@ -473,3 +473,8 @@ crates/drawer-core/src/search_move.rs
 crates/drawer-core/src/search_verify.rs
 crates/drawer-app/src/layer_search.rs
 docs/process/layer-search.md
+
+crates/drawer-core/src/layer_roles.rs
+crates/drawer-core/src/layer_roles_verify.rs
+crates/drawer-app/src/layer_roles.rs
+docs/process/layer-roles.md

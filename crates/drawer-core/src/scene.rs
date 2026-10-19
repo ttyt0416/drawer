@@ -181,6 +181,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::layer_roles::is_false")]
+    pub include_drafts_in_output: bool,
     #[serde(
         default,
         skip_serializing_if = "crate::layer_catalog::Data::is_default"

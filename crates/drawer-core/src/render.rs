@@ -8,6 +8,7 @@ use crate::{
 
 pub struct Renderer<'a> {
     document: &'a Document,
+    owned: Option<Box<Document>>,
     fill: Option<(usize, crate::bucket::Settings)>,
     fill_graph: Option<crate::paper::Graph>,
     stroke: Option<&'a crate::painting::Stroke>,
@@ -20,6 +21,14 @@ struct Contour {
     bounds: Rect,
 }
 impl<'a> Renderer<'a> {
+    fn doc(&self) -> &Document {
+        self.owned.as_deref().unwrap_or(self.document)
+    }
+    pub fn for_export(document: &'a Document) -> Result<Self, String> {
+        let mut r = Self::new(document);
+        r.owned = crate::layer_roles::output_view(document)?;
+        Ok(r)
+    }
     fn object_pixel(&self, index: usize, object: &PageObject, original: Point) -> [u8; 4] {
         match object {
             PageObject::Text { color, .. } => {
@@ -87,13 +96,13 @@ impl<'a> Renderer<'a> {
         }
     }
     fn world_pixel(&self, index: usize, original: Point) -> [u8; 4] {
-        let Some(camera) = &self.document.scene.camera else {
+        let Some(camera) = &self.doc().scene.camera else {
             return [0; 4];
         };
         if !camera.page_bounds.contains(original) {
             return [0; 4];
         }
-        let Some(mesh) = self.document.scene.worlds.get(index) else {
+        let Some(mesh) = self.doc().scene.worlds.get(index) else {
             return [0; 4];
         };
         let center = [
@@ -121,7 +130,7 @@ impl<'a> Renderer<'a> {
     /// Isolated page-source contribution; the normal layer tree handles its own blending.
     pub fn source_pixel(&self, key: crate::layer_search::Key, point: Point) -> [u8; 4] {
         use crate::{layer_properties::Target, layer_search::Key};
-        let d = self.document;
+        let d = self.doc();
         if point.iter().any(|n| !n.is_finite())
             || point[0] < 0.
             || point[1] < 0.
@@ -249,11 +258,14 @@ impl<'a> Renderer<'a> {
         document: &'a Document,
         active: usize,
         settings: crate::bucket::Settings,
-    ) -> Self {
+    ) -> Result<Self, String> {
         let mut r = Self::new(document);
-        r.fill_graph = Some(crate::fill_reference::graph(document, active, settings));
+        r.owned = Some(crate::layer_roles::reference_view(
+            document, active, settings,
+        )?);
+        r.fill_graph = Some(crate::fill_reference::graph(r.doc(), active, settings));
         r.fill = Some((active, settings));
-        r
+        Ok(r)
     }
     pub fn sampling(document: &'a Document, references: &'a crate::eyedropper::References) -> Self {
         let mut r = Self::new(document);
@@ -279,6 +291,7 @@ impl<'a> Renderer<'a> {
             .collect();
         Self {
             document,
+            owned: None,
             stroke,
             references: None,
             fill: None,
@@ -299,7 +312,7 @@ impl<'a> Renderer<'a> {
         }
     }
     pub fn pixel(&self, point: Point) -> [u8; 4] {
-        let doc = self.document;
+        let doc = self.doc();
         if point[0] < 0.0
             || point[1] < 0.0
             || point[0] >= doc.width as f64
@@ -313,9 +326,12 @@ impl<'a> Renderer<'a> {
             x,
             y,
             self.references.is_none_or(|r| r.animation)
-                && self
-                    .fill
-                    .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite),
+                && self.fill.is_none_or(|(_, s)| {
+                    matches!(
+                        s.reference,
+                        crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                    )
+                }),
             self.fill_graph.as_ref().unwrap_or(&doc.scene.paper),
             |index, layer| {
                 if self.references.is_some_and(|r| !r.raster(index))
@@ -337,9 +353,12 @@ impl<'a> Renderer<'a> {
         }
         if scene.clipping.solo.is_none()
             && self.references.is_none_or(|r| r.objects)
-            && self
-                .fill
-                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
+            && self.fill.is_none_or(|(_, s)| {
+                matches!(
+                    s.reference,
+                    crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                )
+            })
         {
             for layer in &scene.gradients.layers {
                 result = crate::layer_catalog::compose(
@@ -350,12 +369,19 @@ impl<'a> Renderer<'a> {
                 );
             }
         }
-        for (index, object) in scene.objects.iter().enumerate().filter(|(_, o)| {
+        for (index, object) in scene.objects.iter().enumerate().filter(|(n, _)| {
             scene.clipping.solo.is_none()
                 && self.references.is_none_or(|r| r.objects)
-                && self
-                    .fill
-                    .is_none_or(|(_, s)| crate::fill_reference::object(o, s))
+                && self.fill.is_none_or(|(_, s)| {
+                    matches!(
+                        s.reference,
+                        crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                    ) && !crate::layer_properties::properties(
+                        doc,
+                        crate::layer_properties::Target::Object(scene.catalog.objects.id(*n)),
+                    )
+                    .hidden
+                })
         }) {
             let color = self.object_pixel(index, object, original);
             result = crate::layer_catalog::compose(
@@ -441,9 +467,12 @@ impl<'a> Renderer<'a> {
         }
         if scene.clipping.solo.is_none()
             && self.references.is_none_or(|r| r.objects)
-            && self
-                .fill
-                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
+            && self.fill.is_none_or(|(_, s)| {
+                matches!(
+                    s.reference,
+                    crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                )
+            })
         {
             for index in 0..scene.worlds.len() {
                 result = crate::layer_catalog::compose(

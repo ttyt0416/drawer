@@ -307,7 +307,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         size_px: 12.0,
         color: [0, 0, 0, 255],
     });
-    let with = crate::render::Renderer::fill(&text, 0, s);
+    let with = crate::render::Renderer::fill(&text, 0, s)?;
     let without = crate::render::Renderer::fill(
         &text,
         0,
@@ -318,7 +318,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             },
             ..s
         },
-    );
+    )?;
     if !(0..16).any(|y| {
         (0..16).any(|x| {
             with.pixel([x as f64 + 0.5, y as f64 + 0.5])[3] > 0
@@ -363,7 +363,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
                 },
                 ..s
             },
-        );
+        )?;
         if (r.pixel([8.5, 8.5])[3] > 0) == excluded {
             return Err("Vector reference/draft filter".into());
         }
@@ -385,7 +385,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             },
             ..s
         },
-    );
+    )?;
     if r.pixel([0.5; 2]) != [200, 0, 0, 255] {
         return Err("Excluded layer recipe still affected the reference".into());
     }

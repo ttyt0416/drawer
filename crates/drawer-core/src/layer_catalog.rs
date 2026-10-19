@@ -430,21 +430,7 @@ pub fn from_thumbnail(d: &Document, t: crate::thumbnail::Target) -> Option<Key> 
 }
 fn flags(d: &Document, t: Target) -> [bool; 7] {
     let v = p::inherited(d, t);
-    let tags = match t {
-        Target::Raster(id) => crate::layers::index(d, id)
-            .and_then(|n| d.scene.paper.layers.get(&n))
-            .map(|p| p.fill),
-        Target::Vector(id) => d
-            .scene
-            .lines
-            .layers
-            .iter()
-            .find(|l| l.id == id)
-            .map(|l| l.fill),
-        Target::Folder(n) => d.scene.paper.folders.get(n as usize).map(|f| f.paper.fill),
-        _ => None,
-    }
-    .unwrap_or_default();
+    let tags = crate::layer_roles::flags(d, t);
     [
         !v.hidden,
         v.locked,
@@ -566,11 +552,7 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
         if rulers {
             extras.insert(Kind::Ruler);
         }
-        let mut states = flags(d, target);
-        if matches!(target, Target::Track(_) | Target::Cell { .. }) {
-            states[5] = info.reference;
-            states[6] = info.draft;
-        }
+        let states = flags(d, target);
         if states[6] {
             extras.insert(Kind::Draft);
         }

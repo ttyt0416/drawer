@@ -211,6 +211,7 @@ pub fn prepare(
     if indices.is_empty() {
         return Err("The chosen folders contain no raster layers".into());
     }
+    let roles = crate::layer_roles::common(doc, indices.iter().copied())?;
     let mut working_state = doc.snapshot();
     if settings.include_hidden {
         unhide(doc, &mut working_state, &members)?;
@@ -338,6 +339,7 @@ pub fn prepare(
     after.scene.layer_ids.next = id.checked_add(1).ok_or("Raster identity limit")?;
     after.scene.layer_ids.rasters[replacement] = id;
     after.layers = layers;
+    crate::layer_roles::put_raster(&mut after, replacement, roles);
     let rendered = preview(&after, doc.current_frame)?;
     let before_roots = working.scene.paper.root_nodes(working.layers.len());
     let after_roots = rendered.scene.paper.root_nodes(rendered.layers.len());
@@ -437,5 +439,5 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     {
         after.scene.rulers.active = None;
     }
-    finish(doc,after,Target::Raster(id),affected,vec![format!("Current frame {} becomes one raster layer; hidden layers {}.",doc.current_frame+1,if settings.include_hidden{"included"}else{"excluded"}),"Flatten removes off-canvas pixels, animation/audio and editable objects/effects. One Undo restores the original document structure.".into()],0)
+    finish(doc,after,Target::Raster(id),affected,vec![format!("Current frame {} becomes one raster layer; hidden layers {}.",doc.current_frame+1,if settings.include_hidden{"included"}else{"excluded"}),"Flatten bakes the visible canvas including draft layers, and removes off-canvas pixels, animation/audio, reference/draft layer roles and editable objects/effects. One Undo restores the original document structure.".into()],0)
 }

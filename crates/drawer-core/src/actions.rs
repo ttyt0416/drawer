@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 92] = [
+pub const EXTRA_COMMANDS: [&str; 93] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -80,6 +80,7 @@ pub const EXTRA_COMMANDS: [&str; 92] = [
     "layer-folders",
     "adjustment-layer",
     "layer-search",
+    "layer-roles",
     "import-image-layer",
     "new-raster-layer",
     "new-vector-layer",
@@ -401,6 +402,7 @@ impl Settings {
             "manage-layers" => "Manage local layers",
             "adjustment-layer" => "Nondestructive brightness, contrast, hue and saturation layers",
             "layer-search" => "Search, filter and select local layers",
+            "layer-roles" => "Reference and draft layer roles; rendered output policy",
             "layer-folders" => "Layer folders, wrapping and grayscale masks",
             "merge-layers" => "Merge selected, merge down or flatten page",
             "layer-blend" => "Layer blend modes: Normal, Multiply, Screen, Overlay",
