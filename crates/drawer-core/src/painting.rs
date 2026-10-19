@@ -189,7 +189,15 @@ impl Style {
             && self.pressure.error().is_none()
     }
 }
+struct Arm {
+    transform: crate::scene::Affine,
+    stroke: Box<Stroke>,
+}
 pub struct Stroke {
+    ruler: crate::rulers::Runtime,
+    arms: Vec<Arm>,
+    mirror_tip: bool,
+    free_limit: usize,
     pub document: u64,
     pub layer: usize,
     revision: u64,
@@ -265,12 +273,22 @@ impl Stroke {
         if !(0.0..=1.0).contains(&scale) {
             return Err("Invalid stroke geometry scale".into());
         }
+        for arm in &mut self.arms {
+            arm.stroke.set_geometry_scale(scale)?;
+        }
         self.scale = scale;
         Ok(())
     }
     pub fn set_dynamic_input(&mut self, input: crate::brush_dynamics::Input) -> Result<(), String> {
         if !input.valid() {
             return Err("Invalid brush dynamic input".into());
+        }
+        for arm in &mut self.arms {
+            let mut mapped = input;
+            mapped.bearing = input
+                .bearing
+                .map(|a| crate::rulers::angle(arm.transform, a));
+            arm.stroke.set_dynamic_input(mapped)?;
         }
         self.dynamics = input;
         Ok(())
@@ -316,6 +334,9 @@ impl Stroke {
         if self.last.is_some() || !self.changes.is_empty() || !materials.valid() {
             return Err("Material snapshot must be valid and set before the stroke".into());
         }
+        for arm in &mut self.arms {
+            arm.stroke.materials = materials.clone();
+        }
         self.materials = materials;
         Ok(self)
     }
@@ -352,6 +373,11 @@ impl Stroke {
         self.check(doc)?;
         if !(0.0..=1.0).contains(&strength) || point.iter().any(|v| !v.is_finite()) {
             return Err("Invalid stroke material".into());
+        }
+        let point = self.ruler.constrain(point);
+        for arm in &mut self.arms {
+            arm.stroke
+                .material(doc, effect, strength, arm.transform.map(point))?;
         }
         self.effect = if self.style.clone_stamp.enabled || self.style.profile.transparent {
             crate::mouse_pressure::Effect::Normal
@@ -448,6 +474,16 @@ impl Stroke {
         doc: &Document,
         cancel: impl Fn() -> bool,
     ) -> Result<(), String> {
+        self.finish_material_inner(doc, &cancel)
+    }
+    fn finish_material_inner(
+        &mut self,
+        doc: &Document,
+        cancel: &dyn Fn() -> bool,
+    ) -> Result<(), String> {
+        for arm in &mut self.arms {
+            arm.stroke.finish_material_inner(doc, cancel)?;
+        }
         use crate::brush_material::Mode;
         if self.style.profile.transparent
             || self.style.tonal()
@@ -467,7 +503,7 @@ impl Stroke {
             0.0
         };
         if strength > 0.0 {
-            self.diffuse(doc, strength, &cancel)?;
+            self.diffuse(doc, strength, cancel)?;
         }
         self.finish_water_edges(doc, cancel)
     }
@@ -559,6 +595,16 @@ impl Stroke {
                 .any(|v| !v.is_finite() || v.abs() > 1e12)
         {
             return Err("Invalid timed dab".into());
+        }
+        let anchor = self.ruler.constrain(anchor);
+        let point = self.ruler.constrain(point);
+        for arm in &mut self.arms {
+            arm.stroke.direct_dab(
+                doc,
+                arm.transform.map(point),
+                arm.transform.map(anchor),
+                pressure,
+            )?;
         }
         self.prepare_region(doc, anchor)?;
         self.heading_to(anchor);
@@ -720,6 +766,9 @@ impl Stroke {
         Ok(())
     }
     pub fn set_seed(&mut self, seed: u32) {
+        for arm in &mut self.arms {
+            arm.stroke.set_seed(seed);
+        }
         self.seed = seed;
     }
     pub fn anchor(&self) -> Option<(usize, BrushTip, Point)> {
@@ -735,6 +784,29 @@ impl Stroke {
         style: Style,
         budget: usize,
     ) -> Result<Self, String> {
+        Self::with_ruler_budget(doc, layer, style, budget, true)
+    }
+    fn with_ruler_budget(
+        doc: &Document,
+        layer: usize,
+        style: Style,
+        budget: usize,
+        assisted: bool,
+    ) -> Result<Self, String> {
+        let ruler = if assisted {
+            crate::rulers::Runtime::new(doc)?
+        } else {
+            Default::default()
+        };
+        let copies = ruler.copies.clone();
+        let total_budget = budget.min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()));
+        let free_limit = total_budget.saturating_sub(std::mem::size_of::<Self>() + 256) / 96;
+        // Reserve a quarter for the single-history merge of independent arms.
+        let budget = if copies.is_empty() {
+            total_budget
+        } else {
+            total_budget / 4 * 3
+        } / (copies.len() + 1);
         let style = style.resolved();
         if doc.layers.get(layer).is_some_and(|l| l.locked) {
             return Err("The raster layer is locked".into());
@@ -754,7 +826,11 @@ impl Stroke {
         if limit == 0 {
             return Err("No memory available for a stroke".into());
         }
-        Ok(Self {
+        let mut stroke = Self {
+            ruler,
+            arms: vec![],
+            mirror_tip: false,
+            free_limit,
             document: doc.id,
             layer,
             revision: doc.revision,
@@ -802,7 +878,71 @@ impl Stroke {
             pixel_work: 0,
             region: None,
             region_prepared: false,
-        })
+        };
+        for transform in copies {
+            let mut child_style = style;
+            let sign = if crate::rulers::reflected(transform) {
+                -1.0
+            } else {
+                1.0
+            };
+            if style.dynamics.direction == crate::brush_dynamics::Direction::Fixed {
+                child_style.shape.angle = crate::rulers::angle(transform, style.shape.angle);
+                child_style.dynamics.fallback_angle *= sign;
+                child_style.dynamics.scatter_angle *= sign;
+            } else {
+                child_style.shape.angle *= sign;
+                child_style.dynamics.fallback_angle =
+                    crate::rulers::angle(transform, style.dynamics.fallback_angle);
+                child_style.dynamics.scatter_angle =
+                    crate::rulers::angle(transform, style.dynamics.scatter_angle);
+            }
+            let v = transform.map(style.clone_stamp.offset.map(|v| v as f64));
+            let o = transform.map([0.0; 2]);
+            child_style.clone_stamp.offset =
+                [(v[0] - o[0]).round() as i64, (v[1] - o[1]).round() as i64];
+            let mut child = Self::with_ruler_budget(doc, layer, child_style, budget, false)?;
+            child.mirror_tip = crate::rulers::reflected(transform);
+            stroke.arms.push(Arm {
+                transform,
+                stroke: Box::new(child),
+            });
+        }
+        Ok(stroke)
+    }
+    /// A session toggle is fixed before input; it never edits the page rulers.
+    pub fn disable_rulers(&mut self) -> Result<(), String> {
+        if self.last.is_some() || !self.changes.is_empty() {
+            return Err("Change ruler snapping before starting a stroke".into());
+        }
+        self.limit = self.free_limit;
+        self.arms.clear();
+        self.ruler = Default::default();
+        Ok(())
+    }
+    fn collect_changes(self) -> Result<Vec<PixelChange>, String> {
+        if self.arms.is_empty() {
+            return Ok(self.changes);
+        }
+        let count = self.changed_pixels();
+        let mut result = Vec::new();
+        result
+            .try_reserve_exact(count)
+            .map_err(|_| "Symmetry commit allocation failed")?;
+        let mut seen = std::collections::HashSet::new();
+        seen.try_reserve(count)
+            .map_err(|_| "Symmetry index allocation failed")?;
+        // Primary then increasing arm order: overlapping axis pixels are written once.
+        for change in self
+            .changes
+            .into_iter()
+            .chain(self.arms.into_iter().flat_map(|a| a.stroke.changes))
+        {
+            if change.before != change.after && seen.insert(change.offset) {
+                result.push(change);
+            }
+        }
+        Ok(result)
     }
     fn check(&self, doc: &Document) -> Result<(), String> {
         if doc.id != self.document
@@ -851,6 +991,11 @@ impl Stroke {
         }
         if !point.iter().all(|n| n.is_finite() && n.abs() <= 1e12) {
             return Err("Invalid drawing coordinate".into());
+        }
+        let point = self.ruler.constrain(point);
+        for arm in &mut self.arms {
+            arm.stroke
+                .sample_pressure_inner(doc, arm.transform.map(point), pressure, processed)?;
         }
         self.prepare_region(doc, point)?;
         let pressure = if processed {
@@ -974,6 +1119,9 @@ impl Stroke {
         Ok(())
     }
     pub fn finish_sample(&mut self, doc: &Document) -> Result<(), String> {
+        for arm in &mut self.arms {
+            arm.stroke.finish_sample(doc)?;
+        }
         if self.direct {
             return self.check(doc);
         }
@@ -997,7 +1145,8 @@ impl Stroke {
         self.check(doc)?;
         self.finish_sample(doc)?;
         self.finish_material(doc, || false)?;
-        let Self { layer, changes, .. } = self;
+        let layer = self.layer;
+        let changes = self.collect_changes()?;
         doc.commit_pixel_changes(layer, changes)
     }
     pub fn commit_mouse(
@@ -1008,7 +1157,8 @@ impl Stroke {
         self.check(doc)?;
         self.finish_sample(doc)?;
         self.finish_material(doc, || false)?;
-        let Self { layer, changes, .. } = self;
+        let layer = self.layer;
+        let changes = self.collect_changes()?;
         doc.commit_mouse_changes(layer, changes, metadata)
     }
     pub fn pixel(
@@ -1023,10 +1173,32 @@ impl Stroke {
             return None;
         }
         let offset = raster.pixel_index(doc.width, doc.height, x as i64, y as i64)?;
-        self.lookup.get(&offset).map(|n| self.changes[*n].after)
+        if self.arms.is_empty() {
+            self.lookup.get(&offset).map(|n| self.changes[*n].after)
+        } else {
+            self.changed_pixel(offset)
+        }
+    }
+    fn changed_pixel(&self, offset: usize) -> Option<[u8; 4]> {
+        self.lookup
+            .get(&offset)
+            .and_then(|n| {
+                let change = &self.changes[*n];
+                (change.before != change.after).then_some(change.after)
+            })
+            .or_else(|| {
+                self.arms
+                    .iter()
+                    .find_map(|a| a.stroke.changed_pixel(offset))
+            })
     }
     pub fn preview_key(&self) -> (u64, u64) {
-        (self.nonce, self.preview_revision)
+        (
+            self.nonce,
+            self.arms.iter().fold(self.preview_revision, |n, a| {
+                n.wrapping_add(a.stroke.preview_revision)
+            }),
+        )
     }
     pub fn mask_is_square(&self) -> bool {
         self.mask_square
@@ -1040,6 +1212,14 @@ impl Stroke {
     pub fn set_angle_offset(&mut self, angle: f64) -> Result<(), String> {
         if !angle.is_finite() || angle.abs() > 360.0 {
             return Err("Invalid pen tilt angle".into());
+        }
+        for arm in &mut self.arms {
+            arm.stroke
+                .set_angle_offset(if crate::rulers::reflected(arm.transform) {
+                    -angle
+                } else {
+                    angle
+                })?;
         }
         self.angle_offset = angle;
         Ok(())
@@ -1069,6 +1249,11 @@ impl Stroke {
     }
     pub fn changed_pixels(&self) -> usize {
         self.changes.len()
+            + self
+                .arms
+                .iter()
+                .map(|a| a.stroke.changed_pixels())
+                .sum::<usize>()
     }
     fn stamp(
         &mut self,
@@ -1090,12 +1275,20 @@ impl Stroke {
             } else {
                 self.style.tip as u32 + 1
             };
-            let offset = pattern.offset_for_tip(
+            let mut offset = pattern.offset_for_tip(
                 self.pattern_index,
                 particle,
                 tip,
                 self.style.shape.angle + self.style.dynamics.scatter_angle,
             );
+            if self.mirror_tip {
+                let (sin, cos) = (self.style.shape.angle + self.style.dynamics.scatter_angle)
+                    .to_radians()
+                    .sin_cos();
+                let x = offset[0] * cos + offset[1] * sin;
+                let y = -offset[0] * sin + offset[1] * cos;
+                offset = [x * cos + y * sin, x * sin - y * cos];
+            }
             self.particle = Some([-offset[0], -offset[1]]);
             self.stamp_single(
                 doc,
@@ -1348,16 +1541,21 @@ impl Stroke {
                 }
                 let dx = point[0] - center[0];
                 let dy = point[1] - center[1];
-                let raw_q = [
+                let mut raw_q = [
                     (dx * cos + dy * sin) / radius,
                     (-dx * sin + dy * cos) / minor,
                 ];
+                if self.mirror_tip {
+                    raw_q[1] = -raw_q[1];
+                }
                 let q = slot.point(raw_q);
+                let mirror_tip = self.mirror_tip;
                 let geometry = |p: Point| {
                     let delta = [p[0] - center[0], p[1] - center[1]];
                     let local = slot.point([
                         (delta[0] * cos + delta[1] * sin) / radius,
-                        (-delta[0] * sin + delta[1] * cos) / minor,
+                        (-delta[0] * sin + delta[1] * cos) / minor
+                            * if mirror_tip { -1.0 } else { 1.0 },
                     ]);
                     if self.style.pattern.mode == crate::brush_pattern::Mode::Ribbon {
                         crate::brush_pattern::ribbon_distance(
@@ -1809,6 +2007,44 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+    #[test]
+    fn symmetry_ignores_noop_primary_when_another_arm_changes_the_pixel() {
+        let mut d = doc();
+        d.scene
+            .rulers
+            .add(
+                "Mirror",
+                crate::rulers::Kind::Mirror {
+                    a: [16.0, 0.0],
+                    b: [16.0, 12.0],
+                },
+            )
+            .unwrap();
+        let before = d.snapshot();
+        let mut stroke = Stroke::begin(&d, 0, style(BrushTip::Pen)).unwrap();
+        stroke.changes.push(PixelChange {
+            offset: 0,
+            before: [0; 4],
+            after: [0; 4],
+        });
+        stroke.lookup.insert(0, 0);
+        let arm = &mut stroke.arms[0].stroke;
+        arm.changes.push(PixelChange {
+            offset: 0,
+            before: [0; 4],
+            after: [20, 40, 60, 128],
+        });
+        arm.lookup.insert(0, 0);
+        assert_eq!(
+            stroke.pixel(&d, 0, &d.layers[0], 0, 0),
+            Some([20, 40, 60, 128])
+        );
+        assert!(stroke.commit(&mut d).unwrap());
+        assert_eq!(d.composite_pixel(0, 0), [20, 40, 60, 128]);
+        assert_eq!(d.history_counts(), (1, 0));
+        assert!(d.undo());
+        assert_eq!(d.snapshot(), before);
     }
     #[test]
     fn pattern_dab_budget_rejects_without_publishing() {

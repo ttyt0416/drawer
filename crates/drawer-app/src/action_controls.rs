@@ -204,6 +204,7 @@ impl Drawer {
                 | "move-selection-boundary"
                 | "move-selected-pixels"
                 | "bucket-tool"
+                | "ruler-snap"
                 | "wand-tool"
                 | "selection-brush-tool"
                 | "selection-erase-tool"
@@ -234,6 +235,18 @@ impl Drawer {
                     };
                     self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
                     self.drawing.connect_line = false;
+                }
+                "ruler-tools" => self.begin_rulers()?,
+                "ruler-snap" => {
+                    self.drawing.ruler_disabled = !self.drawing.ruler_disabled;
+                    self.status = Some(format!(
+                        "Ruler snapping {} for following strokes",
+                        if self.drawing.ruler_disabled {
+                            "off"
+                        } else {
+                            "on"
+                        }
+                    ));
                 }
                 "bucket-tool" => {
                     self.restore_locked_tool();

@@ -328,3 +328,7 @@ docs/process/bucket-fill.md
 crates/drawer-core/src/selection_edit.rs
 crates/drawer-app/src/selection_edit.rs
 docs/process/wand-selection-brush.md
+
+crates/drawer-core/src/rulers.rs
+crates/drawer-app/src/rulers.rs
+docs/process/drawing-rulers.md

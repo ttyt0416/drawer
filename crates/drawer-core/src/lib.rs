@@ -138,3 +138,5 @@ pub mod layer_pick;
 pub mod bucket;
 
 pub mod selection_edit;
+
+pub mod rulers;

@@ -143,6 +143,7 @@ impl Metadata {
     }
 }
 pub struct Replay {
+    ruler_disabled: bool,
     document: u64,
     revision: u64,
     layer: usize,
@@ -188,6 +189,7 @@ impl Replay {
             return Err("Not enough memory to preserve and reconstruct a mouse stroke".into());
         }
         Ok(Self {
+            ruler_disabled: false,
             document: doc.id,
             revision: doc.revision,
             layer,
@@ -202,6 +204,13 @@ impl Replay {
             dynamic_inputs: vec![],
             materials: Default::default(),
         })
+    }
+    pub fn disable_rulers(mut self) -> Result<Self, String> {
+        if !self.samples.is_empty() {
+            return Err("Change ruler snapping before input".into());
+        }
+        self.ruler_disabled = true;
+        Ok(self)
     }
     pub fn with_materials(
         mut self,
@@ -434,6 +443,9 @@ impl Replay {
         }
         let mut stroke = Stroke::with_budget(doc, self.layer, style, self.budget)?
             .with_materials(self.materials.clone())?;
+        if self.ruler_disabled {
+            stroke.disable_rulers()?;
+        }
         stroke.set_seed(self.settings.seed);
         if let Some((point, _, _)) = points.first() {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;

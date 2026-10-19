@@ -19,7 +19,7 @@ foreach ($entry in Get-ChildItem -LiteralPath $cacheRoot -Directory) {
     $removedBuilds++
 }
 $temporaryFiles = @(Get-ChildItem -LiteralPath $projectRoot -Recurse -File | Where-Object {
-    $_.Extension -in '.tmp', '.bak' -and -not $_.FullName.StartsWith((Join-Path $projectRoot '.git') + '\')
+    ($_.Extension -in '.tmp', '.bak' -or ($_.Name -like '*.long-type-*.txt' -and $_.FullName.StartsWith($cacheRoot + [IO.Path]::DirectorySeparatorChar))) -and -not $_.FullName.StartsWith((Join-Path $projectRoot '.git') + [IO.Path]::DirectorySeparatorChar)
 })
 foreach ($entry in $temporaryFiles) { Remove-Item -LiteralPath $entry.FullName -Force }
 if (Test-Path -LiteralPath (Join-Path $projectRoot '.handoff-staging')) { throw '임시 전달 폴더가 남아 있습니다.' }

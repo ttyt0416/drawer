@@ -149,6 +149,7 @@ pub fn default_bindings() -> Vec<Binding> {
         ("M", false, false, "Move"),
         ("G", false, false, "bucket-tool"),
         ("H", false, false, "wand-tool"),
+        ("V", false, false, "ruler-snap"),
         ("J", false, false, "selection-brush-tool"),
         ("J", false, true, "selection-erase-tool"),
         ("C", true, false, "copy-selection"),

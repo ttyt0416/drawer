@@ -174,6 +174,7 @@ impl Drawer {
             || self.brush_presets.open
             || self.textures.modal()
             || self.lines.modal()
+            || self.ruler_tools.open
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()
@@ -214,6 +215,7 @@ impl Drawer {
                         | "paste-selection"
                         | "bucket-tool"
                         | "fill-selection"
+                        | "ruler-snap"
                         | "wand-tool"
                         | "selection-brush-tool"
                         | "selection-erase-tool"

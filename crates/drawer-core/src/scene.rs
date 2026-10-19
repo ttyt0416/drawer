@@ -181,6 +181,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::rulers::Data::is_default")]
+    pub rulers: crate::rulers::Data,
     #[serde(
         default,
         skip_serializing_if = "crate::selection_tools::Data::is_default"
@@ -221,6 +223,7 @@ impl Scene {
                     .iter()
                     .all(|v| v.is_finite() && v.abs() <= 1e12)
             })
+            && self.rulers.valid()
             && self.selections.valid()
             && self.lines.valid()
             && self.transform.valid()
@@ -287,7 +290,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.selections.size_bytes()
+        self.rulers.bytes()
+            + self.selections.size_bytes()
             + self.lines.size_bytes()
             + self.paper.size_bytes()
             + self.clips.len() * 64

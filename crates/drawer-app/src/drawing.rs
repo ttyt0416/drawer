@@ -87,6 +87,7 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub ruler_disabled: bool,
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
     frame_time: f64,
     active: Option<Session>,
@@ -1122,6 +1123,9 @@ impl Drawing {
                         )?
                         .with_materials(self.assets.clone())?
                         .configure_input(self.ends[index], !virtual_mouse)?;
+                        if self.ruler_disabled {
+                            replay = replay.disable_rulers()?;
+                        }
                         for point in [from, to] {
                             replay.push_dynamic(
                                 drawer_core::mouse_pressure::Sample {
@@ -1136,21 +1140,24 @@ impl Drawing {
                                 ),
                             )?;
                         }
-                        if replay
-                            .render_cancel(doc, true, || {
-                                self.cancel_check.as_ref().is_some_and(|f| f())
-                            })?
-                            .commit_mouse(doc, replay.metadata())?
-                        {
-                            self.remember(doc.id, layer, style.tip, to);
+                        let stroke = replay.render_cancel(doc, true, || {
+                            self.cancel_check.as_ref().is_some_and(|f| f())
+                        })?;
+                        let endpoint = stroke.anchor().map_or(to, |(_, _, p)| p);
+                        if stroke.commit_mouse(doc, replay.metadata())? {
+                            self.remember(doc.id, layer, style.tip, endpoint);
                         }
                         return Ok(());
                     }
                     let mut stroke = Stroke::begin(doc, layer, style)?;
+                    if self.ruler_disabled {
+                        stroke.disable_rulers()?;
+                    }
                     stroke.sample(doc, from)?;
                     stroke.sample(doc, to)?;
+                    let endpoint = stroke.anchor().map_or(to, |(_, _, p)| p);
                     if stroke.commit(doc)? {
-                        self.remember(doc.id, layer, style.tip, to);
+                        self.remember(doc.id, layer, style.tip, endpoint);
                     }
                     Ok(())
                 })();
@@ -1163,7 +1170,12 @@ impl Drawing {
                 .ok_or_else(|| "Select a raster layer to paint".to_string())
                 .and_then(|layer| Stroke::begin(doc, layer, style))
                 .and_then(|stroke| stroke.with_materials(self.assets.clone()))
-            {
+                .and_then(|mut s| {
+                    if self.ruler_disabled {
+                        s.disable_rulers()?;
+                    }
+                    Ok(s)
+                }) {
                 Ok(stroke) => {
                     let config = self.mouse_settings[index];
                     let virtual_mouse = event.source.kind
@@ -1196,7 +1208,13 @@ impl Drawing {
                         )
                         .and_then(|r| r.with_materials(self.assets.clone()))
                         .and_then(|r| r.configure_input(self.ends[index], !virtual_mouse))
-                        {
+                        .and_then(|r| {
+                            if self.ruler_disabled {
+                                r.disable_rulers()
+                            } else {
+                                Ok(r)
+                            }
+                        }) {
                             Ok(mouse) => Some(mouse),
                             Err(e) => {
                                 self.error = Some(e);

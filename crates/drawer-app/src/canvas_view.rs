@@ -1219,6 +1219,18 @@ impl CanvasView {
             }
         }
         if preferences.guides {
+            for guide in &document.scene.rulers.guides {
+                for line in drawer_core::rulers::lines(guide, document.scene.transform, size) {
+                    segment(
+                        line.map(|p| document.view.document_to_screen(p, size, center, ppp)),
+                        if document.scene.rulers.active == Some(guide.id) {
+                            egui::Color32::LIGHT_GREEN
+                        } else {
+                            egui::Color32::from_rgb(90, 180, 255)
+                        },
+                    );
+                }
+            }
             for line in &document.scene.guides {
                 segment(
                     line.map(|point| {
