@@ -739,3 +739,9 @@ Prepare merge preview에서 전후 이미지와 영향 목록을 검토하고 �
 Layers… → Folders / grayscale masks에서 Create empty folder 또는 Wrap selected in folder를 누릅니다. 감싸기는 같은 부모의 연속된 대상을 사용합니다. 폴더 하나를 고르면 부모·슬롯 이동, Through folder 전환과 Unwrap을 사용할 수 있습니다. 해제로 마스크·불투명도·배경 효과가 달라지면 Open raster preservation preview로 배경을 포함한 병합을 검토합니다.
 
 층 또는 폴더 하나를 선택해 사각 영역과 Visible strength를 지정하고 Replace rectangle mask를 누릅니다.0은 숨김,255는 표시이며 사각 밖은 숨깁니다. 부모와 자식 마스크는 함께 적용됩니다. Remove mask로 제거합니다. 연결 마스크는 전체층 이동을 따라가며 각 버튼은 한 Undo로 복구합니다.
+
+## adjustment-layer | 비파괴 보정 레이어 | 밝기 대비 색상 채도 HSL HSV
+
+Layers… → Color correction layers에서 새 보정층을 만들거나 기존 층을 고릅니다. 밝기·대비·색상·채도를 바꾸고 Preview correction으로 전후를 확인한 뒤 Apply correction을 누릅니다. 원래 픽셀과 알파는 유지하며 한 Undo로 복구합니다. HSL은 명도, HSV는 최댓값을 유지하는 채도 조정입니다.
+
+보정은 같은 부모의 앞쪽 래스터 배경에 적용됩니다. 일반 폴더 안에서는 그 내부로 제한됩니다. 폴더·마스크 화면에서 보정층에 마스크를 붙이면 범위를 제한할 수 있고 불투명도로 강도를 조절합니다. 보정층을 숨기면 원래 배경으로 돌아옵니다. 붓은 이미지층에서 사용하고 보정층은 매개변수로 편집합니다.

@@ -458,3 +458,8 @@ crates/drawer-core/src/layer_folders.rs
 crates/drawer-core/src/layer_folders_verify.rs
 crates/drawer-app/src/layer_folders.rs
 docs/process/layer-folders.md
+
+crates/drawer-core/src/adjustments.rs
+crates/drawer-core/src/adjustments_verify.rs
+crates/drawer-app/src/adjustments.rs
+docs/process/adjustment-layers.md

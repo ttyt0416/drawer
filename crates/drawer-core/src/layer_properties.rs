@@ -211,6 +211,11 @@ pub fn paintable(doc: &Document, n: usize) -> Result<(), String> {
     if n >= doc.layers.len() {
         return Err("Raster layer is missing".into());
     }
+    if crate::layer_effects::adjustment(doc, raster(doc, n)).is_some() {
+        return Err(
+            "Paint on an image layer; edit this adjustment layer through its parameters".into(),
+        );
+    }
     let p = inherited(doc, raster(doc, n));
     if p.hidden || !doc.scene.paper.raster_visible(n, doc.layers.len()) {
         return Err("Layer is hidden; show it before editing".into());

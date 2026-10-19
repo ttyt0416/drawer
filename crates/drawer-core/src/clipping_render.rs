@@ -72,11 +72,15 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
             return false;
         };
         self.graph.mark_layers(n, &mut self.seen, 0);
-        if value == Default::default() {
+        if value.identity() {
             return true;
         }
         if !self.paper(n).hidden {
-            *dst = Color::interpolate(*dst, Color::from(value.pixel(dst.rgba())), self.weight(n));
+            let mut corrected = value.pixel(dst.rgba());
+            corrected[3] = 255;
+            let mut top = Color::from(corrected);
+            top.scale(self.weight(n));
+            crate::layer_blend::mode(self.doc, clipping::node_key(self.doc, n)).atop(dst, top);
         }
         true
     }

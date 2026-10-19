@@ -21,7 +21,7 @@ struct Draft {
     images: Option<[egui::TextureHandle; 2]>,
     acknowledged: bool,
 }
-fn image(ctx: &egui::Context, d: &Document, label: &str) -> egui::TextureHandle {
+pub(super) fn image(ctx: &egui::Context, d: &Document, label: &str) -> egui::TextureHandle {
     let size = [d.width.min(64) as usize, d.height.min(64) as usize];
     let r = drawer_core::render::Renderer::new(d);
     let mut pixels = Vec::with_capacity(size[0] * size[1]);

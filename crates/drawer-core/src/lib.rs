@@ -232,3 +232,7 @@ pub mod layer_merge_verify;
 pub mod layer_folders;
 
 pub mod layer_folders_verify;
+
+pub mod adjustments;
+
+pub mod adjustments_verify;

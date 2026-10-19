@@ -26,15 +26,40 @@ impl Mask {
         self.coverage.valid() && self.offset.iter().all(|n| n.is_finite() && n.abs() <= 1e9)
     }
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ColorModel {
+    #[default]
+    Hsl,
+    Hsv,
+}
+fn legacy_color_model() -> ColorModel {
+    ColorModel::Hsv
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Adjustment {
+    #[serde(default = "legacy_color_model")]
+    pub color_model: ColorModel,
     pub brightness: f64,
     pub contrast: f64,
     pub hue: f64,
     pub saturation: f64,
 }
+impl Default for Adjustment {
+    fn default() -> Self {
+        Self {
+            brightness: 0.,
+            contrast: 0.,
+            hue: 0.,
+            saturation: 0.,
+            color_model: ColorModel::Hsl,
+        }
+    }
+}
 impl Adjustment {
+    pub fn identity(self) -> bool {
+        self.brightness == 0. && self.contrast == 0. && self.hue == 0. && self.saturation == 0.
+    }
     pub fn valid(self) -> bool {
         [self.brightness, self.contrast, self.saturation]
             .iter()
@@ -42,7 +67,7 @@ impl Adjustment {
             && (-180. ..=180.).contains(&self.hue)
     }
     pub fn pixel(self, mut p: [u8; 4]) -> [u8; 4] {
-        if self == Self::default() || p[3] == 0 {
+        if self.identity() || p[3] == 0 {
             return p;
         }
         let contrast = if self.contrast > 0. {
@@ -56,15 +81,19 @@ impl Adjustment {
                 .round() as u8;
         }
         if self.hue != 0. || self.saturation != 0. {
-            let [h, s, v] = crate::color_selector::hsv(p, 0.);
-            p = crate::color_selector::from_hsv(
-                [
-                    (h + self.hue).rem_euclid(360.),
-                    (s * (1. + self.saturation)).clamp(0., 1.),
-                    v,
-                ],
-                p[3],
-            )
+            let [h, s, v] = match self.color_model {
+                ColorModel::Hsl => crate::color_selector::hsl(p, 0.),
+                ColorModel::Hsv => crate::color_selector::hsv(p, 0.),
+            };
+            let values = [
+                (h + self.hue).rem_euclid(360.),
+                (s * (1. + self.saturation)).clamp(0., 1.),
+                v,
+            ];
+            p = match self.color_model {
+                ColorModel::Hsl => crate::color_selector::from_hsl(values, p[3]),
+                ColorModel::Hsv => crate::color_selector::from_hsv(values, p[3]),
+            }
             .unwrap_or(p);
         }
         p

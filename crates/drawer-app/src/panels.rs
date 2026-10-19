@@ -561,6 +561,7 @@ impl Drawer {
                                 ("Layer blend modes…", "layer-blend"),
                                 ("Merge layers / flatten…", "merge-layers"),
                                 ("Folders / grayscale masks…", "layer-folders"),
+                                ("Color correction layers…", "adjustment-layer"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),
