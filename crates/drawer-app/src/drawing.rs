@@ -1,3 +1,5 @@
+#[path = "auto_shape.rs"]
+pub(crate) mod auto_shape;
 #[path = "bucket.rs"]
 pub(crate) mod bucket;
 #[path = "magnetic_lasso.rs"]
@@ -72,6 +74,7 @@ struct SelectionGesture {
     shape: Option<super::shapes::Capture>,
 }
 struct Session {
+    auto: Option<auto_shape::Monitor>,
     snapping: drawer_core::snapping::Settings,
     stroke: Stroke,
     mouse: Option<drawer_core::mouse_pressure::Replay>,
@@ -105,6 +108,10 @@ pub(super) struct Drawing {
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
     frame_time: f64,
     active: Option<Session>,
+    correction: Option<Box<auto_shape::Correction>>,
+    vector_auto: Option<Box<auto_shape::VectorCapture>>,
+    pub auto_settings: drawer_core::auto_shape::Settings,
+    pub auto_target: Option<drawer_core::shapes::Target>,
     selection: Option<SelectionGesture>,
     lasso: Option<Box<magnetic_lasso::Gesture>>,
     pub lasso_settings: drawer_core::magnetic_lasso::Settings,
@@ -205,6 +212,8 @@ impl Drawing {
             .map(|s| s.view)
             .or_else(|| self.selection.as_ref().map(|s| s.view))
             .or_else(|| self.lasso.as_ref().map(|s| s.view))
+            .or_else(|| self.correction.as_ref().map(|c| c.view))
+            .or_else(|| self.vector_auto.as_ref().map(|v| v.view))
             .or_else(|| self.movement.as_ref().map(|s| s.view))
             .or_else(|| self.bucket.as_ref().map(|s| s.view))
             .or_else(|| self.selection_edit.as_ref().map(|s| s.view))
@@ -213,6 +222,8 @@ impl Drawing {
         self.active.is_some()
             || self.selection.is_some()
             || self.lasso.is_some()
+            || self.correction.is_some()
+            || self.vector_auto.is_some()
             || self.movement.is_some()
             || self.bucket.is_some()
             || self.selection_edit.is_some()
@@ -227,6 +238,7 @@ impl Drawing {
             .as_ref()
             .filter(|s| s.stroke.document == document)
             .map(|s| &s.stroke)
+            .or_else(|| self.original_preview(document))
     }
     pub(super) fn cancel_sample(&mut self) {
         self.sample_pending = None;
@@ -234,6 +246,8 @@ impl Drawing {
     fn cancel(&mut self) {
         self.selection = None;
         self.lasso = None;
+        self.correction = None;
+        self.vector_auto = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -314,6 +328,8 @@ impl Drawing {
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.selection = None;
         self.lasso = None;
+        self.correction = None;
+        self.vector_auto = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -334,6 +350,8 @@ impl Drawing {
     fn finish_document(&mut self, doc: &mut Document) {
         self.selection = None;
         self.lasso = None;
+        self.correction = None;
+        self.vector_auto = None;
         self.movement = None;
         self.bucket = None;
         self.selection_edit = None;
@@ -448,6 +466,11 @@ impl Drawing {
         attributes: drawer_core::pointer_input::Attributes,
     ) {
         self.last_attributes = attributes.normalized();
+        if let Err(e) = self.auto_sample(pos) {
+            self.error = Some(e);
+            self.cancel();
+            return;
+        }
         if let Some(s) = &mut self.active {
             s.stroke.set_snap_disabled(self.snap_disabled);
             if let Some(mouse) = &mut s.mouse {
@@ -903,6 +926,8 @@ impl Drawing {
                 });
             }
         }
+        self.promote_auto(ctx, documents);
+        self.advance_auto_input(ctx, documents);
         self.advance_lasso(ctx, documents);
         self.advance_selection_edit(ctx, documents);
         self.advance_bucket(ctx, documents);
@@ -931,6 +956,7 @@ impl Drawing {
             self.receive(n, doc);
         }
         self.advance_clock(ctx);
+        self.promote_auto(ctx, documents);
         if !self.native_mouse
             && self
                 .ownership
@@ -1132,7 +1158,7 @@ impl Drawing {
                 }
             }
             if self.pending() {
-                if self.active_view() == Some(view) {
+                if self.active.is_some() && self.active_view() == Some(view) {
                     self.receive(n, doc);
                 }
                 continue;
@@ -1564,6 +1590,24 @@ impl Drawing {
                 }
                 continue;
             }
+            if self.auto_settings.enabled
+                && let Some(drawer_core::shapes::Target::Vector(Some(id))) = self.auto_target
+            {
+                if let Err(err) = self.begin_vector_auto(
+                    doc,
+                    view,
+                    projection,
+                    ui.ctx().content_rect(),
+                    event.source,
+                    id,
+                    projection.point(pos),
+                    style,
+                ) {
+                    self.error = Some(err);
+                    self.ownership.clear();
+                }
+                continue;
+            }
             match layer
                 .ok_or_else(|| "Select a raster layer to paint".to_string())
                 .and_then(|layer| Stroke::begin(doc, layer, style))
@@ -1636,7 +1680,23 @@ impl Drawing {
                         None
                     };
                     self.last_source = Some(event.source);
+                    let auto = match self.auto_monitor(
+                        doc,
+                        ui.ctx().content_rect(),
+                        event.source,
+                        layer.unwrap(),
+                        projection.point(pos),
+                        style,
+                    ) {
+                        Ok(auto) => auto,
+                        Err(e) => {
+                            self.error = Some(e);
+                            self.ownership.clear();
+                            continue;
+                        }
+                    };
                     self.active = Some(Session {
+                        auto,
                         snapping: self.snap_settings,
                         stroke,
                         mouse,
@@ -1683,6 +1743,24 @@ impl Drawer {
                 self.precision.target = drawer_core::precision::Target::Layer;
             }
         }
+        self.drawing.auto_settings = self.workspaces.store.current.auto_shape;
+        self.drawing.auto_target = self.active.and_then(|n| {
+            match self
+                .panels
+                .targets
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+            {
+                drawer_core::thumbnail::Target::Raster(i) => {
+                    Some(drawer_core::shapes::Target::Raster(i))
+                }
+                drawer_core::thumbnail::Target::Vector(id) => {
+                    Some(drawer_core::shapes::Target::Vector(Some(id)))
+                }
+                _ => None,
+            }
+        });
         self.drawing.snap_settings = self.workspaces.store.current.snapping;
         self.drawing.ruler_disabled = !self.drawing.snap_settings.rulers;
         self.drawing.snap_disabled = super::snapping::disabled(ctx, self.drawing.snap_settings);

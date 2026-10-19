@@ -459,7 +459,8 @@ impl CanvasView {
         paint.drawing.refresh_movement(document);
         let document = paint
             .drawing
-            .selection_edit_preview(document.id)
+            .conversion_preview(document.id)
+            .or_else(|| paint.drawing.selection_edit_preview(document.id))
             .or_else(|| paint.drawing.bucket_preview(document.id))
             .or_else(|| paint.drawing.movement_preview(document.id))
             .unwrap_or(document);

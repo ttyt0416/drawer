@@ -119,6 +119,7 @@ try {
     if ($smokeResult -notmatch 'selection_shortcuts=true') { throw '선택 바로가기·윤곽 변환 검증 실패' }
     if ($smokeResult -notmatch 'magnetic_lasso=true') { throw '마그네틱 올가미·바깥 삭제 검증 실패' }
     if ($smokeResult -notmatch 'extended_fill=true') { throw '확장 채우기·애니메이션 출력 프레임 검증 실패' }
+    if ($smokeResult -notmatch 'auto_shape=true') { throw '획 유지 도형 보정·원래 획 복귀 검증 실패' }
     if ($smokeResult -notmatch 'layer_selection=true') { throw '레이어 알파·벡터 선택·윤곽 숨김과 칠 제한 검증 실패' }
     if ($smokeResult -notmatch 'drawing_snapping=true') { throw '스냅 우선순위·확대·수정키 복원 검증 실패' }
     if ($smokeResult -notmatch 'object_alignment=true') { throw '개체 정렬·균등 간격·한 취소 검증 실패' }

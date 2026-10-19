@@ -190,3 +190,7 @@ pub mod animation_output;
 pub mod extended_fill;
 
 pub mod extended_fill_verify;
+
+pub mod auto_shape;
+
+pub mod auto_shape_verify;

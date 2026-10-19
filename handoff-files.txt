@@ -412,3 +412,8 @@ crates/drawer-core/src/extended_fill.rs
 crates/drawer-core/src/extended_fill_verify.rs
 crates/drawer-app/src/extended_fill.rs
 docs/process/extended-fill.md
+
+crates/drawer-core/src/auto_shape.rs
+crates/drawer-core/src/auto_shape_verify.rs
+crates/drawer-app/src/auto_shape.rs
+docs/process/stroke-shape-correction.md

@@ -64,6 +64,7 @@ impl Drawer {
         self.enclosure_controls(ui);
         self.shapes_controls(ui);
         self.snapping_controls(ui);
+        self.auto_shape_controls(ui);
         ui.horizontal_wrapped(|ui| {
             for (label, mode) in [
                 ("Paint", Mode::Paint),
