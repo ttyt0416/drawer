@@ -308,6 +308,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub gradient_presets: crate::gradient_ramp::Library,
+    #[serde(default)]
     pub enclosure: crate::enclosure::Settings,
     #[serde(default)]
     pub color_range: crate::color_range::Settings,
@@ -398,6 +400,7 @@ impl Default for Snapshot {
             selection_edit: Default::default(),
             color_range: Default::default(),
             enclosure: Default::default(),
+            gradient_presets: Default::default(),
             layer_pick: Default::default(),
             color_modes: Default::default(),
             related_colors: Default::default(),
@@ -456,7 +459,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.selection_edit.valid() || !self.enclosure.valid() {
+        if !self.selection_edit.valid() || !self.enclosure.valid() || !self.gradient_presets.valid()
+        {
             return false;
         }
         self.version == 1
@@ -556,6 +560,7 @@ impl Snapshot {
             next.selection_edit = incoming.selection_edit;
             next.color_range = incoming.color_range;
             next.enclosure = incoming.enclosure;
+            next.gradient_presets = incoming.gradient_presets.clone();
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;

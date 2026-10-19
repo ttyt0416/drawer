@@ -36,6 +36,9 @@ pub fn coordinates(rgb: [u8; 3]) -> [f64; 3] {
     ]
 }
 pub fn rgb(lab: [f64; 3]) -> [u8; 3] {
+    rgb_float(lab).map(|v| (v * 255.0).round() as u8)
+}
+pub(crate) fn rgb_float(lab: [f64; 3]) -> [f64; 3] {
     let y = (lab[0] + 16.0) / 116.0;
     let f = [y + lab[1] / 500.0, y, y - lab[2] / 200.0];
     let xyz = std::array::from_fn::<_, 3, _>(|n| {
@@ -60,12 +63,11 @@ pub fn rgb(lab: [f64; 3]) -> [u8; 3] {
     )
     .map(|v| {
         let v = v.clamp(0.0, 1.0);
-        let encoded = if v <= 0.0031308 {
+        if v <= 0.0031308 {
             12.92 * v
         } else {
             1.055 * v.powf(1.0 / 2.4) - 0.055
-        };
-        (encoded * 255.0).round() as u8
+        }
     })
 }
 /// Move the post-mix lightness toward the alpha-weighted input L*, retaining a*/b*.

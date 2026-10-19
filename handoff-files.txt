@@ -366,3 +366,8 @@ crates/drawer-core/src/gradient_regions.rs
 crates/drawer-core/src/gradient_verify.rs
 crates/drawer-app/src/gradient.rs
 docs/process/gradients.md
+
+crates/drawer-core/src/gradient_ramp.rs
+crates/drawer-core/src/gradient_ramp_verify.rs
+crates/drawer-app/src/gradient_ramp.rs
+docs/process/gradient-stops.md

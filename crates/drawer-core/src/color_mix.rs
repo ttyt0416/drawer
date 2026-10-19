@@ -36,14 +36,14 @@ impl Quality {
 fn matrix(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     m.map(|row| row.iter().zip(v).map(|(a, b)| a * b).sum())
 }
-fn linear(x: f64) -> f64 {
+pub(crate) fn linear(x: f64) -> f64 {
     if x <= 0.04045 {
         x / 12.92
     } else {
         ((x + 0.055) / 1.055).powf(2.4)
     }
 }
-fn encoded(x: f64) -> f64 {
+pub(crate) fn encoded(x: f64) -> f64 {
     let x = x.clamp(0.0, 1.0);
     if x <= 0.0031308 {
         x * 12.92
@@ -51,7 +51,7 @@ fn encoded(x: f64) -> f64 {
         1.055 * x.powf(1.0 / 2.4) - 0.055
     }
 }
-fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
+pub(crate) fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
     let c = rgb.map(|n| n as f64 / 255.0);
     match space {
         Space::LabD65 => crate::lab_mix::coordinates(rgb),
@@ -78,8 +78,11 @@ fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
     }
 }
 fn rgb(space: Space, c: [f64; 3]) -> [u8; 3] {
+    rgb_float(space, c).map(|v| (v * 255.0).round() as u8)
+}
+pub(crate) fn rgb_float(space: Space, c: [f64; 3]) -> [f64; 3] {
     let c = match space {
-        Space::LabD65 => return crate::lab_mix::rgb(c),
+        Space::LabD65 => return crate::lab_mix::rgb_float(c),
         Space::Standard => c,
         Space::Perceptual => {
             let lms = matrix(
@@ -102,7 +105,7 @@ fn rgb(space: Space, c: [f64; 3]) -> [u8; 3] {
             .map(encoded)
         }
     };
-    c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)
+    c.map(|x| x.clamp(0.0, 1.0))
 }
 pub fn mix(space: Space, a: [u8; 4], b: [u8; 4], weight: f64) -> [u8; 4] {
     if !weight.is_finite() || weight <= 0.0 {

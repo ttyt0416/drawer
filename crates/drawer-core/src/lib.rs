@@ -155,3 +155,7 @@ pub mod enclosure;
 pub mod gradient;
 mod gradient_regions;
 pub mod gradient_verify;
+
+pub mod gradient_ramp;
+
+pub mod gradient_ramp_verify;

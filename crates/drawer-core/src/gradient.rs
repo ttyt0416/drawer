@@ -65,6 +65,8 @@ impl VectorFill {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp: Option<crate::gradient_ramp::Ramp>,
     pub shape: Shape,
     pub repeat: Repeat,
     pub start: Point,
@@ -82,6 +84,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            ramp: None,
             shape: Shape::StraightLine,
             repeat: Repeat::DoNotRepeat,
             start: [0.5, 0.5],
@@ -103,6 +106,10 @@ impl Settings {
         crate::line_tools::point_valid(self.start)
             && crate::line_tools::point_valid(self.end)
             && (0.01..=100.0).contains(&self.ellipse_ratio)
+            && self
+                .ramp
+                .as_ref()
+                .is_none_or(crate::gradient_ramp::Ramp::valid)
     }
     pub fn color(&self, p: Point, anchors: Option<[Point; 2]>) -> [u8; 4] {
         let [a, b] = anchors.unwrap_or([self.start, self.end]);
@@ -140,9 +147,18 @@ impl Settings {
                 }
             }
         };
-        // Premultiplied encoded-RGB interpolation; hidden RGB cannot tint a transparent stop.
-        let alpha = self.first[3] as f64 * (1.0 - t) + self.last[3] as f64 * t;
-        if alpha == 0.0 {
+        let sample = if let Some(ramp) = &self.ramp {
+            ramp.sample(t)
+        } else {
+            crate::gradient_ramp::mix(
+                crate::gradient_ramp::Space::Standard,
+                crate::gradient_ramp::Brightness::Off,
+                self.first,
+                self.last,
+                t,
+            )
+        };
+        if sample[3] == 0.0 {
             return [0; 4];
         }
         let bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
@@ -157,14 +173,9 @@ impl Settings {
         };
         let mut c = [0; 4];
         for (i, v) in c[..3].iter_mut().enumerate() {
-            *v = ((self.first[i] as f64 * self.first[3] as f64 * (1.0 - t)
-                + self.last[i] as f64 * self.last[3] as f64 * t)
-                / alpha
-                + noise)
-                .round()
-                .clamp(0.0, 255.0) as u8;
+            *v = (sample[i] + noise).round().clamp(0.0, 255.0) as u8;
         }
-        c[3] = alpha.round() as u8;
+        c[3] = sample[3].round() as u8;
         c
     }
 }
@@ -316,7 +327,8 @@ pub fn prepare(
         return Err("Invalid gradient or gradient undo budget exceeded".into());
     }
     let count = doc.width as usize * doc.height as usize;
-    if count > 4 * 1024 * 1024
+    if count == 0
+        || count > 4 * 1024 * 1024
         || count
             .saturating_mul(32)
             .saturating_add(doc.resident_bytes())

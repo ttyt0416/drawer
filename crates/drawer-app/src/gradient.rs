@@ -6,17 +6,18 @@ use drawer_core::{
 #[derive(Default)]
 pub(super) struct Panel {
     pub draft: Option<Box<Draft>>,
-    apply: Option<egui::Rect>,
+    pub(super) apply: Option<egui::Rect>,
+    ramps: super::gradient_ramp::Panel,
 }
 pub(super) struct Draft {
     id: u64,
     revision: u64,
     frame: u32,
-    layer: usize,
+    pub(super) layer: usize,
     editing: Option<u64>,
-    settings: Settings,
+    pub(super) settings: Settings,
     editable: bool,
-    reference: bucket::Settings,
+    pub(super) reference: bucket::Settings,
 }
 impl Drawer {
     pub(super) fn begin_gradient(&mut self) -> Result<(), String> {
@@ -92,8 +93,9 @@ impl Drawer {
             ui.horizontal(|ui|{ui.label("Shape");egui::ComboBox::from_id_salt("gradient-shape").selected_text(shape_label(e.settings.shape)).show_ui(ui,|ui|{for s in Shape::ALL{ui.selectable_value(&mut e.settings.shape,s,shape_label(s));}});});
             ui.horizontal(|ui|{ui.label("Outside range");egui::ComboBox::from_id_salt("gradient-repeat").selected_text(repeat_label(e.settings.repeat)).show_ui(ui,|ui|{for r in Repeat::ALL{ui.selectable_value(&mut e.settings.repeat,r,repeat_label(r));}});});
             for (label,p) in [("Start",&mut e.settings.start),("End",&mut e.settings.end)]{ui.horizontal(|ui|{ui.label(label);for v in p{ui.add(egui::DragValue::new(v).range(-1e9..=1e9).speed(0.5));}});}
-            ui.horizontal(|ui|{ui.label("Start color");super::edit::rgba(ui,&mut e.settings.first);ui.label("End color");super::edit::rgba(ui,&mut e.settings.last);});
-            if ui.button("Swap start/end colors").clicked(){std::mem::swap(&mut e.settings.first,&mut e.settings.last);}
+            if e.settings.ramp.is_none(){ui.horizontal(|ui|{ui.label("Start color");super::edit::rgba(ui,&mut e.settings.first);ui.label("End color");super::edit::rgba(ui,&mut e.settings.last);});
+            if ui.button("Swap start/end colors").clicked(){std::mem::swap(&mut e.settings.first,&mut e.settings.last);}}
+            super::gradient_ramp::controls(ui,&mut e.settings,&mut self.gradient.ramps,&mut self.workspaces.store.current.gradient_presets,&mut self.status);
             ui.checkbox(&mut e.settings.dithering,"Dithering");
             if e.settings.shape==Shape::Ellipse{ui.add(egui::Slider::new(&mut e.settings.ellipse_ratio,0.01..=100.0).logarithmic(true).text("Ellipse minor/major ratio"));}
             if e.settings.shape==Shape::Freeform {
