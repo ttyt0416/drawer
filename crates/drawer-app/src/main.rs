@@ -22,6 +22,7 @@ mod brush_variation;
 mod canvas_view;
 mod clone_stamp;
 mod color_modes;
+mod color_range;
 mod color_selector;
 mod color_tables;
 mod cursor_settings;
@@ -148,6 +149,7 @@ struct Drawer {
     drawing: Box<drawing::Drawing>,
     ruler_tools: rulers::Panel,
     selection_filter: selection_filter::Panel,
+    color_range: color_range::Panel,
     precision: precision::Precision,
     native_input: pointer_input::Native,
     #[cfg(windows)]
@@ -272,6 +274,7 @@ impl Drawer {
             drawing: Default::default(),
             ruler_tools: Default::default(),
             selection_filter: Default::default(),
+            color_range: Default::default(),
             precision: Default::default(),
             native_input: Default::default(),
             #[cfg(windows)]
@@ -614,6 +617,7 @@ impl Drawer {
         self.selection_window(ui.ctx());
         self.ruler_window(ui.ctx());
         self.selection_filter_window(ui.ctx());
+        self.color_range_window(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
         self.input_settings(ui.ctx());
@@ -1311,6 +1315,10 @@ impl eframe::App for Drawer {
                     eprintln!("HSL/editable swatches: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = color_range::smoke(&root) {
+                    eprintln!("Color range: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = quick_mask::smoke(&root) {
                     eprintln!("Quick mask: {e}");
                     fail_smoke();
@@ -1530,7 +1538,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

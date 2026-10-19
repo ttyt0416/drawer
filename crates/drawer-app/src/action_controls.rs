@@ -252,6 +252,7 @@ impl Drawer {
                     ));
                 }
                 "quick-mask" => self.toggle_quick_mask(),
+                "color-range" => self.begin_color_range()?,
                 "bucket-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = super::precision::Mode::Fill;

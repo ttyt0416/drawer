@@ -308,6 +308,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub color_range: crate::color_range::Settings,
+    #[serde(default)]
     pub selection_edit: crate::selection_edit::Settings,
     #[serde(default)]
     pub layer_pick: crate::layer_pick::Settings,
@@ -392,6 +394,7 @@ impl Default for Snapshot {
             aids: Default::default(),
             tool: "Pen".into(),
             selection_edit: Default::default(),
+            color_range: Default::default(),
             layer_pick: Default::default(),
             color_modes: Default::default(),
             related_colors: Default::default(),
@@ -548,6 +551,7 @@ impl Snapshot {
         }
         if scope.other {
             next.selection_edit = incoming.selection_edit;
+            next.color_range = incoming.color_range;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;

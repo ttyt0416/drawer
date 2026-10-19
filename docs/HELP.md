@@ -673,3 +673,8 @@ Expand selection/Shrink selection/Feather selection에서 반경을 정하고 Ap
 
 Quick mask/Shift+Q를 켜면 선택 강도가 빨갛게 보입니다. J로 선택을 칠하고 Shift+J로 지우며 지름·경도·강도를 조절합니다. 다시 끄면 선택을 유지하고 이전 도구로 돌아갑니다. 그림 픽셀은 바뀌지 않습니다.
 Selection mask layers에서 이름을 입력해 Save / replace selection mask layer로 저장합니다. Load mask layer로 반투명 강도까지 복원하고 Remove mask layer로 삭제합니다. 마스크 층은 페이지당16개이며 문서와 함께 로컬에 저장됩니다.
+
+## color-range | 색상 범위 선택 | 추출색 허용치 투명 픽셀 현재층 합성
+
+스포이트로 색을 고른 뒤 Color range의 Use current drawing color를 누릅니다. RGB tolerance 0은 정확한 색,255는 모든 보이는 색입니다. Include fully transparent pixels는 숨은 RGB와 무관하게 알파0도 포함합니다.
+Current/Composite와 선택 합성 연산을 고르고 Apply color range로 적용합니다. 떨어진 같은 색도 선택하며 그림 픽셀은 바뀌지 않습니다. Cancel/Escape는 취소하고 Undo로 선택 변경을 되돌립니다.
