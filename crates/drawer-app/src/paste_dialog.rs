@@ -58,6 +58,8 @@ pub(super) fn write_clipboard(packet: &ClipboardImage, budget: usize) -> Result<
 pub(super) struct PasteDialog {
     id: u64,
     revision: u64,
+    frame: u32,
+    original: Box<drawer_core::document::RasterLayer>,
     pub preview: Document,
     pub origin: Option<[i64; 2]>,
     pub offset: [i64; 2],
@@ -72,6 +74,71 @@ pub(super) struct PasteDialog {
     pub origin_button: Option<egui::Rect>,
 }
 impl PasteDialog {
+    pub(super) fn set_layer_name(&mut self, name: String) {
+        self.original.name = name.clone();
+        self.preview.layers.last_mut().unwrap().name = name;
+    }
+    pub(super) fn fit_to_canvas(&mut self, budget: usize) -> Result<(), String> {
+        let e = self
+            .original
+            .extent(self.preview.width, self.preview.height);
+        let ratio = (self.preview.width as f64 / e.width as f64)
+            .min(self.preview.height as f64 / e.height as f64);
+        let w = (e.width as f64 * ratio).round().max(1.0) as u32;
+        let h = (e.height as f64 * ratio).round().max(1.0) as u32;
+        let count = w as usize * h as usize;
+        if count > 4 * 1024 * 1024
+            || self
+                .preview
+                .memory_bytes()
+                .saturating_add(self.original.pixels.len() * 4)
+                .saturating_add(count * 4)
+                > budget
+        {
+            return Err("Image fit exceeds preview memory/work limit".into());
+        }
+        let step = [e.width as f64 / w as f64, e.height as f64 / h as f64];
+        let mut pixels = Vec::with_capacity(count);
+        for y in 0..h {
+            for x in 0..w {
+                let point = [
+                    (x as f64 + 0.5) * step[0] - 0.5,
+                    (y as f64 + 0.5) * step[1] - 0.5,
+                ];
+                pixels.push(drawer_core::interpolation::sample(
+                    point,
+                    drawer_core::interpolation::box_footprint(point, step),
+                    drawer_core::interpolation::Filter::Bilinear,
+                    |x, y| {
+                        self.original.pixels[y.clamp(0, e.height as i64 - 1) as usize
+                            * e.width as usize
+                            + x.clamp(0, e.width as i64 - 1) as usize]
+                    },
+                ));
+            }
+        }
+        let offset = [
+            (self.preview.width as i64 - w as i64).div_euclid(2),
+            (self.preview.height as i64 - h as i64).div_euclid(2),
+        ];
+        let layer = self.preview.layers.last_mut().unwrap();
+        layer.pixels = pixels;
+        layer.placement = Some(PlacedRaster {
+            width: w,
+            height: h,
+            offset,
+        });
+        self.offset = offset;
+        self.remainder = offset.map(|n| n as f64);
+        self.preview.revision += 1;
+        Ok(())
+    }
+    pub(super) fn restore_pixel_size(&mut self) {
+        *self.preview.layers.last_mut().unwrap() = self.original.as_ref().clone();
+        self.offset = self.original.placement.unwrap().offset;
+        self.remainder = self.offset.map(|n| n as f64);
+        self.preview.revision += 1;
+    }
     #[cfg(test)]
     pub fn viewport(&self) -> egui::Rect {
         self.canvas.viewport.unwrap()
@@ -138,6 +205,8 @@ impl Drawer {
         self.paste_dialog = Some(PasteDialog {
             id: doc.id,
             revision: doc.revision,
+            frame: doc.current_frame,
+            original: Box::new(preview.layers.last().unwrap().clone()),
             preview,
             origin: packet.origin,
             offset,
@@ -158,7 +227,11 @@ impl Drawer {
         let index = self
             .documents
             .iter()
-            .position(|d| d.id == dialog.id && d.revision == dialog.revision)
+            .position(|d| {
+                d.id == dialog.id
+                    && d.revision == dialog.revision
+                    && d.current_frame == dialog.frame
+            })
             .ok_or("The document changed; cancel and paste again")?;
         self.documents[index].commit_state(dialog.preview.snapshot())?;
         self.panels.targets.insert(
@@ -237,6 +310,8 @@ impl Drawer {
         });
     }
     pub(super) fn show_paste(&mut self, ctx: &egui::Context) {
+        let fit_budget = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         let Some(dialog) = &mut self.paste_dialog else {
             return;
         };
@@ -253,6 +328,16 @@ impl Drawer {
             switch_screen = switch.clicked();
 
             ui.heading("Place pasted image");
+            ui.horizontal(|ui| {
+                if ui.button("Fit image inside canvas").clicked()
+                    && let Err(err) = dialog.fit_to_canvas(fit_budget)
+                {
+                    dialog.error = Some(err);
+                }
+                if ui.button("Original pixel size").clicked() {
+                    dialog.restore_pixel_size();
+                }
+            });
             ui.label("New layer · drag preview or edit position · pixels kept outside canvas");
             let mut offset = dialog.offset;
             ui.horizontal(|ui| {

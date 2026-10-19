@@ -25,6 +25,8 @@ impl Drop for Job {
     }
 }
 pub(super) struct ImportDialog {
+    destination: Option<(u64, u64, u32)>,
+    context: egui::Context,
     source: Option<Arc<ImageSource>>,
     pub page: usize,
     pub orient: bool,
@@ -96,6 +98,8 @@ impl Drawer {
         let budget = self.import_budget();
         let path = path.to_owned();
         self.import_dialog = Some(ImportDialog {
+            destination: None,
+            context: ctx.clone(),
             source: None,
             page: 0,
             orient: true,
@@ -114,6 +118,29 @@ impl Drawer {
             #[cfg(test)]
             orientation_button: None,
         });
+    }
+    pub(super) fn begin_import_layer(
+        &mut self,
+        ctx: &egui::Context,
+        path: &Path,
+    ) -> Result<(), String> {
+        let d = &self.documents[self.active.ok_or("Open a page first")?];
+        let destination = (d.id, d.revision, d.current_frame);
+        self.begin_import(ctx, path);
+        self.import_dialog.as_mut().unwrap().destination = Some(destination);
+        Ok(())
+    }
+    pub(super) fn choose_image_layer(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if self.active.is_none() {
+            return Err("Open a page first".into());
+        }
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("Local image", &["png", "jpg", "jpeg", "tif", "tiff"])
+            .pick_file()
+        {
+            self.begin_import_layer(ctx, &path)?;
+        }
+        Ok(())
     }
     pub(super) fn document_from_clipboard(
         &mut self,
@@ -144,6 +171,14 @@ impl Drawer {
         if dialog.job.is_some() {
             return Err("Wait for the image preview".into());
         }
+        if let Some((id, revision, frame)) = dialog.destination {
+            let d = &self.documents[self.active.ok_or("Source page was closed")?];
+            if (d.id, d.revision, d.current_frame) != (id, revision, frame) {
+                return Err("Page/frame changed; reopen image layer import".into());
+            }
+        }
+        let destination = dialog.destination;
+        let context = dialog.context.clone();
         let preview = dialog.preview.take().ok_or("No decoded image to import")?;
         let source = dialog.source.clone().ok_or("No input image")?;
         let title = format!(
@@ -159,7 +194,24 @@ impl Drawer {
                 String::new()
             }
         );
-        self.add_image_document(preview.image, title)?;
+        if destination.is_some() {
+            self.begin_paste_reserved(
+                &context,
+                || {
+                    Ok(drawer_core::paste::ClipboardImage {
+                        image: preview.image,
+                        origin: None,
+                    })
+                },
+                source.encoded_snapshot().len(),
+            )?;
+            if let Some(p) = self.paste_dialog.as_mut() {
+                p.set_layer_name(title.chars().take(64).collect());
+            }
+        } else {
+            self.add_image_document(preview.image, title)?;
+        }
+
         self.protected_sources.insert(source.path.clone());
         self.remember_file(&source.path);
         self.import_dialog = None;
@@ -227,7 +279,11 @@ impl Drawer {
             }
             switch_screen = switch.clicked();
 
-            ui.heading("Image as new document");
+            ui.heading(if dialog.destination.is_some() {
+                "Image as a new local layer"
+            } else {
+                "Image as new document"
+            });
             ui.label("PNG / JPEG / TIFF · independent copy · source kept unchanged");
             if let Some(source) = &dialog.source {
                 ui.label(source.path.display().to_string());
@@ -320,7 +376,11 @@ impl Drawer {
             ui.horizontal(|ui| {
                 let accept = ui.add_enabled(
                     dialog.preview.is_some() && dialog.job.is_none() && !changed,
-                    egui::Button::new("Create document"),
+                    egui::Button::new(if dialog.destination.is_some() {
+                        "Place image layer…"
+                    } else {
+                        "Create document"
+                    }),
                 );
                 import = accept.clicked();
                 let dismiss = crate::help::button(ui, "Cancel", "files");
@@ -348,5 +408,165 @@ impl Drawer {
                 self.status = Some(error);
             }
         }
+    }
+}
+
+pub(super) fn layer_smoke(root: &std::path::Path) -> Result<(), String> {
+    for (w, h) in [(2u32, 1u32), (12, 10)] {
+        let source = root.join(format!("layer-source-{w}-{h}.png"));
+        let mut rgba = [10, 40, 90, 128].repeat((w * h) as usize);
+        rgba[..4].copy_from_slice(&[200, 50, 20, 0]);
+        let fixture = LocalImage::from_rgba(w as usize, h as usize, &rgba, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .document(DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?;
+        drawer_core::png_export::export(&fixture, &source, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 8,
+            height: 8,
+            dpi: 600.0,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        app.documents[0].scene.selection = Some(drawer_core::scene::Rect {
+            min: [1.0, 1.0],
+            max: [2.0, 2.0],
+        });
+        let original = app.documents[0].snapshot();
+        app.begin_import_layer(&ctx, &source)?;
+        let mut time = 0.0;
+        for _ in 0..1000 {
+            time += 0.1;
+            super::input_replay::frame(&ctx, &mut app, time, vec![]);
+            let d = app
+                .import_dialog
+                .as_ref()
+                .ok_or("Image layer import closed")?;
+            if d.job.is_none() && d.preview.is_some() {
+                break;
+            }
+            if d.job.is_none() && d.error.is_some() {
+                return Err(format!("Image layer decode failed: {:?}", d.error));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if app
+            .import_dialog
+            .as_ref()
+            .is_none_or(|d| d.job.is_some() || d.preview.is_none())
+        {
+            return Err("Image layer decoding timed out".into());
+        }
+        app.accept_import()?;
+        if app.documents.len() != 1 || app.documents[0].snapshot() != original {
+            return Err("Image layer placement draft changed document".into());
+        }
+        let p = app
+            .paste_dialog
+            .as_mut()
+            .ok_or("Image layer placement missing")?;
+        let extent = p.preview.layers[1].extent(8, 8);
+        let offset = [(8 - w as i64).div_euclid(2), (8 - h as i64).div_euclid(2)];
+        if (extent.width, extent.height, extent.offset) != (w, h, offset) {
+            return Err("Image layer pixels/DPI/default center".into());
+        }
+        let pixels = p.preview.layers[1].pixels.clone();
+        p.fit_to_canvas(DEFAULT_DOCUMENT_BUDGET)?;
+        let fitted = p.preview.layers[1].extent(8, 8);
+        if fitted.width > 8 || fitted.height > 8 {
+            return Err("Image layer fit dimensions".into());
+        }
+        p.restore_pixel_size();
+        if p.preview.layers[1].pixels != pixels || p.preview.layers[1].extent(8, 8) != extent {
+            return Err("Image layer original pixel size restore".into());
+        }
+        app.accept_paste()?;
+        if app.documents[0].history_counts().0 != 1
+            || app.documents[0].scene.selection != original.scene.selection
+            || app.documents[0].layers[0] != original.layers[0]
+            || app.documents[0].layers[1].pixels != pixels
+        {
+            return Err("Image layer insertion modified source/selection/history".into());
+        }
+        let inserted = app.documents[0].snapshot();
+        app.begin_import_layer(&ctx, &source)?;
+        for _ in 0..1000 {
+            time += 0.1;
+            super::input_replay::frame(&ctx, &mut app, time, vec![]);
+            if app
+                .import_dialog
+                .as_ref()
+                .is_some_and(|d| d.job.is_none() && d.preview.is_some())
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        app.accept_import()?;
+        app.accept_paste()?;
+        if app.documents[0].layers.len() != 3
+            || app.documents[0].history_counts().0 != 2
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != inserted
+            || !app.documents[0].redo()
+            || !app.documents[0].undo()
+        {
+            return Err("Consecutive image layers / Undo / Redo".into());
+        }
+        app.begin_import_layer(&ctx, &source)?;
+        let cancel_before = app.documents[0].snapshot();
+        app.import_dialog = None;
+        if app.documents[0].snapshot() != cancel_before {
+            return Err("Cancelled image layer read changed page".into());
+        }
+        std::fs::remove_file(&source).map_err(|e| e.to_string())?;
+        let file = root.join(format!("image-layer-{w}-{h}.drawer"));
+        drawer_core::files::save(&mut app.documents[0], &file).map_err(|e| e.to_string())?;
+        if drawer_core::files::open(&file, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .snapshot()
+            != app.documents[0].snapshot()
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != original
+            || !app.documents[0].redo()
+        {
+            return Err("Image layer native after source removal / Undo / Redo".into());
+        }
+        app.sync_layer_identity();
+        let before = app.documents[0].snapshot();
+        let selected = app.panels.targets.clone();
+        app.begin_import_layer(&ctx, &source)?;
+        for _ in 0..1000 {
+            time += 0.1;
+            super::input_replay::frame(&ctx, &mut app, time, vec![]);
+            if app.import_dialog.as_ref().is_some_and(|d| d.job.is_none()) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if app
+            .import_dialog
+            .as_ref()
+            .is_none_or(|d| d.job.is_some() || d.error.is_none())
+            || app.accept_import().is_ok()
+            || app.documents[0].snapshot() != before
+            || app.panels.targets != selected
+        {
+            return Err("Unreadable image layer changed existing layers/selection".into());
+        }
+        app.import_dialog = None;
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod layer_tests {
+    #[test]
+    fn local_file_layer_pixels_fit_source_removal_and_undo() {
+        let root = crate::tests::TestDirectory::new();
+        super::layer_smoke(&root.0).unwrap();
     }
 }

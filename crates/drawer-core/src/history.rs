@@ -235,6 +235,7 @@ impl Document {
     }
     pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
         if !after.valid()
+            || !after.layer_ids.matches(self.layers.len())
             || !after.paper.valid_for(self.layers.len())
             || self.scene.size_bytes().saturating_add(after.size_bytes())
                 > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
@@ -289,15 +290,17 @@ impl Document {
     }
     pub(crate) fn commit_state_group(
         &mut self,
-        after: DocumentState,
+        mut after: DocumentState,
         group: Option<u64>,
     ) -> Result<bool, String> {
+        after.scene.layer_ids.append(after.layers.len())?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
             || !(1..=crate::document::MAX_DIMENSION).contains(&after.height)
             || !after.dpi.is_finite()
             || after.dpi <= 0.0
             || !(1..=256).contains(&after.layers.len())
             || !after.scene.valid()
+            || !after.scene.layer_ids.matches(after.layers.len())
             || !after.scene.paper.valid_for(after.layers.len())
             || after.animation.as_ref().is_some_and(|a| !a.valid())
             || after

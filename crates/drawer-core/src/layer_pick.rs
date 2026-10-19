@@ -154,7 +154,7 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                         .layers
                         .iter()
                         .find(|l| l.id == id)
-                        .is_some_and(|l| l.paths.iter().any(|p0| p0.color[3] > 0 && p0.hit(p)))
+                        .is_some_and(|l| l.paths.iter().any(|p0| p0.visible_hit(p)))
             }
         })
         .collect()

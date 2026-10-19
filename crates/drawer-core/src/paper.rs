@@ -574,7 +574,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 }
             }
             let replacement = map[first];
-            let mut g = after.scene.paper;
+            let mut g = std::mem::take(&mut after.scene.paper);
             let roots = g.root_nodes(doc.layers.len());
             let consumed = (0..g.folders.len())
                 .filter(|n| contains(&g, Node::Folder(folder), Node::Folder(*n), 0))
@@ -599,13 +599,35 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 .filter(|(n, _)| !indices.contains(n))
                 .map(|(n, p)| (map[n], p))
                 .collect();
-            after
-                .scene
-                .mouse_strokes
-                .retain(|s| !indices.contains(&s.layer));
-            for s in &mut after.scene.mouse_strokes {
-                s.layer = map[s.layer];
+            if !after.scene.layer_ids.rasters.is_empty() {
+                let old = after.scene.layer_ids.rasters.clone();
+                let mut ids = vec![0; layers.len()];
+                for n in 0..doc.layers.len() {
+                    if !indices.contains(&n) {
+                        ids[map[n]] = old[n];
+                    }
+                }
+                ids[replacement] = after.scene.layer_ids.next;
+                after.scene.layer_ids.next = after
+                    .scene
+                    .layer_ids
+                    .next
+                    .checked_add(1)
+                    .ok_or("Raster identity limit")?;
+                after.scene.layer_ids.rasters = ids;
             }
+            let refs = (0..doc.layers.len())
+                .map(|n| {
+                    if indices.contains(&n) {
+                        None
+                    } else {
+                        Some(map[n])
+                    }
+                })
+                .collect::<Vec<_>>();
+            let rulers = std::mem::take(&mut after.scene.rulers);
+            crate::layers::remap_references(&mut after.scene, &refs);
+            after.scene.rulers = rulers;
             after.layers = layers;
             after.scene.paper = g;
             crate::ruler_scope::remap_rasters(

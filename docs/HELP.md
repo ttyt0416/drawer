@@ -705,3 +705,9 @@ Draw along saved ruler에서 곡선/가이드 번호·폭·색을 고르고 Draw
 Align and distribute objects에서 선택·캔버스·기준 개체 또는 축에 맞는 Page guide를 고르고 정렬/분배 버튼을 누릅니다. 문자 픽셀·벡터 경로·래스터 투명 여백 옵션은 기준 경계를 바꿉니다. 변/중심 분배와 Equal gaps는 서로 다른 결과를 만들며 분배에는 움직일 개체 세 개가 필요합니다. 적용한 기준과 선택 목록은 문서에 저장하고 모든 개체 이동은 한 Undo로 되돌립니다.
 
 Snapping priority and temporary disable에서 Object bounds and center lines, Vector control points, Canvas edges를 켤 수 있습니다. 화면 거리와 해제 수정키를 공유하며 래스터 전체층 이동에서는 자기 층을 제외한 표적에 모서리/중심을 맞춥니다.
+
+## layer-management | 레이어 생성·복제·이름·순서 | 래스터 벡터 삭제 폴더 식별자 이미지 삽입
+
+Layers → Manage layers에서 이름과 종류를 고르고 Create layer를 누릅니다. 선택 층의 Rename/Duplicate/Delete와 대상 폴더/슬롯 이동도 제공합니다. 동명 층은 허용하며 식별자로 구별합니다. 슬롯0은 해당 묶음의 맨 아래입니다. 마지막 래스터층은 삭제할 수 없습니다. 각 버튼은 한 번의 Undo로 복원합니다.
+
+Import local image layer는 PNG/JPEG/TIFF를 현재 문서에 배치합니다. 기본은 원래 픽셀 크기와 중앙 위치이며 캔버스보다 큰 이미지도 자르지 않습니다. Fit image inside canvas는 별도 선택이고 Original pixel size로 복구합니다. 배치를 확정하기 전에는 문서를 바꾸지 않으며 저장된 문서는 원본 이미지 파일 없이 열 수 있습니다.

@@ -1741,6 +1741,7 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.sync_layer_identity();
         if self.drawing.quick_mask {
             self.drawing.mode = super::precision::Mode::SelectionBrush;
             self.drawing.connect_line = false;

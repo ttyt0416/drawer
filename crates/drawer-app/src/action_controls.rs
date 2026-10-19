@@ -285,6 +285,11 @@ impl Drawer {
                 "selection-border" => self.begin_selection_border()?,
                 "gradient-tool" => self.begin_gradient()?,
                 "align-objects" => self.begin_alignment()?,
+                "manage-layers" => self.begin_layer_manager()?,
+                "import-image-layer" => self.choose_image_layer(ctx)?,
+                "new-raster-layer" | "new-vector-layer" | "duplicate-layer" | "delete-layer" => {
+                    self.layer_quick_command(command)?
+                }
                 "layer-selection-tools" => self.begin_layer_selection()?,
                 "vector-selection-clear" => self.clear_vector_selection()?,
                 "alpha-selection-replace" => {

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 44;
+const VERSION: u32 = 45;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -181,6 +181,7 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
         if !document.scene.valid()
+            || !document.scene.layer_ids.matches(document.layers.len())
             || !document.scene.paper.valid_for(document.layers.len())
             || document.memory_bytes() > budget
         {
@@ -250,6 +251,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         return Err(invalid("Invalid animation"));
     }
     if !document.scene.valid()
+        || !document.scene.layer_ids.matches(document.layers.len())
         || !document.scene.paper.valid_for(document.layers.len())
         || document.scene.size_bytes() > MAX_SCENE_BYTES
     {

@@ -377,8 +377,8 @@ impl Drawer {
         let cfg = self.panels.settings.panels[kind.index()];
         let mut rows = Vec::new();
         if kind != Kind::Timeline || !cfg.animation_only {
-            for (index, layer) in doc.layers.iter().enumerate() {
-                rows.push((Target::Raster(index), layer.name.clone()));
+            for index in drawer_core::layers::order(doc) {
+                rows.push((Target::Raster(index), doc.layers[index].name.clone()));
             }
         }
         if let Some(animation) = &doc.animation {
@@ -498,6 +498,7 @@ impl Drawer {
         }
     }
     fn panel_commands(&mut self, ui: &mut egui::Ui, kind: Kind) {
+        let mut layer_action = None;
         ui.horizontal_wrapped(|ui| match kind {
             Kind::Brush => {
                 for tip in BrushTip::ALL {
@@ -525,10 +526,32 @@ impl Drawer {
             Kind::Layers | Kind::Timeline => {
                 if let Some(n) = self.active {
                     let doc = &mut self.documents[n];
-                    if ui.small_button("Top raster").clicked() {
-                        self.panels
-                            .targets
-                            .insert(doc.id, Target::Raster(doc.layers.len() - 1));
+                    let mut top = false;
+                    if kind == Kind::Layers {
+                        ui.menu_button("Layers…", |ui| {
+                            top = ui.button("Top raster").clicked();
+                            for (label, command) in [
+                                ("Manage layers…", "manage-layers"),
+                                ("Import local image layer…", "import-image-layer"),
+                                ("New raster", "new-raster-layer"),
+                                ("New vector", "new-vector-layer"),
+                                ("Duplicate selected layer", "duplicate-layer"),
+                                ("Delete selected layer", "delete-layer"),
+                            ] {
+                                if ui.button(label).clicked() {
+                                    layer_action = Some(command);
+                                    ui.close();
+                                }
+                            }
+                        });
+                    } else {
+                        top = ui.small_button("Top raster").clicked();
+                    }
+                    if top {
+                        self.panels.targets.insert(
+                            doc.id,
+                            Target::Raster(*drawer_core::layers::order(doc).last().unwrap()),
+                        );
                     }
                     if ui.small_button("Center selection").clicked() {
                         let target = self
@@ -551,6 +574,9 @@ impl Drawer {
                 }
             }
         });
+        if let Some(command) = layer_action {
+            self.execute_command(ui.ctx(), command);
+        }
     }
     pub(super) fn panel_settings(&mut self, ctx: &egui::Context) {
         if !self.panels.open {

@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 79] = [
+pub const EXTRA_COMMANDS: [&str; 85] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -72,6 +72,12 @@ pub const EXTRA_COMMANDS: [&str; 79] = [
     "gradient-tool",
     "shape-tool",
     "align-objects",
+    "manage-layers",
+    "import-image-layer",
+    "new-raster-layer",
+    "new-vector-layer",
+    "duplicate-layer",
+    "delete-layer",
     "layer-selection-tools",
     "contour-selection",
     "selection-shortcuts",
@@ -385,6 +391,12 @@ impl Settings {
             "gradient-tool" => "Gradient and freeform gradient",
             "shape-tool" => "Draw shape",
             "align-objects" => "Align and distribute objects",
+            "manage-layers" => "Manage local layers",
+            "import-image-layer" => "Import local image as layer",
+            "new-raster-layer" => "Create raster layer",
+            "new-vector-layer" => "Create vector layer",
+            "duplicate-layer" => "Duplicate selected layer",
+            "delete-layer" => "Delete selected layer",
             "layer-selection-tools" => "Layer alpha and vector editing selections",
             "vector-selection-clear" => "Clear vector editing selection",
             "selection-outline" => "Show/hide area selection outline",

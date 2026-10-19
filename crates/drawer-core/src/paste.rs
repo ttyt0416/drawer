@@ -113,6 +113,7 @@ pub fn prepare(
         pixels: image.pixels.clone(),
         placement: Some(placement),
     });
+    state.scene.layer_ids.append(state.layers.len())?;
     Ok(state)
 }
 #[cfg(test)]

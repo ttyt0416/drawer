@@ -122,6 +122,7 @@ try {
     if ($smokeResult -notmatch 'auto_shape=true') { throw '획 유지 도형 보정·원래 획 복귀 검증 실패' }
     if ($smokeResult -notmatch 'special_rulers=true') { throw '특수 자·레이어 연결·자 따라 그리기 검증 실패' }
     if ($smokeResult -notmatch 'alignment_detail=true') { throw '세부 정렬·개체 스냅 검증 실패' }
+    if ($smokeResult -notmatch 'layer_management=true') { throw '레이어 생성·복제·순서·식별자 검증 실패' }
     if ($smokeResult -notmatch 'layer_selection=true') { throw '레이어 알파·벡터 선택·윤곽 숨김과 칠 제한 검증 실패' }
     if ($smokeResult -notmatch 'drawing_snapping=true') { throw '스냅 우선순위·확대·수정키 복원 검증 실패' }
     if ($smokeResult -notmatch 'object_alignment=true') { throw '개체 정렬·균등 간격·한 취소 검증 실패' }

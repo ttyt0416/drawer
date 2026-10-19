@@ -428,3 +428,8 @@ crates/drawer-core/src/alignment_detail.rs
 crates/drawer-core/src/alignment_detail_verify.rs
 crates/drawer-core/src/object_snap.rs
 docs/process/advanced-alignment.md
+
+crates/drawer-core/src/layers.rs
+crates/drawer-core/src/layers_verify.rs
+crates/drawer-app/src/layer_manager.rs
+docs/process/layer-management.md

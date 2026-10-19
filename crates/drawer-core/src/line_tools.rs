@@ -52,6 +52,16 @@ impl Path {
         }
         crate::scene::Rect { min, max }
     }
+    pub fn visible_hit(&self, p: Point) -> bool {
+        self.fill.is_some_and(|c| c[3] > 0)
+            && self.closed
+            && crate::shapes::contains(&self.points, p)
+            || self.stroke
+                && self.color[3] > 0
+                && self
+                    .segments()
+                    .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+    }
     pub fn hit(&self, p: Point) -> bool {
         self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
             || self.stroke
