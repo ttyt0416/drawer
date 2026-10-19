@@ -810,7 +810,10 @@ impl Stroke {
         } else {
             total_budget / 4 * 3
         } / (copies.len() + 1);
-        let style = style.resolved();
+        let mut style = style.resolved();
+        if crate::clipping::alpha_locked(doc, layer) {
+            style.material.alpha_lock = true;
+        }
         crate::layer_properties::paintable(doc, layer)?;
         if doc.layers.get(layer).is_some_and(|l| l.locked) {
             return Err("The raster layer is locked".into());

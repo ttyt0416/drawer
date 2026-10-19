@@ -132,6 +132,37 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
         .into_iter()
         .filter(|target| match *target {
             Target::Raster(n) => {
+                if doc
+                    .scene
+                    .clipping
+                    .binding(crate::layer_properties::raster(doc, n))
+                    .is_some()
+                {
+                    let alpha = doc.scene.paper.clipped_node_pixel(
+                        doc,
+                        Node::Raster(n),
+                        [x as i64, y as i64],
+                    )[3] as f64;
+                    let mut weight = 1.0;
+                    let mut node = Node::Raster(n);
+                    for _ in 0..16 {
+                        let Some(parent) = doc
+                            .scene
+                            .paper
+                            .folders
+                            .iter()
+                            .position(|f| f.children.contains(&node))
+                        else {
+                            break;
+                        };
+                        weight *= crate::layer_properties::factor(
+                            doc,
+                            crate::layer_properties::Target::Folder(parent as u16),
+                        );
+                        node = Node::Folder(parent);
+                    }
+                    return (alpha * weight).round() > 0.0;
+                }
                 doc.composite_pixel_filtered(x, y, false, |i, l| {
                     if i == n {
                         l.pixel(doc.width, doc.height, x as i64, y as i64)
@@ -174,6 +205,35 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                     return false;
                 }
                 let p = doc.scene.transform.inverse().map(point);
+                let mask = if let Some(base) = doc
+                    .scene
+                    .clipping
+                    .binding(crate::layer_properties::Target::Vector(id))
+                {
+                    if !crate::clipping::active(doc, crate::layer_properties::Target::Vector(id)) {
+                        return false;
+                    }
+                    let crate::layer_properties::Target::Vector(base) = base else {
+                        return false;
+                    };
+                    let Some(l) = doc.scene.lines.layers.iter().find(|l| l.id == base) else {
+                        return false;
+                    };
+                    if l.hidden {
+                        return false;
+                    }
+                    l.paths
+                        .iter()
+                        .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)))[3]
+                        as f64
+                        / 255.0
+                        * crate::layer_properties::factor(
+                            doc,
+                            crate::layer_properties::Target::Vector(base),
+                        )
+                } else {
+                    1.0
+                };
                 !doc.scene.clips.iter().any(|r| !crate::render::inside(r, p))
                     && doc
                         .scene
@@ -187,6 +247,7 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                                 .iter()
                                 .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)));
                             (pixel[3] as f64
+                                * mask
                                 * crate::layer_properties::factor(
                                     doc,
                                     crate::layer_properties::Target::Vector(id),

@@ -327,27 +327,7 @@ pub fn prepare_patch(
     state.scene.layer_ids.initialize(doc.layers.len())?;
     for t in selected {
         let p = updated(*t);
-        state.scene.layer_properties.set(*t, p);
-        match *t {
-            Target::Raster(id) => {
-                let n = crate::layers::index(doc, id).unwrap();
-                state.layers[n].locked = p.locked;
-                state.scene.paper.layers.entry(n).or_default().hidden = p.hidden;
-            }
-            Target::Vector(id) => {
-                let l = state
-                    .scene
-                    .lines
-                    .layers
-                    .iter_mut()
-                    .find(|l| l.id == id)
-                    .unwrap();
-                l.hidden = p.hidden;
-                l.locked = p.locked;
-            }
-            Target::Folder(n) => state.scene.paper.folders[n as usize].paper.hidden = p.hidden,
-            _ => {}
-        }
+        set_state(doc, &mut state, *t, p)?;
     }
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
@@ -359,6 +339,69 @@ pub fn prepare_patch(
         return Err("Layer properties exceed scene limits".into());
     }
     Ok(state)
+}
+pub(crate) fn set_state(
+    doc: &Document,
+    state: &mut DocumentState,
+    t: Target,
+    p: Properties,
+) -> Result<(), String> {
+    state.scene.layer_properties.set(t, p);
+    match t {
+        Target::Raster(id) => {
+            let n = crate::layers::index(doc, id).unwrap();
+            state.layers[n].locked = p.locked;
+            if let Some(paper) = state.scene.paper.layers.get_mut(&n) {
+                paper.hidden = p.hidden;
+                if *paper == Default::default() {
+                    state.scene.paper.layers.remove(&n);
+                }
+            } else if p.hidden {
+                state.scene.paper.layers.entry(n).or_default().hidden = true;
+            }
+        }
+        Target::Vector(id) => {
+            let l = state
+                .scene
+                .lines
+                .layers
+                .iter_mut()
+                .find(|l| l.id == id)
+                .unwrap();
+            l.hidden = p.hidden;
+            l.locked = p.locked;
+        }
+        Target::Folder(n) => state.scene.paper.folders[n as usize].paper.hidden = p.hidden,
+        _ => {}
+    }
+    Ok(())
+}
+pub(crate) fn state_properties(state: &DocumentState, t: Target) -> Properties {
+    let mut p = state.scene.layer_properties.get(t);
+    match t {
+        Target::Raster(id) => {
+            if let Some(n) = (0..state.layers.len()).find(|n| state.scene.layer_ids.id(*n) == id) {
+                p.hidden = state.scene.paper.layers.get(&n).is_some_and(|p| p.hidden);
+                p.locked = state.layers[n].locked;
+            }
+        }
+        Target::Vector(id) => {
+            if let Some(l) = state.scene.lines.layers.iter().find(|l| l.id == id) {
+                p.hidden = l.hidden;
+                p.locked = l.locked;
+            }
+        }
+        Target::Folder(n) => {
+            p.hidden = state
+                .scene
+                .paper
+                .folders
+                .get(n as usize)
+                .is_some_and(|f| f.paper.hidden)
+        }
+        _ => {}
+    }
+    p
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mark {

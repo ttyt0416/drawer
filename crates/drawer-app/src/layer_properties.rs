@@ -12,6 +12,10 @@ struct Draft {
     selected: Vec<Target>,
     values: Properties,
     patch: Patch,
+    alpha: bool,
+    clip: bool,
+    alpha_patch: Option<bool>,
+    clip_patch: Option<bool>,
 }
 pub(super) fn label(d: &Document, t: Target) -> String {
     match t {
@@ -134,6 +138,10 @@ impl Drawer {
             selected: vec![target],
             values: core::properties(d, target),
             patch: Default::default(),
+            alpha: d.scene.clipping.alpha.contains(&target),
+            clip: d.scene.clipping.binding(target).is_some(),
+            alpha_patch: None,
+            clip_patch: None,
         }));
         Ok(())
     }
@@ -148,7 +156,15 @@ impl Drawer {
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen layer properties".into());
         }
-        let state = core::prepare_patch(d, &e.selected, e.patch)?;
+        let mut state = core::prepare_patch(d, &e.selected, e.patch)?;
+        let clip = drawer_core::clipping::prepare(d, &e.selected, e.alpha_patch, e.clip_patch)?;
+        state.scene.clipping = clip.scene.clipping;
+        if state.scene.layer_ids.rasters.is_empty() {
+            state.scene.layer_ids = clip.scene.layer_ids;
+        }
+        if state.scene.clipping.graph_active() {
+            state.scene.paper.roots = state.scene.paper.root_nodes(state.layers.len());
+        }
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
         if state.memory_bytes().saturating_mul(2).saturating_add(used) > DEFAULT_DOCUMENT_BUDGET {
             return Err("Layer properties exceed workspace memory".into());
@@ -171,6 +187,7 @@ impl Drawer {
         let mut apply = false;
         let mut cancel = false;
         let mut view_changed = false;
+        let mut solo = None;
         egui::Window::new("Layer properties and identification colors").open(&mut open).collapsible(false).resizable(false).default_width(530.0).min_width(530.0).default_pos(egui::pos2(60.0,25.0)).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
             ui.horizontal(|ui|{if ui.button("Select all layers / cells").clicked(){e.selected=targets.clone();}
@@ -184,9 +201,15 @@ if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{}
             if ui.checkbox(&mut e.values.position_locked,"Lock position").changed(){e.patch.position_locked=Some(e.values.position_locked);}
             let mut tagged=e.values.color.is_some();if ui.checkbox(&mut tagged,"Identification color").changed(){e.values.color=if tagged{Some([80,150,220])}else{None};e.patch.color=Some(e.values.color);}
             if let Some(c)=e.values.color.as_mut(){ui.horizontal(|ui|{for(k,name)in ["R","G","B"].iter().enumerate(){if ui.add(egui::Slider::new(&mut c[k],0..=255).text(*name)).changed(){e.patch.color=Some(Some(*c));}}});}
+            ui.separator();
+            ui.add_enabled_ui(e.selected.iter().any(|t|matches!(t,Target::Raster(_)|Target::Cell{..})),|ui|{if ui.checkbox(&mut e.alpha,"Protect existing alpha").changed(){e.alpha_patch=Some(e.alpha);}});
+            ui.add_enabled_ui(e.selected.iter().any(|t|matches!(t,Target::Raster(_)|Target::Vector(_)|Target::Folder(_))),|ui|{if ui.checkbox(&mut e.clip,"Clip to the base below").changed(){e.clip_patch=Some(e.clip);}});
+            for t in &e.selected{if let Some(base)=d.scene.clipping.binding(*t){ui.small(format!("{} → {} ({})",label(d,*t),label(d,base),if drawer_core::clipping::active(d,*t){"active"}else{"inactive base"}));}}
+            ui.horizontal(|ui|{if let [Target::Folder(n)]=e.selected.as_slice() && ui.button("Solo this folder").clicked(){solo=Some(Some(*n as usize));}
+if d.scene.clipping.solo.is_some() && ui.button("Restore visibility before solo").clicked(){solo=Some(None);}});
             ui.separator();ui.label("Show identification marks (view settings)");let p=&mut self.workspaces.store.current.layer_colors;
             ui.horizontal(|ui|{view_changed|=ui.checkbox(&mut p.list,"Lists").changed();view_changed|=ui.checkbox(&mut p.parents,"Mixed parent folders").changed();view_changed|=ui.checkbox(&mut p.canvas,"Selected canvas bounds").changed();view_changed|=ui.checkbox(&mut p.timeline,"Timeline cell / clip marks").changed();});
-            ui.horizontal(|ui|{let r=ui.add_enabled(!e.selected.is_empty()&&!e.patch.empty(),egui::Button::new("Apply changed properties"));self.layer_properties.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(!e.selected.is_empty()&&(!e.patch.empty()||e.alpha_patch.is_some()||e.clip_patch.is_some()),egui::Button::new("Apply changed properties"));self.layer_properties.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
             ui.label("Property edits use one Undo. View switches save separately. Identification colors never change image output. Hidden layers must be shown before painting.");
         });
         if open && !cancel {
@@ -194,6 +217,20 @@ if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{}
         }
         if apply && let Err(err) = self.apply_layer_properties() {
             self.status = Some(err);
+        }
+        if let Some(folder) = solo {
+            let result = drawer_core::clipping::solo(&self.documents[n], folder).and_then(|s| {
+                let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
+                if s.memory_bytes().saturating_mul(2).saturating_add(used) > DEFAULT_DOCUMENT_BUDGET
+                {
+                    return Err("Solo exceeds workspace memory".into());
+                }
+                self.documents[n].commit_state(s).map(|_| ())
+            });
+            match result {
+                Ok(()) => self.layer_properties.draft = None,
+                Err(err) => self.status = Some(err),
+            }
         }
         if view_changed && let Err(err) = self.persist_workspace() {
             self.status = Some(err);
@@ -416,8 +453,162 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+pub(super) fn clipping_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::clipping_verify::verify(root)?;
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 32,
+        height: 32,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    app.documents[0].layers[0].pixels.fill([30, 40, 50, 128]);
+    let copy = app.documents[0].layers[0].clone();
+    app.documents[0].layers.push(copy);
+    let mut time = 0.;
+    let step = |app: &mut Drawer, time: &mut f64, events| {
+        *time += 0.1;
+        super::input_replay::frame(&ctx, app, *time, events);
+    };
+    step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
+    app.execute_command(&ctx, "layer-clipping");
+    let before = app.documents[0].snapshot();
+    let count = app.documents[0].history_counts().0;
+    let e = app
+        .layer_properties
+        .draft
+        .as_mut()
+        .ok_or("Clipping command missing")?;
+    e.selected = vec![Target::Raster(2)];
+    e.alpha_patch = Some(true);
+    e.clip_patch = Some(true);
+    step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
+    if app.documents[0].snapshot() != before {
+        return Err("Clipping draft mutated image".into());
+    }
+    let r = app.layer_properties.apply.ok_or("Clipping Apply missing")?;
+    for pressed in [true, false] {
+        step(
+            &mut app,
+            &mut time,
+            vec![
+                egui::Event::PointerMoved(r.center()),
+                egui::Event::PointerButton {
+                    pos: r.center(),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+    }
+    if app.layer_properties.draft.is_some()
+        || !app.documents[0]
+            .scene
+            .clipping
+            .alpha
+            .contains(&Target::Raster(2))
+        || app.documents[0].history_counts().0 != count + 1
+    {
+        return Err(format!("Clipping actual Apply failed: {:?}", app.status));
+    }
+    let saved = app.documents[0].snapshot();
+    if !app.documents[0].undo()
+        || app.documents[0].snapshot() != before
+        || !app.documents[0].redo()
+        || app.documents[0].snapshot() != saved
+    {
+        return Err("Clipping UI Undo/Redo".into());
+    }
+    app.execute_command(&ctx, "layer-clipping");
+    app.documents[0].edit_pixel(0, 0, 0, [1, 2, 3, 128]);
+    if app.apply_layer_properties().is_ok() {
+        return Err("Stale clipping draft accepted".into());
+    }
+    app.layer_properties.draft = None;
+    for pen in [false, true] {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 32,
+            height: 32,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        for y in 0..32 {
+            for x in 8..16 {
+                app.documents[0].layers[0].pixels[y * 32 + x] = [30, 40, 50, 128];
+            }
+        }
+        let state = drawer_core::clipping::prepare(
+            &app.documents[0],
+            &[Target::Raster(1)],
+            Some(true),
+            None,
+        )?;
+        app.documents[0].commit_state(state)?;
+        app.documents[0].view.angle = 90.;
+        app.documents[0].view.zoom = 2.;
+        app.set_tool(BrushTip::PixelPen);
+        app.panels.settings.brush_size = 1.;
+        app.choose_color([200, 20, 10, 255]);
+        let original = app.documents[0].snapshot();
+        let mut time = 0.;
+        let step = |app: &mut Drawer, time: &mut f64| {
+            *time += 0.1;
+            super::input_replay::frame(&ctx, app, *time, vec![]);
+        };
+        step(&mut app, &mut time);
+        step(&mut app, &mut time);
+        for (phase, p) in [
+            (drawer_core::pointer_input::Phase::Down, [5.5, 8.5]),
+            (drawer_core::pointer_input::Phase::Move, [10.5, 8.5]),
+            (drawer_core::pointer_input::Phase::Up, [20.5, 8.5]),
+        ] {
+            let mut event = super::precision::pointer(&ctx, &app, p, phase);
+            if pen {
+                event.source = drawer_core::pointer_input::Source {
+                    kind: drawer_core::pointer_input::Kind::Pen,
+                    device: 118,
+                    contact: 1,
+                };
+                event.pressure = Some(0.5);
+            }
+            app.drawing.virtual_events(vec![event], pen);
+            step(&mut app, &mut time);
+        }
+        if app.documents[0].snapshot() == original
+            || !app.documents[0].layers[0]
+                .pixels
+                .iter()
+                .zip(&original.layers[0].pixels)
+                .all(|(a, b)| a[3] == b[3])
+        {
+            return Err(format!(
+                "Protected production stroke pen={pen}: {:?}",
+                app.status
+            ));
+        }
+        if !app.documents[0].undo() || app.documents[0].snapshot() != original {
+            return Err("Protected production stroke single Undo".into());
+        }
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn alpha_clipping_buttons_and_mouse_pen() {
+        let root = crate::tests::TestDirectory::new();
+        super::clipping_smoke(&root.0).unwrap();
+    }
     #[test]
     fn property_buttons_marks_and_mouse_pen_lock_paths() {
         let root = crate::tests::TestDirectory::new();

@@ -438,3 +438,8 @@ crates/drawer-core/src/layer_properties.rs
 crates/drawer-core/src/layer_properties_verify.rs
 crates/drawer-app/src/layer_properties.rs
 docs/process/layer-properties.md
+
+crates/drawer-core/src/clipping.rs
+crates/drawer-core/src/clipping_render.rs
+crates/drawer-core/src/clipping_verify.rs
+docs/process/layer-clipping.md

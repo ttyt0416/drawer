@@ -125,6 +125,11 @@ impl Document {
             {
                 return Err("Stale or duplicate pixel delta".into());
             }
+            if crate::clipping::alpha_locked(self, *n) {
+                for p in changes.iter_mut() {
+                    p.after = crate::clipping::preserve(p.before, p.after);
+                }
+            }
             changes.retain(|p| p.before != p.after);
         }
         layers.retain(|(_, p)| !p.is_empty());
@@ -191,6 +196,11 @@ impl Document {
         after_scene: Option<crate::scene::Scene>,
     ) -> Result<bool, String> {
         crate::layer_properties::paintable(self, layer)?;
+        if crate::clipping::alpha_locked(self, layer) {
+            for p in &mut changes {
+                p.after = crate::clipping::preserve(p.before, p.after);
+            }
+        }
         changes.retain(|p| p.before != p.after);
         if changes.is_empty() {
             return Ok(false);
@@ -266,6 +276,7 @@ impl Document {
         if x >= self.width || y >= self.height {
             return false;
         }
+        let protected = crate::clipping::alpha_locked(self, layer);
         let Some(layer_data) = self.layers.get_mut(layer) else {
             return false;
         };
@@ -277,6 +288,11 @@ impl Document {
             return false;
         };
         let before = layer_data.pixels[offset];
+        let after = if protected {
+            crate::clipping::preserve(before, after)
+        } else {
+            after
+        };
         if before == after {
             return false;
         }
@@ -299,6 +315,7 @@ impl Document {
         group: Option<u64>,
     ) -> Result<bool, String> {
         after.scene.layer_ids.append(after.layers.len())?;
+        crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
             || !(1..=crate::document::MAX_DIMENSION).contains(&after.height)

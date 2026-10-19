@@ -717,3 +717,9 @@ Import local image layer는 PNG/JPEG/TIFF를 현재 문서에 배치합니다. �
 Layers… → Properties / identification colors에서 하나 또는 여러 대상을 고릅니다. 바꾼 항목만 Apply changed properties로 적용하며 한 Undo로 복원합니다. 전체 잠금, 래스터/셀 픽셀 잠금, 위치 잠금은 서로 다른 설정이고 부모의 잠금도 적용됩니다. 숨긴 층은 먼저 표시해야 그릴 수 있습니다. 위치만 잠근 래스터에는 그릴 수 있고 픽셀만 잠근 층은 전체 이동할 수 있습니다.
 
 Identification color는 이미지에 칠하지 않는 구분색입니다. Lists / Mixed parent folders / Selected canvas bounds / Timeline cell / clip marks를 독립적으로 켜고 끕니다. 같은 셀을 참조하는 클립은 같은 셀의 색을 표시합니다. 표시 스위치는 그림 이력과 분리해 저장하며 이 표식은 내보내기에 들어가지 않습니다.
+
+## layer-clipping | 투명 픽셀 보호·아래층 클리핑·폴더 단독 표시 | 알파 잠금 연쇄 복원
+
+Layers… → Alpha protection / clipping / solo에서 Protect existing alpha와 Clip to the base below를 바꾸고 Apply changed properties를 누릅니다. 알파 보호는 이미 칠한 부분의 투명도를 유지합니다. 클리핑은 같은 폴더 안의 아래 기준층에만 표시하며 기준층이 이동·삭제되어 끊기면 비활성으로 남습니다. 목록에서 기준과 활성 상태를 확인할 수 있습니다.
+
+폴더 하나를 선택해 Solo this folder를 누르면 바깥 층을 숨깁니다. 내부의 숨긴 자식은 계속 숨겨집니다. Restore visibility before solo는 이전 표시 상태를 복구합니다. 각 적용과 복구는 한 Undo이며 문서에 저장됩니다.

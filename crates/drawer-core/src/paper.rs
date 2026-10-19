@@ -1,9 +1,12 @@
 //! Raster folder composition and nondestructive paper recipes.
+#[path = "clipping_render.rs"]
+mod clipping_render;
 use crate::{
     document::{Document, RasterLayer},
     scene::Point,
     texture::Pattern,
 };
+pub(crate) use clipping_render::vectors as clipped_vectors;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -325,6 +328,9 @@ impl Graph {
         y: u32,
         pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> Color {
+        if doc.scene.clipping.graph_active() {
+            return self.clipped_composite(doc, [x as i64, y as i64], pixel);
+        }
         if self.layers.is_empty() && self.roots.is_empty() {
             let mut color = Color::default();
             for (n, layer) in doc.layers.iter().enumerate() {
@@ -431,6 +437,9 @@ impl Graph {
         }
     }
     pub fn node_pixel(&self, doc: &Document, node: Node, point: [i64; 2]) -> [u8; 4] {
+        if doc.scene.clipping.graph_active() {
+            return self.clipped_node_pixel(doc, node, point);
+        }
         let original = doc
             .scene
             .transform
@@ -570,7 +579,35 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     {
         return Err("Select a visible raster layer or folder".into());
     }
+    let key = crate::clipping::node_key(doc, node);
+    if doc.scene.clipping.binding(key).is_some() {
+        return Err("Bake the clipping base and its run together; keep this layer editable".into());
+    }
     let indices = graph.raster_indices(node);
+    let members = indices
+        .iter()
+        .map(|n| crate::layer_properties::raster(doc, *n))
+        .chain(
+            (0..graph.folders.len())
+                .filter(|n| contains(graph, node, Node::Folder(*n), 0))
+                .map(|n| crate::layer_properties::Target::Folder(n as u16)),
+        )
+        .collect::<std::collections::BTreeSet<_>>();
+    if members.iter().any(|t| {
+        doc.scene
+            .clipping
+            .binding(*t)
+            .is_some_and(|base| !members.contains(&base))
+    }) || crate::layer_properties::targets(doc).iter().any(|t| {
+        !members.contains(t)
+            && doc
+                .scene
+                .clipping
+                .binding(*t)
+                .is_some_and(|base| members.contains(&base))
+    }) {
+        return Err("Bake requires the complete clipping run inside the selected folder".into());
+    }
     if indices.iter().any(|n| doc.layers[*n].locked) {
         return Err("Unlock all affected layers before baking".into());
     }
@@ -638,6 +675,9 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 .filter(|(n, _)| !indices.contains(n))
                 .map(|(n, p)| (map[n], p))
                 .collect();
+            for target in &members {
+                after.scene.clipping.remove_owner(*target);
+            }
             for n in &indices {
                 after
                     .scene

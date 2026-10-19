@@ -422,6 +422,28 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             }
             insert(&mut state.scene.paper, to, p, pos)?;
             let copy_id = state.scene.layer_ids.id(to);
+            if state
+                .scene
+                .clipping
+                .alpha
+                .contains(&crate::layer_properties::Target::Raster(id))
+            {
+                state
+                    .scene
+                    .clipping
+                    .alpha
+                    .insert(crate::layer_properties::Target::Raster(copy_id));
+            }
+            if let Some(base) = state
+                .scene
+                .clipping
+                .binding(crate::layer_properties::Target::Raster(id))
+            {
+                state
+                    .scene
+                    .clipping
+                    .bind(crate::layer_properties::Target::Raster(copy_id), Some(base));
+            }
             if let Some(p) = state.scene.layer_properties.rasters.get(&id).copied() {
                 state.scene.layer_properties.rasters.insert(copy_id, p);
             }
@@ -451,6 +473,16 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 .unwrap();
             state.scene.lines.layers.pop();
             state.scene.lines.layers.insert(index + 1, copy);
+            if let Some(base) = state
+                .scene
+                .clipping
+                .binding(crate::layer_properties::Target::Vector(id))
+            {
+                state
+                    .scene
+                    .clipping
+                    .bind(crate::layer_properties::Target::Vector(to), Some(base));
+            }
             if let Some(p) = state.scene.layer_properties.vectors.get(&id).copied() {
                 state.scene.layer_properties.vectors.insert(to, p);
             }
@@ -475,6 +507,10 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 .collect();
             state.layers.remove(i);
             state.scene.layer_properties.rasters.remove(&id);
+            state
+                .scene
+                .clipping
+                .remove_owner(crate::layer_properties::Target::Raster(id));
             remap(&mut state.scene, &map);
             selected = Target::Raster(state.scene.layer_ids.id(i.min(state.layers.len() - 1)));
         }
@@ -496,6 +532,10 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 .collect();
             state.scene.lines.layers.remove(i);
             state.scene.layer_properties.vectors.remove(&id);
+            state
+                .scene
+                .clipping
+                .remove_owner(crate::layer_properties::Target::Vector(id));
             state.scene.lines.prune_selection();
             state
                 .scene

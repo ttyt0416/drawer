@@ -113,7 +113,8 @@ impl<'a> Renderer<'a> {
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
             return result;
         }
-        if self.references.is_none_or(|r| r.objects)
+        if scene.clipping.solo.is_none()
+            && self.references.is_none_or(|r| r.objects)
             && self
                 .fill
                 .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
@@ -123,7 +124,8 @@ impl<'a> Renderer<'a> {
             }
         }
         for (index, object) in scene.objects.iter().enumerate().filter(|(_, o)| {
-            self.references.is_none_or(|r| r.objects)
+            scene.clipping.solo.is_none()
+                && self.references.is_none_or(|r| r.objects)
                 && self
                     .fill
                     .is_none_or(|(_, s)| crate::fill_reference::object(o, s))
@@ -195,60 +197,79 @@ impl<'a> Renderer<'a> {
             };
             result = over(result, color);
         }
-        for (index, (layer, bounds)) in scene
-            .lines
-            .layers
-            .iter()
-            .zip(&self.vector_bounds)
-            .enumerate()
-        {
-            let opacity = crate::layer_properties::factor(
+        if !scene.clipping.vectors.is_empty() {
+            result = crate::paper::clipped_vectors(
                 doc,
-                crate::layer_properties::Target::Vector(layer.id),
+                point,
+                original,
+                result,
+                |index, layer| {
+                    self.references.is_none_or(|r| r.vectors)
+                        && self
+                            .fill
+                            .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
+                },
+                self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline),
             );
-            if !layer.hidden
-                && opacity > 0.0
-                && self.references.is_none_or(|r| r.vectors)
-                && self
-                    .fill
-                    .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
+        } else {
+            for (index, (layer, bounds)) in scene
+                .lines
+                .layers
+                .iter()
+                .zip(&self.vector_bounds)
+                .enumerate()
             {
-                let mut vector_result = if opacity == 1.0 { result } else { [0; 4] };
-                for (path, bounds) in layer.paths.iter().zip(bounds) {
-                    if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
-                        if path.segments().any(|(a, b)| {
-                            distance(point, scene.transform.map(a), scene.transform.map(b)) <= 0.5
-                        }) {
-                            vector_result = over(
-                                vector_result,
-                                if path.stroke {
-                                    path.color
-                                } else {
-                                    path.fill.unwrap_or(path.color)
-                                },
-                            );
+                let opacity = crate::layer_properties::factor(
+                    doc,
+                    crate::layer_properties::Target::Vector(layer.id),
+                );
+                if !layer.hidden
+                    && opacity > 0.0
+                    && self.references.is_none_or(|r| r.vectors)
+                    && self
+                        .fill
+                        .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
+                {
+                    let mut vector_result = if opacity == 1.0 { result } else { [0; 4] };
+                    for (path, bounds) in layer.paths.iter().zip(bounds) {
+                        if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
+                            if path.segments().any(|(a, b)| {
+                                distance(point, scene.transform.map(a), scene.transform.map(b))
+                                    <= 0.5
+                            }) {
+                                vector_result = over(
+                                    vector_result,
+                                    if path.stroke {
+                                        path.color
+                                    } else {
+                                        path.fill.unwrap_or(path.color)
+                                    },
+                                );
+                            }
+                            continue;
                         }
-                        continue;
+                        if (0..2)
+                            .all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
+                        {
+                            vector_result = over(vector_result, path.pixel(original));
+                        }
                     }
-                    if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
-                    {
-                        vector_result = over(vector_result, path.pixel(original));
-                    }
+                    result = if opacity == 1.0 {
+                        vector_result
+                    } else {
+                        crate::brush_composite::Mode::Normal.compose(
+                            result,
+                            vector_result,
+                            opacity,
+                            original.map(|p| p.floor() as i64),
+                            0,
+                        )
+                    };
                 }
-                result = if opacity == 1.0 {
-                    vector_result
-                } else {
-                    crate::brush_composite::Mode::Normal.compose(
-                        result,
-                        vector_result,
-                        opacity,
-                        original.map(|p| p.floor() as i64),
-                        0,
-                    )
-                };
             }
         }
-        if self.references.is_none_or(|r| r.objects)
+        if scene.clipping.solo.is_none()
+            && self.references.is_none_or(|r| r.objects)
             && self
                 .fill
                 .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)

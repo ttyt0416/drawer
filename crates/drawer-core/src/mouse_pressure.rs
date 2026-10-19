@@ -168,7 +168,11 @@ impl Replay {
         style: Style,
         mut settings: Settings,
     ) -> Result<Self, String> {
-        let style = style.resolved();
+        let mut style = style.resolved();
+        if crate::clipping::alpha_locked(doc, layer) {
+            style.material.alpha_lock = true;
+        }
+        crate::layer_properties::paintable(doc, layer)?;
         if style.clone_stamp.enabled {
             settings.effect = Effect::Normal;
         }

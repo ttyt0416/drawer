@@ -550,6 +550,7 @@ impl Drawer {
                             for (label, command) in [
                                 ("Manage layers…", "manage-layers"),
                                 ("Properties / identification colors…", "layer-properties"),
+                                ("Alpha protection / clipping / solo…", "layer-clipping"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),

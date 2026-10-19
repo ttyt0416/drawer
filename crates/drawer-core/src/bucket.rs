@@ -476,6 +476,8 @@ fn paint(
     alpha_lock: bool,
     sample: impl Fn(u32, u32) -> ([u8; 4], u8),
 ) -> Result<DocumentState, String> {
+    crate::layer_properties::paintable(doc, layer)?;
+    let alpha_lock = alpha_lock || crate::clipping::alpha_locked(doc, layer);
     let raster = doc
         .layers
         .get(layer)
@@ -498,7 +500,9 @@ fn paint(
     }
     for y in 0..doc.height {
         for x in 0..doc.width {
-            if sample(x, y).1 > 0 {
+            if sample(x, y).1 > 0
+                && (!alpha_lock || raster.pixel(doc.width, doc.height, x as i64, y as i64)[3] > 0)
+            {
                 min = [min[0].min(x as i64), min[1].min(y as i64)];
                 max = [max[0].max(x as i64 + 1), max[1].max(y as i64 + 1)];
             }
