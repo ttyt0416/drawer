@@ -20,6 +20,12 @@ pub struct Settings {
     pub rulers: bool,
     pub guides: bool,
     pub grid: bool,
+    #[serde(default)]
+    pub objects: bool,
+    #[serde(default)]
+    pub control_points: bool,
+    #[serde(default)]
+    pub canvas_edges: bool,
     pub screen_distance: f64,
     pub modifier: Modifier,
 }
@@ -29,6 +35,9 @@ impl Default for Settings {
             rulers: true,
             guides: false,
             grid: false,
+            objects: false,
+            control_points: false,
+            canvas_edges: false,
             screen_distance: 8.0,
             modifier: Modifier::Control,
         }
@@ -41,6 +50,7 @@ impl Settings {
 }
 #[derive(Clone)]
 pub(crate) struct Lower {
+    geometry: crate::object_snap::Geometry,
     guides: Vec<[Point; 2]>,
     grid: Option<(crate::aids::Grid, Affine)>,
     distance: f64,
@@ -66,6 +76,7 @@ impl Lower {
             vec![]
         };
         let result = Self {
+            geometry: crate::object_snap::Geometry::new(doc, s, &[])?,
             guides,
             grid: s.grid.then_some((doc.scene.grid, doc.scene.transform)),
             distance: s.screen_distance * document_per_screen,
@@ -84,13 +95,15 @@ impl Lower {
         Ok(result)
     }
     pub fn bytes(&self) -> usize {
-        self.guides.len() * 32
+        self.guides.len() * 32 + self.geometry.bytes()
     }
     pub fn failed(&self) -> bool {
         self.failed
     }
     pub fn snap(&mut self, p: Point) -> (Point, bool) {
-        self.work = self.work.saturating_add(self.guides.len() + 1);
+        self.work = self
+            .work
+            .saturating_add(self.guides.len() + self.geometry.work() + 1);
         if self.work > 64 * 1024 * 1024 {
             self.failed = true;
             return (p, false);
@@ -111,6 +124,9 @@ impl Lower {
             }
         }
         if let Some((q, _)) = best {
+            return (q, true);
+        }
+        if let Some((q, _)) = self.geometry.snap(p, self.distance) {
             return (q, true);
         }
         if let Some((grid, transform)) = self.grid {

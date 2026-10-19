@@ -4,19 +4,21 @@ use crate::{
     scene::{Affine, PageObject, Point, Rect},
     sizing::DocumentState,
 };
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+use serde::{Deserialize, Serialize};
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Item {
     Raster(usize),
     Object(usize),
     Vector(u64),
     Gradient(u64),
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Reference {
     #[default]
     Selection,
     Canvas,
     Key(Item),
+    Guide(usize),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Align {
@@ -58,6 +60,7 @@ pub enum Operation {
     GapsVertical,
     CentersHorizontal,
     CentersVertical,
+    Edges(Align),
 }
 pub fn items(doc: &Document) -> Vec<Item> {
     (0..doc.layers.len())
@@ -215,6 +218,48 @@ pub fn prepare(
     reference: Reference,
     operation: Operation,
 ) -> Result<DocumentState, String> {
+    prepare_inner(doc, selected, reference, operation, Default::default())
+}
+pub fn prepare_advanced(
+    doc: &Document,
+    settings: &crate::alignment_detail::Settings,
+    operation: Operation,
+) -> Result<DocumentState, String> {
+    if !settings.valid() {
+        return Err("Invalid alignment selection/settings".into());
+    }
+    let mut state = prepare_inner(
+        doc,
+        &settings.selected,
+        settings.reference,
+        operation,
+        settings.options,
+    )?;
+    let moving = settings
+        .selected
+        .iter()
+        .filter(|i| settings.reference != Reference::Key(**i))
+        .count();
+    if moving > 0 && (matches!(operation, Operation::Align(_)) || moving >= 3) {
+        state.scene.alignment = settings.clone();
+    }
+    if !state.scene.valid()
+        || serde_json::to_vec(&state.scene)
+            .map_err(|e| e.to_string())?
+            .len()
+            > 4 * 1024 * 1024
+    {
+        return Err("Alignment settings exceed scene budget".into());
+    }
+    Ok(state)
+}
+fn prepare_inner(
+    doc: &Document,
+    selected: &[Item],
+    reference: Reference,
+    operation: Operation,
+    options: crate::alignment_detail::Options,
+) -> Result<DocumentState, String> {
     if !doc.scene.valid()
         || doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
         || doc
@@ -233,9 +278,13 @@ pub fn prepare(
     if selected.is_empty() {
         return Ok(doc.snapshot());
     }
+    let mut remaining = 64 * 1024 * 1024;
     let mut objects: Vec<_> = selected
         .iter()
-        .map(|i| bounds(doc, *i).map(|r| (*i, r)))
+        .map(|i| {
+            crate::alignment_detail::bounds_budget(doc, *i, options, &mut remaining)
+                .map(|r| (*i, r))
+        })
         .collect::<Result<_, _>>()?;
     if let Reference::Key(key) = reference {
         objects.retain(|(i, _)| *i != key);
@@ -249,7 +298,26 @@ pub fn prepare(
             min: [0.0; 2],
             max: [doc.width as f64, doc.height as f64],
         },
-        Reference::Key(i) => bounds(doc, i)?,
+        Reference::Key(i) => {
+            crate::alignment_detail::bounds_budget(doc, i, options, &mut remaining)?
+        }
+        Reference::Guide(n) => {
+            let [a, b] = doc
+                .scene
+                .guides
+                .get(n)
+                .ok_or("Choose an existing page guide")?
+                .map(|p| doc.scene.transform.map(p));
+            let axis = match operation {
+                Operation::Align(a) | Operation::Edges(a) => a.axis(),
+                Operation::GapsHorizontal | Operation::CentersHorizontal => 0,
+                _ => 1,
+            };
+            if (a[axis] - b[axis]).abs() > 1e-6 {
+                return Err("Choose a guide parallel to the alignment edge".into());
+            }
+            Rect { min: a, max: a }
+        }
     };
     for (item, _) in &objects {
         writable(doc, *item)?;
@@ -269,48 +337,71 @@ pub fn prepare(
         _ => {
             let axis = usize::from(matches!(
                 operation,
-                Operation::GapsVertical | Operation::CentersVertical
+                Operation::GapsVertical
+                    | Operation::CentersVertical
+                    | Operation::Edges(Align::Top | Align::Middle | Align::Bottom)
             ));
             objects.sort_by(|a, b| {
                 ((a.1.min[axis] + a.1.max[axis]) / 2.0)
                     .total_cmp(&((b.1.min[axis] + b.1.max[axis]) / 2.0))
             });
-            let centers = matches!(
-                operation,
-                Operation::CentersHorizontal | Operation::CentersVertical
-            );
-            let span = base.max[axis] - base.min[axis];
-            let sizes: Vec<_> = objects
-                .iter()
-                .map(|(_, r)| r.max[axis] - r.min[axis])
-                .collect();
-            let spacing = if centers {
-                (span - (sizes[0] + sizes[sizes.len() - 1]) / 2.0) / (objects.len() - 1) as f64
-            } else {
-                (span - sizes.iter().sum::<f64>()) / (objects.len() - 1) as f64
-            };
-            if spacing < -1e-9
-                || centers
-                    && sizes
-                        .windows(2)
-                        .any(|s| spacing < (s[0] + s[1]) / 2.0 - 1e-9)
-            {
-                return Err(
-                    "Insufficient space for non-overlapping equal distribution; no objects changed"
-                        .into(),
-                );
-            }
-            let mut next = base.min[axis];
-            for (n, (item, r)) in objects.into_iter().enumerate() {
-                let location = if centers {
-                    base.min[axis] + sizes[0] / 2.0 + n as f64 * spacing - sizes[n] / 2.0
+            if let Operation::Edges(a) = operation {
+                let t = a.position();
+                objects.sort_by(|a, b| {
+                    (a.1.min[axis] * (1.0 - t) + a.1.max[axis] * t)
+                        .total_cmp(&(b.1.min[axis] * (1.0 - t) + b.1.max[axis] * t))
+                });
+                let position = |r: Rect| r.min[axis] * (1.0 - t) + r.max[axis] * t;
+                // The first and last chosen edges stay on their original lines for a selection reference.
+                let (first, last) = if reference == Reference::Selection
+                    && doc.scene.selection.is_none()
+                    && doc.scene.selection_mask.is_none()
+                {
+                    (position(objects[0].1), position(objects.last().unwrap().1))
                 } else {
-                    next
+                    (base.min[axis], base.max[axis])
                 };
-                let mut delta = [0.0; 2];
-                delta[axis] = location - r.min[axis];
-                movements.push((item, delta));
-                next += sizes[n] + spacing.max(0.0);
+                for (n, (item, r)) in objects.iter().enumerate() {
+                    let mut delta = [0.0; 2];
+                    delta[axis] = first + (last - first) * n as f64 / (objects.len() - 1) as f64
+                        - position(*r);
+                    movements.push((*item, delta));
+                }
+            } else {
+                let centers = matches!(
+                    operation,
+                    Operation::CentersHorizontal | Operation::CentersVertical
+                );
+                let span = base.max[axis] - base.min[axis];
+                let sizes: Vec<_> = objects
+                    .iter()
+                    .map(|(_, r)| r.max[axis] - r.min[axis])
+                    .collect();
+                let spacing = if centers {
+                    (span - (sizes[0] + sizes[sizes.len() - 1]) / 2.0) / (objects.len() - 1) as f64
+                } else {
+                    (span - sizes.iter().sum::<f64>()) / (objects.len() - 1) as f64
+                };
+                if spacing < -1e-9
+                    || centers
+                        && sizes
+                            .windows(2)
+                            .any(|s| spacing < (s[0] + s[1]) / 2.0 - 1e-9)
+                {
+                    return Err("Insufficient space for non-overlapping equal distribution; no objects changed".into());
+                }
+                let mut next = base.min[axis];
+                for (n, (item, r)) in objects.into_iter().enumerate() {
+                    let location = if centers {
+                        base.min[axis] + sizes[0] / 2.0 + n as f64 * spacing - sizes[n] / 2.0
+                    } else {
+                        next
+                    };
+                    let mut delta = [0.0; 2];
+                    delta[axis] = location - r.min[axis];
+                    movements.push((item, delta));
+                    next += sizes[n] + spacing.max(0.0);
+                }
             }
         }
     }

@@ -1064,7 +1064,7 @@
   저장·취소: 자 기하와 적용 범위 저장; 자 편집과 그린 획을 독립 복원  
   완료 검증: 다른 레이어·컷에서 스냅 범위와 원근 변경 결과를 확인한다. 빈 입력·최소/최대 설정·취소·문서 닫기·저장 후 재열기를 포함한다. 서로 다른 자에 동일 드래그를 넣어 제한 방향을 확인; 투시점 무한원·고정·가이드 삭제·레이어 적용 범위·저장/실행 취소 시험.
 
-- [ ] **115.** 선택·캔버스·가이드·기준 개체별 정렬, 글자 픽셀·벡터 경로 기준, 개체·제어점·캔버스 가장자리 스냅
+- [x] **115.** 선택·캔버스·가이드·기준 개체별 정렬, 글자 픽셀·벡터 경로 기준, 개체·제어점·캔버스 가장자리 스냅
 
   입력·결과: 선택 개체·기준 개체/캔버스/선택/가이드·정렬 축 → 기준에 맞춰 정렬/간격 분배하고 개체/제어점 스냅 제공  
   필수 옵션: 정렬·분배 기준선 및 균등 간격 — Align top edges, Align bottom edges, Align left edges, Align right edges, Align vertical centers, Align horizontal centers, Distribute top edges, Distribute bottom edges, Distribute left edges, Distribute right edges, Distribute vertical centers, Distribute horizontal centers, Distribute vertical spacing, Distribute horizontal spacing, Align to text pixels, Align to vector paths. 각 변/중심을 기준으로 맞춤·분배하는 것과 개체 사이 빈 간격을 동일하게 만드는 것을 구별한다. 문자 픽셀/벡터 경로 기준 옵션을 제공한다.  

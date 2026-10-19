@@ -200,3 +200,9 @@ pub mod special_rulers;
 pub mod ruler_scope;
 
 pub mod special_rulers_verify;
+
+pub mod alignment_detail;
+
+pub mod object_snap;
+
+pub mod alignment_detail_verify;

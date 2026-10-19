@@ -423,3 +423,8 @@ crates/drawer-core/src/ruler_scope.rs
 crates/drawer-core/src/special_rulers_verify.rs
 crates/drawer-app/src/special_rulers.rs
 docs/process/special-rulers.md
+
+crates/drawer-core/src/alignment_detail.rs
+crates/drawer-core/src/alignment_detail_verify.rs
+crates/drawer-core/src/object_snap.rs
+docs/process/advanced-alignment.md

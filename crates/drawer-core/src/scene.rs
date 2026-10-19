@@ -183,6 +183,11 @@ pub struct WorldMesh {
 pub struct Scene {
     #[serde(
         default,
+        skip_serializing_if = "crate::alignment_detail::Settings::is_default"
+    )]
+    pub alignment: crate::alignment_detail::Settings,
+    #[serde(
+        default,
         skip_serializing_if = "crate::animation_output::Data::is_default"
     )]
     pub animation_output: crate::animation_output::Data,
@@ -230,6 +235,7 @@ impl Scene {
                     .iter()
                     .all(|v| v.is_finite() && v.abs() <= 1e12)
             })
+            && self.alignment.valid()
             && self.animation_output.valid()
             && self.rulers.valid()
             && self.gradients.valid()
@@ -299,7 +305,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.animation_output.bytes()
+        self.alignment.selected.len() * std::mem::size_of::<crate::alignment::Item>()
+            + self.animation_output.bytes()
             + self.rulers.bytes()
             + self.gradients.size_bytes()
             + self.selections.size_bytes()

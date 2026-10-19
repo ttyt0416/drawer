@@ -13,6 +13,10 @@ pub(super) struct Gesture {
     origin: Point,
     total: [i64; 2],
     engine: Nudge,
+    geometry: drawer_core::object_snap::Geometry,
+    bounds: drawer_core::scene::Rect,
+    snapping: drawer_core::snapping::Settings,
+    snap_work: usize,
     preview: Option<Document>,
 }
 impl Drawing {
@@ -39,6 +43,13 @@ impl Drawing {
             layer.ok_or("Select a raster layer")?
         };
         let engine = Nudge::begin(doc, layer, self.move_target)?;
+        let geometry = drawer_core::object_snap::Geometry::new(
+            doc,
+            self.snap_settings,
+            &[drawer_core::alignment::Item::Raster(layer)],
+        )?;
+        let bounds =
+            drawer_core::alignment::bounds(doc, drawer_core::alignment::Item::Raster(layer))?;
         self.movement = Some(Gesture {
             document: doc.id,
             revision: doc.revision,
@@ -51,6 +62,10 @@ impl Drawing {
             origin: projection.point(pos),
             total: [0; 2],
             engine,
+            geometry,
+            bounds,
+            snapping: self.snap_settings,
+            snap_work: 0,
             preview: None,
         });
         Ok(())
@@ -86,7 +101,22 @@ impl Drawing {
                 event.position[0] as f32,
                 event.position[1] as f32,
             ));
-            let delta = [p[0] - s.origin[0], p[1] - s.origin[1]];
+            let mut delta = [p[0] - s.origin[0], p[1] - s.origin[1]];
+            if s.target == Target::Layer && !self.snap_disabled {
+                s.snap_work = s
+                    .snap_work
+                    .saturating_add(s.geometry.work().saturating_mul(5));
+                if s.snap_work > 64 * 1024 * 1024 {
+                    self.error = Some("Movement snapping work limit".into());
+                    self.ownership.clear();
+                    return;
+                }
+                delta = s.geometry.movement(
+                    s.bounds,
+                    delta,
+                    s.snapping.screen_distance * s.projection.ppp / s.projection.view.zoom,
+                );
+            }
             if delta
                 .iter()
                 .any(|v| !v.is_finite() || v.abs() > 1_000_000.0)
@@ -154,6 +184,7 @@ impl Drawing {
     pub(super) fn advance_movement(&mut self, ctx: &egui::Context, documents: &mut [Document]) {
         if self.movement.as_ref().is_some_and(|s| {
             self.mode != super::super::precision::Mode::Move
+                || self.snap_settings != s.snapping
                 || self.move_target != s.target
                 || (s.target != Target::Boundary && self.move_layer != Some(s.layer))
                 || documents

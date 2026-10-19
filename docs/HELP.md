@@ -699,3 +699,9 @@ Patch small unpainted areas는 현재 선택 안의 닫힌 미채색 영역 중 
 Drawing rulers의 Advanced special rulers 또는 Special rulers and layer scope 명령에서 자 종류·기하·표시·적용 레이어/폴더/프레임을 편집하고 Apply special rulers로 저장합니다. 눈금·곡선·연결 투시 가이드도 편집할 수 있습니다. 고정 투시점은 움직이지 않으며 Infinitize는 일반 투시의 방향을 무한원으로 전환합니다. 어안은 유한한 한두 극점을 사용합니다.
 
 Draw along saved ruler에서 곡선/가이드 번호·폭·색을 고르고 Draw ruler path로 현재 래스터/벡터층에 한 획을 만듭니다. Move layer with rulers는 연결된 자와 층을 함께 옮깁니다. 자 편집·획·이동은 각각 Undo로 되돌립니다. 표시 Hidden은 스냅과 독립입니다. 저장한 원/닫힌 곡선은 contour selection에서도 선택할 수 있습니다.
+
+## advanced-alignment | 세부 정렬·분배·개체 스냅 | 문자 픽셀 벡터 경로 투명 여백 가이드 중심 간격
+
+Align and distribute objects에서 선택·캔버스·기준 개체 또는 축에 맞는 Page guide를 고르고 정렬/분배 버튼을 누릅니다. 문자 픽셀·벡터 경로·래스터 투명 여백 옵션은 기준 경계를 바꿉니다. 변/중심 분배와 Equal gaps는 서로 다른 결과를 만들며 분배에는 움직일 개체 세 개가 필요합니다. 적용한 기준과 선택 목록은 문서에 저장하고 모든 개체 이동은 한 Undo로 되돌립니다.
+
+Snapping priority and temporary disable에서 Object bounds and center lines, Vector control points, Canvas edges를 켤 수 있습니다. 화면 거리와 해제 수정키를 공유하며 래스터 전체층 이동에서는 자기 층을 제외한 표적에 모서리/중심을 맞춥니다.

@@ -11,7 +11,8 @@ impl Drawer {
     pub(super) fn snapping_controls(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Snapping priority and temporary disable",|ui|{
             let old=self.workspaces.store.current.snapping;let s=&mut self.workspaces.store.current.snapping;
-            ui.checkbox(&mut s.rulers,"Active drawing ruler (first priority)");ui.checkbox(&mut s.guides,"Nearest page guide (second priority)");ui.checkbox(&mut s.grid,"Page grid intersections (third priority)");
+            ui.checkbox(&mut s.rulers,"Active drawing ruler (first priority)");ui.checkbox(&mut s.guides,"Nearest page guide (second priority)");ui.checkbox(&mut s.grid,"Page grid intersections (after other targets)");
+            ui.checkbox(&mut s.objects,"Object bounds and center lines");ui.checkbox(&mut s.control_points,"Vector control points / object anchors");ui.checkbox(&mut s.canvas_edges,"Canvas edges");
             ui.add(egui::Slider::new(&mut s.screen_distance,0.1..=128.0).text("Capture distance in screen pixels"));
             egui::ComboBox::from_id_salt("snap-disable-modifier").selected_text(format!("Hold {:?} to disable snapping",s.modifier)).show_ui(ui,|ui|{for m in Modifier::ALL{ui.selectable_value(&mut s.modifier,m,format!("{m:?}"));}});
             ui.label("Line/perspective rulers constrain before guide/grid capture. Equidistant guides use their page order. Symmetry copies remain enabled during the temporary modifier. Brush and shape inputs share this priority; shape grid-step snapping is a fallback. Releasing the modifier restores snapping without changing saved options.");

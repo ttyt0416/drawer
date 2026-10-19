@@ -434,3 +434,75 @@ fn glyph_contours(baseline: Point, text: &str, size: f64) -> Vec<Contour> {
         })
         .collect()
 }
+
+/// Bounds of occupied glyph pixels on the document grid, independent of other layers.
+pub fn text_pixel_bounds(doc: &Document, index: usize) -> Result<Rect, String> {
+    text_pixel_bounds_budget(doc, index, &mut (64 * 1024 * 1024))
+}
+pub(crate) fn text_pixel_bounds_budget(
+    doc: &Document,
+    index: usize,
+    remaining: &mut usize,
+) -> Result<Rect, String> {
+    let Some(PageObject::Text {
+        baseline,
+        text,
+        size_px,
+        color,
+    }) = doc.scene.objects.get(index)
+    else {
+        return Err("Choose a text object".into());
+    };
+    if color[3] == 0 {
+        return Err("Text contains no visible pixels".into());
+    }
+    let paths = glyph_contours(*baseline, text, *size_px);
+    let points = paths
+        .iter()
+        .flat_map(|p| &p.points)
+        .map(|p| doc.scene.transform.map(*p));
+    let bounds = crate::alignment_detail::rectangle(points)?;
+    let x0 = bounds.min[0].floor() as i64;
+    let y0 = bounds.min[1].floor() as i64;
+    let x1 = bounds.max[0].ceil() as i64;
+    let y1 = bounds.max[1].ceil() as i64;
+    if x1 - x0 > 32768 || y1 - y0 > 32768 {
+        return Err("Text pixel bounds dimensions limit".into());
+    }
+    let count = (x1 - x0).max(0) as usize * (y1 - y0).max(0) as usize;
+    let segments: usize = paths.iter().map(|p| p.points.len()).sum();
+    if count > 4 * 1024 * 1024 || count.saturating_mul(segments) > 64 * 1024 * 1024 {
+        return Err("Text pixel bounds work limit".into());
+    }
+    *remaining = remaining
+        .checked_sub(count.saturating_mul(segments + doc.scene.clips.len() * 4))
+        .ok_or("Alignment glyph bounds work limit")?;
+    let inv = doc.scene.transform.inverse();
+    let mut r = Rect {
+        min: [f64::INFINITY; 2],
+        max: [f64::NEG_INFINITY; 2],
+    };
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let p = inv.map([x as f64 + 0.5, y as f64 + 0.5]);
+            if !doc.scene.clips.iter().any(|clip| !inside(clip, p))
+                && paths
+                    .iter()
+                    .filter(|c| c.bounds.contains(p))
+                    .map(|c| winding(&c.points, p))
+                    .sum::<i32>()
+                    != 0
+            {
+                r.min[0] = r.min[0].min(x as f64);
+                r.min[1] = r.min[1].min(y as f64);
+                r.max[0] = r.max[0].max(x as f64 + 1.0);
+                r.max[1] = r.max[1].max(y as f64 + 1.0);
+            }
+        }
+    }
+    if r.valid() {
+        Ok(r)
+    } else {
+        Err("Text contains no visible pixels".into())
+    }
+}

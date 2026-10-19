@@ -280,6 +280,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         grid: true,
         screen_distance: 12.5,
         modifier: crate::snapping::Modifier::Alt,
+        ..Default::default()
     };
     let file = root.join("snapping-workspace.json");
     snapshot.export(&file).map_err(|e| e.to_string())?;
