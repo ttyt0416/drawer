@@ -286,6 +286,7 @@ impl Drawer {
                 "gradient-tool" => self.begin_gradient()?,
                 "align-objects" => self.begin_alignment()?,
                 "manage-layers" => self.begin_layer_manager()?,
+                "merge-layers" => self.begin_layer_merge()?,
                 "layer-properties" | "layer-clipping" | "layer-blend" => {
                     self.begin_layer_properties()?
                 }

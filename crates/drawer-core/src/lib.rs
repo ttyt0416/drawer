@@ -222,3 +222,9 @@ pub mod clipping_verify;
 pub mod layer_blend;
 
 pub mod layer_blend_verify;
+
+pub mod layer_effects;
+
+pub mod layer_merge;
+
+pub mod layer_merge_verify;

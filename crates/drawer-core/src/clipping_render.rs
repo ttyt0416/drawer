@@ -59,6 +59,26 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
             Node::Folder(n) => self.doc.scene.layer_properties.folders.get(&(n as u16)),
         };
         p.map_or(1.0, |p| p.opacity as f32 / 100.0)
+            * self
+                .doc
+                .scene
+                .layer_effects
+                .mask(clipping::node_key(self.doc, n), self.original)
+    }
+    fn adjust(&mut self, dst: &mut Color, n: Node) -> bool {
+        let Some(value) =
+            crate::layer_effects::adjustment(self.doc, clipping::node_key(self.doc, n))
+        else {
+            return false;
+        };
+        self.graph.mark_layers(n, &mut self.seen, 0);
+        if value == Default::default() {
+            return true;
+        }
+        if !self.paper(n).hidden {
+            *dst = Color::interpolate(*dst, Color::from(value.pixel(dst.rgba())), self.weight(n));
+        }
+        true
     }
     fn source(&mut self, n: Node, depth: usize) -> Color {
         if depth > 16 {
@@ -125,6 +145,10 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
                 i += 1;
                 continue;
             }
+            if self.adjust(dst, n) {
+                i += 1;
+                continue;
+            }
             if let Node::Folder(index) = n
                 && graph.folders[index].through
             {
@@ -156,6 +180,10 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
                     .binding(clipping::node_key(self.doc, nodes[j]))
                     == Some(key)
                 {
+                    if self.adjust(&mut group, nodes[j]) {
+                        j += 1;
+                        continue;
+                    }
                     let top = self.source(nodes[j], depth);
                     atop(
                         &mut group,
@@ -175,6 +203,29 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
     }
 }
 impl Graph {
+    pub(crate) fn composite_nodes(
+        &self,
+        doc: &Document,
+        nodes: &[Node],
+        point: [i64; 2],
+    ) -> [u8; 4] {
+        let mut pixel =
+            |_: usize, l: &RasterLayer| l.pixel(doc.width, doc.height, point[0], point[1]);
+        let mut sample = Sample {
+            graph: self,
+            doc,
+            original: doc
+                .scene
+                .transform
+                .inverse()
+                .map([point[0] as f64 + 0.5, point[1] as f64 + 0.5]),
+            pixel: &mut pixel,
+            seen: [false; 256],
+        };
+        let mut color = Color::default();
+        sample.nodes(nodes, &mut color, 0);
+        color.rgba()
+    }
     pub(super) fn clipped_composite(
         &self,
         doc: &Document,
@@ -193,7 +244,12 @@ impl Graph {
             seen: [false; 256],
         };
         let mut color = Color::default();
-        sample.nodes(&self.roots, &mut color, 0);
+        if self.roots.is_empty() {
+            let nodes: [Node; 256] = std::array::from_fn(Node::Raster);
+            sample.nodes(&nodes[..doc.layers.len()], &mut color, 0);
+        } else {
+            sample.nodes(&self.roots, &mut color, 0);
+        }
         for n in 0..doc.layers.len() {
             if !sample.seen[n]
                 && doc
@@ -202,8 +258,7 @@ impl Graph {
                     .binding(crate::layer_properties::raster(doc, n))
                     .is_none()
             {
-                let source = sample.source(Node::Raster(n), 0);
-                sample.put(&mut color, source, Node::Raster(n));
+                sample.nodes(&[Node::Raster(n)], &mut color, 0);
             }
         }
         color
@@ -285,7 +340,10 @@ pub(crate) fn vectors(
             rgba = crate::render::over(rgba, value);
         }
         let mut result = Color::from(rgba);
-        result.scale(crate::layer_properties::factor(doc, Target::Vector(l.id)) as f32);
+        result.scale(
+            crate::layer_properties::factor(doc, Target::Vector(l.id)) as f32
+                * doc.scene.layer_effects.mask(Target::Vector(l.id), original),
+        );
         result
     };
     let mut output = Color::from(initial);

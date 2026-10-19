@@ -197,7 +197,10 @@ impl<'a> Renderer<'a> {
             };
             result = over(result, color);
         }
-        if !scene.clipping.vectors.is_empty() || crate::layer_blend::vectors_active(doc) {
+        if !scene.clipping.vectors.is_empty()
+            || crate::layer_blend::vectors_active(doc)
+            || !doc.scene.layer_effects.vectors.is_empty()
+        {
             result = crate::paper::clipped_vectors(
                 doc,
                 point,

@@ -447,3 +447,9 @@ docs/process/layer-clipping.md
 crates/drawer-core/src/layer_blend.rs
 crates/drawer-core/src/layer_blend_verify.rs
 docs/process/layer-blend.md
+
+crates/drawer-core/src/layer_effects.rs
+crates/drawer-core/src/layer_merge.rs
+crates/drawer-core/src/layer_merge_verify.rs
+crates/drawer-app/src/layer_merge.rs
+docs/process/layer-merge.md

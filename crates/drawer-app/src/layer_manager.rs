@@ -307,7 +307,7 @@ impl Drawer {
             if let Some(t)=change{e.name=title(d,t);e.parent=match t{Target::Raster(id)=>core::index(d,id).and_then(|n|core::parent(&d.scene.paper,n)),_=>None};}
             super::edit::text(ui,&mut e.name,"managed-layer-name");
             ui.horizontal(|ui|{ui.selectable_value(&mut e.kind,Kind::Raster,"New raster");ui.selectable_value(&mut e.kind,Kind::Vector,"New vector");});
-            egui::ComboBox::from_id_salt("managed-layer-parent").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{ui.selectable_value(&mut e.parent,None,"Root");for(n,f)in d.scene.paper.folders.iter().enumerate(){ui.selectable_value(&mut e.parent,Some(n),&f.name);}});
+            egui::ComboBox::from_id_salt("managed-layer-parent").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{ui.selectable_value(&mut e.parent,None,"Root");for(n,f)in d.scene.paper.folders.iter().enumerate().filter(|(n,_)|d.scene.paper.folder_active(*n)){ui.selectable_value(&mut e.parent,Some(n),&f.name);}});
             ui.horizontal(|ui|{
                 let r=ui.button("Create layer");self.layer_manager.create=Some(r.rect);if r.clicked(){command=Some(Command::Create {kind:e.kind,name:e.name.clone(),parent:if e.kind==Kind::Vector{None}else{e.parent}});}
                 let r=ui.button("Rename layer");self.layer_manager.rename=Some(r.rect);if r.clicked(){command=Some(Command::Rename {target:e.target,name:e.name.clone()});}

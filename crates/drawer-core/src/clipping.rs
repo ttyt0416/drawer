@@ -189,6 +189,9 @@ pub fn below(
     {
         return Err("Choose an isolated folder or raster as the clipping base".into());
     }
+    if crate::layer_effects::adjustment(doc, base).is_some() {
+        return Err("Choose an image or isolated folder as the clipping base".into());
+    }
     Ok(base)
 }
 pub fn active(doc: &Document, t: Target) -> bool {

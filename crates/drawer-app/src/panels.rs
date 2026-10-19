@@ -393,7 +393,14 @@ impl Drawer {
             for layer in &doc.scene.lines.layers {
                 rows.push((Target::Vector(layer.id), format!("Vector: {}", layer.name)));
             }
-            for (n, folder) in doc.scene.paper.folders.iter().enumerate() {
+            for (n, folder) in doc
+                .scene
+                .paper
+                .folders
+                .iter()
+                .enumerate()
+                .filter(|(n, _)| doc.scene.paper.folder_active(*n))
+            {
                 rows.push((Target::Folder(n), format!("Folder: {}", folder.name)));
             }
         }
@@ -552,6 +559,7 @@ impl Drawer {
                                 ("Properties / identification colors…", "layer-properties"),
                                 ("Alpha protection / clipping / solo…", "layer-clipping"),
                                 ("Layer blend modes…", "layer-blend"),
+                                ("Merge layers / flatten…", "merge-layers"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),

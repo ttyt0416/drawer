@@ -1,0 +1,169 @@
+//! Shared composition data for masks and adjustment layers; editors are separate features.
+use crate::{document::Document, layer_properties::Target, scene::Point};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mask {
+    pub coverage: crate::selection::Mask,
+    pub offset: Point,
+    pub enabled: bool,
+    pub linked: bool,
+    pub inverted: bool,
+}
+impl Mask {
+    pub fn factor(&self, p: Point) -> f32 {
+        if !self.enabled {
+            return 1.;
+        }
+        let a = self
+            .coverage
+            .coverage([p[0] - self.offset[0], p[1] - self.offset[1]]) as f32
+            / 255.;
+        if self.inverted { 1. - a } else { a }
+    }
+    fn valid(&self) -> bool {
+        self.coverage.valid() && self.offset.iter().all(|n| n.is_finite() && n.abs() <= 1e9)
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Adjustment {
+    pub brightness: f64,
+    pub contrast: f64,
+    pub hue: f64,
+    pub saturation: f64,
+}
+impl Adjustment {
+    pub fn valid(self) -> bool {
+        [self.brightness, self.contrast, self.saturation]
+            .iter()
+            .all(|n| (-1. ..=1.).contains(n))
+            && (-180. ..=180.).contains(&self.hue)
+    }
+    pub fn pixel(self, mut p: [u8; 4]) -> [u8; 4] {
+        if self == Self::default() || p[3] == 0 {
+            return p;
+        }
+        let contrast = if self.contrast > 0. {
+            1. / (1. - self.contrast * 0.99)
+        } else {
+            1. + self.contrast
+        };
+        for c in &mut p[..3] {
+            *c = (((*c as f64 / 255. - 0.5) * contrast + 0.5 + self.brightness).clamp(0., 1.)
+                * 255.)
+                .round() as u8;
+        }
+        if self.hue != 0. || self.saturation != 0. {
+            let [h, s, v] = crate::color_selector::hsv(p, 0.);
+            p = crate::color_selector::from_hsv(
+                [
+                    (h + self.hue).rem_euclid(360.),
+                    (s * (1. + self.saturation)).clamp(0., 1.),
+                    v,
+                ],
+                p[3],
+            )
+            .unwrap_or(p);
+        }
+        p
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Effect {
+    pub mask: Option<Mask>,
+    pub adjustment: Option<Adjustment>,
+}
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Data {
+    pub rasters: BTreeMap<u64, Effect>,
+    pub folders: BTreeMap<u16, Effect>,
+    pub vectors: BTreeMap<u64, Effect>,
+}
+impl Data {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+    pub fn valid(&self) -> bool {
+        self.rasters.len() <= 256
+            && self.folders.len() <= 256
+            && self.vectors.len() <= 32
+            && self
+                .rasters
+                .keys()
+                .chain(self.vectors.keys())
+                .all(|n| *n > 0)
+            && self.folders.keys().all(|n| *n < 256)
+            && self
+                .folders
+                .values()
+                .chain(self.vectors.values())
+                .all(|e| e.adjustment.is_none())
+            && self
+                .rasters
+                .values()
+                .chain(self.folders.values())
+                .chain(self.vectors.values())
+                .all(|e| {
+                    e.mask.as_ref().is_none_or(Mask::valid)
+                        && e.adjustment.is_none_or(Adjustment::valid)
+                })
+            && self
+                .rasters
+                .values()
+                .chain(self.folders.values())
+                .chain(self.vectors.values())
+                .filter_map(|e| e.mask.as_ref())
+                .map(|m| m.coverage.runs.len())
+                .sum::<usize>()
+                <= 32768
+    }
+    pub fn bytes(&self) -> usize {
+        self.rasters
+            .values()
+            .chain(self.folders.values())
+            .chain(self.vectors.values())
+            .map(|e| {
+                128 + e.mask.as_ref().map_or(0, |m| {
+                    m.coverage.runs.len() * std::mem::size_of::<crate::selection::Run>()
+                })
+            })
+            .sum()
+    }
+    pub fn get(&self, t: Target) -> Option<&Effect> {
+        match t {
+            Target::Raster(n) => self.rasters.get(&n),
+            Target::Folder(n) => self.folders.get(&n),
+            Target::Vector(n) => self.vectors.get(&n),
+            _ => None,
+        }
+    }
+    pub fn remove(&mut self, t: Target) {
+        match t {
+            Target::Raster(n) => {
+                self.rasters.remove(&n);
+            }
+            Target::Folder(n) => {
+                self.folders.remove(&n);
+            }
+            Target::Vector(n) => {
+                self.vectors.remove(&n);
+            }
+            _ => {}
+        }
+    }
+    pub fn mask(&self, t: Target, p: Point) -> f32 {
+        self.get(t)
+            .and_then(|e| e.mask.as_ref())
+            .map_or(1., |m| m.factor(p))
+    }
+    pub fn graph_active(&self) -> bool {
+        !self.rasters.is_empty() || !self.folders.is_empty()
+    }
+}
+pub fn adjustment(d: &Document, t: Target) -> Option<Adjustment> {
+    d.scene.layer_effects.get(t).and_then(|e| e.adjustment)
+}

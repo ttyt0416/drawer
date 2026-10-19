@@ -133,6 +133,11 @@ impl Color {
     }
 }
 impl Graph {
+    pub fn folder_active(&self, n: usize) -> bool {
+        self.roots
+            .iter()
+            .any(|root| contains(self, *root, Node::Folder(n), 0))
+    }
     pub fn raster_visible(&self, layer: usize, count: usize) -> bool {
         fn visit(g: &Graph, node: Node, layer: usize, shown: bool, depth: usize) -> Option<bool> {
             if depth > 16 {
@@ -328,7 +333,10 @@ impl Graph {
         y: u32,
         pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> Color {
-        if doc.scene.clipping.graph_active() || crate::layer_blend::graph_active(doc) {
+        if doc.scene.clipping.graph_active()
+            || crate::layer_blend::graph_active(doc)
+            || doc.scene.layer_effects.graph_active()
+        {
             return self.clipped_composite(doc, [x as i64, y as i64], pixel);
         }
         if self.layers.is_empty() && self.roots.is_empty() {
@@ -437,7 +445,10 @@ impl Graph {
         }
     }
     pub fn node_pixel(&self, doc: &Document, node: Node, point: [i64; 2]) -> [u8; 4] {
-        if doc.scene.clipping.graph_active() || crate::layer_blend::graph_active(doc) {
+        if doc.scene.clipping.graph_active()
+            || crate::layer_blend::graph_active(doc)
+            || doc.scene.layer_effects.graph_active()
+        {
             return self.clipped_node_pixel(doc, node, point);
         }
         let original = doc
@@ -581,6 +592,9 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
         return Err("Select a visible raster layer or folder".into());
     }
     let key = crate::clipping::node_key(doc, node);
+    if crate::layer_effects::adjustment(doc, key).is_some() {
+        return Err("An adjustment requires its lower backdrop when rasterizing".into());
+    }
     if doc.scene.clipping.binding(key).is_some() {
         return Err("Bake the clipping base and its run together; keep this layer editable".into());
     }
@@ -678,6 +692,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 .collect();
             for target in &members {
                 after.scene.clipping.remove_owner(*target);
+                after.scene.layer_effects.remove(*target);
             }
             for n in &indices {
                 after

@@ -151,7 +151,11 @@ pub fn targets(doc: &Document) -> Vec<Target> {
     (0..doc.layers.len())
         .map(|n| raster(doc, n))
         .chain(doc.scene.lines.layers.iter().map(|l| Target::Vector(l.id)))
-        .chain((0..doc.scene.paper.folders.len()).map(|n| Target::Folder(n as u16)))
+        .chain(
+            (0..doc.scene.paper.folders.len())
+                .filter(|n| doc.scene.paper.folder_active(*n))
+                .map(|n| Target::Folder(n as u16)),
+        )
         .chain(
             doc.animation
                 .iter()

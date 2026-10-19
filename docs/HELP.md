@@ -727,3 +727,9 @@ Layers… → Alpha protection / clipping / solo에서 Protect existing alpha와
 ## layer-blend | 레이어 혼합 모드 | 일반 곱하기 스크린 오버레이
 
 Layers… → Layer blend modes에서 대상을 선택하고 Normal / Multiply / Screen / Overlay 중 하나를 고릅니다. Apply changed properties로 적용하며 한 Undo로 복구합니다. 원래 픽셀은 유지합니다. 반투명과 불투명도도 함께 합성합니다. 통과 폴더에 일반 이외 모드를 적용하면 격리 폴더로 바뀝니다. 셀은 트랙의 혼합 모드를 따릅니다.
+
+## merge-layers | 레이어 병합·전체 합치기 | 아래와 병합 숨김층 미리보기
+
+Layers… → Merge layers / flatten에서 Merge selected / Merge down / Flatten page를 고릅니다. 선택/아래 병합은 같은 폴더의 연속된 래스터·폴더를 합칩니다. Include hidden layers는 숨김층을 결과에 표시하고, Include lower siblings는 혼합에 필요한 아래 배경도 포함합니다. 불완전한 클리핑 연쇄나 외부 배경 의존 결과는 설명과 함께 거절합니다.
+
+Prepare merge preview에서 전후 이미지와 영향 목록을 검토하고 확인란을 켠 뒤 Apply merge를 누릅니다. Flatten page는 현재 프레임과 모든 표시 개체를 한 래스터로 만들며 애니메이션·오디오·캔버스 밖 픽셀과 편집 효과를 대체합니다. 한 Undo로 원래 구조를 복구합니다. 취소와 미리보기는 그림을 바꾸지 않습니다.
