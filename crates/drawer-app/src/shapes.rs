@@ -3,12 +3,17 @@ use drawer_core::shapes::{self as core, Constraint, Curve, Input, Kind, Paint, S
 #[derive(Clone, Copy)]
 pub(super) struct Capture {
     pub settings: Settings,
+    pub snapping: drawer_core::snapping::Settings,
     pub target: Target,
     pub budget: usize,
 }
 impl drawing::Drawing {
     pub(super) fn shape_changed(&self, s: Option<Capture>) -> bool {
-        s.is_some_and(|s| self.shape_settings != s.settings || self.shape_target != Some(s.target))
+        s.is_some_and(|s| {
+            self.shape_settings != s.settings
+                || self.shape_target != Some(s.target)
+                || self.snap_settings != s.snapping
+        })
     }
 }
 impl Drawer {

@@ -166,3 +166,7 @@ pub mod shapes_verify;
 
 pub mod alignment;
 pub mod alignment_verify;
+
+pub mod snapping;
+
+pub mod snapping_verify;

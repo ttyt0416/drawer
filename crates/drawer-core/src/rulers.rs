@@ -122,6 +122,8 @@ pub fn apply(doc: &mut Document, data: Data) -> Result<bool, String> {
 }
 #[derive(Clone)]
 pub struct Runtime {
+    lower: Option<crate::snapping::Lower>,
+    temporary_disabled: bool,
     constraint: Constraint,
     pub copies: Vec<Affine>,
 }
@@ -138,6 +140,8 @@ enum Constraint {
 impl Default for Runtime {
     fn default() -> Self {
         Self {
+            lower: None,
+            temporary_disabled: false,
             constraint: Constraint::None,
             copies: vec![],
         }
@@ -225,8 +229,56 @@ impl Runtime {
         }
         Ok(r)
     }
+    pub fn configure_snapping(
+        &mut self,
+        doc: &Document,
+        settings: crate::snapping::Settings,
+        scale: f64,
+    ) -> Result<usize, String> {
+        if self.lower.is_some() {
+            return Err("Configure snapping once before input".into());
+        }
+        let lower = crate::snapping::Lower::new(doc, settings, scale)?;
+        let bytes = lower.bytes();
+        if !settings.rulers {
+            self.constraint = Constraint::None;
+            self.copies.clear();
+        }
+        self.lower = Some(lower);
+        Ok(bytes)
+    }
+    pub fn check_snapping(&self) -> Result<(), String> {
+        if self.lower.as_ref().is_some_and(|l| l.failed()) {
+            Err("Snapping exceeds guide/grid work limit; pending input cancelled".into())
+        } else {
+            Ok(())
+        }
+    }
+    pub fn constrain_dab(&mut self, p: Point, anchor: Point) -> (Point, Point) {
+        let a = self.constrain(anchor);
+        let p = if !matches!(self.constraint, Constraint::None) {
+            self.constrain(p)
+        } else if a == anchor {
+            p
+        } else {
+            [p[0] + (a[0] - anchor[0]), p[1] + (a[1] - anchor[1])]
+        };
+        (p, a)
+    }
+    pub fn set_snap_disabled(&mut self, disabled: bool) {
+        self.temporary_disabled = disabled;
+    }
     pub fn constrain(&mut self, p: Point) -> Point {
-        match &mut self.constraint {
+        self.constrain_with_hit(p).0
+    }
+    pub fn constrain_with_hit(&mut self, p: Point) -> (Point, bool) {
+        if self.temporary_disabled {
+            return (p, false);
+        }
+        if matches!(self.constraint, Constraint::None) {
+            return self.lower.as_mut().map_or((p, false), |l| l.snap(p));
+        }
+        let result = match &mut self.constraint {
             Constraint::None => p,
             Constraint::Line(a, d) => project(*a, *d, p),
             Constraint::Perspective {
@@ -236,7 +288,7 @@ impl Runtime {
             } => {
                 let Some(a) = *anchor else {
                     *anchor = Some(p);
-                    return p;
+                    return (p, true);
                 };
                 if line.is_none()
                     && let Some(motion) = direction(a, p)
@@ -254,7 +306,8 @@ impl Runtime {
                 }
                 line.map_or(p, |d| project(a, d, p))
             }
-        }
+        };
+        (result, true)
     }
 }
 fn project(a: Point, d: Point, p: Point) -> Point {

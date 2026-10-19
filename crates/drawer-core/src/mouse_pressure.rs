@@ -143,6 +143,9 @@ impl Metadata {
     }
 }
 pub struct Replay {
+    snapping: Option<(crate::snapping::Settings, f64)>,
+    snap_disabled: bool,
+    snap_samples: Vec<bool>,
     ruler_disabled: bool,
     document: u64,
     revision: u64,
@@ -190,6 +193,9 @@ impl Replay {
         }
         Ok(Self {
             ruler_disabled: false,
+            snapping: None,
+            snap_disabled: false,
+            snap_samples: vec![],
             document: doc.id,
             revision: doc.revision,
             layer,
@@ -204,6 +210,24 @@ impl Replay {
             dynamic_inputs: vec![],
             materials: Default::default(),
         })
+    }
+    pub fn configure_snapping(
+        mut self,
+        settings: crate::snapping::Settings,
+        scale: f64,
+    ) -> Result<Self, String> {
+        if !self.samples.is_empty()
+            || !settings.valid()
+            || !scale.is_finite()
+            || !(1e-9..=1e6).contains(&scale)
+        {
+            return Err("Configure valid snapping before replay input".into());
+        }
+        self.snapping = Some((settings, scale));
+        Ok(self)
+    }
+    pub fn set_snap_disabled(&mut self, disabled: bool) {
+        self.snap_disabled = disabled;
     }
     pub fn disable_rulers(mut self) -> Result<Self, String> {
         if !self.samples.is_empty() {
@@ -307,6 +331,10 @@ impl Replay {
                 ..Default::default()
             }
         };
+        self.snap_samples
+            .try_reserve(1)
+            .map_err(|_| "Snapping input allocation failed")?;
+        self.snap_samples.push(self.snap_disabled);
         self.dynamic_inputs.push(input);
         self.inputs.push([1.0, 0.0]);
         self.samples.push(sample);
@@ -338,6 +366,12 @@ impl Replay {
             let result = keep[n];
             n += 1;
             result
+        });
+        let mut n = 0;
+        self.snap_samples.retain(|_| {
+            let keep = keep[n];
+            n += 1;
+            keep
         });
         let mut n = 0;
         self.clocks.retain(|_| {
@@ -400,6 +434,14 @@ impl Replay {
             return Err("The original drawing changed; mouse stroke cancelled".into());
         }
         let inputs = self.filtered_inputs()?;
+        let mut assistance = if self.ruler_disabled {
+            crate::rulers::Runtime::default()
+        } else {
+            crate::rulers::Runtime::new(doc)?
+        };
+        if let Some((settings, scale)) = self.snapping {
+            assistance.configure_snapping(doc, settings, scale)?;
+        }
         let mut trace = Trace::default();
         let mut points = Vec::new();
         points
@@ -411,17 +453,17 @@ impl Replay {
             if n % 256 == 0 && cancel() {
                 return Err("Mouse reconstruction cancelled".into());
             }
+            assistance.set_snap_disabled(self.snap_samples[n]);
+            let resolved = assistance.constrain(sample.point);
+            assistance.check_snapping()?;
             let point = trace
-                .receive(
-                    sample.point,
-                    self.style.filters.position(self.style.smoothing),
-                )
+                .receive(resolved, self.style.filters.position(self.style.smoothing))
                 .map(|(_, p)| p)
                 .or(last)
-                .unwrap_or(sample.point);
+                .unwrap_or(resolved);
             // Release catches the filter up to the actual final sample, never prediction.
             let point = if finalizing && n + 1 == self.samples.len() {
-                sample.point
+                resolved
             } else {
                 point
             };
@@ -443,9 +485,12 @@ impl Replay {
         }
         let mut stroke = Stroke::with_budget(doc, self.layer, style, self.budget)?
             .with_materials(self.materials.clone())?;
-        if self.ruler_disabled {
+        if self.ruler_disabled || self.snapping.is_some_and(|(s, _)| !s.rulers) {
             stroke.disable_rulers()?;
         }
+        // The prepass resolves every source point. Keep symmetry arms while avoiding
+        // a second constraint during interpolation between modifier transitions.
+        stroke.set_snap_disabled(true);
         stroke.set_seed(self.settings.seed);
         if let Some((point, _, _)) = points.first() {
             stroke.material(doc, self.settings.effect, self.settings.strength, *point)?;
@@ -656,6 +701,7 @@ impl Replay {
                 return Err("Continuous brush dab limit".into());
             }
             let end = (index + 1).min(inputs.len() - 1);
+
             let mut input = self.dynamic_inputs[index].interpolate(self.dynamic_inputs[end], t);
             input.speed = self.dynamic_inputs[end].speed;
             stroke.set_dynamic_input(input)?;

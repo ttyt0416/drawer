@@ -375,6 +375,7 @@ impl Stroke {
             return Err("Invalid stroke material".into());
         }
         let point = self.ruler.constrain(point);
+        self.ruler.check_snapping()?;
         for arm in &mut self.arms {
             arm.stroke
                 .material(doc, effect, strength, arm.transform.map(point))?;
@@ -596,8 +597,8 @@ impl Stroke {
         {
             return Err("Invalid timed dab".into());
         }
-        let anchor = self.ruler.constrain(anchor);
-        let point = self.ruler.constrain(point);
+        let (point, anchor) = self.ruler.constrain_dab(point, anchor);
+        self.ruler.check_snapping()?;
         for arm in &mut self.arms {
             arm.stroke.direct_dab(
                 doc,
@@ -910,6 +911,29 @@ impl Stroke {
         }
         Ok(stroke)
     }
+    pub fn configure_snapping(
+        &mut self,
+        doc: &Document,
+        settings: crate::snapping::Settings,
+        scale: f64,
+    ) -> Result<(), String> {
+        if self.last.is_some() || !self.changes.is_empty() {
+            return Err("Configure snapping before stroke input".into());
+        }
+        if !settings.rulers {
+            self.disable_rulers()?;
+        }
+        let bytes = self.ruler.configure_snapping(doc, settings, scale)?;
+        self.limit = self
+            .limit
+            .checked_sub(bytes.div_ceil(96))
+            .filter(|n| *n > 0)
+            .ok_or("Guide snapping exceeds stroke memory")?;
+        Ok(())
+    }
+    pub fn set_snap_disabled(&mut self, disabled: bool) {
+        self.ruler.set_snap_disabled(disabled);
+    }
     /// A session toggle is fixed before input; it never edits the page rulers.
     pub fn disable_rulers(&mut self) -> Result<(), String> {
         if self.last.is_some() || !self.changes.is_empty() {
@@ -993,6 +1017,7 @@ impl Stroke {
             return Err("Invalid drawing coordinate".into());
         }
         let point = self.ruler.constrain(point);
+        self.ruler.check_snapping()?;
         for arm in &mut self.arms {
             arm.stroke
                 .sample_pressure_inner(doc, arm.transform.map(point), pressure, processed)?;

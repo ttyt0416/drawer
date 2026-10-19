@@ -381,3 +381,8 @@ crates/drawer-core/src/alignment.rs
 crates/drawer-core/src/alignment_verify.rs
 crates/drawer-app/src/alignment.rs
 docs/process/object-alignment.md
+
+crates/drawer-core/src/snapping.rs
+crates/drawer-core/src/snapping_verify.rs
+crates/drawer-app/src/snapping.rs
+docs/process/drawing-snapping.md

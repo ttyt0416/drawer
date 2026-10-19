@@ -244,6 +244,8 @@ impl Drawer {
                 "ruler-tools" => self.begin_rulers()?,
                 "ruler-snap" => {
                     self.drawing.ruler_disabled = !self.drawing.ruler_disabled;
+                    self.workspaces.store.current.snapping.rulers = !self.drawing.ruler_disabled;
+                    self.drawing.snap_settings.rulers = !self.drawing.ruler_disabled;
                     self.status = Some(format!(
                         "Ruler snapping {} for following strokes",
                         if self.drawing.ruler_disabled {

@@ -53,6 +53,8 @@ pub(super) struct PaintInput<'a> {
     pub color: [u8; 4],
 }
 struct SelectionGesture {
+    assistance: Option<drawer_core::rulers::Runtime>,
+    resolved: bool,
     document: u64,
     revision: u64,
     view: u64,
@@ -68,6 +70,7 @@ struct SelectionGesture {
     shape: Option<super::shapes::Capture>,
 }
 struct Session {
+    snapping: drawer_core::snapping::Settings,
     stroke: Stroke,
     mouse: Option<drawer_core::mouse_pressure::Replay>,
     mouse_dirty: bool,
@@ -95,6 +98,8 @@ pub(super) struct Drawing {
     pub quick_mask: bool,
     pub quick_previous: Option<super::precision::Mode>,
     pub ruler_disabled: bool,
+    pub snap_settings: drawer_core::snapping::Settings,
+    pub snap_disabled: bool,
     pub cancel_check: Option<Box<dyn Fn() -> bool>>,
     frame_time: f64,
     active: Option<Session>,
@@ -402,6 +407,7 @@ impl Drawing {
                 .checked_add(elapsed)
                 .ok_or("Mouse spray frame clock overflow")?;
             if now.saturating_sub(s.last_timer) >= period as u64 {
+                mouse.set_snap_disabled(self.snap_disabled);
                 mouse.push_clock(drawer_core::mouse_pressure::Sample {
                     point: s.projection.point(s.last_screen),
                     micros: Some(now),
@@ -434,6 +440,10 @@ impl Drawing {
     ) {
         self.last_attributes = attributes.normalized();
         if let Some(s) = &mut self.active {
+            s.stroke.set_snap_disabled(self.snap_disabled);
+            if let Some(mouse) = &mut s.mouse {
+                mouse.set_snap_disabled(self.snap_disabled);
+            }
             s.last_screen = pos;
             s.last_pressure = pressure;
             s.last_attributes = attributes.normalized();
@@ -488,7 +498,16 @@ impl Drawing {
                 points.push(p);
             }
             return Some(
-                match drawer_core::shapes::geometry(shape.settings, &points) {
+                match drawer_core::shapes::geometry(
+                    if s.resolved {
+                        let mut settings = shape.settings;
+                        settings.snap = false;
+                        settings
+                    } else {
+                        shape.settings
+                    },
+                    &points,
+                ) {
                     Ok(mut g) => {
                         if g.closed {
                             g.points.push(g.points[0]);
@@ -531,7 +550,11 @@ impl Drawing {
     }
     fn commit_shape(&mut self, s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
         if let Some(shape) = s.shape {
-            let state = drawer_core::shapes::prepare(doc, shape.target, &s.points, shape.settings)?;
+            let state = if s.resolved {
+                drawer_core::shapes::prepare_resolved(doc, shape.target, &s.points, shape.settings)?
+            } else {
+                drawer_core::shapes::prepare(doc, shape.target, &s.points, shape.settings)?
+            };
             if state
                 .memory_bytes()
                 .saturating_mul(2)
@@ -601,6 +624,25 @@ impl Drawing {
         let scene = selection_geometry::prepare(doc, kind, &s.points, s.combine)?;
         doc.edit_scene(scene)
     }
+    fn assist_shape(s: &mut SelectionGesture, point: Point, disabled: bool) -> Point {
+        if let Some(r) = &mut s.assistance {
+            r.set_snap_disabled(disabled);
+            let (p, hit) = r.constrain_with_hit(point);
+            if hit {
+                s.resolved = true;
+                return p;
+            }
+        }
+        if !disabled
+            && let Some(shape) = s.shape
+            && shape.settings.snap
+        {
+            s.resolved = true;
+            return point
+                .map(|v| (v / shape.settings.snap_step).round() * shape.settings.snap_step);
+        }
+        point
+    }
     fn receive_selection(&mut self, index: usize, doc: &mut Document, canvas: bool) {
         use drawer_core::pointer_input::{Decision, Phase};
         if self.events[index].1 {
@@ -653,6 +695,14 @@ impl Drawing {
             self.ownership.clear();
             return;
         }
+        let p = Self::assist_shape(&mut s, p, self.snap_disabled);
+        if let Some(r) = &s.assistance
+            && let Err(e) = r.check_snapping()
+        {
+            self.error = Some(e);
+            self.ownership.clear();
+            return;
+        }
         if polygon {
             if event.phase == Phase::Down
                 && s.points
@@ -684,7 +734,7 @@ impl Drawing {
                 .points
                 .last()
                 .is_none_or(|v| (v[0] - p[0]).hypot(v[1] - p[1]) >= 0.25)
-                || event.phase == Phase::Up
+                || event.phase == Phase::Up && (s.shape.is_none() || s.points.last() != Some(&p))
             {
                 if s.points.len() == if s.shape.is_some() { 128 } else { 4096 } {
                     self.error = Some("Lasso path limit; prior selection kept".into());
@@ -777,6 +827,13 @@ impl Drawing {
             self.finish(documents);
             self.events.clear();
             return;
+        }
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|s| s.snapping != self.snap_settings)
+        {
+            self.cancel();
         }
         if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.controls.reset();
@@ -1173,13 +1230,36 @@ impl Drawing {
                     };
                     Some(super::shapes::Capture {
                         settings: self.shape_settings,
+                        snapping: self.snap_settings,
                         target,
                         budget: self.fill_budget,
                     })
                 } else {
                     None
                 };
-                self.selection = Some(SelectionGesture {
+                let assistance = if shape.is_some() {
+                    match (|| -> Result<_, String> {
+                        let mut r = drawer_core::rulers::Runtime::new(doc)?;
+                        r.configure_snapping(
+                            doc,
+                            self.snap_settings,
+                            projection.ppp / projection.view.zoom,
+                        )?;
+                        Ok(r)
+                    })() {
+                        Ok(r) => Some(r),
+                        Err(e) => {
+                            self.error = Some(e);
+                            self.ownership.clear();
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+                let mut selection = SelectionGesture {
+                    assistance,
+                    resolved: false,
                     document: doc.id,
                     revision: doc.revision,
                     view,
@@ -1193,7 +1273,9 @@ impl Drawing {
                     hover: None,
                     combine: self.selection_settings.combine,
                     frame: doc.current_frame,
-                });
+                };
+                selection.points[0] = Self::assist_shape(&mut selection, point, self.snap_disabled);
+                self.selection = Some(selection);
                 continue;
             }
             if self.mode == super::precision::Mode::Move {
@@ -1380,6 +1462,11 @@ impl Drawing {
                         if self.ruler_disabled {
                             replay = replay.disable_rulers()?;
                         }
+                        replay = replay.configure_snapping(
+                            self.snap_settings,
+                            projection.ppp / projection.view.zoom,
+                        )?;
+                        replay.set_snap_disabled(self.snap_disabled);
                         for point in [from, to] {
                             replay.push_dynamic(
                                 drawer_core::mouse_pressure::Sample {
@@ -1407,6 +1494,12 @@ impl Drawing {
                     if self.ruler_disabled {
                         stroke.disable_rulers()?;
                     }
+                    stroke.configure_snapping(
+                        doc,
+                        self.snap_settings,
+                        projection.ppp / projection.view.zoom,
+                    )?;
+                    stroke.set_snap_disabled(self.snap_disabled);
                     stroke.sample(doc, from)?;
                     stroke.sample(doc, to)?;
                     let endpoint = stroke.anchor().map_or(to, |(_, _, p)| p);
@@ -1428,6 +1521,12 @@ impl Drawing {
                     if self.ruler_disabled {
                         s.disable_rulers()?;
                     }
+                    s.configure_snapping(
+                        doc,
+                        self.snap_settings,
+                        projection.ppp / projection.view.zoom,
+                    )?;
+                    s.set_snap_disabled(self.snap_disabled);
                     Ok(s)
                 }) {
                 Ok(stroke) => {
@@ -1468,6 +1567,12 @@ impl Drawing {
                             } else {
                                 Ok(r)
                             }
+                        })
+                        .and_then(|r| {
+                            r.configure_snapping(
+                                self.snap_settings,
+                                projection.ppp / projection.view.zoom,
+                            )
                         }) {
                             Ok(mouse) => Some(mouse),
                             Err(e) => {
@@ -1481,6 +1586,7 @@ impl Drawing {
                     };
                     self.last_source = Some(event.source);
                     self.active = Some(Session {
+                        snapping: self.snap_settings,
                         stroke,
                         mouse,
                         mouse_dirty: false,
@@ -1526,6 +1632,9 @@ impl Drawer {
                 self.precision.target = drawer_core::precision::Target::Layer;
             }
         }
+        self.drawing.snap_settings = self.workspaces.store.current.snapping;
+        self.drawing.ruler_disabled = !self.drawing.snap_settings.rulers;
+        self.drawing.snap_disabled = super::snapping::disabled(ctx, self.drawing.snap_settings);
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
         self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
         self.drawing.enclosure_settings = self.workspaces.store.current.enclosure;

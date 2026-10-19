@@ -63,6 +63,7 @@ impl Drawer {
     pub(super) fn precision_controls(&mut self, ui: &mut egui::Ui) {
         self.enclosure_controls(ui);
         self.shapes_controls(ui);
+        self.snapping_controls(ui);
         ui.horizontal_wrapped(|ui| {
             for (label, mode) in [
                 ("Paint", Mode::Paint),

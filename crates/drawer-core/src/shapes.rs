@@ -149,11 +149,23 @@ impl Settings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub snapped_controls: bool,
     pub settings: Settings,
     pub controls: Vec<Point>,
     pub creation: Affine,
 }
+fn is_false(v: &bool) -> bool {
+    !*v
+}
 impl Definition {
+    pub fn geometry(&self) -> Result<Geometry, String> {
+        let mut s = self.settings;
+        if self.snapped_controls {
+            s.snap = false;
+        }
+        geometry(s, &self.controls)
+    }
     pub fn valid(&self) -> bool {
         self.settings.valid()
             && self.creation.valid()
@@ -398,10 +410,31 @@ pub fn prepare(
     controls: &[Point],
     s: Settings,
 ) -> Result<DocumentState, String> {
+    prepare_inner(doc, target, controls, s, false)
+}
+pub fn prepare_resolved(
+    doc: &Document,
+    target: Target,
+    controls: &[Point],
+    s: Settings,
+) -> Result<DocumentState, String> {
+    prepare_inner(doc, target, controls, s, true)
+}
+fn prepare_inner(
+    doc: &Document,
+    target: Target,
+    controls: &[Point],
+    s: Settings,
+    resolved: bool,
+) -> Result<DocumentState, String> {
     if !doc.scene.valid() || doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Invalid shape page or undo budget".into());
     }
-    let geometry = geometry(s, controls)?;
+    let mut effective = s;
+    if resolved {
+        effective.snap = false;
+    }
+    let geometry = geometry(effective, controls)?;
     let inverse = doc.scene.transform.inverse();
     let points: Vec<_> = geometry
         .points
@@ -421,6 +454,7 @@ pub fn prepare(
         stroke: s.paint.line(),
         definition: Some(Definition {
             settings: s,
+            snapped_controls: resolved,
             controls: controls.to_vec(),
             creation: doc.scene.transform,
         }),

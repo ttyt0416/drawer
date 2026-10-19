@@ -305,7 +305,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             && def.creation != old.creation,
         "Vector construction definition lost after alignment",
     )?;
-    let rebuilt = crate::shapes::geometry(def.settings, &def.controls)?;
+    let rebuilt = def.geometry()?;
     check(
         rebuilt.points.iter().zip(&moved.points).all(|(a, b)| {
             let p = def.creation.inverse().map(*a);

@@ -308,6 +308,8 @@ impl Scratchpad {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub snapping: crate::snapping::Settings,
+    #[serde(default)]
     pub shapes: crate::shapes::Settings,
     #[serde(default)]
     pub shapes_vector: bool,
@@ -406,6 +408,7 @@ impl Default for Snapshot {
             enclosure: Default::default(),
             gradient_presets: Default::default(),
             shapes: Default::default(),
+            snapping: Default::default(),
             shapes_vector: false,
             layer_pick: Default::default(),
             color_modes: Default::default(),
@@ -469,6 +472,7 @@ impl Snapshot {
             || !self.enclosure.valid()
             || !self.gradient_presets.valid()
             || !self.shapes.valid()
+            || !self.snapping.valid()
         {
             return false;
         }
@@ -571,6 +575,7 @@ impl Snapshot {
             next.enclosure = incoming.enclosure;
             next.gradient_presets = incoming.gradient_presets.clone();
             next.shapes = incoming.shapes;
+            next.snapping = incoming.snapping;
             next.shapes_vector = incoming.shapes_vector;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
