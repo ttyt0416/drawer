@@ -55,11 +55,25 @@ pub fn visible(doc: &Document, settings: Settings) -> Vec<Target> {
     for l in doc.scene.lines.layers.iter().filter(|l| !l.hidden) {
         out.push(Target::Vector(l.id));
     }
-    out.retain(|target| settings.include_locked || !locked(doc, *target));
+    out.retain(|target| {
+        !crate::layer_properties::inherited(
+            doc,
+            crate::layer_properties::from_thumbnail(doc, *target),
+        )
+        .hidden
+            && (settings.include_locked || !locked(doc, *target))
+    });
     out.reverse();
     out
 }
 pub fn locked(doc: &Document, target: Target) -> bool {
+    let p = crate::layer_properties::inherited(
+        doc,
+        crate::layer_properties::from_thumbnail(doc, target),
+    );
+    if p.locked || p.pixels_locked || p.position_locked {
+        return true;
+    }
     match target {
         Target::Raster(n) => doc.layers.get(n).is_some_and(|l| l.locked),
         Target::Vector(id) => doc
@@ -136,16 +150,29 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
             Target::Track(n) => doc
                 .animation
                 .as_ref()
-                .and_then(|a| a.tracks.get(n))
-                .and_then(|t| {
-                    let i = t
-                        .exposures
-                        .partition_point(|e| e.frame <= doc.current_frame);
-                    i.checked_sub(1)
-                        .and_then(|i| t.cells.get(t.exposures[i].cell))
+                .and_then(|a| {
+                    a.indexed_visible_cells(doc.current_frame)
+                        .find(|(track, _, _)| *track == n)
                 })
-                .is_some_and(|c| c.pixel(x as i64, y as i64)[3] > 0),
+                .is_some_and(|(track, cell, c)| {
+                    let w = crate::layer_properties::factor(
+                        doc,
+                        crate::layer_properties::Target::Track(track as u16),
+                    ) * crate::layer_properties::factor(
+                        doc,
+                        crate::layer_properties::Target::Cell {
+                            track: track as u16,
+                            cell: cell as u16,
+                        },
+                    );
+                    (c.pixel(x as i64, y as i64)[3] as f64 * w).round() > 0.0
+                }),
             Target::Vector(id) => {
+                if crate::layer_properties::factor(doc, crate::layer_properties::Target::Vector(id))
+                    == 0.0
+                {
+                    return false;
+                }
                 let p = doc.scene.transform.inverse().map(point);
                 !doc.scene.clips.iter().any(|r| !crate::render::inside(r, p))
                     && doc
@@ -154,7 +181,19 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                         .layers
                         .iter()
                         .find(|l| l.id == id)
-                        .is_some_and(|l| l.paths.iter().any(|p0| p0.visible_hit(p)))
+                        .is_some_and(|l| {
+                            let pixel = l
+                                .paths
+                                .iter()
+                                .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)));
+                            (pixel[3] as f64
+                                * crate::layer_properties::factor(
+                                    doc,
+                                    crate::layer_properties::Target::Vector(id),
+                                ))
+                            .round()
+                                > 0.0
+                        })
             }
         })
         .collect()

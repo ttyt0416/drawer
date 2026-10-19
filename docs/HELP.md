@@ -711,3 +711,9 @@ Snapping priority and temporary disable에서 Object bounds and center lines, Ve
 Layers → Manage layers에서 이름과 종류를 고르고 Create layer를 누릅니다. 선택 층의 Rename/Duplicate/Delete와 대상 폴더/슬롯 이동도 제공합니다. 동명 층은 허용하며 식별자로 구별합니다. 슬롯0은 해당 묶음의 맨 아래입니다. 마지막 래스터층은 삭제할 수 없습니다. 각 버튼은 한 번의 Undo로 복원합니다.
 
 Import local image layer는 PNG/JPEG/TIFF를 현재 문서에 배치합니다. 기본은 원래 픽셀 크기와 중앙 위치이며 캔버스보다 큰 이미지도 자르지 않습니다. Fit image inside canvas는 별도 선택이고 Original pixel size로 복구합니다. 배치를 확정하기 전에는 문서를 바꾸지 않으며 저장된 문서는 원본 이미지 파일 없이 열 수 있습니다.
+
+## layer-properties | 표시·불투명도·잠금·구분색 | 숨김 픽셀 위치 폴더 트랙 셀 색상 표식
+
+Layers… → Properties / identification colors에서 하나 또는 여러 대상을 고릅니다. 바꾼 항목만 Apply changed properties로 적용하며 한 Undo로 복원합니다. 전체 잠금, 래스터/셀 픽셀 잠금, 위치 잠금은 서로 다른 설정이고 부모의 잠금도 적용됩니다. 숨긴 층은 먼저 표시해야 그릴 수 있습니다. 위치만 잠근 래스터에는 그릴 수 있고 픽셀만 잠근 층은 전체 이동할 수 있습니다.
+
+Identification color는 이미지에 칠하지 않는 구분색입니다. Lists / Mixed parent folders / Selected canvas bounds / Timeline cell / clip marks를 독립적으로 켜고 끕니다. 같은 셀을 참조하는 클립은 같은 셀의 색을 표시합니다. 표시 스위치는 그림 이력과 분리해 저장하며 이 표식은 내보내기에 들어가지 않습니다.

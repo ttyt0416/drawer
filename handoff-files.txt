@@ -433,3 +433,8 @@ crates/drawer-core/src/layers.rs
 crates/drawer-core/src/layers_verify.rs
 crates/drawer-app/src/layer_manager.rs
 docs/process/layer-management.md
+
+crates/drawer-core/src/layer_properties.rs
+crates/drawer-core/src/layer_properties_verify.rs
+crates/drawer-app/src/layer_properties.rs
+docs/process/layer-properties.md

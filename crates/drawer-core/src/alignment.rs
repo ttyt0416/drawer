@@ -185,6 +185,22 @@ fn selection(doc: &Document, objects: &[(Item, Rect)]) -> Result<Rect, String> {
     rectangle(objects.iter().flat_map(|(_, r)| [r.min, r.max]))
 }
 fn writable(doc: &Document, item: Item) -> Result<(), String> {
+    match item {
+        Item::Raster(n) => {
+            crate::layer_properties::movable(doc, crate::layer_properties::raster(doc, n))?
+        }
+        Item::Vector(id) => {
+            let l = doc
+                .scene
+                .lines
+                .layers
+                .iter()
+                .find(|l| l.paths.iter().any(|p| p.id == id))
+                .ok_or("Missing vector path")?;
+            crate::layer_properties::movable(doc, crate::layer_properties::Target::Vector(l.id))?;
+        }
+        _ => {}
+    }
     let okay = match item {
         Item::Raster(n) => doc
             .layers

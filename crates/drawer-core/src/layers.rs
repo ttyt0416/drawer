@@ -421,7 +421,11 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 state.scene.paper.layers.insert(to, attrs);
             }
             insert(&mut state.scene.paper, to, p, pos)?;
-            selected = Target::Raster(state.scene.layer_ids.id(to));
+            let copy_id = state.scene.layer_ids.id(to);
+            if let Some(p) = state.scene.layer_properties.rasters.get(&id).copied() {
+                state.scene.layer_properties.rasters.insert(copy_id, p);
+            }
+            selected = Target::Raster(copy_id);
         }
         Command::Duplicate(Target::Vector(id)) => {
             let source = state
@@ -447,6 +451,9 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 .unwrap();
             state.scene.lines.layers.pop();
             state.scene.lines.layers.insert(index + 1, copy);
+            if let Some(p) = state.scene.layer_properties.vectors.get(&id).copied() {
+                state.scene.layer_properties.vectors.insert(to, p);
+            }
             selected = Target::Vector(to);
         }
         Command::Delete(Target::Raster(id)) => {
@@ -467,6 +474,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 })
                 .collect();
             state.layers.remove(i);
+            state.scene.layer_properties.rasters.remove(&id);
             remap(&mut state.scene, &map);
             selected = Target::Raster(state.scene.layer_ids.id(i.min(state.layers.len() - 1)));
         }
@@ -487,6 +495,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 .map(|p| p.id)
                 .collect();
             state.scene.lines.layers.remove(i);
+            state.scene.layer_properties.vectors.remove(&id);
             state.scene.lines.prune_selection();
             state
                 .scene

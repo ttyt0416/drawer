@@ -213,13 +213,30 @@ impl Document {
         mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> [u8; 4] {
         let mut color = graph.composite(self, x, y, &mut pixel);
-        for cell in self
+        for (track, cell_index, cell) in self
             .animation
             .iter()
             .filter(|_| animation)
-            .flat_map(|a| a.visible_cells(self.current_frame))
+            .flat_map(|a| a.indexed_visible_cells(self.current_frame))
         {
-            color.add(cell.pixel(x as i64, y as i64));
+            let weight = crate::layer_properties::factor(
+                self,
+                crate::layer_properties::Target::Track(track as u16),
+            ) * crate::layer_properties::factor(
+                self,
+                crate::layer_properties::Target::Cell {
+                    track: track as u16,
+                    cell: cell_index as u16,
+                },
+            );
+            let pixel = cell.pixel(x as i64, y as i64);
+            if weight == 1.0 {
+                color.add(pixel);
+            } else {
+                let mut top = crate::paper::Color::default();
+                top.add(pixel);
+                color.mix_layer(top, weight as f32);
+            }
         }
         color.rgba()
     }

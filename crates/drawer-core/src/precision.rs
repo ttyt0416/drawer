@@ -33,6 +33,12 @@ pub struct Nudge {
 impl Nudge {
     pub fn begin(doc: &Document, layer: usize, target: Target) -> Result<Self, String> {
         let raster = doc.layers.get(layer).ok_or("Select a raster layer")?;
+        if target != Target::Boundary {
+            crate::layer_properties::movable(doc, crate::layer_properties::raster(doc, layer))?;
+        }
+        if target == Target::Pixels {
+            crate::layer_properties::paintable(doc, layer)?;
+        }
         if target != Target::Boundary && raster.locked {
             return Err("The raster layer is locked".into());
         }

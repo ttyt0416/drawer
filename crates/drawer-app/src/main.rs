@@ -42,6 +42,7 @@ mod image_import_dialog;
 mod information;
 mod input_replay;
 mod layer_manager;
+mod layer_properties;
 mod layer_selection;
 mod layout;
 mod line_tools;
@@ -164,6 +165,7 @@ struct Drawer {
     ruler_tools: rulers::Panel,
     special_rulers: special_rulers::Panel,
     layer_manager: layer_manager::Panel,
+    layer_properties: layer_properties::Panel,
     selection_filter: selection_filter::Panel,
     color_range: color_range::Panel,
     selection_border: selection_border::Panel,
@@ -297,6 +299,7 @@ impl Drawer {
             ruler_tools: Default::default(),
             special_rulers: Default::default(),
             layer_manager: Default::default(),
+            layer_properties: Default::default(),
             selection_filter: Default::default(),
             color_range: Default::default(),
             selection_border: Default::default(),
@@ -527,6 +530,14 @@ impl Drawer {
         self.canvas_view.simple = self.simple_view;
         self.canvas_view.selection_outline = self.workspaces.store.current.selection_outline;
         self.canvas_view.ruler_aids = self.aids.preferences;
+        self.canvas_view.label_preferences = self.workspaces.store.current.layer_colors;
+        self.canvas_view.label_target = self.active.map(|n| {
+            self.panels
+                .targets
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or(drawer_core::thumbnail::Target::Raster(0))
+        });
         self.canvas_view.ruler_target = self
             .active
             .and_then(|n| self.panels.targets.get(&self.documents[n].id).copied())
@@ -673,6 +684,7 @@ impl Drawer {
         self.gradient_window(ui.ctx());
         self.alignment_window(ui.ctx());
         self.layer_manager_window(ui.ctx());
+        self.layer_property_window(ui.ctx());
         self.layer_selection_window(ui.ctx());
         self.workspace_settings(ui.ctx());
         self.command_settings(ui.ctx());
@@ -1431,6 +1443,10 @@ impl eframe::App for Drawer {
                     eprintln!("Drawing snap priority: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = layer_properties::smoke(&root) {
+                    eprintln!("Layer properties/identification colors: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = layer_manager::smoke(&root) {
                     eprintln!("Layer management: {e}");
                     fail_smoke();
@@ -1662,7 +1678,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

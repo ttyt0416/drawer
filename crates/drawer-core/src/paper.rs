@@ -24,18 +24,20 @@ pub struct Paper {
     pub origin: Point,
 }
 impl Paper {
-    fn add(self, color: &mut Color, pixel: [u8; 4], original: Point) {
-        if self.hidden {
+    fn add(self, color: &mut Color, pixel: [u8; 4], original: Point, opacity: f64) {
+        if self.hidden || opacity <= 0.0 {
             return;
         }
         let pixel = self.shade(pixel, original);
         if self.blend == crate::brush_composite::Mode::Normal {
-            color.add(pixel);
+            let mut top = Color::from(pixel);
+            top.scale(opacity as f32);
+            color.over(top);
         } else {
             *color = Color::from(self.blend.compose(
                 color.rgba(),
                 pixel,
-                1.0,
+                opacity,
                 original.map(|v| v.floor() as i64),
                 self.seed,
             ));
@@ -107,6 +109,22 @@ impl Color {
             ]
         }
     }
+    pub(crate) fn mix_layer(&mut self, mut top: Self, w: f32) {
+        top.scale(w);
+        self.over(top);
+    }
+    fn scale(&mut self, w: f32) {
+        for c in &mut self.rgb {
+            *c *= w;
+        }
+        self.alpha *= w;
+    }
+    fn interpolate(before: Self, after: Self, w: f32) -> Self {
+        Self {
+            rgb: std::array::from_fn(|i| before.rgb[i] + (after.rgb[i] - before.rgb[i]) * w),
+            alpha: before.alpha + (after.alpha - before.alpha) * w,
+        }
+    }
     pub(crate) fn add(&mut self, pixel: [u8; 4]) {
         self.over(Self::from(pixel));
     }
@@ -150,7 +168,11 @@ impl Graph {
                     || f.name.chars().any(char::is_control)
                     || f.children.len() > 512
                     || !f.paper.valid()
-                    || (f.through && f.paper != Paper::default())
+                    || (f.through
+                        && Paper {
+                            hidden: false,
+                            ..f.paper
+                        } != Paper::default())
             })
         {
             return false;
@@ -306,7 +328,12 @@ impl Graph {
         if self.layers.is_empty() && self.roots.is_empty() {
             let mut color = Color::default();
             for (n, layer) in doc.layers.iter().enumerate() {
-                color.add(pixel(n, layer));
+                let mut top = Color::from(pixel(n, layer));
+                top.scale(crate::layer_properties::factor(
+                    doc,
+                    crate::layer_properties::raster(doc, n),
+                ) as f32);
+                color.over(top);
             }
             return color;
         }
@@ -319,11 +346,12 @@ impl Graph {
             let mut color = Color::default();
             for (n, layer) in doc.layers.iter().enumerate() {
                 let c = pixel(n, layer);
-                self.layers
-                    .get(&n)
-                    .copied()
-                    .unwrap_or_default()
-                    .add(&mut color, c, original);
+                self.layers.get(&n).copied().unwrap_or_default().add(
+                    &mut color,
+                    c,
+                    original,
+                    crate::layer_properties::factor(doc, crate::layer_properties::raster(doc, n)),
+                );
             }
             return color;
         }
@@ -335,11 +363,12 @@ impl Graph {
         for (n, layer) in doc.layers.iter().enumerate() {
             if !seen[n] {
                 let c = pixel(n, layer);
-                self.layers
-                    .get(&n)
-                    .copied()
-                    .unwrap_or_default()
-                    .add(&mut color, c, original);
+                self.layers.get(&n).copied().unwrap_or_default().add(
+                    &mut color,
+                    c,
+                    original,
+                    crate::layer_properties::factor(doc, crate::layer_properties::raster(doc, n)),
+                );
             }
         }
         color
@@ -367,24 +396,35 @@ impl Graph {
                 };
                 seen[n] = true;
                 let c = pixel(n, layer);
-                self.layers
-                    .get(&n)
-                    .copied()
-                    .unwrap_or_default()
-                    .add(color, c, original);
+                self.layers.get(&n).copied().unwrap_or_default().add(
+                    color,
+                    c,
+                    original,
+                    crate::layer_properties::factor(doc, crate::layer_properties::raster(doc, n)),
+                );
             }
             Node::Folder(n) => {
                 if let Some(folder) = self.folders.get(n) {
+                    if folder.paper.hidden {
+                        self.mark_layers(Node::Folder(n), seen, 0);
+                        return;
+                    }
+                    let weight = crate::layer_properties::factor(
+                        doc,
+                        crate::layer_properties::Target::Folder(n as u16),
+                    );
                     if !folder.through {
                         let mut group = Color::default();
                         for c in &folder.children {
                             self.append(doc, (*c, depth + 1), original, &mut group, seen, pixel);
                         }
-                        folder.paper.add(color, group.rgba(), original);
+                        folder.paper.add(color, group.rgba(), original, weight);
                     } else {
+                        let before = *color;
                         for c in &folder.children {
                             self.append(doc, (*c, depth + 1), original, color, seen, pixel);
                         }
+                        *color = Color::interpolate(before, *color, weight as f32);
                     }
                 }
             }
@@ -481,15 +521,7 @@ impl Graph {
             .map_err(|_| "Not enough raster memory")?;
         for y in min[1]..max[1] {
             for x in min[0]..max[0] {
-                let c = match node {
-                    Node::Raster(n) => self.layer_pixel(
-                        doc,
-                        n,
-                        [x, y],
-                        doc.layers[n].pixel(doc.width, doc.height, x, y),
-                    ),
-                    Node::Folder(_) => self.node_pixel(doc, node, [x, y]),
-                };
+                let c = self.node_pixel(doc, node, [x, y]);
                 pixels.push(c);
             }
         }
@@ -544,6 +576,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     }
     if let Node::Raster(n) = node
         && !graph.layers.contains_key(&n)
+        && crate::layer_properties::factor(doc, crate::layer_properties::raster(doc, n)) == 1.0
     {
         return Ok(false);
     }
@@ -559,9 +592,15 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
         Node::Raster(n) => {
             after.layers[n] = raster;
             after.scene.paper.layers.remove(&n);
+            let target = crate::layer_properties::raster(doc, n);
+            let mut properties = crate::layer_properties::properties(doc, target);
+            properties.opacity = 100;
+            properties.hidden = false;
+            after.scene.layer_properties.set(target, properties);
             after.scene.mouse_strokes.retain(|s| s.layer != n);
         }
         Node::Folder(folder) => {
+            after.scene.layer_ids.initialize(doc.layers.len())?;
             let first = *indices.first().ok_or("Empty folder")?;
             let mut map = [0usize; 256];
             let mut layers = Vec::new();
@@ -599,6 +638,13 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 .filter(|(n, _)| !indices.contains(n))
                 .map(|(n, p)| (map[n], p))
                 .collect();
+            for n in &indices {
+                after
+                    .scene
+                    .layer_properties
+                    .rasters
+                    .remove(&doc.scene.layer_ids.id(*n));
+            }
             if !after.scene.layer_ids.rasters.is_empty() {
                 let old = after.scene.layer_ids.rasters.clone();
                 let mut ids = vec![0; layers.len()];

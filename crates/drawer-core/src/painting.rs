@@ -811,6 +811,7 @@ impl Stroke {
             total_budget / 4 * 3
         } / (copies.len() + 1);
         let style = style.resolved();
+        crate::layer_properties::paintable(doc, layer)?;
         if doc.layers.get(layer).is_some_and(|l| l.locked) {
             return Err("The raster layer is locked".into());
         }

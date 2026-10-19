@@ -457,6 +457,14 @@ impl Drawer {
             canvas.profiles = self.workspaces.store.current.input.profiles;
             canvas.selection_outline = self.workspaces.store.current.selection_outline;
             canvas.ruler_aids = self.aids.preferences;
+            canvas.label_preferences = self.workspaces.store.current.layer_colors;
+            canvas.label_target = Some(
+                self.panels
+                    .targets
+                    .get(&doc.id)
+                    .copied()
+                    .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
+            );
             canvas.ruler_target = self.panels.targets.get(&doc.id).copied().map_or(
                 drawer_core::line_tools::Target::Raster(0),
                 |t| match t {

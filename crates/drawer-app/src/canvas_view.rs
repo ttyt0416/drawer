@@ -3,6 +3,9 @@ use eframe::egui;
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    pub label_target: Option<drawer_core::thumbnail::Target>,
+    pub label_preferences: drawer_core::layer_properties::Display,
+    pub label_edges: usize,
     pub ruler_target: drawer_core::line_tools::Target,
     pub ruler_aids: drawer_core::aids::AidPreferences,
     pub ruler_segments: usize,
@@ -83,6 +86,9 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            label_target: None,
+            label_preferences: Default::default(),
+            label_edges: 0,
             ruler_target: drawer_core::line_tools::Target::Raster(0),
             ruler_aids: Default::default(),
             ruler_segments: 0,
@@ -1242,6 +1248,31 @@ impl CanvasView {
                 );
             }
         };
+        self.label_edges = 0;
+        if self.label_preferences.canvas
+            && let Some(target) = self.label_target
+        {
+            let t = drawer_core::layer_properties::from_thumbnail(document, target);
+            if !drawer_core::layer_properties::inherited(document, t).hidden {
+                let mark = drawer_core::layer_properties::canvas_mark(document, target);
+                let color = match mark {
+                    drawer_core::layer_properties::Mark::None => None,
+                    drawer_core::layer_properties::Mark::Color(c) => {
+                        Some(egui::Color32::from_rgb(c[0], c[1], c[2]))
+                    }
+                    drawer_core::layer_properties::Mark::Mixed => Some(egui::Color32::LIGHT_GRAY),
+                };
+                if let Some(color) = color {
+                    let r = drawer_core::thumbnail::bounds(document, target, false);
+                    let points = [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]]
+                        .map(|p| view.document_to_screen(p, size, center, ppp));
+                    for i in 0..4 {
+                        segment([points[i], points[(i + 1) % 4]], color);
+                        self.label_edges += 1;
+                    }
+                }
+            }
+        }
         if preferences.grid {
             for line in aids::grid_lines(
                 view,

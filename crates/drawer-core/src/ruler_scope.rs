@@ -127,6 +127,12 @@ pub fn translate_layer(
     target: Target,
     delta: Point,
 ) -> Result<DocumentState, String> {
+    let properties_target = match target {
+        Target::Raster(n) => crate::layer_properties::raster(doc, n),
+        Target::Vector(id) => crate::layer_properties::Target::Vector(id),
+        _ => return Err("Choose a raster or vector layer".into()),
+    };
+    crate::layer_properties::movable(doc, properties_target)?;
     if !linked_visible(doc, target) {
         return Err("Layer is hidden or missing".into());
     }

@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub layer_colors: crate::layer_properties::Display,
+    #[serde(default)]
     pub auto_shape: crate::auto_shape::Settings,
     #[serde(default)]
     pub magnetic_lasso: crate::magnetic_lasso::Settings,
@@ -423,6 +425,7 @@ impl Default for Snapshot {
             selection_outline: true,
             selection_shortcuts: Default::default(),
             magnetic_lasso: Default::default(),
+            layer_colors: Default::default(),
             auto_shape: Default::default(),
             shapes_vector: false,
             layer_pick: Default::default(),
@@ -598,6 +601,7 @@ impl Snapshot {
             next.shapes = incoming.shapes;
             next.snapping = incoming.snapping;
             next.selection_outline = incoming.selection_outline;
+            next.layer_colors = incoming.layer_colors;
             next.shapes_vector = incoming.shapes_vector;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;

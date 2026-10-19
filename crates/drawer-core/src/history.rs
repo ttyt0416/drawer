@@ -190,6 +190,7 @@ impl Document {
         mut changes: Vec<PixelChange>,
         after_scene: Option<crate::scene::Scene>,
     ) -> Result<bool, String> {
+        crate::layer_properties::paintable(self, layer)?;
         changes.retain(|p| p.before != p.after);
         if changes.is_empty() {
             return Ok(false);
@@ -234,6 +235,7 @@ impl Document {
         Ok(true)
     }
     pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
+        crate::layer_properties::validate_scene(self, &after)?;
         if !after.valid()
             || !after.layer_ids.matches(self.layers.len())
             || !after.paper.valid_for(self.layers.len())
@@ -258,6 +260,9 @@ impl Document {
         self.revision += 1;
     }
     pub fn edit_pixel(&mut self, layer: usize, x: u32, y: u32, after: [u8; 4]) -> bool {
+        if crate::layer_properties::paintable(self, layer).is_err() {
+            return false;
+        }
         if x >= self.width || y >= self.height {
             return false;
         }
@@ -294,6 +299,7 @@ impl Document {
         group: Option<u64>,
     ) -> Result<bool, String> {
         after.scene.layer_ids.append(after.layers.len())?;
+        crate::layer_properties::validate_edit(self, &after)?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
             || !(1..=crate::document::MAX_DIMENSION).contains(&after.height)
             || !after.dpi.is_finite()

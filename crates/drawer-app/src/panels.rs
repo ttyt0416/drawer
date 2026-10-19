@@ -423,6 +423,13 @@ impl Drawer {
                             )
                             .clicked()
                         });
+                        super::layer_properties::row_mark(
+                            ui,
+                            &self.documents[n],
+                            *target,
+                            self.workspaces.store.current.layer_colors,
+                            kind == Kind::Timeline,
+                        );
                         let response =
                             crate::help::selectable(ui, selected == *target, label, "tools");
                         #[cfg(test)]
@@ -486,9 +493,19 @@ impl Drawer {
                         let mut locked = raster.locked;
                         if ui.checkbox(&mut locked, "Lock raster layer").changed() {
                             self.finish_stroke();
-                            let mut state = self.documents[n].snapshot();
-                            state.layers[layer].locked = locked;
-                            if let Err(e) = self.documents[n].commit_state(state) {
+                            let result = drawer_core::layer_properties::prepare_patch(
+                                &self.documents[n],
+                                &[drawer_core::layer_properties::raster(
+                                    &self.documents[n],
+                                    layer,
+                                )],
+                                drawer_core::layer_properties::Patch {
+                                    locked: Some(locked),
+                                    ..Default::default()
+                                },
+                            )
+                            .and_then(|state| self.documents[n].commit_state(state));
+                            if let Err(e) = result {
                                 self.status = Some(e);
                             }
                         }
@@ -532,6 +549,7 @@ impl Drawer {
                             top = ui.button("Top raster").clicked();
                             for (label, command) in [
                                 ("Manage layers…", "manage-layers"),
+                                ("Properties / identification colors…", "layer-properties"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),

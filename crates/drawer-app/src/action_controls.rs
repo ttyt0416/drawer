@@ -286,6 +286,7 @@ impl Drawer {
                 "gradient-tool" => self.begin_gradient()?,
                 "align-objects" => self.begin_alignment()?,
                 "manage-layers" => self.begin_layer_manager()?,
+                "layer-properties" => self.begin_layer_properties()?,
                 "import-image-layer" => self.choose_image_layer(ctx)?,
                 "new-raster-layer" | "new-vector-layer" | "duplicate-layer" | "delete-layer" => {
                     self.layer_quick_command(command)?

@@ -181,6 +181,11 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::layer_properties::Data::is_default"
+    )]
+    pub layer_properties: crate::layer_properties::Data,
     #[serde(default, skip_serializing_if = "crate::layers::Ids::is_default")]
     pub layer_ids: crate::layers::Ids,
     #[serde(
@@ -237,6 +242,7 @@ impl Scene {
                     .iter()
                     .all(|v| v.is_finite() && v.abs() <= 1e12)
             })
+            && self.layer_properties.valid()
             && self.layer_ids.valid()
             && self.alignment.valid()
             && self.animation_output.valid()
@@ -308,7 +314,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.layer_ids.rasters.len() * 8
+        self.layer_properties.bytes()
+            + self.layer_ids.rasters.len() * 8
             + self.alignment.selected.len() * std::mem::size_of::<crate::alignment::Item>()
             + self.animation_output.bytes()
             + self.rulers.bytes()

@@ -210,3 +210,7 @@ pub mod alignment_detail_verify;
 pub mod layers;
 
 pub mod layers_verify;
+
+pub mod layer_properties;
+
+pub mod layer_properties_verify;

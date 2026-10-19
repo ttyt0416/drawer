@@ -158,6 +158,19 @@ impl Timeline {
                 .map(|a| a.name.len() + a.samples.len() * 2 + 64)
                 .sum::<usize>()
     }
+    pub fn indexed_visible_cells(&self, frame: u32) -> impl Iterator<Item = (usize, usize, &Cell)> {
+        self.tracks
+            .iter()
+            .enumerate()
+            .filter_map(move |(track, t)| {
+                if frame >= t.end {
+                    return None;
+                }
+                let n = t.exposures.partition_point(|e| e.frame <= frame);
+                let cell = t.exposures.get(n.checked_sub(1)?)?.cell;
+                t.cells.get(cell).map(|c| (track, cell, c))
+            })
+    }
     pub fn visible_cells(&self, frame: u32) -> impl Iterator<Item = &Cell> {
         self.tracks.iter().filter_map(move |t| {
             if frame >= t.end {

@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 85] = [
+pub const EXTRA_COMMANDS: [&str; 86] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -73,6 +73,7 @@ pub const EXTRA_COMMANDS: [&str; 85] = [
     "shape-tool",
     "align-objects",
     "manage-layers",
+    "layer-properties",
     "import-image-layer",
     "new-raster-layer",
     "new-vector-layer",
@@ -392,6 +393,7 @@ impl Settings {
             "shape-tool" => "Draw shape",
             "align-objects" => "Align and distribute objects",
             "manage-layers" => "Manage local layers",
+            "layer-properties" => "Layer properties and identification colors",
             "import-image-layer" => "Import local image as layer",
             "new-raster-layer" => "Create raster layer",
             "new-vector-layer" => "Create vector layer",

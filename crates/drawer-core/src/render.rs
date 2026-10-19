@@ -202,19 +202,25 @@ impl<'a> Renderer<'a> {
             .zip(&self.vector_bounds)
             .enumerate()
         {
+            let opacity = crate::layer_properties::factor(
+                doc,
+                crate::layer_properties::Target::Vector(layer.id),
+            );
             if !layer.hidden
+                && opacity > 0.0
                 && self.references.is_none_or(|r| r.vectors)
                 && self
                     .fill
                     .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
             {
+                let mut vector_result = if opacity == 1.0 { result } else { [0; 4] };
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
                     if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
                         if path.segments().any(|(a, b)| {
                             distance(point, scene.transform.map(a), scene.transform.map(b)) <= 0.5
                         }) {
-                            result = over(
-                                result,
+                            vector_result = over(
+                                vector_result,
                                 if path.stroke {
                                     path.color
                                 } else {
@@ -226,9 +232,20 @@ impl<'a> Renderer<'a> {
                     }
                     if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
                     {
-                        result = over(result, path.pixel(original));
+                        vector_result = over(vector_result, path.pixel(original));
                     }
                 }
+                result = if opacity == 1.0 {
+                    vector_result
+                } else {
+                    crate::brush_composite::Mode::Normal.compose(
+                        result,
+                        vector_result,
+                        opacity,
+                        original.map(|p| p.floor() as i64),
+                        0,
+                    )
+                };
             }
         }
         if self.references.is_none_or(|r| r.objects)

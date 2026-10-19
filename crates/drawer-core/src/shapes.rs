@@ -496,6 +496,7 @@ fn prepare_inner(
             state
         }
         Target::Raster(index) => {
+            crate::layer_properties::paintable(doc, index)?;
             let raster = doc
                 .layers
                 .get(index)
