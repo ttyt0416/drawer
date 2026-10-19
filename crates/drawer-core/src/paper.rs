@@ -328,7 +328,7 @@ impl Graph {
         y: u32,
         pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> Color {
-        if doc.scene.clipping.graph_active() {
+        if doc.scene.clipping.graph_active() || crate::layer_blend::graph_active(doc) {
             return self.clipped_composite(doc, [x as i64, y as i64], pixel);
         }
         if self.layers.is_empty() && self.roots.is_empty() {
@@ -437,7 +437,7 @@ impl Graph {
         }
     }
     pub fn node_pixel(&self, doc: &Document, node: Node, point: [i64; 2]) -> [u8; 4] {
-        if doc.scene.clipping.graph_active() {
+        if doc.scene.clipping.graph_active() || crate::layer_blend::graph_active(doc) {
             return self.clipped_node_pixel(doc, node, point);
         }
         let original = doc
@@ -561,10 +561,11 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             "Unhide affected layers/folders before baking; stored pixels are preserved".into(),
         );
     }
-    if graph
-        .layers
-        .values()
-        .any(|p| p.blend != crate::brush_composite::Mode::Normal)
+    if crate::layer_blend::graph_active(doc)
+        || graph
+            .layers
+            .values()
+            .any(|p| p.blend != crate::brush_composite::Mode::Normal)
         || graph
             .folders
             .iter()

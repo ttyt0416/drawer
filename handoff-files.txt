@@ -443,3 +443,7 @@ crates/drawer-core/src/clipping.rs
 crates/drawer-core/src/clipping_render.rs
 crates/drawer-core/src/clipping_verify.rs
 docs/process/layer-clipping.md
+
+crates/drawer-core/src/layer_blend.rs
+crates/drawer-core/src/layer_blend_verify.rs
+docs/process/layer-blend.md

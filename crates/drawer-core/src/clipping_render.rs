@@ -8,7 +8,17 @@ struct Sample<'a, F> {
     pixel: &'a mut F,
     seen: [bool; 256],
 }
-fn atop(base: &mut Color, top: Color, paper: Paper, original: Point) {
+fn atop(
+    base: &mut Color,
+    top: Color,
+    paper: Paper,
+    original: Point,
+    blend: crate::layer_blend::Mode,
+) {
+    if !blend.is_normal() {
+        blend.atop(base, top);
+        return;
+    }
     if base.alpha <= 0.0 || top.alpha <= 0.0 {
         return;
     }
@@ -84,6 +94,11 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
     }
     fn put(&self, dst: &mut Color, source: Color, n: Node) {
         let paper = self.paper(n);
+        let mode = crate::layer_blend::mode(self.doc, clipping::node_key(self.doc, n));
+        if !mode.is_normal() {
+            mode.over(dst, source);
+            return;
+        }
         if paper.blend == crate::brush_composite::Mode::Normal {
             dst.over(source);
         } else {
@@ -142,7 +157,13 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
                     == Some(key)
                 {
                     let top = self.source(nodes[j], depth);
-                    atop(&mut group, top, self.paper(nodes[j]), self.original);
+                    atop(
+                        &mut group,
+                        top,
+                        self.paper(nodes[j]),
+                        self.original,
+                        crate::layer_blend::mode(self.doc, clipping::node_key(self.doc, nodes[j])),
+                    );
                 } else {
                     graph.mark_layers(nodes[j], &mut self.seen, 0);
                 }
@@ -287,11 +308,17 @@ pub(crate) fn vectors(
         {
             if doc.scene.clipping.binding(Target::Vector(layers[j].id)) == Some(key) {
                 let top = source(j, &mut allowed);
-                atop(&mut group, top, Paper::default(), original);
+                atop(
+                    &mut group,
+                    top,
+                    Paper::default(),
+                    original,
+                    crate::layer_blend::mode(doc, Target::Vector(layers[j].id)),
+                );
             }
             j += 1;
         }
-        output.over(group);
+        crate::layer_blend::mode(doc, key).over(&mut output, group);
         i = j;
     }
     output.rgba()

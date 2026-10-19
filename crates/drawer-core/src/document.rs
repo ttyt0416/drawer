@@ -230,7 +230,17 @@ impl Document {
                 },
             );
             let pixel = cell.pixel(x as i64, y as i64);
-            if weight == 1.0 {
+            let blend = crate::layer_blend::mode(
+                self,
+                crate::layer_properties::Target::Track(track as u16),
+            );
+            if !blend.is_normal() {
+                let mut top = crate::paper::Color::default();
+                top.add(pixel);
+                top.rgb.iter_mut().for_each(|c| *c *= weight as f32);
+                top.alpha *= weight as f32;
+                blend.over(&mut color, top);
+            } else if weight == 1.0 {
                 color.add(pixel);
             } else {
                 let mut top = crate::paper::Color::default();

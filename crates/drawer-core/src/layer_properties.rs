@@ -19,6 +19,8 @@ pub struct Properties {
     pub pixels_locked: bool,
     pub position_locked: bool,
     pub color: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "crate::layer_blend::Mode::is_normal")]
+    pub blend: crate::layer_blend::Mode,
 }
 impl Default for Properties {
     fn default() -> Self {
@@ -29,6 +31,7 @@ impl Default for Properties {
             pixels_locked: false,
             position_locked: false,
             color: None,
+            blend: Default::default(),
         }
     }
 }
@@ -56,6 +59,7 @@ impl Data {
             && self.folders.len() <= 256
             && self.tracks.len() <= 32
             && self.cells.len() <= 10000
+            && self.cells.values().all(|p| p.blend.is_normal())
             && self
                 .rasters
                 .keys()
@@ -236,6 +240,7 @@ pub struct Patch {
     pub pixels_locked: Option<bool>,
     pub position_locked: Option<bool>,
     pub color: Option<Option<[u8; 3]>>,
+    pub blend: Option<crate::layer_blend::Mode>,
 }
 impl Patch {
     pub fn apply(self, mut p: Properties) -> Properties {
@@ -254,6 +259,9 @@ impl Patch {
         if let Some(v) = self.position_locked {
             p.position_locked = v;
         }
+        if let Some(v) = self.blend {
+            p.blend = v;
+        }
         if let Some(v) = self.color {
             p.color = v;
         }
@@ -267,6 +275,7 @@ impl Patch {
             && self.pixels_locked.is_none()
             && self.position_locked.is_none()
             && self.color.is_none()
+            && self.blend.is_none()
     }
 }
 pub fn prepare(
@@ -284,6 +293,7 @@ pub fn prepare(
             pixels_locked: Some(p.pixels_locked),
             position_locked: Some(p.position_locked),
             color: Some(p.color),
+            blend: Some(p.blend),
         },
     )
 }
@@ -317,6 +327,9 @@ pub fn prepare_patch(
         let mut p = patch.apply(old);
         if matches!(t, Target::Vector(_)) {
             p.pixels_locked = old.pixels_locked;
+        }
+        if matches!(t, Target::Cell { .. }) {
+            p.blend = old.blend;
         }
         p
     };
@@ -371,7 +384,12 @@ pub(crate) fn set_state(
             l.hidden = p.hidden;
             l.locked = p.locked;
         }
-        Target::Folder(n) => state.scene.paper.folders[n as usize].paper.hidden = p.hidden,
+        Target::Folder(n) => {
+            state.scene.paper.folders[n as usize].paper.hidden = p.hidden;
+            if !p.blend.is_normal() {
+                state.scene.paper.folders[n as usize].through = false;
+            }
+        }
         _ => {}
     }
     Ok(())

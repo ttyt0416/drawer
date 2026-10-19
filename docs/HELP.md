@@ -723,3 +723,7 @@ Identification color는 이미지에 칠하지 않는 구분색입니다. Lists 
 Layers… → Alpha protection / clipping / solo에서 Protect existing alpha와 Clip to the base below를 바꾸고 Apply changed properties를 누릅니다. 알파 보호는 이미 칠한 부분의 투명도를 유지합니다. 클리핑은 같은 폴더 안의 아래 기준층에만 표시하며 기준층이 이동·삭제되어 끊기면 비활성으로 남습니다. 목록에서 기준과 활성 상태를 확인할 수 있습니다.
 
 폴더 하나를 선택해 Solo this folder를 누르면 바깥 층을 숨깁니다. 내부의 숨긴 자식은 계속 숨겨집니다. Restore visibility before solo는 이전 표시 상태를 복구합니다. 각 적용과 복구는 한 Undo이며 문서에 저장됩니다.
+
+## layer-blend | 레이어 혼합 모드 | 일반 곱하기 스크린 오버레이
+
+Layers… → Layer blend modes에서 대상을 선택하고 Normal / Multiply / Screen / Overlay 중 하나를 고릅니다. Apply changed properties로 적용하며 한 Undo로 복구합니다. 원래 픽셀은 유지합니다. 반투명과 불투명도도 함께 합성합니다. 통과 폴더에 일반 이외 모드를 적용하면 격리 폴더로 바뀝니다. 셀은 트랙의 혼합 모드를 따릅니다.

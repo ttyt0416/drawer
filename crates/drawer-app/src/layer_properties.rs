@@ -4,6 +4,7 @@ use drawer_core::layer_properties::{self as core, Mark, Patch, Properties, Targe
 pub(super) struct Panel {
     draft: Option<Box<Draft>>,
     apply: Option<egui::Rect>,
+    modes: [Option<egui::Rect>; 4],
 }
 struct Draft {
     id: u64,
@@ -194,6 +195,7 @@ impl Drawer {
 if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{} selected",e.selected.len()));});
             egui::ScrollArea::vertical().id_salt("property-layer-targets").max_height(150.0).show_rows(ui,22.0,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,label(d,t)).changed(){if selected{e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});
             ui.label("Only changed fields apply to the selected targets. Unchanged colors and locks stay per layer.");
+            ui.add_enabled_ui(e.selected.iter().any(|t|!matches!(t,Target::Cell{..})),|ui|{ui.horizontal(|ui|{ui.label("Layer blend");for (i,mode) in drawer_core::layer_blend::Mode::ALL.iter().enumerate(){let r=ui.selectable_value(&mut e.values.blend,*mode,format!("{mode:?}"));self.layer_properties.modes[i]=Some(r.rect);if r.changed(){e.patch.blend=Some(*mode);}}});});
             if ui.checkbox(&mut e.values.hidden,"Hidden").changed(){e.patch.hidden=Some(e.values.hidden);}
             if ui.add(egui::Slider::new(&mut e.values.opacity,0..=100).text("Opacity %")).changed(){e.patch.opacity=Some(e.values.opacity);}
             if ui.checkbox(&mut e.values.locked,"Lock all layer content / position").changed(){e.patch.locked=Some(e.values.locked);}
@@ -602,8 +604,127 @@ pub(super) fn clipping_smoke(root: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+pub(super) fn blend_smoke(root: &std::path::Path) -> Result<(), String> {
+    use drawer_core::layer_blend::Mode;
+    drawer_core::layer_blend_verify::verify(root)?;
+    for mode in Mode::ALL {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 8,
+            height: 8,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        app.documents[0].layers[0].pixels.fill([64, 128, 192, 255]);
+        let mut l = app.documents[0].layers[0].clone();
+        l.pixels.fill([192, 64, 128, 128]);
+        app.documents[0].layers.push(l);
+        let state = core::prepare_patch(
+            &app.documents[0],
+            &[Target::Raster(2)],
+            Patch {
+                blend: Some(mode),
+                ..Default::default()
+            },
+        )?;
+        app.documents[0].commit_state(state)?;
+        let expected = drawer_core::render::Renderer::new(&app.documents[0]).pixel([0.5, 0.5]);
+        let upload = egui::Color32::from_rgba_unmultiplied(
+            expected[0],
+            expected[1],
+            expected[2],
+            expected[3],
+        );
+        let mut found = false;
+        for time in [0., 0.1] {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1000., 700.),
+                    )),
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| app.show(ui),
+            );
+            for deltas in output.textures_delta.set.values() {
+                for delta in deltas {
+                    let egui::ImageData::Color(image) = &delta.image;
+                    if image.size == [8, 8] && image.pixels.iter().all(|c| *c == upload) {
+                        found = true;
+                    }
+                }
+            }
+            output.textures_delta.clear();
+        }
+        if !found {
+            return Err(format!("CPU/GPU texture upload mismatch for {mode:?}"));
+        }
+    }
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 8,
+        height: 8,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    let mut time = 0.;
+    let step = |app: &mut Drawer, time: &mut f64, events| {
+        *time += 0.1;
+        super::input_replay::frame(&ctx, app, *time, events);
+    };
+    step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
+    app.execute_command(&ctx, "layer-blend");
+    let before = app.documents[0].snapshot();
+    step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
+    let click = |app: &mut Drawer, time: &mut f64, r: egui::Rect| {
+        for pressed in [true, false] {
+            step(
+                app,
+                time,
+                vec![
+                    egui::Event::PointerMoved(r.center()),
+                    egui::Event::PointerButton {
+                        pos: r.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+    };
+    let r = app.layer_properties.modes[2].ok_or("Screen control missing")?;
+    click(&mut app, &mut time, r);
+    if app.documents[0].snapshot() != before {
+        return Err("Blend selector mutated pixels before Apply".into());
+    }
+    let r = app.layer_properties.apply.ok_or("Blend Apply missing")?;
+    click(&mut app, &mut time, r);
+    if core::properties(&app.documents[0], Target::Raster(1)).blend != Mode::Screen
+        || !app.documents[0].undo()
+        || app.documents[0].snapshot() != before
+    {
+        return Err(format!("Blend button/apply/Undo failed: {:?}", app.status));
+    }
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn blend_buttons_and_gpu_texture_payload() {
+        let root = crate::tests::TestDirectory::new();
+        super::blend_smoke(&root.0).unwrap();
+    }
     #[test]
     fn alpha_clipping_buttons_and_mouse_pen() {
         let root = crate::tests::TestDirectory::new();

@@ -218,3 +218,7 @@ pub mod layer_properties_verify;
 pub mod clipping;
 
 pub mod clipping_verify;
+
+pub mod layer_blend;
+
+pub mod layer_blend_verify;
