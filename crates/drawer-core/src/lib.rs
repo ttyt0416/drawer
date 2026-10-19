@@ -175,3 +175,5 @@ pub mod layer_selection;
 pub mod vector_selection;
 
 pub mod layer_selection_verify;
+
+pub mod transparency_verify;

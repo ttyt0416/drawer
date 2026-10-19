@@ -392,3 +392,7 @@ crates/drawer-core/src/vector_selection.rs
 crates/drawer-core/src/layer_selection_verify.rs
 crates/drawer-app/src/layer_selection.rs
 docs/process/layer-and-vector-selections.md
+
+crates/drawer-core/src/transparency_verify.rs
+crates/drawer-app/src/transparency.rs
+docs/process/transparency-fill-wand.md

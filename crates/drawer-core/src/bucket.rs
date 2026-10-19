@@ -139,7 +139,7 @@ impl Region {
                     p[3] as f64 / 255.0 <= s.alpha_tolerance
                 } else {
                     p[3] as f64 / 255.0 > s.alpha_tolerance
-                        && (0..4)
+                        && (0..3)
                             .all(|n| p[n].abs_diff(origin[n]) as f64 / 255.0 <= s.color_tolerance)
                 });
             }

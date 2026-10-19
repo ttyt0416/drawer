@@ -208,6 +208,11 @@ impl Drawer {
                 ui.selectable_value(&mut s.region.reference,drawer_core::bucket::Reference::Active,"Current raster");ui.selectable_value(&mut s.region.reference,drawer_core::bucket::Reference::Composite,"Visible composite");
                 if let Some(n)=self.active{for(i,l)in self.documents[n].layers.iter().enumerate(){ui.selectable_value(&mut s.region.reference,drawer_core::bucket::Reference::Layer(i as u16),format!("Raster {}: {}",i+1,l.name));}}
             });
+            ui.horizontal(|ui|{ui.selectable_value(&mut s.region.mode,drawer_core::bucket::Mode::Strict,"Strict transparency");ui.selectable_value(&mut s.region.mode,drawer_core::bucket::Mode::CloseGaps,"Loose / close gaps");});
+            ui.add_enabled_ui(s.region.mode==drawer_core::bucket::Mode::CloseGaps,|ui|{ui.add(egui::Slider::new(&mut s.region.gap,0..=32).text("Maximum gap pixels"));});
+            ui.add(egui::Slider::new(&mut s.region.expand,0..=32).text("Expand pixels"));
+            egui::ComboBox::from_id_salt("wand-expansion").selected_text(format!("{:?}",s.region.expansion)).show_ui(ui,|ui|{for v in [drawer_core::bucket::Expansion::Diamond,drawer_core::bucket::Expansion::Rectangle,drawer_core::bucket::Expansion::Round,drawer_core::bucket::Expansion::Darkest]{ui.selectable_value(&mut s.region.expansion,v,format!("{v:?}"));}});
+            ui.checkbox(&mut s.region.fill_narrow,"Include narrow areas");
             ui.add(egui::Slider::new(&mut s.region.color_tolerance,0.0..=1.0).text("Color tolerance"));ui.add(egui::Slider::new(&mut s.region.alpha_tolerance,0.0..=1.0).text("Alpha tolerance"));ui.checkbox(&mut s.region.antialias,"Wand edge coverage");
             ui.add(egui::Slider::new(&mut s.diameter,0.5..=4096.0).logarithmic(true).text("Selection brush diameter"));ui.add(egui::Slider::new(&mut s.hardness,0.0..=1.0).text("Hardness"));ui.add(egui::Slider::new(&mut s.strength,0.0..=1.0).text("Strength"));ui.checkbox(&mut s.erase,"Erase selection strength");
             if *s!=before{self.finish_stroke();}
