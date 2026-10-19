@@ -344,6 +344,8 @@ impl Drawer {
                     self.drawing.mode = super::precision::Mode::Move;
                     self.drawing.connect_line = false;
                 }
+                "contour-selection" => self.begin_contour_selection()?,
+                "selection-shortcuts" => self.edit_selection_shortcuts(),
                 "selection-expand" | "selection-shrink" | "selection-feather" => self
                     .begin_selection_filter(match command {
                         "selection-expand" => drawer_core::selection_filter::Operation::Expand,

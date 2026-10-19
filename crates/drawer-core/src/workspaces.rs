@@ -310,6 +310,8 @@ fn selection_outline_default() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(default)]
+    pub selection_shortcuts: crate::selection_shortcuts::Settings,
     #[serde(default = "selection_outline_default")]
     pub selection_outline: bool,
     #[serde(default)]
@@ -415,6 +417,7 @@ impl Default for Snapshot {
             shapes: Default::default(),
             snapping: Default::default(),
             selection_outline: true,
+            selection_shortcuts: Default::default(),
             shapes_vector: false,
             layer_pick: Default::default(),
             color_modes: Default::default(),
@@ -474,7 +477,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.selection_edit.valid()
+        if !self.selection_shortcuts.valid()
+            || !self.selection_edit.valid()
             || !self.enclosure.valid()
             || !self.gradient_presets.valid()
             || !self.shapes.valid()
@@ -560,6 +564,7 @@ impl Snapshot {
             next.display = incoming.display.clone();
         }
         if scope.bars {
+            next.selection_shortcuts = incoming.selection_shortcuts.clone();
             next.actions.access = incoming.actions.access.clone();
             next.actions.radials = incoming.actions.radials.clone();
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);

@@ -76,6 +76,8 @@ impl Drawer {
         let mut named = None;
         egui::Window::new("Page selections").open(&mut open).vscroll(true).show(ctx,|ui|{
             ui.horizontal_wrapped(|ui|{for (id,label) in [("select-rectangle","Rectangle"),("select-lasso","Lasso"),("select-ellipse","Ellipse"),("select-polygon","Polygon"),("selection-clear","Deselect"),("selection-invert","Invert"),("selection-reselect","Reselect")]{if ui.button(label).clicked(){command=Some(id);}}});
+            ui.horizontal(|ui|{if ui.button("Selection shortcut toolbar settings…").clicked(){command=Some("selection-shortcuts");}
+if ui.button("Selection from vector / ruler contour…").clicked(){command=Some("contour-selection");}});
             ui.label("Drag rectangles, ellipses or lassos and release. Polygon: click vertices, Enter to close; Backspace removes the last vertex. Escape/focus loss cancels. Edges use 4×4 coverage samples; no painting pixels change.");
             self.shape_selection_controls(ui);
             let Some(n)=self.active else{ui.label("Open a page first");return;};let d=&self.documents[n];
