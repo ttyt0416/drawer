@@ -499,3 +499,5 @@ crates/drawer-core/src/raster_conversion.rs
 crates/drawer-core/src/raster_conversion_verify.rs
 crates/drawer-app/src/raster_conversion.rs
 docs/process/raster-conversion.md
+crates/drawer-core/src/extended_blend_verify.rs
+docs/process/extended-blend.md

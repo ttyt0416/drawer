@@ -253,6 +253,7 @@ mod catalog_guard;
 
 pub mod search_edit;
 
+pub mod extended_blend_verify;
 pub mod file_objects;
 pub mod file_objects_verify;
 pub mod material_layer;

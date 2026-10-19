@@ -724,9 +724,13 @@ Layers… → Alpha protection / clipping / solo에서 Protect existing alpha와
 
 폴더 하나를 선택해 Solo this folder를 누르면 바깥 층을 숨깁니다. 내부의 숨긴 자식은 계속 숨겨집니다. Restore visibility before solo는 이전 표시 상태를 복구합니다. 각 적용과 복구는 한 Undo이며 문서에 저장됩니다.
 
-## layer-blend | 레이어 혼합 모드 | 일반 곱하기 스크린 오버레이
+## layer-blend | 레이어 혼합 모드 28개 | 발광 어둡게 밝게 색상 채도 광도
 
-Layers… → Layer blend modes에서 대상을 선택하고 Normal / Multiply / Screen / Overlay 중 하나를 고릅니다. Apply changed properties로 적용하며 한 Undo로 복구합니다. 원래 픽셀은 유지합니다. 반투명과 불투명도도 함께 합성합니다. 통과 폴더에 일반 이외 모드를 적용하면 격리 폴더로 바뀝니다. 셀은 트랙의 혼합 모드를 따릅니다.
+Layers… → Layer blend modes의 스크롤 메뉴에서 모드를 고릅니다. Normal, Darken, Multiply, Color burn, Linear burn, Subtract, Darker color, Lighten, Screen, Color dodge, Glow dodge, Add, Add (Glow), Lighter color, Overlay, Soft light, Hard light, Vivid light, Linear light, Pin light, Hard mix, Difference, Exclusion, Hue, Saturation, Color, Brightness, Divide를 제공합니다. Apply changed properties로 확정하고 한 Undo로 복원하며 원래 픽셀은 유지합니다. 통과 폴더의 일반 이외 모드는 격리 폴더로 전환하고 셀은 트랙의 모드를 따릅니다.
+
+채널별 Darken/Lighten과 전체색을 고르는 Darker/Lighter color는 다릅니다. Color burn/Linear burn, Color dodge/Glow dodge, Add/Add (Glow)와 다섯 Light 모드도 서로 다른 계산을 사용합니다. Glow dodge는 배경을 어둡게 하지 않는 Drawer의 이차 발광 규칙이며 Add (Glow)는 색을 합성한 뒤 범위를 제한해 반투명 발광을 보존합니다. 모든 모드는 인코딩된 sRGB 성분에서 계산하고 같은 source-over 알파를 사용합니다. Hue/Saturation/Color/Brightness는 RGB 전체의 색 성분을 교체합니다. 화면 ICC 소프트프루프는 혼합 이후에 적용되며 저장된 픽셀이나 혼합 공간을 바꾸지 않습니다.
+
+혼합 설정은 .drawer에 보존합니다. 현재 PSD의 편집 가능한 레이어 교환에는 혼합 모드를 보존하지 않으며, 사용 중인 모드 이름과 함께 Export rendered whole image를 안내합니다. PNG/PSD 렌더된 이미지는 현재 합성 결과를 굳힙니다. 각 모드의 이름은 타사 내부 수식과 비트 단위로 같다는 뜻이 아니며 Drawer의 공개된 고정 수식을 사용합니다.
 
 ## merge-layers | 레이어 병합·전체 합치기 | 아래와 병합 숨김층 미리보기
 

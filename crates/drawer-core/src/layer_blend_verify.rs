@@ -29,6 +29,7 @@ fn reference(mode: Mode, b: [u8; 4], s: [u8; 4]) -> [u8; 4] {
                     255 * 255 - 2 * (255 - cb) * (255 - cs)
                 }
             }
+            _ => unreachable!("Legacy rational reference covers the original four modes"),
         };
         let n = cb * ab * (255 - a) * 255 + cs * a * (255 - ab) * 255 + blended * a * ab;
         let den = alpha * 255;

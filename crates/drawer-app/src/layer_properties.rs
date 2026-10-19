@@ -4,7 +4,9 @@ use drawer_core::layer_properties::{self as core, Mark, Patch, Properties, Targe
 pub(super) struct Panel {
     draft: Option<Box<Draft>>,
     apply: Option<egui::Rect>,
-    modes: [Option<egui::Rect>; 4],
+    modes: Vec<Option<egui::Rect>>,
+    mode_trigger: Option<egui::Rect>,
+    blend_open: bool,
 }
 struct Draft {
     id: u64,
@@ -131,6 +133,7 @@ pub(super) fn row_mark(
 }
 impl Drawer {
     pub(super) fn begin_layer_properties(&mut self) -> Result<(), String> {
+        self.layer_properties.blend_open = false;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let t = self
             .panels
@@ -202,7 +205,11 @@ impl Drawer {
 if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{} selected",e.selected.len()));});
             egui::ScrollArea::vertical().id_salt("property-layer-targets").max_height(150.0).show_rows(ui,22.0,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,label(d,t)).changed(){if selected{e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});
             ui.label("Only changed fields apply to the selected targets. Unchanged colors and locks stay per layer.");
-            ui.add_enabled_ui(e.selected.iter().any(|t|!matches!(t,Target::Cell{..})),|ui|{ui.horizontal(|ui|{ui.label("Layer blend");for (i,mode) in drawer_core::layer_blend::Mode::ALL.iter().enumerate(){let r=ui.selectable_value(&mut e.values.blend,*mode,format!("{mode:?}"));self.layer_properties.modes[i]=Some(r.rect);if r.changed(){e.patch.blend=Some(*mode);}}});});
+            ui.add_enabled_ui(e.selected.iter().any(|t|!matches!(t,Target::Cell{..})),|ui|{
+                let was_open=self.layer_properties.blend_open;let mut shown=false;self.layer_properties.modes.resize(drawer_core::layer_blend::Mode::ALL.len(),None);self.layer_properties.modes.fill(None);
+                let menu=egui::ComboBox::from_label("Layer blend").height(240.).width(180.).selected_text(e.values.blend.label()).show_ui(ui,|ui|{shown=true;for(i,mode)in drawer_core::layer_blend::Mode::ALL.iter().enumerate(){let r=ui.selectable_value(&mut e.values.blend,*mode,mode.label());self.layer_properties.modes[i]=Some(r.rect);if !was_open&&*mode==e.values.blend{r.scroll_to_me(Some(egui::Align::Center));}
+if r.clicked(){e.patch.blend=Some(*mode);}}});self.layer_properties.mode_trigger=Some(menu.response.rect);self.layer_properties.blend_open=shown;
+            });
             if ui.checkbox(&mut e.values.hidden,"Hidden").changed(){e.patch.hidden=Some(e.values.hidden);}
             if ui.add(egui::Slider::new(&mut e.values.opacity,0..=100).text("Opacity %")).changed(){e.patch.opacity=Some(e.values.opacity);}
             if ui.checkbox(&mut e.values.locked,"Lock all layer content / position").changed(){e.patch.locked=Some(e.values.locked);}
@@ -614,6 +621,7 @@ pub(super) fn clipping_smoke(root: &std::path::Path) -> Result<(), String> {
 pub(super) fn blend_smoke(root: &std::path::Path) -> Result<(), String> {
     use drawer_core::layer_blend::Mode;
     drawer_core::layer_blend_verify::verify(root)?;
+    drawer_core::extended_blend_verify::verify(root)?;
     for mode in Mode::ALL {
         let ctx = egui::Context::default();
         let mut app = Drawer::new(&ctx, None);
@@ -710,7 +718,15 @@ pub(super) fn blend_smoke(root: &std::path::Path) -> Result<(), String> {
             );
         }
     };
-    let r = app.layer_properties.modes[2].ok_or("Screen control missing")?;
+    let trigger = app
+        .layer_properties
+        .mode_trigger
+        .ok_or("Blend menu missing")?;
+    click(&mut app, &mut time, trigger);
+    step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
+    let index = Mode::ALL.iter().position(|m| *m == Mode::Screen).unwrap();
+    let r = app.layer_properties.modes[index].ok_or("Screen control missing")?;
     click(&mut app, &mut time, r);
     if app.documents[0].snapshot() != before {
         return Err("Blend selector mutated pixels before Apply".into());
@@ -722,6 +738,47 @@ pub(super) fn blend_smoke(root: &std::path::Path) -> Result<(), String> {
         || app.documents[0].snapshot() != before
     {
         return Err(format!("Blend button/apply/Undo failed: {:?}", app.status));
+    }
+    for (mode_index, mode) in Mode::ALL.into_iter().enumerate() {
+        let before = app.documents[0].snapshot();
+        app.execute_command(&ctx, "layer-blend");
+        app.layer_properties
+            .draft
+            .as_mut()
+            .ok_or("Blend draft missing")?
+            .values
+            .blend = mode;
+        step(&mut app, &mut time, vec![]);
+        step(&mut app, &mut time, vec![]);
+        let trigger = app
+            .layer_properties
+            .mode_trigger
+            .ok_or("Blend menu trigger missing")?;
+        click(&mut app, &mut time, trigger);
+        step(&mut app, &mut time, vec![]);
+        step(&mut app, &mut time, vec![]);
+        let r = app.layer_properties.modes[mode_index].ok_or("Blend menu option missing")?;
+        click(&mut app, &mut time, r);
+        step(&mut app, &mut time, vec![]);
+        let r = app
+            .layer_properties
+            .apply
+            .ok_or("Blend menu apply missing")?;
+        click(&mut app, &mut time, r);
+        if app.layer_properties.draft.is_some()
+            || core::properties(&app.documents[0], Target::Raster(1)).blend != mode
+        {
+            return Err(format!(
+                "Scrollable blend mode {} did not apply: {:?}",
+                mode.label(),
+                app.status
+            ));
+        }
+        if app.documents[0].snapshot() != before
+            && (!app.documents[0].undo() || app.documents[0].snapshot() != before)
+        {
+            return Err(format!("Blend menu {} Undo", mode.label()));
+        }
     }
     Ok(())
 }

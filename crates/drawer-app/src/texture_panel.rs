@@ -227,13 +227,13 @@ impl Drawer {
             let mut open = true;
             let mut choice = None;
             egui::Window::new("PSD rendered export").open(&mut open).show(ctx,|ui|{
-                ui.label(drawer_core::psd::LOSS);ui.label(e.path.display().to_string());
+                ui.label(drawer_core::psd::LOSS);if let Some(note)=drawer_core::layer_blend::exchange_notice(d){ui.label(note);}ui.label(e.path.display().to_string());
                 if e.path.exists(){ui.checkbox(&mut e.replace,"Replace this existing PSD file");}
                 ui.add_enabled_ui(!e.path.exists() || e.replace,|ui|{
                     if ui.add_enabled(drawer_core::psd::layers_supported(d),egui::Button::new("Export rendered root layers / folders")).clicked(){choice=Some(drawer_core::psd::Choice::RenderedLayers);}
                     if ui.button("Export rendered whole image").clicked(){choice=Some(drawer_core::psd::Choice::RenderedImage);}
                 });
-                if !drawer_core::psd::layers_supported(d){ui.label("Page objects or animation require the rendered whole image to preserve the current appearance.");}
+                if !drawer_core::psd::layers_supported(d){ui.label("Layer blending, source order, page objects, hidden content or animation require the rendered whole image to preserve the current appearance.");}
                 if ui.button("Cancel PSD export").clicked(){choice=Some(drawer_core::psd::Choice::Cancel);}
             });
             if let Some(choice) = choice {

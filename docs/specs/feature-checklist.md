@@ -1215,7 +1215,7 @@
   저장·취소: 변경된 픽셀 또는 벡터색을 문서에 저장. 한 번의 확정으로 색·알파·기하의 이전상태 복원.  
   완료 검증: 반투명래스터·알파0·선택마스크·가변필압선·효과층거절·원래알파 유지.
 
-- [ ] **129.** 추가 혼합 모드의 고정 색 공간·알파 규칙과 교환 시 미지원 모드 안내
+- [x] **129.** 추가 혼합 모드의 고정 색 공간·알파 규칙과 교환 시 미지원 모드 안내
 
   입력·결과: 추가 혼합 모드(어둡게/밝게/차이/제외/가산/색상/채도/색/광도)를 제공하고 sRGB 성분 계산+source-over 알파 합성 규칙 고정  
   필수 옵션: 레이어 색 합성 모드의 명시적 선택값 — Normal, Darken, Multiply, Color burn, Linear burn, Subtract, Darker color, Lighten, Screen, Color dodge, Glow dodge, Add, Add (Glow), Lighter color, Overlay, Soft light, Hard light, Vivid light, Linear light, Pin light, Hard mix, Difference, Exclusion, Hue, Saturation, Color, Brightness, Divide. 일반·어둡게·밝게·대비·차분·색 성분 교체를 구별한다. 특히 단순 가산과 발광 가산, 색 번/선형 번, 색 닷지/발광 닷지, 채널별 어두움/밝음과 전체색 비교를 별개 선택값으로 제공한다.  

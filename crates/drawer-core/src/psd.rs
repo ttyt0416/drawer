@@ -36,6 +36,7 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
 }
 pub fn layers_supported(d: &Document) -> bool {
     (d.scene.include_drafts_in_output || !crate::layer_roles::has_drafts(d))
+        && !crate::layer_blend::graph_active(d)
         && d.scene.render_order.is_default()
         && d.animation.is_none()
         && d.scene.gradients.layers.is_empty()
@@ -53,7 +54,7 @@ pub fn layers_supported(d: &Document) -> bool {
             .iter()
             .all(|f| !f.paper.hidden && f.paper.blend == crate::brush_composite::Mode::Normal)
 }
-pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
+pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Layer blend settings are baked in rendered-image export; editable blend-mode metadata is not preserved. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
 pub fn export(
     d: &Document,
     path: &Path,
@@ -122,7 +123,7 @@ pub fn export(
         Choice::RenderedLayers => {
             if !layers_supported(d) {
                 return Err(error(
-                    "Animation, page objects and hidden layers and external composition modes require Rendered image",
+                    "Layer blend modes, source raster order, animation, page objects and hidden layers require Rendered image",
                 ));
             }
             let mut remaining = budget / 4;
