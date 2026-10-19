@@ -181,6 +181,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::appearance::Data::is_default")]
+    pub appearance: crate::appearance::Data,
     #[serde(default, skip_serializing_if = "crate::layer_roles::is_false")]
     pub include_drafts_in_output: bool,
     #[serde(
@@ -245,17 +247,19 @@ pub struct Scene {
 }
 impl Scene {
     pub fn valid(&self) -> bool {
-        self.lines
-            .layers
-            .iter()
-            .flat_map(|l| &l.paths)
-            .flat_map(|p| &p.points)
-            .all(|p| {
-                self.transform
-                    .map(*p)
-                    .iter()
-                    .all(|v| v.is_finite() && v.abs() <= 1e12)
-            })
+        self.appearance.valid()
+            && self
+                .lines
+                .layers
+                .iter()
+                .flat_map(|l| &l.paths)
+                .flat_map(|p| &p.points)
+                .all(|p| {
+                    self.transform
+                        .map(*p)
+                        .iter()
+                        .all(|v| v.is_finite() && v.abs() <= 1e12)
+                })
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
             && self.catalog.worlds.matches(self.worlds.len())
@@ -333,7 +337,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.catalog.bytes()
+        self.appearance.bytes()
+            + self.catalog.bytes()
             + self.clipping.bytes()
             + self.layer_effects.bytes()
             + self.layer_properties.bytes()

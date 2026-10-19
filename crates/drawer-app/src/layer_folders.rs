@@ -69,8 +69,20 @@ impl Drawer {
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen folder/mask controls".into());
         }
-        let state = core::prepare(d, c)?;
+        let creating = matches!(
+            &c,
+            core::Command::Create { .. } | core::Command::Wrap { .. }
+        );
+        let mut state = core::prepare(d, c)?;
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
+        if creating {
+            super::layer_defaults::apply(
+                d,
+                &mut state.state,
+                &self.workspaces.store.current.layer_defaults,
+                used,
+            )?;
+        }
         if used.saturating_add(state.state.memory_bytes().saturating_mul(2))
             > DEFAULT_DOCUMENT_BUDGET
         {

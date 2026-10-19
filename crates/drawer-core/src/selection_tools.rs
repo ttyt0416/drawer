@@ -29,7 +29,7 @@ impl Shape {
         s.selection_mask = self.mask.clone();
         s.selection_translation = self.translation;
     }
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.rect.is_none_or(Rect::valid)
             && self.mask.as_ref().is_none_or(Mask::valid)
             && self
@@ -204,6 +204,10 @@ pub fn reselect(doc: &mut Document) -> Result<bool, String> {
     selected(doc, last)
 }
 pub fn save_named(doc: &mut Document, name: &str) -> Result<bool, String> {
+    let scene = prepare_named(doc, name)?;
+    commit(doc, scene)
+}
+pub fn prepare_named(doc: &Document, name: &str) -> Result<Scene, String> {
     let mut scene = doc.scene.clone();
     if scene.selections.page.is_none() {
         scene.selections.page = Some(page_id());
@@ -221,7 +225,12 @@ pub fn save_named(doc: &mut Document, name: &str) -> Result<bool, String> {
             shape,
         });
     }
-    commit(doc, scene)
+    if !scene.valid()
+        || serde_json::to_vec(&scene).map_err(|e| e.to_string())?.len() > 4 * 1024 * 1024
+    {
+        return Err("Named selection exceeds scene/serialization limits".into());
+    }
+    Ok(scene)
 }
 pub fn load_named(doc: &mut Document, id: u64) -> Result<bool, String> {
     let shape = doc

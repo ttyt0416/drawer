@@ -90,7 +90,15 @@ impl Drawer {
                 parent: e.parent,
             }
         };
-        let result = core::prepare(d, dest, e.value)?;
+        let mut result = core::prepare(d, dest, e.value)?;
+        if !e.edit {
+            super::layer_defaults::apply(
+                d,
+                &mut result.state,
+                &self.workspaces.store.current.layer_defaults,
+                used,
+            )?;
+        }
         if used.saturating_add(result.state.memory_bytes().saturating_mul(3))
             > DEFAULT_DOCUMENT_BUDGET
         {

@@ -25,6 +25,7 @@ pub enum CreateError {
     ResourceLimit,
     Allocation,
     ViewLimit,
+    LayerDefaults(String),
 }
 
 impl fmt::Display for CreateError {
@@ -35,6 +36,7 @@ impl fmt::Display for CreateError {
             Self::ResourceLimit => "The canvas exceeds the available document memory budget.",
             Self::Allocation => "There is not enough memory to create the canvas.",
             Self::ViewLimit => "The workspace supports up to 256 views.",
+            Self::LayerDefaults(message) => message,
         })
     }
 }

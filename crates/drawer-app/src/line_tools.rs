@@ -216,7 +216,13 @@ impl Drawer {
             let mut scene = d.scene.clone();
             scene.lines = e.draft.clone();
             scene.lines.prune_selection();
-            match d.edit_scene(scene) {
+            match drawer_core::layer_defaults::scene(
+                d,
+                scene,
+                &self.workspaces.store.current.layer_defaults,
+            )
+            .and_then(|scene| d.edit_scene(scene))
+            {
                 Err(err) => {
                     self.status = Some(err);
                     self.lines.editor = Some(e);

@@ -41,6 +41,7 @@ pub(super) fn prepare(d: &Document, selected: &[Key]) -> Result<DocumentState, S
         for id in raster {
             s.scene.layer_properties.rasters.remove(&id);
             s.scene.layer_effects.rasters.remove(&id);
+            s.scene.appearance.rasters.remove(&id);
             s.scene.catalog.rasters.remove(&id);
             s.scene.clipping.remove_owner(Target::Raster(id));
         }

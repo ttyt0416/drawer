@@ -182,7 +182,13 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
             .saturating_sub(reserved);
         let offset = paste::center(doc, &packet.image);
-        let state = paste::prepare(doc, &packet.image, offset, budget)?;
+        let mut state = paste::prepare(doc, &packet.image, offset, budget)?;
+        super::layer_defaults::apply(
+            doc,
+            &mut state,
+            &self.workspaces.store.current.layer_defaults,
+            DEFAULT_DOCUMENT_BUDGET.saturating_sub(budget),
+        )?;
         let mut preview = Document::create(
             CanvasSpec {
                 width: 1,

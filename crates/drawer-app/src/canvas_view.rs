@@ -15,6 +15,7 @@ pub struct CanvasView {
     proof_settings: Option<drawer_core::soft_proof::Settings>,
     proof: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
     pub(super) proof_error: Option<String>,
+    render_error: Option<String>,
     pub(super) preview_sample: Option<([u8; 4], [u8; 4])>,
     image: Option<(ImageKey, egui::TextureHandle)>,
     checker: egui::TextureHandle,
@@ -99,6 +100,7 @@ impl CanvasView {
             proof_settings: None,
             proof: None,
             proof_error: None,
+            render_error: None,
             preview_sample: None,
             move_delta: None,
             filter: drawer_core::interpolation::Filter::Nearest,
@@ -190,6 +192,12 @@ impl CanvasView {
         self.proof_settings = None;
     }
     fn proof_notice(&self, ui: &mut egui::Ui) {
+        if let Some(e) = &self.render_error {
+            ui.colored_label(
+                egui::Color32::LIGHT_RED,
+                format!("Layer display unavailable: {e}"),
+            );
+        }
         if let Some(e) = &self.proof_error {
             ui.colored_label(
                 egui::Color32::LIGHT_RED,
@@ -766,6 +774,10 @@ impl CanvasView {
             let height = document.height.div_ceil(reduction);
             let mut pixels = Vec::with_capacity((width * height) as usize);
             let renderer = drawer_core::render::Renderer::preview(document, stroke);
+            self.render_error = renderer.error().map(str::to_owned);
+            if self.render_error.is_some() {
+                return;
+            }
             for y in 0..height {
                 for x in 0..width {
                     let pixel = renderer
@@ -854,6 +866,10 @@ impl CanvasView {
             };
             if self.screen_image.as_ref().map(|(k, _)| *k) != Some(key) {
                 let renderer = drawer_core::render::Renderer::preview(document, stroke);
+                self.render_error = renderer.error().map(str::to_owned);
+                if self.render_error.is_some() {
+                    return;
+                }
                 let mut pixels = Vec::with_capacity(dimensions[0] * dimensions[1]);
                 let origin = view.screen_to_document(
                     [rect.min.x as f64, rect.min.y as f64],

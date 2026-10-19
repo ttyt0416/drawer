@@ -299,7 +299,14 @@ impl Drawer {
             {
                 return Err("The insertion exceeds the workspace memory budget".into());
             }
-            clip.insert(&mut self.documents[n], start)?;
+            let mut state = clip.prepare_insert(&self.documents[n], start)?;
+            super::layer_defaults::apply(
+                &self.documents[n],
+                &mut state,
+                &self.workspaces.store.current.layer_defaults,
+                DEFAULT_DOCUMENT_BUDGET.saturating_sub(available),
+            )?;
+            self.documents[n].commit_state(state)?;
         } else {
             if self.tabs.len() >= 256 {
                 return Err("View limit reached".into());

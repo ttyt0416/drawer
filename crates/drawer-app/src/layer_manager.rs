@@ -217,7 +217,16 @@ impl Drawer {
                 .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
         );
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        let prepared = core::prepare(&self.documents[n], command)?;
+        let creating = matches!(&command, Command::Create { .. });
+        let mut prepared = core::prepare(&self.documents[n], command)?;
+        if creating {
+            super::layer_defaults::apply(
+                &self.documents[n],
+                &mut prepared.state,
+                &self.workspaces.store.current.layer_defaults,
+                used,
+            )?;
+        }
         if prepared
             .state
             .memory_bytes()

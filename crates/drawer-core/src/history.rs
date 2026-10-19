@@ -247,6 +247,7 @@ impl Document {
     pub fn edit_scene(&mut self, mut after: crate::scene::Scene) -> Result<bool, String> {
         crate::layer_catalog::reconcile_scene(&self.scene, &mut after)?;
         crate::layer_properties::validate_scene(self, &after)?;
+        crate::appearance::limits(self.width, self.height, &self.layers, &after)?;
         if !after.valid()
             || !after.layer_ids.matches(self.layers.len())
             || !after.paper.valid_for(self.layers.len())

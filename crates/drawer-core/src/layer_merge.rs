@@ -218,10 +218,14 @@ pub fn prepare(
     }
     let working = preview(&working_state, doc.current_frame)?;
     drop(working_state);
+    let appearance = crate::appearance::Caches::new(&working, None)?;
     let mut min = [i64::MAX; 2];
     let mut max = [i64::MIN; 2];
     for n in &indices {
-        let e = doc.layers[*n].extent(doc.width, doc.height);
+        let e = appearance.rasters[*n].as_ref().map_or_else(
+            || doc.layers[*n].extent(doc.width, doc.height),
+            |c| c.extent,
+        );
         for a in 0..2 {
             min[a] = min[a].min(e.offset[a]);
             max[a] = max[a].max(e.offset[a] + [e.width, e.height][a] as i64);
@@ -245,12 +249,12 @@ pub fn prepare(
         .map_err(|_| "Merge allocation failed")?;
     for y in min[1]..max[1] {
         for x in min[0]..max[0] {
-            pixels.push(
-                working
-                    .scene
-                    .paper
-                    .composite_nodes(&working, &nodes, [x, y]),
-            );
+            pixels.push(working.scene.paper.composite_nodes_with(
+                &working,
+                &nodes,
+                [x, y],
+                &mut |n, _| appearance.raster(&working, n, [x, y]),
+            ));
         }
     }
     let raster = RasterLayer {
@@ -305,6 +309,7 @@ pub fn prepare(
         after.scene.layer_properties.set(*t, Default::default());
         after.scene.clipping.remove_owner(*t);
         after.scene.layer_effects.remove(*t);
+        after.scene.appearance.remove(*t);
         after
             .scene
             .catalog
@@ -341,19 +346,24 @@ pub fn prepare(
     after.layers = layers;
     crate::layer_roles::put_raster(&mut after, replacement, roles);
     let rendered = preview(&after, doc.current_frame)?;
+    let after_appearance = crate::appearance::Caches::new(&rendered, None)?;
     let before_roots = working.scene.paper.root_nodes(working.layers.len());
     let after_roots = rendered.scene.paper.root_nodes(rendered.layers.len());
     let mut maximum_delta = 0;
     for y in min[1]..max[1] {
         for x in min[0]..max[0] {
-            let a = working
-                .scene
-                .paper
-                .composite_nodes(&working, &before_roots, [x, y]);
-            let b = rendered
-                .scene
-                .paper
-                .composite_nodes(&rendered, &after_roots, [x, y]);
+            let a = working.scene.paper.composite_nodes_with(
+                &working,
+                &before_roots,
+                [x, y],
+                &mut |n, _| appearance.raster(&working, n, [x, y]),
+            );
+            let b = rendered.scene.paper.composite_nodes_with(
+                &rendered,
+                &after_roots,
+                [x, y],
+                &mut |n, _| after_appearance.raster(&rendered, n, [x, y]),
+            );
             for i in 0..4 {
                 maximum_delta = maximum_delta.max(a[i].abs_diff(b[i]));
             }

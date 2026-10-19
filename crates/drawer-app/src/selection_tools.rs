@@ -57,7 +57,13 @@ impl Drawer {
                 d.commit_state(drawer_core::magnetic_lasso::delete_outside(d, layer)?)?;
             }
             "selection-save" => {
-                core::save_named(d, &self.selection_panel.name)?;
+                let scene = core::prepare_named(d, &self.selection_panel.name)?;
+                let scene = drawer_core::layer_defaults::scene(
+                    d,
+                    scene,
+                    &self.workspaces.store.current.layer_defaults,
+                )?;
+                d.edit_scene(scene)?;
             }
             _ => return Err("Unknown selection command".into()),
         }

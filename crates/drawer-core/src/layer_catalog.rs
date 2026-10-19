@@ -342,6 +342,7 @@ pub fn reconcile(before: &Document, after: &mut DocumentState) -> Result<(), Str
 }
 pub fn clear_rendered(d: &Document, state: &mut DocumentState) -> Result<(), String> {
     let c = &mut state.scene.catalog;
+    state.scene.appearance = Default::default();
     c.objects.clear(d.scene.objects.len())?;
     c.worlds.clear(d.scene.worlds.len())?;
     c.tracks

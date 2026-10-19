@@ -291,6 +291,8 @@ impl Drawer {
                 "adjustment-layer" => self.begin_adjustment()?,
                 "layer-search" => self.layer_search.open = true,
                 "layer-roles" => self.begin_layer_roles()?,
+                "layer-appearance" => self.begin_appearance()?,
+                "layer-defaults" => self.begin_layer_defaults()?,
                 "layer-properties" | "layer-clipping" | "layer-blend" => {
                     self.begin_layer_properties()?
                 }

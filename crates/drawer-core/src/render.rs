@@ -9,6 +9,7 @@ use crate::{
 pub struct Renderer<'a> {
     document: &'a Document,
     owned: Option<Box<Document>>,
+    appearance: Result<crate::appearance::Caches, String>,
     fill: Option<(usize, crate::bucket::Settings)>,
     fill_graph: Option<crate::paper::Graph>,
     stroke: Option<&'a crate::painting::Stroke>,
@@ -21,6 +22,43 @@ struct Contour {
     bounds: Rect,
 }
 impl<'a> Renderer<'a> {
+    pub fn error(&self) -> Option<&str> {
+        self.appearance.as_ref().err().map(String::as_str)
+    }
+    pub(crate) fn raster_pixel(&self, n: usize, point: [i64; 2]) -> [u8; 4] {
+        let doc = self.doc();
+        if let Ok(caches) = &self.appearance
+            && let Some(c) = caches.rasters.get(n).and_then(|c| c.as_ref())
+        {
+            return c.pixel(point);
+        }
+        let Some(layer) = doc.layers.get(n) else {
+            return [0; 4];
+        };
+        self.stroke
+            .and_then(|s| {
+                if point.iter().all(|v| *v >= 0 && *v <= u32::MAX as i64) {
+                    s.pixel(doc, n, layer, point[0] as u32, point[1] as u32)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| layer.pixel(doc.width, doc.height, point[0], point[1]))
+    }
+    pub(crate) fn vector_pixel(&self, n: usize, point: Point) -> [u8; 4] {
+        let doc = self.doc();
+        if let Ok(caches) = &self.appearance
+            && let Some(c) = caches.vectors.get(n).and_then(|c| c.as_ref())
+        {
+            return c.pixel(point.map(|v| v.floor() as i64));
+        }
+        let original = doc.scene.transform.inverse().map(point);
+        doc.scene.lines.layers.get(n).map_or([0; 4], |l| {
+            l.paths
+                .iter()
+                .fold([0; 4], |out, p| over(out, p.pixel(original)))
+        })
+    }
     fn doc(&self) -> &Document {
         self.owned.as_deref().unwrap_or(self.document)
     }
@@ -129,6 +167,9 @@ impl<'a> Renderer<'a> {
     }
     /// Isolated page-source contribution; the normal layer tree handles its own blending.
     pub fn source_pixel(&self, key: crate::layer_search::Key, point: Point) -> [u8; 4] {
+        if self.error().is_some() {
+            return [0; 4];
+        }
         use crate::{layer_properties::Target, layer_search::Key};
         let d = self.doc();
         if point.iter().any(|n| !n.is_finite())
@@ -181,16 +222,18 @@ impl<'a> Renderer<'a> {
                 };
                 return match t {
                     Target::Raster(id) => crate::layers::index(d, id).map_or([0; 4], |n| {
-                        d.scene.paper.node_pixel(
+                        d.scene.paper.clipped_node_pixel_with(
                             d,
                             crate::paper::Node::Raster(n),
                             point.map(|n| n.floor() as i64),
+                            &mut |n, _| self.raster_pixel(n, point.map(|n| n.floor() as i64)),
                         )
                     }),
-                    Target::Folder(n) => d.scene.paper.node_pixel(
+                    Target::Folder(n) => d.scene.paper.clipped_node_pixel_with(
                         d,
                         crate::paper::Node::Folder(n as usize),
                         point.map(|n| n.floor() as i64),
+                        &mut |n, _| self.raster_pixel(n, point.map(|n| n.floor() as i64)),
                     ),
                     Target::Cell { track, cell } => {
                         let Some(c) = d
@@ -234,10 +277,28 @@ impl<'a> Renderer<'a> {
                         if l.hidden {
                             return [0; 4];
                         }
-                        let mut value = l
-                            .paths
-                            .iter()
-                            .fold([0; 4], |out, p| over(out, p.pixel(original)));
+                        let Some(index) = d.scene.lines.layers.iter().position(|v| v.id == id)
+                        else {
+                            return [0; 4];
+                        };
+                        let mut value = self.vector_pixel(index, point);
+                        if let Some(base) = d.scene.clipping.binding(t) {
+                            if !crate::clipping::active(d, t) {
+                                return [0; 4];
+                            }
+                            let Target::Vector(base) = base else {
+                                return [0; 4];
+                            };
+                            let Some(index) =
+                                d.scene.lines.layers.iter().position(|v| v.id == base)
+                            else {
+                                return [0; 4];
+                            };
+                            let weight = self.vector_pixel(index, point)[3] as f64 / 255.
+                                * crate::layer_properties::factor(d, Target::Vector(base))
+                                * d.scene.layer_effects.mask(Target::Vector(base), original) as f64;
+                            value[3] = (value[3] as f64 * weight).round() as u8;
+                        }
                         value[3] = (value[3] as f64
                             * crate::layer_properties::factor(d, t)
                             * d.scene.layer_effects.mask(t, original) as f64)
@@ -292,6 +353,7 @@ impl<'a> Renderer<'a> {
         Self {
             document,
             owned: None,
+            appearance: crate::appearance::Caches::new(document, stroke),
             stroke,
             references: None,
             fill: None,
@@ -312,6 +374,9 @@ impl<'a> Renderer<'a> {
         }
     }
     pub fn pixel(&self, point: Point) -> [u8; 4] {
+        if self.error().is_some() {
+            return [0; 4];
+        }
         let doc = self.doc();
         if point[0] < 0.0
             || point[1] < 0.0
@@ -333,7 +398,7 @@ impl<'a> Renderer<'a> {
                     )
                 }),
             self.fill_graph.as_ref().unwrap_or(&doc.scene.paper),
-            |index, layer| {
+            |index, _layer| {
                 if self.references.is_some_and(|r| !r.raster(index))
                     || self
                         .fill
@@ -341,9 +406,7 @@ impl<'a> Renderer<'a> {
                 {
                     return [0; 4];
                 }
-                self.stroke
-                    .and_then(|s| s.pixel(doc, index, layer, x, y))
-                    .unwrap_or_else(|| layer.pixel(doc.width, doc.height, x as i64, y as i64))
+                self.raster_pixel(index, [x as i64, y as i64])
             },
         );
         let scene = &doc.scene;
@@ -407,6 +470,14 @@ impl<'a> Renderer<'a> {
                             .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
                 },
                 self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline),
+                |index| {
+                    self.appearance
+                        .as_ref()
+                        .ok()
+                        .and_then(|c| c.vectors.get(index))
+                        .and_then(|c| c.as_ref())
+                        .map(|c| c.pixel(point.map(|v| v.floor() as i64)))
+                },
             );
         } else {
             for (index, (layer, bounds)) in scene
@@ -428,27 +499,38 @@ impl<'a> Renderer<'a> {
                         .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
                 {
                     let mut vector_result = if opacity == 1.0 { result } else { [0; 4] };
-                    for (path, bounds) in layer.paths.iter().zip(bounds) {
-                        if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
-                            if path.segments().any(|(a, b)| {
-                                distance(point, scene.transform.map(a), scene.transform.map(b))
-                                    <= 0.5
-                            }) {
-                                vector_result = over(
-                                    vector_result,
-                                    if path.stroke {
-                                        path.color
-                                    } else {
-                                        path.fill.unwrap_or(path.color)
-                                    },
-                                );
+                    if let Some(c) = self
+                        .appearance
+                        .as_ref()
+                        .ok()
+                        .and_then(|c| c.vectors.get(index))
+                        .and_then(|c| c.as_ref())
+                    {
+                        vector_result =
+                            over(vector_result, c.pixel(point.map(|v| v.floor() as i64)));
+                    } else {
+                        for (path, bounds) in layer.paths.iter().zip(bounds) {
+                            if self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline) {
+                                if path.segments().any(|(a, b)| {
+                                    distance(point, scene.transform.map(a), scene.transform.map(b))
+                                        <= 0.5
+                                }) {
+                                    vector_result = over(
+                                        vector_result,
+                                        if path.stroke {
+                                            path.color
+                                        } else {
+                                            path.fill.unwrap_or(path.color)
+                                        },
+                                    );
+                                }
+                                continue;
                             }
-                            continue;
-                        }
-                        if (0..2)
-                            .all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
-                        {
-                            vector_result = over(vector_result, path.pixel(original));
+                            if (0..2).all(|i| {
+                                original[i] >= bounds.min[i] && original[i] <= bounds.max[i]
+                            }) {
+                                vector_result = over(vector_result, path.pixel(original));
+                            }
                         }
                     }
                     result = if opacity == 1.0 {
@@ -488,6 +570,9 @@ impl<'a> Renderer<'a> {
     /// Output at a requested DPI while preserving the document's physical size.
     /// Returns RGBA pixels; output file codecs are separate checklist features.
     pub fn output(&self, dpi: f64, budget: usize) -> Result<(u32, u32, Vec<[u8; 4]>), String> {
+        if let Some(e) = self.error() {
+            return Err(e.into());
+        }
         if !dpi.is_finite() || dpi <= 0.0 {
             return Err("Invalid output DPI.".into());
         }

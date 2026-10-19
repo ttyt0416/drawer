@@ -474,6 +474,18 @@ impl Drawer {
         {
             self.status = Some(e);
         }
+        if kind != Kind::Timeline {
+            if ui.button("Display effects").clicked()
+                && let Err(e) = self.begin_appearance()
+            {
+                self.status = Some(e);
+            }
+            if ui.button("New layer defaults").clicked()
+                && let Err(e) = self.begin_layer_defaults()
+            {
+                self.status = Some(e);
+            }
+        }
     }
     fn panel_properties(&mut self, ui: &mut egui::Ui, kind: Kind) {
         match kind {

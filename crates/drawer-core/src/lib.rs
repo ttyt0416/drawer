@@ -237,6 +237,10 @@ pub mod adjustments;
 
 pub mod adjustments_verify;
 
+pub mod appearance;
+pub mod appearance_verify;
+pub mod layer_defaults;
+pub mod layer_defaults_verify;
 pub mod layer_roles;
 pub mod layer_roles_verify;
 pub mod layer_search;

@@ -509,6 +509,7 @@ impl Graph {
         if indices.is_empty() {
             return Err("The folder contains no raster layers".into());
         }
+        let appearance = crate::appearance::Caches::new(doc, None)?;
         let mut min = [i64::MAX; 2];
         let mut max = [i64::MIN; 2];
         for n in &indices {
@@ -516,7 +517,9 @@ impl Graph {
             if !layer.valid(doc.width, doc.height) {
                 return Err("Invalid raster layer".into());
             }
-            let e = layer.extent(doc.width, doc.height);
+            let e = appearance.rasters[*n]
+                .as_ref()
+                .map_or_else(|| layer.extent(doc.width, doc.height), |c| c.extent);
             for a in 0..2 {
                 min[a] = min[a].min(e.offset[a]);
                 max[a] = max[a].max(e.offset[a] + [e.width, e.height][a] as i64);
@@ -541,7 +544,9 @@ impl Graph {
             .map_err(|_| "Not enough raster memory")?;
         for y in min[1]..max[1] {
             for x in min[0]..max[0] {
-                let c = self.node_pixel(doc, node, [x, y]);
+                let c = self.clipped_node_pixel_with(doc, node, [x, y], &mut |n, _| {
+                    appearance.raster(doc, n, [x, y])
+                });
                 pixels.push(c);
             }
         }
@@ -563,6 +568,14 @@ impl Graph {
 }
 /// Bake one paper effect or a folder subtree as a single undoable document command.
 pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
+    if let Node::Raster(n) = node
+        && crate::layer_effects::adjustment(doc, crate::layer_properties::raster(doc, n)).is_some()
+    {
+        return Err(
+            "Merge correction layers with their backdrop instead of baking an isolated correction"
+                .into(),
+        );
+    }
     if !doc.scene.paper.valid_for(doc.layers.len()) {
         return Err("Invalid folder graph".into());
     }
@@ -629,6 +642,13 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     }
     if let Node::Raster(n) = node
         && !graph.layers.contains_key(&n)
+        && !doc
+            .scene
+            .appearance
+            .get(crate::layer_properties::raster(doc, n))
+            .is_some_and(crate::appearance::Style::active)
+        && crate::appearance::expression(doc, crate::layer_properties::raster(doc, n))
+            == crate::layer_search::Expression::Color
         && crate::layer_properties::factor(doc, crate::layer_properties::raster(doc, n)) == 1.0
     {
         return Ok(false);
@@ -644,8 +664,17 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     match node {
         Node::Raster(n) => {
             after.layers[n] = raster;
+            after
+                .scene
+                .appearance
+                .remove(crate::layer_properties::raster(doc, n));
+            let key = crate::layer_search::Key::Layer(crate::layer_properties::raster(doc, n));
+            let mut info = after.scene.catalog.info(key).cloned().unwrap_or_default();
+            info.expression = crate::layer_search::Expression::Color;
+            after.scene.catalog.set(key, info);
             after.scene.paper.layers.remove(&n);
             let target = crate::layer_properties::raster(doc, n);
+            after.scene.layer_effects.remove(target);
             let mut properties = crate::layer_properties::properties(doc, target);
             properties.opacity = 100;
             properties.hidden = false;
@@ -695,6 +724,7 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             for target in &members {
                 after.scene.clipping.remove_owner(*target);
                 after.scene.layer_effects.remove(*target);
+                after.scene.appearance.remove(*target);
                 after
                     .scene
                     .catalog

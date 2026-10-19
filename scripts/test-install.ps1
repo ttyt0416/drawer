@@ -123,6 +123,8 @@ try {
     if ($smokeResult -notmatch 'special_rulers=true') { throw '특수 자·레이어 연결·자 따라 그리기 검증 실패' }
     if ($smokeResult -notmatch 'alignment_detail=true') { throw '세부 정렬·개체 스냅 검증 실패' }
     if ($smokeResult -notmatch 'layer_management=true') { throw '레이어 생성·복제·순서·식별자 검증 실패' }
+    if ($smokeResult -notmatch 'layer_appearance=true') { throw '레이어 표시 효과 검증 실패' }
+    if ($smokeResult -notmatch 'layer_defaults=true') { throw '레이어 종류별 생성 기본값 검증 실패' }
     if ($smokeResult -notmatch 'layer_roles=true') { throw '참조층 및 밑그림 출력 정책 검증 실패' }
     if ($smokeResult -notmatch 'layer_search=true') { throw '레이어 검색 및 직접 선택 검증 실패' }
     if ($smokeResult -notmatch 'adjustment_layers=true') { throw '비파괴 보정 레이어 검증 실패' }

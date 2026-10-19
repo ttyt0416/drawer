@@ -215,6 +215,15 @@ impl Graph {
     ) -> [u8; 4] {
         let mut pixel =
             |_: usize, l: &RasterLayer| l.pixel(doc.width, doc.height, point[0], point[1]);
+        self.composite_nodes_with(doc, nodes, point, &mut pixel)
+    }
+    pub(crate) fn composite_nodes_with(
+        &self,
+        doc: &Document,
+        nodes: &[Node],
+        point: [i64; 2],
+        pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
         let mut sample = Sample {
             graph: self,
             doc,
@@ -223,7 +232,7 @@ impl Graph {
                 .transform
                 .inverse()
                 .map([point[0] as f64 + 0.5, point[1] as f64 + 0.5]),
-            pixel: &mut pixel,
+            pixel,
             seen: [false; 256],
         };
         let mut color = Color::default();
@@ -276,6 +285,15 @@ impl Graph {
     ) -> [u8; 4] {
         let mut pixel =
             |_: usize, l: &RasterLayer| l.pixel(doc.width, doc.height, point[0], point[1]);
+        self.clipped_node_pixel_with(doc, node, point, &mut pixel)
+    }
+    pub(crate) fn clipped_node_pixel_with(
+        &self,
+        doc: &Document,
+        node: Node,
+        point: [i64; 2],
+        pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
         let mut sample = Sample {
             graph: self,
             doc,
@@ -284,7 +302,7 @@ impl Graph {
                 .transform
                 .inverse()
                 .map([point[0] as f64 + 0.5, point[1] as f64 + 0.5]),
-            pixel: &mut pixel,
+            pixel,
             seen: [false; 256],
         };
         let key = clipping::node_key(doc, node);
@@ -313,43 +331,49 @@ pub(crate) fn vectors(
     initial: [u8; 4],
     mut allowed: impl FnMut(usize, &crate::line_tools::Layer) -> bool,
     centerline: bool,
+    mut displayed: impl FnMut(usize) -> Option<[u8; 4]>,
 ) -> [u8; 4] {
-    let source = |n: usize, allowed: &mut dyn FnMut(usize, &crate::line_tools::Layer) -> bool| {
-        let l = &doc.scene.lines.layers[n];
-        if l.hidden || !allowed(n, l) {
-            return Color::default();
-        }
-        let mut rgba = [0; 4];
-        for p in &l.paths {
-            let value = if centerline {
-                if p.segments().any(|(a, b)| {
-                    crate::line_tools::distance(
-                        point,
-                        doc.scene.transform.map(a),
-                        doc.scene.transform.map(b),
-                    )
-                    .0 <= 0.5
-                }) {
-                    if p.stroke {
-                        p.color
-                    } else {
-                        p.fill.unwrap_or(p.color)
-                    }
-                } else {
-                    [0; 4]
-                }
+    let mut source =
+        |n: usize, allowed: &mut dyn FnMut(usize, &crate::line_tools::Layer) -> bool| {
+            let l = &doc.scene.lines.layers[n];
+            if l.hidden || !allowed(n, l) {
+                return Color::default();
+            }
+            let mut rgba = [0; 4];
+            if !centerline && let Some(pixel) = displayed(n) {
+                rgba = pixel;
             } else {
-                p.pixel(original)
-            };
-            rgba = crate::render::over(rgba, value);
-        }
-        let mut result = Color::from(rgba);
-        result.scale(
-            crate::layer_properties::factor(doc, Target::Vector(l.id)) as f32
-                * doc.scene.layer_effects.mask(Target::Vector(l.id), original),
-        );
-        result
-    };
+                for p in &l.paths {
+                    let value = if centerline {
+                        if p.segments().any(|(a, b)| {
+                            crate::line_tools::distance(
+                                point,
+                                doc.scene.transform.map(a),
+                                doc.scene.transform.map(b),
+                            )
+                            .0 <= 0.5
+                        }) {
+                            if p.stroke {
+                                p.color
+                            } else {
+                                p.fill.unwrap_or(p.color)
+                            }
+                        } else {
+                            [0; 4]
+                        }
+                    } else {
+                        p.pixel(original)
+                    };
+                    rgba = crate::render::over(rgba, value);
+                }
+            }
+            let mut result = Color::from(rgba);
+            result.scale(
+                crate::layer_properties::factor(doc, Target::Vector(l.id)) as f32
+                    * doc.scene.layer_effects.mask(Target::Vector(l.id), original),
+            );
+            result
+        };
     let mut output = Color::from(initial);
     let mut i = 0;
     let layers = &doc.scene.lines.layers;

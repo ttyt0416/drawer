@@ -568,6 +568,7 @@ impl Default for Display {
 
 /// Guards every document-state path, including edits prepared outside the pointer engine.
 pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String> {
+    crate::appearance::limits(after.width, after.height, &after.layers, &after.scene)?;
     for (n, old) in doc.layers.iter().enumerate() {
         let p = inherited(doc, raster(doc, n));
         if !p.locked && !p.pixels_locked && !p.position_locked && !p.hidden {

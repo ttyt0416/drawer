@@ -202,6 +202,7 @@ pub fn shift(
     t: crate::line_tools::Target,
     delta: Point,
 ) -> Result<(), String> {
+    crate::appearance::shift(scene, t, delta);
     let inv = scene.transform.inverse();
     let shift = [
         inv.0[0] * delta[0] + inv.0[2] * delta[1],

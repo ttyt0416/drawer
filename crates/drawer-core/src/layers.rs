@@ -450,6 +450,9 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(e) = state.scene.layer_effects.rasters.get(&id).cloned() {
                 state.scene.layer_effects.rasters.insert(copy_id, e);
             }
+            if let Some(s) = state.scene.appearance.rasters.get(&id).cloned() {
+                state.scene.appearance.rasters.insert(copy_id, s);
+            }
             if let Some(info) = state.scene.catalog.rasters.get(&id).cloned() {
                 state.scene.catalog.rasters.insert(copy_id, info);
             }
@@ -495,6 +498,9 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(e) = state.scene.layer_effects.vectors.get(&id).cloned() {
                 state.scene.layer_effects.vectors.insert(to, e);
             }
+            if let Some(s) = state.scene.appearance.vectors.get(&id).cloned() {
+                state.scene.appearance.vectors.insert(to, s);
+            }
             if let Some(info) = state.scene.catalog.vectors.get(&id).cloned() {
                 state.scene.catalog.vectors.insert(to, info);
             }
@@ -520,6 +526,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             state.layers.remove(i);
             state.scene.layer_properties.rasters.remove(&id);
             state.scene.layer_effects.rasters.remove(&id);
+            state.scene.appearance.rasters.remove(&id);
             state.scene.catalog.rasters.remove(&id);
             state
                 .scene
@@ -547,6 +554,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             state.scene.lines.layers.remove(i);
             state.scene.layer_properties.vectors.remove(&id);
             state.scene.layer_effects.vectors.remove(&id);
+            state.scene.appearance.vectors.remove(&id);
             state.scene.catalog.vectors.remove(&id);
             state
                 .scene

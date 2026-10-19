@@ -8,6 +8,31 @@ pub enum Target {
     Source(crate::layer_search::Key),
 }
 type SourcePixels<'a> = (&'a [[u8; 4]], [u32; 2], [i64; 2]);
+fn displayed(document: &Document, target: Target) -> bool {
+    match target {
+        Target::Raster(n) => {
+            crate::appearance::active(document, crate::layer_properties::raster(document, n))
+        }
+        Target::Vector(id) => {
+            crate::appearance::active(document, crate::layer_properties::Target::Vector(id))
+        }
+        _ => false,
+    }
+}
+fn cache<'a>(
+    d: &Document,
+    c: &'a crate::appearance::Caches,
+    t: Target,
+) -> Option<&'a crate::appearance::Cache> {
+    match t {
+        Target::Raster(n) => c.rasters.get(n)?.as_ref(),
+        Target::Vector(id) => c
+            .vectors
+            .get(d.scene.lines.layers.iter().position(|l| l.id == id)?)?
+            .as_ref(),
+        _ => None,
+    }
+}
 fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
     match target {
         Target::Raster(n) => document.layers.get(n).map(|layer| {
@@ -42,6 +67,13 @@ fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
     }
 }
 pub fn bounds(document: &Document, target: Target, content: bool) -> Rect {
+    if content
+        && displayed(document, target)
+        && let Ok(caches) = crate::appearance::Caches::new(document, None)
+        && let Some(rect) = cache(document, &caches, target).and_then(|c| c.bounds())
+    {
+        return rect;
+    }
     if let Target::Source(key) = target {
         return crate::layer_catalog::bounds(document, key).unwrap_or(Rect {
             min: [0.; 2],
@@ -92,9 +124,19 @@ pub fn image(
         return Err("Thumbnail size must be from 1 to 128".into());
     }
     let source = source(document, target);
+    let caches = displayed(document, target)
+        .then(|| crate::appearance::Caches::new(document, None))
+        .transpose()?;
+    let appearance = caches.as_ref().and_then(|c| cache(document, c, target));
     let renderer =
         matches!(target, Target::Source(_)).then(|| crate::render::Renderer::new(document));
-    let bounds = bounds(document, target, content);
+    let bounds = if content {
+        appearance
+            .and_then(|c| c.bounds())
+            .unwrap_or_else(|| bounds(document, target, content))
+    } else {
+        bounds(document, target, content)
+    };
     let width = bounds.max[0] - bounds.min[0];
     let height = bounds.max[1] - bounds.min[1];
     let scale = (size as f64 / width).min(size as f64 / height);
@@ -108,7 +150,12 @@ pub fn image(
             let px = (x as f64 + 0.5 - pad[0]) / scale;
             let py = (y as f64 + 0.5 - pad[1]) / scale;
             let value = if px >= 0.0 && py >= 0.0 && px < width && py < height {
-                if let (Target::Source(key), Some(renderer)) = (target, &renderer) {
+                if let Some(cache) = appearance {
+                    cache.pixel([
+                        (px + bounds.min[0]).floor() as i64,
+                        (py + bounds.min[1]).floor() as i64,
+                    ])
+                } else if let (Target::Source(key), Some(renderer)) = (target, &renderer) {
                     renderer.source_pixel(key, [px + bounds.min[0], py + bounds.min[1]])
                 } else {
                     source

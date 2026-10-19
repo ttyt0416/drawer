@@ -761,3 +761,15 @@ Ctrl로 선택을 더하거나 빼고 Shift로 범위를 고릅니다. 검색 �
 채우기와 마술봉은 각각의 참조 조건·Exclude draft layers·Include hidden reference layers 옵션을 따릅니다. 숨김 참조를 포함해도 원본 층이 표시되거나 잠금이 풀리지 않습니다. 일반 .drawer 저장은 모든 밑그림 내용과 속성을 보존합니다. PNG와 PSD의 Rendered image는 기본적으로 밑그림을 제외하고, 이 문서의 Include draft layers in rendered output을 켜면 포함합니다. 밑그림을 제외하는 PSD는 Rendered image를 선택합니다.
 
 폴더 해제·종이 효과 베이크·같은 속성의 선택 병합은 참조/밑그림 상태를 보존합니다. 서로 다른 상태를 한 층으로 병합하려면 먼저 속성을 맞춥니다. 전체 합치기는 확인 화면에 안내한 대로 캔버스의 밑그림까지 픽셀로 굳히고 개별 층 속성을 없앱니다.
+
+## layer-appearance | 레이어 표시색·테두리·수채 경계 | 레이어 효과 경계 비파괴 베이크 표현색
+
+래스터나 벡터를 고르고 Display effects를 엽니다. 표시색, 사각 테두리 폭·색·알파, 수채 경계 강도를 바꿔 Preview display effects로 확인한 뒤 Apply live effects를 누릅니다. 원본 RGBA와 벡터 점은 그대로 유지합니다. 효과를 끄면 원래 표시가 복원됩니다. 표현색의 컬러/회색/흑백은 별도 비파괴 속성입니다.
+
+Use current area selection은 현재 영역을 효과에 고정하고 Use whole layer는 제한을 풉니다. 고정 영역은 전체층 이동을 따라가며 바깥 픽셀에는 효과가 적용되지 않습니다. Bake into raster pixels는 미리본 효과를 픽셀로 굳히는 별도 동작이고 한 Undo로 복원합니다. 테두리는 저장 영역 바깥까지 보존합니다. 벡터 전체의 픽셀 변환은 기존 Flatten page 미리보기를 사용합니다. 폴더의 종이질감은 Layer and folder paper에서 편집합니다.
+
+## layer-defaults | 레이어 종류별 생성 기본값 | 새층 속성 기본값 저장 초기화
+
+New layer defaults를 열어 현재 층에서 복사할 지원 속성을 고릅니다. 래스터/벡터는 표시 효과·표현색, 공통으로 불투명도·혼합·식별색 중 지원 항목을 선택할 수 있습니다. Save selected defaults는 이후 같은 종류로 만드는 새 층에만 적용합니다. 기존 층·복제·파일 열기에는 덮어쓰지 않습니다. 이름·ID·소스파일·픽셀·마스크·선택 영역·잠금은 복사하지 않습니다.
+
+Reset this kind로 해당 종류의 표준값을 복구하고 Undo default change로 마지막 기본값 변경을 되돌립니다. 설정은 로컬 작업공간에 저장하며 새 문서와 재시작 후에도 유지합니다. 새 층 작성은 속성 적용까지 한 번의 그림 Undo로 복원합니다.

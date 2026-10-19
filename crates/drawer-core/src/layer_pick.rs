@@ -163,46 +163,32 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
     }
     let x = point[0].floor() as u32;
     let y = point[1].floor() as u32;
+    let renderer = crate::render::Renderer::new(doc);
     visible(doc, settings)
         .into_iter()
         .filter(|target| match *target {
-            Target::Source(key) => {
-                crate::render::Renderer::new(doc).source_pixel(key, point)[3] > 0
-            }
+            Target::Source(key) => renderer.source_pixel(key, point)[3] > 0,
             Target::Raster(n) => {
-                if doc
-                    .scene
-                    .clipping
-                    .binding(crate::layer_properties::raster(doc, n))
-                    .is_some()
-                {
-                    let alpha = doc.scene.paper.clipped_node_pixel(
-                        doc,
-                        Node::Raster(n),
-                        [x as i64, y as i64],
-                    )[3] as f64;
-                    let weight = ancestor_weight(
+                let alpha = renderer.source_pixel(
+                    crate::layer_search::Key::Layer(crate::layer_properties::raster(doc, n)),
+                    point,
+                )[3] as f64;
+                (alpha
+                    * ancestor_weight(
                         doc,
                         Node::Raster(n),
                         doc.scene.transform.inverse().map(point),
-                    );
-                    return (alpha * weight).round() > 0.0;
-                }
-                doc.composite_pixel_filtered(x, y, false, |i, l| {
-                    if i == n {
-                        l.pixel(doc.width, doc.height, x as i64, y as i64)
-                    } else {
-                        [0; 4]
-                    }
-                })[3]
-                    > 0
+                    ))
+                .round()
+                    > 0.
             }
             Target::Folder(n) => {
-                let alpha = doc
-                    .scene
-                    .paper
-                    .node_pixel(doc, Node::Folder(n), [x as i64, y as i64])[3]
-                    as f64;
+                let alpha = doc.scene.paper.clipped_node_pixel_with(
+                    doc,
+                    Node::Folder(n),
+                    [x as i64, y as i64],
+                    &mut |i, _| renderer.raster_pixel(i, [x as i64, y as i64]),
+                )[3] as f64;
                 (alpha
                     * ancestor_weight(
                         doc,
@@ -233,72 +219,10 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                     (c.pixel(x as i64, y as i64)[3] as f64 * w).round() > 0.0
                 }),
             Target::Vector(id) => {
-                if crate::layer_properties::factor(doc, crate::layer_properties::Target::Vector(id))
-                    == 0.0
-                {
-                    return false;
-                }
-                let p = doc.scene.transform.inverse().map(point);
-                let mask = if let Some(base) = doc
-                    .scene
-                    .clipping
-                    .binding(crate::layer_properties::Target::Vector(id))
-                {
-                    if !crate::clipping::active(doc, crate::layer_properties::Target::Vector(id)) {
-                        return false;
-                    }
-                    let crate::layer_properties::Target::Vector(base) = base else {
-                        return false;
-                    };
-                    let Some(l) = doc.scene.lines.layers.iter().find(|l| l.id == base) else {
-                        return false;
-                    };
-                    if l.hidden {
-                        return false;
-                    }
-                    l.paths
-                        .iter()
-                        .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)))[3]
-                        as f64
-                        / 255.0
-                        * crate::layer_properties::factor(
-                            doc,
-                            crate::layer_properties::Target::Vector(base),
-                        )
-                        * doc
-                            .scene
-                            .layer_effects
-                            .mask(crate::layer_properties::Target::Vector(base), p)
-                            as f64
-                } else {
-                    1.0
-                };
-                !doc.scene.clips.iter().any(|r| !crate::render::inside(r, p))
-                    && doc
-                        .scene
-                        .lines
-                        .layers
-                        .iter()
-                        .find(|l| l.id == id)
-                        .is_some_and(|l| {
-                            let pixel = l
-                                .paths
-                                .iter()
-                                .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)));
-                            (pixel[3] as f64
-                                * mask
-                                * doc
-                                    .scene
-                                    .layer_effects
-                                    .mask(crate::layer_properties::Target::Vector(id), p)
-                                    as f64
-                                * crate::layer_properties::factor(
-                                    doc,
-                                    crate::layer_properties::Target::Vector(id),
-                                ))
-                            .round()
-                                > 0.0
-                        })
+                renderer.source_pixel(
+                    crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(id)),
+                    point,
+                )[3] > 0
             }
         })
         .collect()

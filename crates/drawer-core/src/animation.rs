@@ -363,6 +363,15 @@ impl Clip {
         Ok(doc)
     }
     pub fn insert(&self, document: &mut Document, start: u32) -> Result<(), String> {
+        let state = self.prepare_insert(document, start)?;
+        document.commit_state(state)?;
+        Ok(())
+    }
+    pub fn prepare_insert(
+        &self,
+        document: &Document,
+        start: u32,
+    ) -> Result<crate::sizing::DocumentState, String> {
         let mut state = document.snapshot();
         let animation = state
             .animation
@@ -381,8 +390,7 @@ impl Clip {
             audio.start = start;
             animation.audio.push(audio);
         }
-        document.commit_state(state)?;
-        Ok(())
+        Ok(state)
     }
 }
 

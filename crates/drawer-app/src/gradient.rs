@@ -60,15 +60,24 @@ impl Drawer {
             .draft
             .as_ref()
             .ok_or("Gradient editor is closed")?;
+        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
         let d = &mut self.documents[self.active.ok_or("Open a page first")?];
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen the gradient editor".into());
         }
-        let state = if let Some(id) = e.editing {
+        let mut state = if let Some(id) = e.editing {
             core::edit(d, id, e.settings.clone())?
         } else {
             core::prepare(d, e.layer, e.settings.clone(), e.editable, e.reference)?
         };
+        if e.editing.is_none() && e.editable {
+            super::layer_defaults::apply(
+                d,
+                &mut state,
+                &self.workspaces.store.current.layer_defaults,
+                used,
+            )?;
+        }
         d.commit_state(state)?;
         self.gradient.draft = None;
         Ok(())

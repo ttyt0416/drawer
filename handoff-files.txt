@@ -478,3 +478,11 @@ crates/drawer-core/src/layer_roles.rs
 crates/drawer-core/src/layer_roles_verify.rs
 crates/drawer-app/src/layer_roles.rs
 docs/process/layer-roles.md
+
+crates/drawer-core/src/appearance.rs
+crates/drawer-core/src/appearance_verify.rs
+crates/drawer-core/src/layer_defaults.rs
+crates/drawer-core/src/layer_defaults_verify.rs
+crates/drawer-app/src/appearance.rs
+crates/drawer-app/src/layer_defaults.rs
+docs/process/layer-appearance.md
