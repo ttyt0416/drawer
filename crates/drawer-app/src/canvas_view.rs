@@ -518,6 +518,8 @@ impl CanvasView {
             paint.drawing.mode,
             crate::precision::Mode::SelectRectangle
                 | crate::precision::Mode::SelectLasso
+                | crate::precision::Mode::SelectEllipse
+                | crate::precision::Mode::SelectPolygon
                 | crate::precision::Mode::Fill
                 | crate::precision::Mode::Wand
                 | crate::precision::Mode::SelectionBrush
@@ -602,6 +604,8 @@ impl CanvasView {
                 paint.drawing.mode,
                 crate::precision::Mode::SelectRectangle
                     | crate::precision::Mode::SelectLasso
+                    | crate::precision::Mode::SelectEllipse
+                    | crate::precision::Mode::SelectPolygon
                     | crate::precision::Mode::Move
                     | crate::precision::Mode::Fill
                     | crate::precision::Mode::Wand

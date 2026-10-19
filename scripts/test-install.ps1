@@ -115,6 +115,7 @@ try {
     if ($smokeResult -notmatch 'color_selector=true') { throw '색상환·색상 입력·색 이력 검증 실패' }
     if ($smokeResult -notmatch 'color_tables_mixing=true') { throw '로컬 색상표·혼색판·시험 이력 검증 실패' }
     if ($smokeResult -notmatch 'related_colors=true') { throw '중간색·유사색 격자·키보드 선택 검증 실패' }
+    if ($smokeResult -notmatch 'selection_geometry=true') { throw '타원·다각형 선택·합성·취소 검증 실패' }
     if ($smokeResult -notmatch 'drawing_rulers=true') { throw '그리기 자·대칭·원근·임시 스냅 검증 실패' }
     if ($smokeResult -notmatch 'selection_edit=true') { throw '마술봉·선택 브러시·강도/취소 검증 실패' }
     if ($smokeResult -notmatch 'bucket_fill=true') { throw '영역·선택 채우기 및 미리보기 취소 검증 실패' }

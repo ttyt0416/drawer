@@ -9,12 +9,13 @@ impl Drawer {
     pub(super) fn selection_command(&mut self, command: &str) -> Result<(), String> {
         use super::precision::Mode;
         match command {
-            "select-rectangle" | "select-lasso" => {
+            "select-rectangle" | "select-lasso" | "select-ellipse" | "select-polygon" => {
                 self.restore_locked_tool();
-                self.drawing.mode = if command == "select-rectangle" {
-                    Mode::SelectRectangle
-                } else {
-                    Mode::SelectLasso
+                self.drawing.mode = match command {
+                    "select-rectangle" => Mode::SelectRectangle,
+                    "select-ellipse" => Mode::SelectEllipse,
+                    "select-polygon" => Mode::SelectPolygon,
+                    _ => Mode::SelectLasso,
                 };
                 self.drawing.connect_line = false;
                 return Ok(());
@@ -49,6 +50,23 @@ impl Drawer {
         }
         Ok(())
     }
+    pub(super) fn shape_selection_controls(&mut self, ui: &mut egui::Ui) {
+        let s = &mut self.workspaces.store.current.selection_edit;
+        let old = s.combine;
+        egui::ComboBox::from_id_salt("shape-selection-combine")
+            .selected_text(format!("Selection: {:?}", s.combine))
+            .show_ui(ui, |ui| {
+                for op in drawer_core::selection_edit::Combine::ALL {
+                    ui.selectable_value(&mut s.combine, op, format!("{op:?}"));
+                }
+            });
+        if s.combine != old {
+            self.finish_stroke();
+        }
+        if self.drawing.mode == super::precision::Mode::SelectPolygon {
+            ui.label("Click vertices; Enter closes; Backspace removes a vertex; Escape cancels.");
+        }
+    }
     pub(super) fn selection_window(&mut self, ctx: &egui::Context) {
         if !self.selection_panel.open {
             return;
@@ -57,8 +75,9 @@ impl Drawer {
         let mut command = None;
         let mut named = None;
         egui::Window::new("Page selections").open(&mut open).vscroll(true).show(ctx,|ui|{
-            ui.horizontal_wrapped(|ui|{for (id,label) in [("select-rectangle","Rectangle"),("select-lasso","Lasso"),("selection-clear","Deselect"),("selection-invert","Invert"),("selection-reselect","Reselect")]{if ui.button(label).clicked(){command=Some(id);}}});
-            ui.label("Drag on the canvas and release to select. Escape/focus loss cancels the draft. Edges use 4×4 coverage samples; no painting pixels change.");
+            ui.horizontal_wrapped(|ui|{for (id,label) in [("select-rectangle","Rectangle"),("select-lasso","Lasso"),("select-ellipse","Ellipse"),("select-polygon","Polygon"),("selection-clear","Deselect"),("selection-invert","Invert"),("selection-reselect","Reselect")]{if ui.button(label).clicked(){command=Some(id);}}});
+            ui.label("Drag rectangles, ellipses or lassos and release. Polygon: click vertices, Enter to close; Backspace removes the last vertex. Escape/focus loss cancels. Edges use 4×4 coverage samples; no painting pixels change.");
+            self.shape_selection_controls(ui);
             let Some(n)=self.active else{ui.label("Open a page first");return;};let d=&self.documents[n];
             ui.label(format!("Page: {} · frame {}. Selection stays with this page when cells/frames change.",d.title,d.current_frame+1));
             super::edit::text(ui,&mut self.selection_panel.name,"selection-tools");if ui.button("Save / replace named page selection").clicked(){command=Some("selection-save");}

@@ -200,6 +200,8 @@ impl Drawer {
                 | "transparent-color"
                 | "select-rectangle"
                 | "select-lasso"
+                | "select-ellipse"
+                | "select-polygon"
                 | "Move"
                 | "move-selection-boundary"
                 | "move-selected-pixels"
@@ -294,9 +296,11 @@ impl Drawer {
                     self.drawing.connect_line = false;
                 }
                 "screen-eyedropper" => self.begin_screen_sample(ctx)?,
-                "select-rectangle" | "select-lasso" | "selection-clear" | "selection-invert"
-                | "selection-reselect" | "selection-tools" | "selection-save"
-                | "duplicate-page" => self.selection_command(command)?,
+                "select-rectangle" | "select-lasso" | "select-ellipse" | "select-polygon"
+                | "selection-clear" | "selection-invert" | "selection-reselect"
+                | "selection-tools" | "selection-save" | "duplicate-page" => {
+                    self.selection_command(command)?
+                }
                 "brush-grow" | "brush-shrink" => {
                     let step = (self.panels.settings.brush_size * 0.1).max(0.1);
                     self.panels.settings.brush_size = (self.panels.settings.brush_size

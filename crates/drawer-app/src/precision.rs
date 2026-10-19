@@ -9,9 +9,19 @@ pub(super) enum Mode {
     Eyedropper,
     SelectRectangle,
     SelectLasso,
+    SelectEllipse,
+    SelectPolygon,
     Fill,
     Wand,
     SelectionBrush,
+}
+impl Mode {
+    pub(super) fn box_selection(self) -> bool {
+        matches!(self, Self::SelectRectangle | Self::SelectEllipse)
+    }
+    pub(super) fn shape_selection(self) -> bool {
+        self.box_selection() || matches!(self, Self::SelectLasso | Self::SelectPolygon)
+    }
 }
 #[derive(Default)]
 pub(super) struct Precision {
@@ -45,6 +55,8 @@ impl Drawer {
                 ("Eyedropper", Mode::Eyedropper),
                 ("Rectangle select", Mode::SelectRectangle),
                 ("Lasso select", Mode::SelectLasso),
+                ("Ellipse select", Mode::SelectEllipse),
+                ("Polygon select", Mode::SelectPolygon),
                 ("Fill", Mode::Fill),
                 ("Wand", Mode::Wand),
                 ("Selection brush", Mode::SelectionBrush),
@@ -60,6 +72,9 @@ impl Drawer {
                 }
             }
         });
+        if self.drawing.mode.shape_selection() {
+            self.shape_selection_controls(ui);
+        }
         if self.drawing.mode == Mode::Eyedropper {
             self.eyedropper_controls(ui);
         }

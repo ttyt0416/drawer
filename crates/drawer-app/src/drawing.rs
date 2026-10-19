@@ -61,6 +61,9 @@ struct SelectionGesture {
     root: egui::Rect,
     mode: super::precision::Mode,
     points: Vec<Point>,
+    hover: Option<Point>,
+    combine: drawer_core::selection_edit::Combine,
+    frame: u32,
 }
 struct Session {
     stroke: Stroke,
@@ -467,51 +470,137 @@ impl Drawing {
         }
     }
     pub(super) fn selection_preview(&self, document: u64) -> Option<Vec<Point>> {
+        use super::precision::Mode;
         let s = self.selection.as_ref().filter(|s| s.document == document)?;
-        if s.mode == super::precision::Mode::SelectRectangle {
+        if s.mode.box_selection() {
             let a = s.points[0];
             let b = *s.points.last()?;
-            Some(vec![a, [b[0], a[1]], b, [a[0], b[1]], a])
-        } else {
-            let mut p = s.points.clone();
-            if let Some(first) = p.first().copied() {
-                p.push(first);
+            if s.mode == Mode::SelectRectangle {
+                return Some(vec![a, [b[0], a[1]], b, [a[0], b[1]], a]);
             }
-            Some(p)
+            let c = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+            return Some(
+                (0..=96)
+                    .map(|i| {
+                        let (sin, cos) = (std::f64::consts::TAU * i as f64 / 96.0).sin_cos();
+                        [
+                            c[0] + (b[0] - a[0]) * cos / 2.0,
+                            c[1] + (b[1] - a[1]) * sin / 2.0,
+                        ]
+                    })
+                    .collect(),
+            );
         }
+        let mut p = s.points.clone();
+        if s.mode == Mode::SelectPolygon
+            && let Some(h) = s.hover
+        {
+            p.push(h);
+        }
+        if let Some(first) = p.first().copied() {
+            p.push(first);
+        }
+        Some(p)
     }
-    fn receive_selection(&mut self, index: usize, doc: &mut Document) {
-        use drawer_core::pointer_input::Phase;
+    fn commit_shape(s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
+        use super::precision::Mode;
+        use drawer_core::{
+            selection_edit::Combine,
+            selection_geometry::{self, Kind},
+        };
+        if s.combine == Combine::Replace {
+            if s.mode == Mode::SelectRectangle {
+                return drawer_core::selection_tools::rectangle(
+                    doc,
+                    s.points[0],
+                    *s.points.last().unwrap(),
+                );
+            }
+            if s.mode == Mode::SelectLasso {
+                return drawer_core::selection_tools::lasso(doc, &s.points);
+            }
+        }
+        let kind = match s.mode {
+            Mode::SelectRectangle => Kind::Rectangle,
+            Mode::SelectEllipse => Kind::Ellipse,
+            _ => Kind::Polygon,
+        };
+        let scene = selection_geometry::prepare(doc, kind, &s.points, s.combine)?;
+        doc.edit_scene(scene)
+    }
+    fn receive_selection(&mut self, index: usize, doc: &mut Document, canvas: bool) {
+        use super::precision::Mode;
+        use drawer_core::pointer_input::{Decision, Phase};
+        if self.events[index].1 {
+            return;
+        }
         let drawer_core::touch::Effect::Pointer(event) = self.events[index].0 else {
             return;
         };
         let Some(mut s) = self.selection.take() else {
             return;
         };
-        if s.document != doc.id || s.source != event.source {
+        let polygon = s.mode == Mode::SelectPolygon;
+        if s.document != doc.id
+            || (if polygon {
+                s.source.kind != event.source.kind || s.source.device != event.source.device
+            } else {
+                s.source != event.source
+            })
+            || (polygon && event.phase == Phase::Down && !canvas)
+        {
             self.selection = Some(s);
             return;
         }
         self.events[index].1 = true;
         if s.revision != doc.revision
+            || s.frame != doc.current_frame
             || s.mode != self.mode
+            || s.combine != self.selection_settings.combine
             || s.projection.view != doc.view
             || event.phase == Phase::Cancel
         {
             self.ownership.clear();
             return;
         }
-        if matches!(event.phase, Phase::Move | Phase::Up) {
-            let p = s.projection.point(egui::pos2(
-                event.position[0] as f32,
-                event.position[1] as f32,
-            ));
-            if p.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
-                self.error = Some("Selection point is outside supported coordinates".into());
-                self.ownership.clear();
+        if polygon && event.phase == Phase::Down {
+            if self.ownership.receive(event, self.settings) != Decision::Begin {
+                self.selection = Some(s);
                 return;
             }
-            if s.mode == super::precision::Mode::SelectRectangle {
+            s.source = event.source;
+        }
+        let p = s.projection.point(egui::pos2(
+            event.position[0] as f32,
+            event.position[1] as f32,
+        ));
+        if p.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
+            self.error = Some("Selection coordinate limit".into());
+            self.ownership.clear();
+            return;
+        }
+        if polygon {
+            if event.phase == Phase::Down
+                && s.points
+                    .last()
+                    .is_none_or(|v| (v[0] - p[0]).hypot(v[1] - p[1]) >= 0.25)
+            {
+                if s.points.len() == 4096 {
+                    self.error = Some("Polygon vertex limit; prior selection kept".into());
+                    self.ownership.clear();
+                    return;
+                }
+                s.points.push(p);
+            }
+            s.hover = Some(p);
+            if event.phase == Phase::Up {
+                self.ownership.clear();
+            }
+            self.selection = Some(s);
+            return;
+        }
+        if matches!(event.phase, Phase::Move | Phase::Up) {
+            if s.mode.box_selection() {
                 if s.points.len() == 1 {
                     s.points.push(p);
                 } else {
@@ -524,7 +613,7 @@ impl Drawing {
                 || event.phase == Phase::Up
             {
                 if s.points.len() == 4096 {
-                    self.error = Some("Lasso path limit reached; prior selection kept".into());
+                    self.error = Some("Lasso path limit; prior selection kept".into());
                     self.ownership.clear();
                     return;
                 }
@@ -533,17 +622,12 @@ impl Drawing {
         }
         if event.phase == Phase::Up {
             self.ownership.clear();
-            let result = if s.mode == super::precision::Mode::SelectRectangle {
-                drawer_core::selection_tools::rectangle(doc, s.points[0], *s.points.last().unwrap())
-            } else {
-                drawer_core::selection_tools::lasso(doc, &s.points)
-            };
-            if let Err(e) = result {
+            if let Err(e) = Self::commit_shape(&s, doc) {
                 self.error = Some(e);
             }
-            return;
+        } else {
+            self.selection = Some(s);
         }
-        self.selection = Some(s);
     }
     fn receive(&mut self, index: usize, doc: &mut Document) {
         use drawer_core::pointer_input::Decision;
@@ -632,10 +716,47 @@ impl Drawing {
         }
         if self.selection.as_ref().is_some_and(|s| {
             s.mode != self.mode
+                || s.combine != self.selection_settings.combine
+                || documents
+                    .iter()
+                    .find(|d| d.id == s.document)
+                    .is_none_or(|d| {
+                        d.revision != s.revision
+                            || d.current_frame != s.frame
+                            || d.view != s.projection.view
+                    })
                 || s.root != ctx.content_rect()
                 || (s.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8
         }) {
             self.cancel();
+        }
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|s| s.mode == super::precision::Mode::SelectPolygon)
+        {
+            if ctx.input(|i| i.key_pressed(egui::Key::Backspace)) {
+                let s = self.selection.as_mut().unwrap();
+                if s.points.len() > 1 {
+                    s.points.pop();
+                }
+                ctx.input_mut(|i| {
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace);
+                });
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let s = self.selection.take().unwrap();
+                if let Some(doc) = documents.iter_mut().find(|d| d.id == s.document)
+                    && let Err(e) = Self::commit_shape(&s, doc)
+                {
+                    self.error = Some(e);
+                    self.selection = Some(s);
+                }
+                self.ownership.clear();
+                ctx.input_mut(|i| {
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Enter);
+                });
+            }
         }
         self.advance_selection_edit(ctx, documents);
         self.advance_bucket(ctx, documents);
@@ -648,7 +769,7 @@ impl Drawing {
                 self.cancel();
                 break;
             };
-            self.receive_selection(n, doc);
+            self.receive_selection(n, doc, false);
         }
         for n in 0..self.events.len() {
             if matches!(self.events[n].0, drawer_core::touch::Effect::Motion(_)) {
@@ -825,7 +946,17 @@ impl Drawing {
                 {
                     self.cancel();
                 } else {
-                    self.receive_selection(n, doc);
+                    let polygon_down = self.mode == super::precision::Mode::SelectPolygon
+                        && event.phase == Phase::Down;
+                    let pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
+                    if polygon_down
+                        && (!rect.contains(pos)
+                            || !ui.clip_rect().contains(pos)
+                            || ui.ctx().layer_id_at(pos) != Some(response.layer_id))
+                    {
+                        continue;
+                    }
+                    self.receive_selection(n, doc, true);
                     if self.events[n].1 {
                         continue;
                     }
@@ -861,6 +992,8 @@ impl Drawing {
                     super::precision::Mode::Move
                         | super::precision::Mode::SelectRectangle
                         | super::precision::Mode::SelectLasso
+                        | super::precision::Mode::SelectEllipse
+                        | super::precision::Mode::SelectPolygon
                 )
             {
                 let point = projection.point(pos);
@@ -925,10 +1058,7 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
-            if matches!(
-                self.mode,
-                super::precision::Mode::SelectRectangle | super::precision::Mode::SelectLasso
-            ) {
+            if self.mode.shape_selection() {
                 let point = projection.point(pos);
                 self.selection = Some(SelectionGesture {
                     document: doc.id,
@@ -939,6 +1069,9 @@ impl Drawing {
                     root: ui.ctx().content_rect(),
                     mode: self.mode,
                     points: vec![point],
+                    hover: None,
+                    combine: self.selection_settings.combine,
+                    frame: doc.current_frame,
                 });
                 continue;
             }

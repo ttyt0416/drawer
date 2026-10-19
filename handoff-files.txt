@@ -332,3 +332,7 @@ docs/process/wand-selection-brush.md
 crates/drawer-core/src/rulers.rs
 crates/drawer-app/src/rulers.rs
 docs/process/drawing-rulers.md
+
+crates/drawer-core/src/selection_geometry.rs
+crates/drawer-app/src/selection_geometry.rs
+docs/process/geometric-selection.md

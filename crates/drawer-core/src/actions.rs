@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 51] = [
+pub const EXTRA_COMMANDS: [&str; 53] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -40,6 +40,8 @@ pub const EXTRA_COMMANDS: [&str; 51] = [
     "screen-eyedropper",
     "select-rectangle",
     "select-lasso",
+    "select-ellipse",
+    "select-polygon",
     "selection-clear",
     "selection-invert",
     "selection-reselect",
@@ -368,6 +370,8 @@ impl Settings {
             "swap-colors" => "Swap primary and secondary colors",
             "select-rectangle" => "Rectangle selection",
             "select-lasso" => "Lasso selection",
+            "select-ellipse" => "Ellipse selection",
+            "select-polygon" => "Polygon selection",
             "selection-clear" => "Deselect",
             "selection-invert" => "Invert page selection",
             "selection-reselect" => "Reselect previous page selection",

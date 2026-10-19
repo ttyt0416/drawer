@@ -203,6 +203,8 @@ impl Drawer {
                         | "screen-eyedropper"
                         | "select-rectangle"
                         | "select-lasso"
+                        | "select-ellipse"
+                        | "select-polygon"
                         | "selection-clear"
                         | "selection-invert"
                         | "selection-reselect"

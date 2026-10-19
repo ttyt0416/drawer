@@ -61,12 +61,12 @@ impl Settings {
                 .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
     }
 }
-struct Grid {
+pub(crate) struct Grid {
     origin: [i32; 2],
-    size: [usize; 2],
+    pub(crate) size: [usize; 2],
 }
 impl Grid {
-    fn new(doc: &Document) -> Result<Self, String> {
+    pub(crate) fn new(doc: &Document) -> Result<Self, String> {
         let inv = doc.scene.transform.inverse();
         let points = [
             [0.0; 2],
@@ -123,7 +123,12 @@ impl Grid {
             size,
         })
     }
-    fn sample(&self, doc: &Document, clip: bool, mut coverage: impl FnMut(Point) -> u8) -> Vec<u8> {
+    pub(crate) fn sample(
+        &self,
+        doc: &Document,
+        clip: bool,
+        mut coverage: impl FnMut(Point) -> u8,
+    ) -> Vec<u8> {
         let mut values = vec![0u8; self.size[0] * self.size[1]];
         for y in 0..self.size[1] {
             for x in 0..self.size[0] {
@@ -149,7 +154,7 @@ impl Grid {
         }
         values
     }
-    fn base(&self, doc: &Document, add: bool) -> Vec<u8> {
+    pub(crate) fn base(&self, doc: &Document, add: bool) -> Vec<u8> {
         if add && doc.scene.selection.is_none() && doc.scene.selection_mask.is_none() {
             vec![0; self.size[0] * self.size[1]]
         } else {
@@ -160,7 +165,7 @@ impl Grid {
             )
         }
     }
-    fn scene(&self, doc: &Document, values: &[u8]) -> Result<Scene, String> {
+    pub(crate) fn scene(&self, doc: &Document, values: &[u8]) -> Result<Scene, String> {
         let mut mask = Mask::default();
         for y in 0..self.size[1] {
             let mut x = 0;

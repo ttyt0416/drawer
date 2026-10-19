@@ -659,3 +659,8 @@ Selection brush/J로 강도를 추가하고 Shift+J로 지웁니다. 지름·경
 
 Drawing rulers에서 이름과 좌표를 입력해 직선·축/방사 대칭·1/2/3점 원근 보조를 만들고 Apply로 저장합니다. Cancel은 초안을 버립니다. 사용할 보조 하나를 선택하거나 No active ruler로 해제합니다.
 V는 이후 획의 스냅을 임시로 켜거나 끕니다. 직선/원근은 획을 선에 맞추고 대칭은 여러 위치에 그립니다. 원근은 첫 이동으로 방향을 고정합니다. 대칭축의 중복 픽셀은 한 번 반영하며 Undo는 전체 대칭 획을 한 번에 복원합니다. 보조 개체는 문서와 함께 저장됩니다.
+
+## selection-geometry | 타원·다각형 선택 | 타원 다각형 꼭짓점 추가 빼기 교차
+
+Ellipse select는 두 모서리를 드래그해 놓으면 선택됩니다. Polygon select는 꼭짓점을 차례로 클릭한 뒤 Enter로 닫습니다. Backspace로 마지막 점을 지우고 Escape로 취소합니다.
+Selection 연산에서 Replace/추가 Add/빼기 Subtract/교차 Intersect를 선택합니다. 사각형·올가미·마술봉도 같은 연산 설정을 씁니다. 선택 변경은 한 번의 Undo로 되돌리고 문서와 함께 저장하며 그림 픽셀은 바뀌지 않습니다.
