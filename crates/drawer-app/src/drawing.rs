@@ -64,6 +64,7 @@ struct SelectionGesture {
     hover: Option<Point>,
     combine: drawer_core::selection_edit::Combine,
     frame: u32,
+    fill: Option<super::enclosure::Fill>,
 }
 struct Session {
     stroke: Stroke,
@@ -102,6 +103,7 @@ pub(super) struct Drawing {
     selection_edit: Option<selection_edit::Gesture>,
     pub selection_settings: drawer_core::selection_edit::Settings,
     pub fill_settings: drawer_core::bucket::Settings,
+    pub enclosure_settings: drawer_core::enclosure::Settings,
     pub fill_budget: usize,
     pub fill_config: ([u8; 4], bool, bool),
     pub move_target: drawer_core::precision::Target,
@@ -505,6 +507,29 @@ impl Drawing {
         Some(p)
     }
     fn commit_shape(s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
+        if let Some(fill) = s.fill {
+            let state = drawer_core::enclosure::prepare(
+                doc,
+                fill.layer,
+                &s.points,
+                fill.mode,
+                fill.settings,
+                fill.reference,
+                fill.config.0,
+                fill.config.1,
+                fill.config.2,
+            )?;
+            if state
+                .memory_bytes()
+                .saturating_mul(2)
+                .saturating_add(doc.memory_bytes())
+                > fill.budget
+            {
+                return Err("Lasso fill exceeds workspace memory".into());
+            }
+            return doc.commit_state(state);
+        }
+
         use super::precision::Mode;
         use drawer_core::{
             selection_edit::Combine,
@@ -559,6 +584,7 @@ impl Drawing {
             || s.frame != doc.current_frame
             || s.mode != self.mode
             || s.combine != self.selection_settings.combine
+            || self.enclosure_changed(s.fill)
             || s.projection.view != doc.view
             || event.phase == Phase::Cancel
         {
@@ -719,6 +745,7 @@ impl Drawing {
         if self.selection.as_ref().is_some_and(|s| {
             s.mode != self.mode
                 || s.combine != self.selection_settings.combine
+                || self.enclosure_changed(s.fill)
                 || documents
                     .iter()
                     .find(|d| d.id == s.document)
@@ -1060,8 +1087,34 @@ impl Drawing {
                 continue;
             }
             let mut style = style;
-            if self.mode.shape_selection() {
+            if self.mode.shape_selection() || self.mode.enclosure_fill() {
                 let point = projection.point(pos);
+                let fill = if self.mode.enclosure_fill() {
+                    let Some(layer) = layer else {
+                        self.error = Some("Choose a raster fill target".into());
+                        self.ownership.clear();
+                        continue;
+                    };
+                    if doc.memory_bytes().saturating_mul(3) > self.fill_budget {
+                        self.error = Some("Lasso fill exceeds workspace memory".into());
+                        self.ownership.clear();
+                        continue;
+                    }
+                    Some(super::enclosure::Fill {
+                        layer,
+                        budget: self.fill_budget,
+                        config: self.fill_config,
+                        reference: self.fill_settings,
+                        settings: self.enclosure_settings,
+                        mode: if self.mode == super::precision::Mode::LassoFill {
+                            drawer_core::enclosure::Mode::Lasso
+                        } else {
+                            drawer_core::enclosure::Mode::Enclosed
+                        },
+                    })
+                } else {
+                    None
+                };
                 self.selection = Some(SelectionGesture {
                     document: doc.id,
                     revision: doc.revision,
@@ -1070,6 +1123,7 @@ impl Drawing {
                     projection,
                     root: ui.ctx().content_rect(),
                     mode: self.mode,
+                    fill,
                     points: vec![point],
                     hover: None,
                     combine: self.selection_settings.combine,
@@ -1409,6 +1463,7 @@ impl Drawer {
         }
         self.drawing.pick_settings = self.workspaces.store.current.layer_pick;
         self.drawing.selection_settings = self.workspaces.store.current.selection_edit;
+        self.drawing.enclosure_settings = self.workspaces.store.current.enclosure;
         let fill_slot = BrushTip::ALL
             .iter()
             .position(|t| *t == self.selected)

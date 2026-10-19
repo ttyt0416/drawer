@@ -150,3 +150,5 @@ pub mod selection_border;
 pub mod fill_reference;
 
 pub mod fill_reference_verify;
+
+pub mod enclosure;

@@ -524,6 +524,8 @@ impl CanvasView {
                 | crate::precision::Mode::SelectEllipse
                 | crate::precision::Mode::SelectPolygon
                 | crate::precision::Mode::Fill
+                | crate::precision::Mode::LassoFill
+                | crate::precision::Mode::EncloseFill
                 | crate::precision::Mode::Wand
                 | crate::precision::Mode::SelectionBrush
         ) && response.hovered()
@@ -611,6 +613,8 @@ impl CanvasView {
                     | crate::precision::Mode::SelectPolygon
                     | crate::precision::Mode::Move
                     | crate::precision::Mode::Fill
+                    | crate::precision::Mode::LassoFill
+                    | crate::precision::Mode::EncloseFill
                     | crate::precision::Mode::Wand
                     | crate::precision::Mode::SelectionBrush
             )

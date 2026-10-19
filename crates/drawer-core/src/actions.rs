@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 59] = [
+pub const EXTRA_COMMANDS: [&str; 62] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -58,6 +58,9 @@ pub const EXTRA_COMMANDS: [&str; 59] = [
     "pick-next-layer",
     "bucket-tool",
     "fill-selection",
+    "lasso-fill-tool",
+    "enclose-fill-tool",
+    "fill-small-gaps",
     "ruler-tools",
     "ruler-snap",
     "quick-mask",

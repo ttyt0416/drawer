@@ -120,44 +120,8 @@ impl Region {
         {
             return Err("Fill region exceeds the work/memory limit".into());
         }
-        crate::fill_reference::validate(doc, active, s)?;
-        let complexity = doc.layers.len()
-            + doc.scene.objects.len()
-            + doc
-                .scene
-                .lines
-                .layers
-                .iter()
-                .flat_map(|l| &l.paths)
-                .map(|p| p.points.len())
-                .sum::<usize>()
-            + 1;
-        if !matches!(s.reference, Reference::Active | Reference::Layer(_))
-            && count.saturating_mul(complexity) > 64 * 1024 * 1024
-        {
-            return Err("Fill reference exceeds sampling work limit".into());
-        }
-        let renderer = (!matches!(s.reference, Reference::Active | Reference::Layer(_)))
-            .then(|| crate::render::Renderer::fill(doc, active, s));
-        let raw = match s.reference {
-            Reference::Active => Some(active),
-            Reference::Layer(n) => Some(n as usize),
-            _ => None,
-        };
-        let sample = |x: u32, y: u32| {
-            if let Some(n) = raw {
-                if crate::fill_reference::raster(doc, n, active, s) {
-                    doc.layers[n].pixel(doc.width, doc.height, x as i64, y as i64)
-                } else {
-                    [0; 4]
-                }
-            } else {
-                renderer
-                    .as_ref()
-                    .unwrap()
-                    .pixel([x as f64 + 0.5, y as f64 + 0.5])
-            }
-        };
+        let sampler = crate::fill_reference::Sampler::new(doc, active, s)?;
+        let sample = |x, y| sampler.pixel(x, y);
         let start = seed[1].floor() as usize * doc.width as usize + seed[0].floor() as usize;
         let origin = sample(seed[0].floor() as u32, seed[1].floor() as u32);
         let transparent = origin[3] as f64 / 255.0 <= s.alpha_tolerance;
@@ -404,7 +368,7 @@ fn expand_region(
     }
     Ok(distance)
 }
-fn neighbors(p: usize, w: usize, h: usize) -> [Option<usize>; 4] {
+pub(crate) fn neighbors(p: usize, w: usize, h: usize) -> [Option<usize>; 4] {
     let x = p % w;
     let y = p / w;
     [

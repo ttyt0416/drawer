@@ -12,10 +12,15 @@ pub(super) enum Mode {
     SelectEllipse,
     SelectPolygon,
     Fill,
+    LassoFill,
+    EncloseFill,
     Wand,
     SelectionBrush,
 }
 impl Mode {
+    pub(super) fn enclosure_fill(self) -> bool {
+        matches!(self, Self::LassoFill | Self::EncloseFill)
+    }
     pub(super) fn box_selection(self) -> bool {
         matches!(self, Self::SelectRectangle | Self::SelectEllipse)
     }
@@ -48,6 +53,7 @@ fn arrow(key: egui::Key) -> Option<[i64; 2]> {
 }
 impl Drawer {
     pub(super) fn precision_controls(&mut self, ui: &mut egui::Ui) {
+        self.enclosure_controls(ui);
         ui.horizontal_wrapped(|ui| {
             for (label, mode) in [
                 ("Paint", Mode::Paint),
@@ -58,6 +64,8 @@ impl Drawer {
                 ("Ellipse select", Mode::SelectEllipse),
                 ("Polygon select", Mode::SelectPolygon),
                 ("Fill", Mode::Fill),
+                ("Lasso fill", Mode::LassoFill),
+                ("Enclose fill", Mode::EncloseFill),
                 ("Wand", Mode::Wand),
                 ("Selection brush", Mode::SelectionBrush),
             ] {

@@ -206,6 +206,8 @@ impl Drawer {
                 | "move-selection-boundary"
                 | "move-selected-pixels"
                 | "bucket-tool"
+                | "lasso-fill-tool"
+                | "enclose-fill-tool"
                 | "ruler-snap"
                 | "quick-mask"
                 | "wand-tool"
@@ -260,6 +262,16 @@ impl Drawer {
                     self.drawing.connect_line = false;
                 }
                 "fill-selection" => self.fill_selection()?,
+                "lasso-fill-tool" | "enclose-fill-tool" => {
+                    self.restore_locked_tool();
+                    self.drawing.mode = if command == "lasso-fill-tool" {
+                        super::precision::Mode::LassoFill
+                    } else {
+                        super::precision::Mode::EncloseFill
+                    };
+                    self.drawing.connect_line = false;
+                }
+                "fill-small-gaps" => self.fill_small_gaps()?,
                 "pick-next-layer" => {
                     let n = self.active.ok_or("Open a page first")?;
                     let doc = &self.documents[n];

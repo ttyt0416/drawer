@@ -241,6 +241,10 @@ pub fn rectangle(doc: &mut Document, a: Point, b: Point) -> Result<bool, String>
     lasso(doc, &[a, [b[0], a[1]], b, [a[0], b[1]]])
 }
 pub fn lasso(doc: &mut Document, points: &[Point]) -> Result<bool, String> {
+    let scene = prepare_lasso(doc, points)?;
+    doc.edit_scene(scene)
+}
+pub fn prepare_lasso(doc: &Document, points: &[Point]) -> Result<Scene, String> {
     if points.len() < 3
         || points.len() > 4096
         || points
@@ -264,7 +268,7 @@ pub fn lasso(doc: &mut Document, points: &[Point]) -> Result<bool, String> {
     let inverse = doc.scene.transform.inverse();
     let points = points.iter().map(|p| inverse.map(*p)).collect::<Vec<_>>();
     let mask = rasterize(doc, &points)?;
-    selected(
+    prepare_shape(
         doc,
         Shape {
             mask: Some(mask),

@@ -165,3 +165,74 @@ pub(crate) fn graph(doc: &Document, active: usize, s: Settings) -> crate::paper:
     }
     graph
 }
+pub(crate) struct Sampler<'a> {
+    doc: &'a Document,
+    active: usize,
+    settings: Settings,
+    raw: Option<usize>,
+    renderer: Option<crate::render::Renderer<'a>>,
+}
+impl<'a> Sampler<'a> {
+    pub fn new(doc: &'a Document, active: usize, s: Settings) -> Result<Self, String> {
+        if !s.valid() {
+            return Err("Invalid fill reference settings".into());
+        }
+        validate(doc, active, s)?;
+        let count = doc.width as usize * doc.height as usize;
+        if count > 4 * 1024 * 1024
+            || count
+                .saturating_mul(12)
+                .saturating_add(doc.resident_bytes())
+                > crate::document::DEFAULT_DOCUMENT_BUDGET
+        {
+            return Err("Fill reference exceeds work/memory limit".into());
+        }
+        let raw = match s.reference {
+            Reference::Active => Some(active),
+            Reference::Layer(n) => Some(n as usize),
+            _ => None,
+        };
+        if let Some(n) = raw
+            && !doc.layers[n].valid(doc.width, doc.height)
+        {
+            return Err("Invalid raster fill reference".into());
+        }
+        let complexity = doc.layers.len()
+            + doc.scene.objects.len()
+            + doc
+                .scene
+                .lines
+                .layers
+                .iter()
+                .flat_map(|l| &l.paths)
+                .map(|p| p.points.len())
+                .sum::<usize>()
+            + 1;
+        if raw.is_none() && count.saturating_mul(complexity) > 64 * 1024 * 1024 {
+            return Err("Fill reference exceeds sampling work limit".into());
+        }
+        Ok(Self {
+            doc,
+            active,
+            settings: s,
+            raw,
+            renderer: raw
+                .is_none()
+                .then(|| crate::render::Renderer::fill(doc, active, s)),
+        })
+    }
+    pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        if let Some(n) = self.raw {
+            if raster(self.doc, n, self.active, self.settings) {
+                self.doc.layers[n].pixel(self.doc.width, self.doc.height, x as i64, y as i64)
+            } else {
+                [0; 4]
+            }
+        } else {
+            self.renderer
+                .as_ref()
+                .unwrap()
+                .pixel([x as f64 + 0.5, y as f64 + 0.5])
+        }
+    }
+}

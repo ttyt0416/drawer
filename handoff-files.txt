@@ -356,3 +356,7 @@ crates/drawer-core/src/fill_reference.rs
 crates/drawer-core/src/fill_reference_verify.rs
 crates/drawer-app/src/fill_reference_tools.rs
 docs/process/fill-reference-sets.md
+
+crates/drawer-core/src/enclosure.rs
+crates/drawer-app/src/enclosure.rs
+docs/process/enclosed-fill.md

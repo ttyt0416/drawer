@@ -688,3 +688,8 @@ Cancel/Escape는 취소하고 Undo는 테두리 전체를 되돌립니다. 빈 �
 
 Fill options에서 현재층·단일층·전체 합성·Reference layers·Selected layers·폴더를 선택합니다. Reference exclusions, expansion and layer sets를 펼쳐 층의 Reference/Draft/용도와 선택 집합을 지정합니다. 숨긴 층은 제외하며 문자·말풍선·초안·편집층·종이·잠금 제외는 독립 옵션입니다. 용도/참조 표시는 문서와 함께 저장하고 Undo로 되돌립니다.
 확장 모양은 Rectangle/Round/To darkest pixel 또는 기존 Diamond입니다. Fill narrow areas는 보정 중 빠진 좁은 끝부분을 제한된 거리만 복원합니다. 결과와 도구 옵션은 로컬 문서/설정/프리셋에 저장됩니다.
+
+## enclosed-fill | 올가미·둘러싸기 채우기·작은 영역 | 올가미 둘러싸기 미채색 작은 영역 최대 면적
+
+Lasso and enclosed-area fill에서 도구를 고르고 경로를 드래그해 놓습니다. Lasso fill은 도형 전체,Enclose and fill은 참조 선에서 실제로 닫힌 미채색 영역만 채웁니다. 바깥 배경에 이어진 틈은 채우지 않습니다. Fill options의 참조/제외와 Alpha tolerance를 사용합니다.
+Patch small unpainted areas는 현재 선택 안의 닫힌 미채색 영역 중 지정한 최대 픽셀 수 이하만 보정합니다. Escape로 초안을 취소하고 Undo로 한 번의 채우기를 되돌립니다. 원래 선택은 유지됩니다.
