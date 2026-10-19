@@ -9,6 +9,11 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paper {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::fill_reference::Tags::is_default"
+    )]
+    pub fill: crate::fill_reference::Tags,
     #[serde(default)]
     pub hidden: bool,
     #[serde(default)]

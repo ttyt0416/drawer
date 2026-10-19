@@ -48,6 +48,11 @@ impl Path {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Layer {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::fill_reference::Tags::is_default"
+    )]
+    pub fill: crate::fill_reference::Tags,
     pub id: u64,
     pub name: String,
     pub hidden: bool,
@@ -167,6 +172,7 @@ impl Data {
         let mut next = self.clone();
         let id = next.id()?;
         next.layers.push(Layer {
+            fill: Default::default(),
             id,
             name: name.trim().into(),
             hidden: false,

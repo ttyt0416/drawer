@@ -8,6 +8,8 @@ use crate::{
 
 pub struct Renderer<'a> {
     document: &'a Document,
+    fill: Option<(usize, crate::bucket::Settings)>,
+    fill_graph: Option<crate::paper::Graph>,
     stroke: Option<&'a crate::painting::Stroke>,
     references: Option<&'a crate::eyedropper::References>,
     text_contours: Vec<Vec<Contour>>,
@@ -20,6 +22,16 @@ struct Contour {
 impl<'a> Renderer<'a> {
     pub fn new(document: &'a Document) -> Self {
         Self::preview(document, None)
+    }
+    pub(crate) fn fill(
+        document: &'a Document,
+        active: usize,
+        settings: crate::bucket::Settings,
+    ) -> Self {
+        let mut r = Self::new(document);
+        r.fill_graph = Some(crate::fill_reference::graph(document, active, settings));
+        r.fill = Some((active, settings));
+        r
     }
     pub fn sampling(document: &'a Document, references: &'a crate::eyedropper::References) -> Self {
         let mut r = Self::new(document);
@@ -47,6 +59,8 @@ impl<'a> Renderer<'a> {
             document,
             stroke,
             references: None,
+            fill: None,
+            fill_graph: None,
             text_contours,
             vector_bounds: document
                 .scene
@@ -73,12 +87,20 @@ impl<'a> Renderer<'a> {
         }
         let x = point[0] as u32;
         let y = point[1] as u32;
-        let mut result = doc.composite_pixel_filtered(
+        let mut result = doc.composite_pixel_graph(
             x,
             y,
-            self.references.is_none_or(|r| r.animation),
+            self.references.is_none_or(|r| r.animation)
+                && self
+                    .fill
+                    .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite),
+            self.fill_graph.as_ref().unwrap_or(&doc.scene.paper),
             |index, layer| {
-                if self.references.is_some_and(|r| !r.raster(index)) {
+                if self.references.is_some_and(|r| !r.raster(index))
+                    || self
+                        .fill
+                        .is_some_and(|(a, s)| !crate::fill_reference::raster(doc, index, a, s))
+                {
                     return [0; 4];
                 }
                 self.stroke
@@ -91,12 +113,12 @@ impl<'a> Renderer<'a> {
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
             return result;
         }
-        for (index, object) in scene
-            .objects
-            .iter()
-            .enumerate()
-            .filter(|_| self.references.is_none_or(|r| r.objects))
-        {
+        for (index, object) in scene.objects.iter().enumerate().filter(|(_, o)| {
+            self.references.is_none_or(|r| r.objects)
+                && self
+                    .fill
+                    .is_none_or(|(_, s)| crate::fill_reference::object(o, s))
+        }) {
             let color = match object {
                 PageObject::Text { color, .. } => {
                     let winding: i32 = self.text_contours[index]
@@ -164,8 +186,19 @@ impl<'a> Renderer<'a> {
             };
             result = over(result, color);
         }
-        for (layer, bounds) in scene.lines.layers.iter().zip(&self.vector_bounds) {
-            if !layer.hidden && self.references.is_none_or(|r| r.vectors) {
+        for (index, (layer, bounds)) in scene
+            .lines
+            .layers
+            .iter()
+            .zip(&self.vector_bounds)
+            .enumerate()
+        {
+            if !layer.hidden
+                && self.references.is_none_or(|r| r.vectors)
+                && self
+                    .fill
+                    .is_none_or(|(_, s)| crate::fill_reference::vector(layer, index, s))
+            {
                 for (path, bounds) in layer.paths.iter().zip(bounds) {
                     if (0..2).all(|i| original[i] >= bounds.min[i] && original[i] <= bounds.max[i])
                         && path.hit(original)
@@ -176,6 +209,9 @@ impl<'a> Renderer<'a> {
             }
         }
         if self.references.is_none_or(|r| r.objects)
+            && self
+                .fill
+                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
             && let Some(camera) = &scene.camera
             && camera.page_bounds.contains(original)
         {

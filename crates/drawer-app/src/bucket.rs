@@ -221,16 +221,67 @@ impl Drawer {
             ui.horizontal(|ui|{ui.selectable_value(&mut s.mode,Mode::Strict,"Strict");ui.selectable_value(&mut s.mode,Mode::CloseGaps,"Close gaps");});
             egui::ComboBox::from_id_salt("bucket-reference").selected_text(format!("{:?}",s.reference)).show_ui(ui,|ui|{
                 ui.selectable_value(&mut s.reference,Reference::Active,"Current raster");ui.selectable_value(&mut s.reference,Reference::Composite,"Visible composite");
+                ui.selectable_value(&mut s.reference,Reference::Marked,"Reference layers (marked)");ui.selectable_value(&mut s.reference,Reference::Selected,"Selected layers (set below)");
+                if let Some(n)=self.active{for(i,f)in self.documents[n].scene.paper.folders.iter().enumerate(){ui.selectable_value(&mut s.reference,Reference::Folder(i as u16),format!("Folder: {}",f.name));}}
+
                 if let Some(n)=self.active{for(i,l)in self.documents[n].layers.iter().enumerate(){ui.selectable_value(&mut s.reference,Reference::Layer(i as u16),format!("Raster {}: {}",i+1,l.name));}}
             });
             ui.add(egui::Slider::new(&mut s.color_tolerance,0.0..=1.0).text("Color tolerance"));ui.add(egui::Slider::new(&mut s.alpha_tolerance,0.0..=1.0).text("Alpha tolerance"));
             ui.add_enabled_ui(s.mode==Mode::CloseGaps,|ui|{ui.add(egui::Slider::new(&mut s.gap,0..=32).text("Maximum gap pixels"));});
             ui.add(egui::Slider::new(&mut s.expand,0..=32).text("Expand pixels"));ui.checkbox(&mut s.antialias,"Antialias partial-alpha edges");
-            if *s!=before{self.finish_stroke();}
+            let mut tags_changed=false;
+            if let Some(n)=self.active{match reference_controls(ui,&mut self.documents[n],s){Ok(changed)=>tags_changed=changed,Err(e)=>self.status=Some(e)}}
+            if *s!=before||tags_changed{self.finish_stroke();}
             ui.checkbox(&mut self.workspaces.store.current.input.materials[slot].alpha_lock,"Protect target alpha");
             ui.horizontal(|ui|{for(c,label)in[("bucket-tool","Fill tool (G)"),("fill-selection","Fill entire selection")]{if ui.button(label).clicked(){self.execute_command(ui.ctx(),c);}}});
             ui.label("Press to preview; release inside the canvas to fill once. Escape/focus loss cancels. Alpha/color thresholds, gap closure, expansion and edge coverage are independent. Options are stored per tool preset.");
         });
+    }
+}
+
+pub(crate) fn reference_controls(
+    ui: &mut egui::Ui,
+    doc: &mut Document,
+    s: &mut Settings,
+) -> Result<bool, String> {
+    use drawer_core::fill_reference::{self as reference, Role, Tags, Target};
+    let mut edits = vec![];
+    ui.collapsing("Reference exclusions, expansion and layer sets",|ui| {
+        ui.horizontal_wrapped(|ui| {
+            for (value,label) in [(&mut s.exclude.text,"Exclude text"),(&mut s.exclude.balloon,"Exclude balloon layers"),(&mut s.exclude.draft,"Exclude draft layers"),(&mut s.exclude.editing,"Exclude editing layer"),(&mut s.exclude.paper,"Exclude paper layer"),(&mut s.exclude.locked,"Exclude locked layers")] {ui.checkbox(value,label);}
+        });
+        egui::ComboBox::from_id_salt("fill-expansion-shape").selected_text(format!("Expansion: {:?}",s.expansion)).show_ui(ui,|ui|{for (op,label) in [(core::Expansion::Diamond,"Legacy diamond"),(core::Expansion::Rectangle,"Rectangle"),(core::Expansion::Round,"Round"),(core::Expansion::Darkest,"To darkest pixel")]{ui.selectable_value(&mut s.expansion,op,label);}});
+        ui.checkbox(&mut s.fill_narrow,"Fill narrow areas");
+        ui.label("Reference/draft/role tags are saved with this page and use drawing Undo. Selected sets and exclusions are saved per tool. Hidden layers are excluded. Text/Balloon/Paper describe the layer's content; role tags do not change its pixels.");
+        for (i,layer) in doc.layers.iter().enumerate() {
+            ui.push_id(("fill-raster",i),|ui| {
+                let mut tags=doc.scene.paper.layers.get(&i).map_or(Tags::default(),|p|p.fill);let old=tags;
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(format!("Raster {}: {}",i+1,layer.name));
+                    let mut selected=reference::selected(s.selected,i);if ui.checkbox(&mut selected,"Selected set").changed(){reference::select(&mut s.selected,i,selected);}
+                    ui.checkbox(&mut tags.reference,"Reference");ui.checkbox(&mut tags.draft,"Draft");
+                    egui::ComboBox::from_id_salt("role").selected_text(format!("{:?}",tags.role)).show_ui(ui,|ui|{for role in Role::ALL{ui.selectable_value(&mut tags.role,role,format!("{role:?}"));}});
+                });
+                if tags!=old{edits.push((Target::Raster(i),tags));}
+            });
+        }
+        for (i,layer) in doc.scene.lines.layers.iter().enumerate() {
+            ui.push_id(("fill-vector",layer.id),|ui| {
+                let mut tags=layer.fill;let old=tags;
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(format!("Vector: {}",layer.name));
+                    let mut selected=reference::selected(s.selected_vectors,i);if ui.checkbox(&mut selected,"Selected set").changed(){reference::select(&mut s.selected_vectors,i,selected);}
+                    ui.checkbox(&mut tags.reference,"Reference");ui.checkbox(&mut tags.draft,"Draft");
+                    egui::ComboBox::from_id_salt("role").selected_text(format!("{:?}",tags.role)).show_ui(ui,|ui|{for role in Role::ALL{ui.selectable_value(&mut tags.role,role,format!("{role:?}"));}});
+                });
+                if tags!=old{edits.push((Target::Vector(layer.id),tags));}
+            });
+        }
+    });
+    if edits.is_empty() {
+        Ok(false)
+    } else {
+        reference::apply_tags(doc, &edits)
     }
 }
 

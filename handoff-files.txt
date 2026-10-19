@@ -351,3 +351,8 @@ docs/process/color-range.md
 crates/drawer-core/src/selection_border.rs
 crates/drawer-app/src/selection_border.rs
 docs/process/selection-border.md
+
+crates/drawer-core/src/fill_reference.rs
+crates/drawer-core/src/fill_reference_verify.rs
+crates/drawer-app/src/fill_reference_tools.rs
+docs/process/fill-reference-sets.md

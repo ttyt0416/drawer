@@ -1,0 +1,167 @@
+//! Read-only fill reference policy. Tags belong to the page; filters to the tool.
+use crate::{
+    bucket::{Reference, Settings},
+    document::Document,
+    scene::PageObject,
+};
+use serde::{Deserialize, Serialize};
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Role {
+    #[default]
+    Drawing,
+    Text,
+    Balloon,
+    Paper,
+}
+impl Role {
+    pub const ALL: [Self; 4] = [Self::Drawing, Self::Text, Self::Balloon, Self::Paper];
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tags {
+    pub role: Role,
+    pub draft: bool,
+    pub reference: bool,
+}
+impl Tags {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Filter {
+    pub text: bool,
+    pub balloon: bool,
+    pub draft: bool,
+    pub editing: bool,
+    pub paper: bool,
+    pub locked: bool,
+}
+impl Filter {
+    pub fn accepts(self, t: Tags, locked: bool) -> bool {
+        !(self.text && t.role == Role::Text
+            || self.balloon && t.role == Role::Balloon
+            || self.paper && t.role == Role::Paper
+            || self.draft && t.draft
+            || self.locked && locked)
+    }
+}
+pub fn selected(bits: [u64; 4], n: usize) -> bool {
+    n < 256 && bits[n / 64] & (1u64 << (n % 64)) != 0
+}
+pub fn select(bits: &mut [u64; 4], n: usize, on: bool) {
+    if n < 256 {
+        if on {
+            bits[n / 64] |= 1u64 << (n % 64);
+        } else {
+            bits[n / 64] &= !(1u64 << (n % 64));
+        }
+    }
+}
+fn in_folder(doc: &Document, folder: usize, layer: usize, depth: usize) -> bool {
+    depth < 16
+        && doc.scene.paper.folders.get(folder).is_some_and(|f| {
+            f.children.iter().any(|n| match *n {
+                crate::paper::Node::Raster(i) => i == layer,
+                crate::paper::Node::Folder(i) => in_folder(doc, i, layer, depth + 1),
+            })
+        })
+}
+pub fn raster(doc: &Document, n: usize, active: usize, s: Settings) -> bool {
+    let Some(layer) = doc.layers.get(n) else {
+        return false;
+    };
+    let tags = doc
+        .scene
+        .paper
+        .layers
+        .get(&n)
+        .map_or(Tags::default(), |p| p.fill);
+    let scope = match s.reference {
+        Reference::Active => n == active,
+        Reference::Layer(i) => n == i as usize,
+        Reference::Composite => true,
+        Reference::Marked => tags.reference,
+        Reference::Selected => selected(s.selected, n),
+        Reference::Folder(i) => in_folder(doc, i as usize, n, 0),
+    };
+    scope
+        && doc.scene.paper.raster_visible(n, doc.layers.len())
+        && !(s.exclude.editing && n == active)
+        && s.exclude.accepts(tags, layer.locked)
+}
+pub fn vector(layer: &crate::line_tools::Layer, index: usize, s: Settings) -> bool {
+    let scope = match s.reference {
+        Reference::Composite => true,
+        Reference::Marked => layer.fill.reference,
+        Reference::Selected => selected(s.selected_vectors, index),
+        _ => false,
+    };
+    scope && !layer.hidden && s.exclude.accepts(layer.fill, layer.locked)
+}
+pub fn object(object: &PageObject, s: Settings) -> bool {
+    s.reference == Reference::Composite
+        && !(s.exclude.text && matches!(object, PageObject::Text { .. }))
+}
+pub fn validate(doc: &Document, active: usize, s: Settings) -> Result<(), String> {
+    match s.reference {
+        Reference::Active if active >= doc.layers.len() => {
+            Err("Missing active fill reference".into())
+        }
+        Reference::Layer(n) if n as usize >= doc.layers.len() => {
+            Err("Missing fill reference layer".into())
+        }
+        Reference::Folder(n) if n as usize >= doc.scene.paper.folders.len() => {
+            Err("Missing fill reference folder".into())
+        }
+        _ => Ok(()),
+    }
+}
+#[derive(Clone, Copy)]
+pub enum Target {
+    Raster(usize),
+    Vector(u64),
+}
+pub fn apply_tags(doc: &mut Document, edits: &[(Target, Tags)]) -> Result<bool, String> {
+    let mut scene = doc.scene.clone();
+    for (target, tags) in edits {
+        match target {
+            Target::Raster(n) => {
+                if *n >= doc.layers.len() {
+                    return Err("Missing layer for fill roles".into());
+                }
+                scene.paper.layers.entry(*n).or_default().fill = *tags;
+            }
+            Target::Vector(id) => {
+                scene
+                    .lines
+                    .layers
+                    .iter_mut()
+                    .find(|l| l.id == *id)
+                    .ok_or("Missing vector for fill roles")?
+                    .fill = *tags
+            }
+        }
+    }
+    if serde_json::to_vec(&scene).map_err(|e| e.to_string())?.len() > 4 * 1024 * 1024 {
+        return Err("Fill roles exceed scene serialization limit".into());
+    }
+    doc.edit_scene(scene)
+}
+pub(crate) fn graph(doc: &Document, active: usize, s: Settings) -> crate::paper::Graph {
+    let mut graph = doc.scene.paper.clone();
+    for n in 0..doc.layers.len() {
+        if !raster(doc, n, active, s) {
+            graph.layers.entry(n).or_default().hidden = true;
+        }
+    }
+    for i in 0..graph.folders.len() {
+        let included =
+            (0..doc.layers.len()).any(|n| in_folder(doc, i, n, 0) && raster(doc, n, active, s));
+        if !included {
+            graph.folders[i].paper.hidden = true;
+        }
+    }
+    graph
+}

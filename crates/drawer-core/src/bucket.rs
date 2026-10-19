@@ -18,10 +18,31 @@ pub enum Reference {
     Active,
     Composite,
     Layer(u16),
+    Marked,
+    Selected,
+    Folder(u16),
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Expansion {
+    #[default]
+    Diamond,
+    Rectangle,
+    Round,
+    Darkest,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    #[serde(default)]
+    pub exclude: crate::fill_reference::Filter,
+    #[serde(default)]
+    pub selected: [u64; 4],
+    #[serde(default)]
+    pub selected_vectors: [u64; 4],
+    #[serde(default)]
+    pub expansion: Expansion,
+    #[serde(default)]
+    pub fill_narrow: bool,
     pub mode: Mode,
     pub reference: Reference,
     pub color_tolerance: f64,
@@ -33,6 +54,11 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            exclude: Default::default(),
+            selected: [0; 4],
+            selected_vectors: [0; 4],
+            expansion: Expansion::Diamond,
+            fill_narrow: false,
             mode: Mode::Strict,
             reference: Reference::Active,
             color_tolerance: 0.0,
@@ -50,7 +76,7 @@ impl Settings {
             .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
             && self.gap <= 32
             && self.expand <= 32
-            && !matches!(self.reference,Reference::Layer(n) if n>=256)
+            && !matches!(self.reference,Reference::Layer(n)|Reference::Folder(n) if n>=256)
     }
 }
 pub struct Region {
@@ -94,57 +120,57 @@ impl Region {
         {
             return Err("Fill region exceeds the work/memory limit".into());
         }
-        if s.reference == Reference::Composite {
-            let complexity = doc.layers.len()
-                + doc.scene.objects.len()
-                + doc
-                    .scene
-                    .lines
-                    .layers
-                    .iter()
-                    .flat_map(|l| &l.paths)
-                    .map(|p| p.points.len())
-                    .sum::<usize>()
-                + 1;
-            if count.saturating_mul(complexity) > 64 * 1024 * 1024 {
-                return Err("Composite fill reference exceeds work limit".into());
-            }
+        crate::fill_reference::validate(doc, active, s)?;
+        let complexity = doc.layers.len()
+            + doc.scene.objects.len()
+            + doc
+                .scene
+                .lines
+                .layers
+                .iter()
+                .flat_map(|l| &l.paths)
+                .map(|p| p.points.len())
+                .sum::<usize>()
+            + 1;
+        if !matches!(s.reference, Reference::Active | Reference::Layer(_))
+            && count.saturating_mul(complexity) > 64 * 1024 * 1024
+        {
+            return Err("Fill reference exceeds sampling work limit".into());
         }
-        let raster = match s.reference {
+        let renderer = (!matches!(s.reference, Reference::Active | Reference::Layer(_)))
+            .then(|| crate::render::Renderer::fill(doc, active, s));
+        let raw = match s.reference {
             Reference::Active => Some(active),
             Reference::Layer(n) => Some(n as usize),
-            Reference::Composite => None,
+            _ => None,
         };
-        if let Some(n) = raster
-            && doc
-                .layers
-                .get(n)
-                .is_none_or(|l| !l.valid(doc.width, doc.height))
-        {
-            return Err("Missing or invalid fill reference".into());
-        }
-        let renderer = raster.is_none().then(|| crate::render::Renderer::new(doc));
         let sample = |x: u32, y: u32| {
-            raster.map_or_else(
-                || {
-                    renderer
-                        .as_ref()
-                        .unwrap()
-                        .pixel([x as f64 + 0.5, y as f64 + 0.5])
-                },
-                |n| doc.layers[n].pixel(doc.width, doc.height, x as i64, y as i64),
-            )
+            if let Some(n) = raw {
+                if crate::fill_reference::raster(doc, n, active, s) {
+                    doc.layers[n].pixel(doc.width, doc.height, x as i64, y as i64)
+                } else {
+                    [0; 4]
+                }
+            } else {
+                renderer
+                    .as_ref()
+                    .unwrap()
+                    .pixel([x as f64 + 0.5, y as f64 + 0.5])
+            }
         };
         let start = seed[1].floor() as usize * doc.width as usize + seed[0].floor() as usize;
         let origin = sample(seed[0].floor() as u32, seed[1].floor() as u32);
         let transparent = origin[3] as f64 / 255.0 <= s.alpha_tolerance;
         let mut eligible = vec![0u8; count];
         let mut alpha = vec![0u8; count];
+        let mut brightness = vec![255u8; count];
         for y in 0..doc.height {
             for x in 0..doc.width {
                 let i = y as usize * doc.width as usize + x as usize;
                 let p = sample(x, y);
                 alpha[i] = p[3];
+                let rgb = (p[0] as u32 * 54 + p[1] as u32 * 183 + p[2] as u32 * 19 + 128) / 256;
+                brightness[i] = (255 - ((255 - rgb) * p[3] as u32 + 127) / 255) as u8;
                 eligible[i] = u8::from(if transparent {
                     p[3] as f64 / 255.0 <= s.alpha_tolerance
                 } else {
@@ -217,27 +243,14 @@ impl Region {
                 }
             }
         }
-        let mut distance = vec![255u8; count];
-        for &p in &queue {
-            distance[p as usize] = 0;
-        }
-        head = 0;
-        while head < queue.len() {
-            let p = queue[head] as usize;
-            head += 1;
-            if distance[p] >= s.expand {
-                continue;
-            }
-            for q in neighbors(p, doc.width as usize, doc.height as usize)
-                .into_iter()
-                .flatten()
-            {
-                if distance[q] == 255 {
-                    distance[q] = distance[p] + 1;
-                    queue.push(q as u32);
-                }
-            }
-        }
+        let distance = expand_region(
+            &mut queue,
+            &eligible,
+            &brightness,
+            doc.width as usize,
+            doc.height as usize,
+            s,
+        )?;
         let mut coverage = vec![0u8; count];
         for &p in &queue {
             let i = p as usize;
@@ -261,6 +274,135 @@ impl Region {
             coverage,
         })
     }
+}
+fn expand_region(
+    queue: &mut Vec<u32>,
+    eligible: &[u8],
+    brightness: &[u8],
+    w: usize,
+    h: usize,
+    s: Settings,
+) -> Result<Vec<u8>, String> {
+    let count = w * h;
+    let mut narrow = vec![255u8; count];
+    for &p in queue.iter() {
+        narrow[p as usize] = 0;
+    }
+    let mut head = 0;
+    let mut work = 0usize;
+    let limit = s.gap.max(1);
+    while s.fill_narrow && head < queue.len() {
+        let p = queue[head] as usize;
+        head += 1;
+        if narrow[p] >= limit {
+            continue;
+        }
+        for q in neighbors(p, w, h).into_iter().flatten() {
+            if narrow[q] != 255 || eligible[q] == 0 {
+                continue;
+            }
+            let mut thin = false;
+            for (stride, at, length) in [(1, q % w, w), (w, q / w, h)] {
+                let mut span = 1usize;
+                for direction in [-1i64, 1] {
+                    for n in 1..=limit as usize {
+                        work += 1;
+                        if work > 64 * 1024 * 1024 {
+                            return Err("Narrow-area sampling work limit".into());
+                        }
+                        let v = at as i64 + direction * n as i64;
+                        if v < 0 || v >= length as i64 {
+                            break;
+                        }
+                        let index = (q as i64 + direction * n as i64 * stride as i64) as usize;
+                        if eligible[index] == 0 {
+                            break;
+                        }
+                        span += 1;
+                    }
+                }
+                thin |= span <= limit as usize;
+            }
+            if thin {
+                narrow[q] = narrow[p] + 1;
+                queue.push(q as u32);
+            }
+        }
+    }
+    let mut distance = vec![255u8; count];
+    for &p in queue.iter() {
+        distance[p as usize] = 0;
+    }
+    if s.expand == 0 {
+        return Ok(distance);
+    }
+    if s.expansion == Expansion::Round {
+        let r = s.expand as i32;
+        let mut offsets = vec![];
+        for y in -r..=r {
+            for x in -r..=r {
+                if x * x + y * y <= r * r {
+                    offsets.push((x, y));
+                }
+            }
+        }
+        let base = distance.clone();
+        if (count - queue.len()).saturating_mul(offsets.len()) > 64 * 1024 * 1024 {
+            return Err("Round expansion work limit".into());
+        }
+        for p in 0..count {
+            if base[p] == 0 {
+                continue;
+            }
+            let (x, y) = ((p % w) as i32, (p / w) as i32);
+            if offsets.iter().any(|(dx, dy)| {
+                let a = x + dx;
+                let b = y + dy;
+                a >= 0
+                    && b >= 0
+                    && a < w as i32
+                    && b < h as i32
+                    && base[b as usize * w + a as usize] == 0
+            }) {
+                distance[p] = 1;
+                queue.push(p as u32);
+            }
+        }
+        return Ok(distance);
+    }
+    head = 0;
+    while head < queue.len() {
+        let p = queue[head] as usize;
+        head += 1;
+        if distance[p] >= s.expand {
+            continue;
+        }
+        let mut candidates = [None; 8];
+        candidates[..4].copy_from_slice(&neighbors(p, w, h));
+        if s.expansion == Expansion::Rectangle {
+            let x = p % w;
+            let y = p / w;
+            for dy in [-1i64, 1] {
+                for dx in [-1i64, 1] {
+                    let a = x as i64 + dx;
+                    let b = y as i64 + dy;
+                    if a >= 0 && b >= 0 && a < w as i64 && b < h as i64 {
+                        let slot = 4 + usize::from(dy > 0) * 2 + usize::from(dx > 0);
+                        candidates[slot] = Some(b as usize * w + a as usize);
+                    }
+                }
+            }
+        }
+        for q in candidates.into_iter().flatten() {
+            if distance[q] == 255
+                && (s.expansion != Expansion::Darkest || brightness[q] <= brightness[p])
+            {
+                distance[q] = distance[p] + 1;
+                queue.push(q as u32);
+            }
+        }
+    }
+    Ok(distance)
 }
 fn neighbors(p: usize, w: usize, h: usize) -> [Option<usize>; 4] {
     let x = p % w;

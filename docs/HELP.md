@@ -683,3 +683,8 @@ Current/Composite와 선택 합성 연산을 고르고 Apply color range로 적�
 
 Draw selection border에서 Inside/Center/Outside 정렬,문서 픽셀 폭과색을 고른 뒤 Draw border를 누릅니다. 구멍의 경계도 그리며 원래 선택은 유지합니다. 바깥쪽 선은 선택 밖에 그려지고 결과는 캔버스에 잘립니다.
 Cancel/Escape는 취소하고 Undo는 테두리 전체를 되돌립니다. 빈 선택은 바뀌지 않으며 숨긴/잠긴 대상에는 그리지 않습니다.
+
+## fill-reference-sets | 채우기 참조 집합·제외 | 참조층 선택층 폴더 초안 문자 말풍선 종이 잠금 확장
+
+Fill options에서 현재층·단일층·전체 합성·Reference layers·Selected layers·폴더를 선택합니다. Reference exclusions, expansion and layer sets를 펼쳐 층의 Reference/Draft/용도와 선택 집합을 지정합니다. 숨긴 층은 제외하며 문자·말풍선·초안·편집층·종이·잠금 제외는 독립 옵션입니다. 용도/참조 표시는 문서와 함께 저장하고 Undo로 되돌립니다.
+확장 모양은 Rectangle/Round/To darkest pixel 또는 기존 Diamond입니다. Fill narrow areas는 보정 중 빠진 좁은 끝부분을 제한된 거리만 복원합니다. 결과와 도구 옵션은 로컬 문서/설정/프리셋에 저장됩니다.

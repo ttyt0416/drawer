@@ -202,7 +202,17 @@ impl Document {
         animation: bool,
         mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
     ) -> [u8; 4] {
-        let mut color = self.scene.paper.composite(self, x, y, &mut pixel);
+        self.composite_pixel_graph(x, y, animation, &self.scene.paper, &mut pixel)
+    }
+    pub(crate) fn composite_pixel_graph(
+        &self,
+        x: u32,
+        y: u32,
+        animation: bool,
+        graph: &crate::paper::Graph,
+        mut pixel: impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
+        let mut color = graph.composite(self, x, y, &mut pixel);
         for cell in self
             .animation
             .iter()
