@@ -292,7 +292,9 @@ pub fn reconcile_scene(before: &Scene, after: &mut Scene) -> Result<(), String> 
         &mut after.catalog.worlds,
         before.worlds.len(),
         after.worlds.len(),
-    )
+    )?;
+    crate::render_order::reconcile_scene(after);
+    Ok(())
 }
 pub fn reconcile(before: &Document, after: &mut DocumentState) -> Result<(), String> {
     reconcile_scene(&before.scene, &mut after.scene)?;
@@ -669,6 +671,21 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
             .iter()
             .map(|s| Key::Selection(s.id)),
     );
+    if !d.scene.render_order.is_default() {
+        let extras = crate::render_order::normalized(&d.scene);
+        let keys = extras
+            .iter()
+            .map(|e| e.key)
+            .collect::<std::collections::BTreeSet<_>>();
+        let selections = order
+            .iter()
+            .copied()
+            .filter(|k| matches!(k, Key::Selection(_)))
+            .collect::<Vec<_>>();
+        order.retain(|k| !keys.contains(k) && !matches!(k, Key::Selection(_)));
+        order.extend(extras.into_iter().map(|e| e.key));
+        order.extend(selections);
+    }
     let positions = order
         .into_iter()
         .enumerate()

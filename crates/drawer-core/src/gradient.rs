@@ -270,7 +270,7 @@ impl Data {
                 .all(|l| l.valid() && l.id < self.next_id && ids.insert(l.id))
             && self.run_count() <= 32768
     }
-    fn run_count(&self) -> usize {
+    pub(crate) fn run_count(&self) -> usize {
         self.layers
             .iter()
             .flat_map(|l| &l.areas)

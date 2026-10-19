@@ -494,3 +494,8 @@ crates/drawer-core/src/file_objects.rs
 crates/drawer-core/src/file_objects_verify.rs
 crates/drawer-app/src/file_objects.rs
 docs/process/file-objects.md
+crates/drawer-core/src/render_order.rs
+crates/drawer-core/src/raster_conversion.rs
+crates/drawer-core/src/raster_conversion_verify.rs
+crates/drawer-app/src/raster_conversion.rs
+docs/process/raster-conversion.md

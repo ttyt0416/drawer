@@ -68,6 +68,21 @@ pub fn visible(doc: &Document, settings: Settings) -> Vec<Target> {
             doc.scene.catalog.worlds.id(n),
         )));
     }
+    if !doc.scene.render_order.is_default() {
+        let order = crate::render_order::normalized(&doc.scene);
+        let keys = order
+            .iter()
+            .map(|e| e.key)
+            .collect::<std::collections::BTreeSet<_>>();
+        out.retain(|t| {
+            !crate::layer_catalog::from_thumbnail(doc, *t).is_some_and(|k| keys.contains(&k))
+        });
+        out.extend(
+            order
+                .into_iter()
+                .filter_map(|e| crate::layer_catalog::thumbnail(doc, e.key)),
+        );
+    }
     out.retain(|target| {
         !crate::layer_properties::inherited(
             doc,

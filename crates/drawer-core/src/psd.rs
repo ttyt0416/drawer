@@ -36,6 +36,7 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
 }
 pub fn layers_supported(d: &Document) -> bool {
     (d.scene.include_drafts_in_output || !crate::layer_roles::has_drafts(d))
+        && d.scene.render_order.is_default()
         && d.animation.is_none()
         && d.scene.gradients.layers.is_empty()
         && d.scene.objects.is_empty()

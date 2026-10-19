@@ -475,6 +475,11 @@ impl Drawer {
             self.status = Some(e);
         }
         if kind != Kind::Timeline {
+            if ui.button("Rasterize / content color").clicked()
+                && let Err(e) = self.begin_raster_conversion()
+            {
+                self.status = Some(e);
+            }
             if ui.button("Local linked file layer").clicked()
                 && let Err(e) = self.begin_file_objects()
             {

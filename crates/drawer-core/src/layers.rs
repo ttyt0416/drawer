@@ -461,6 +461,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                 crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(id)),
                 crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(copy_id)),
             );
+            crate::render_order::duplicate(&mut state.scene, id, copy_id);
             selected = Target::Raster(copy_id);
         }
         Command::Duplicate(Target::Vector(id)) => {
@@ -624,6 +625,10 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             materialize(&mut state.scene.paper, state.layers.len());
             detach(&mut state.scene.paper, i);
             insert(&mut state.scene.paper, i, p, position)?;
+            state.scene.render_order.entries.retain(|e| {
+                e.key
+                    != crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(id))
+            });
             selected = Target::Raster(id);
         }
         Command::Move {
@@ -646,6 +651,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             }
             let l = state.scene.lines.layers.remove(i);
             state.scene.lines.layers.insert(position, l);
+            crate::render_order::move_vector(&mut state.scene);
             selected = Target::Vector(id);
         }
     }

@@ -242,6 +242,13 @@ pub fn prepare(
     if selected.iter().any(|t| !available.contains(t)) {
         return Err("Clipping targets changed; reopen the draft".into());
     }
+    if clip == Some(true)
+        && selected
+            .iter()
+            .any(|t| matches!(t,Target::Raster(id)if doc.scene.render_order.deferred(*id)))
+    {
+        return Err("Move the raster substitute into the normal raster stack before adding a clipping relationship".into());
+    }
     let mut state = doc.snapshot();
     if alpha.is_none() && clip.is_none() {
         return Ok(state);

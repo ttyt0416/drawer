@@ -85,6 +85,9 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
         true
     }
     fn source(&mut self, n: Node, depth: usize) -> Color {
+        self.source_inner(n, depth, true)
+    }
+    fn source_inner(&mut self, n: Node, depth: usize, opacity: bool) -> Color {
         if depth > 16 {
             return Color::default();
         }
@@ -102,7 +105,14 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
         {
             graph.mark_layers(n, &mut self.seen, 0);
             let mut c = Color::from(paper.shade(pixel, self.original));
-            c.scale(self.weight(n));
+            c.scale(if opacity {
+                self.weight(n)
+            } else {
+                self.doc
+                    .scene
+                    .layer_effects
+                    .mask(clipping::node_key(self.doc, n), self.original)
+            });
             return c;
         }
         let pixel = match n {
@@ -124,7 +134,14 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
             }
         };
         let mut c = Color::from(paper.shade(pixel, self.original));
-        c.scale(self.weight(n));
+        c.scale(if opacity {
+            self.weight(n)
+        } else {
+            self.doc
+                .scene
+                .layer_effects
+                .mask(clipping::node_key(self.doc, n), self.original)
+        });
         c
     }
     fn put(&self, dst: &mut Color, source: Color, n: Node) {
@@ -226,6 +243,26 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
     }
 }
 impl Graph {
+    pub(crate) fn intrinsic_node_pixel_with(
+        &self,
+        doc: &Document,
+        node: Node,
+        point: [i64; 2],
+        pixel: &mut impl FnMut(usize, &RasterLayer) -> [u8; 4],
+    ) -> [u8; 4] {
+        let mut sample = Sample {
+            graph: self,
+            doc,
+            original: doc
+                .scene
+                .transform
+                .inverse()
+                .map(point.map(|v| v as f64 + 0.5)),
+            pixel,
+            seen: [false; 256],
+        };
+        sample.source_inner(node, 0, false).rgba()
+    }
     pub(crate) fn composite_nodes(
         &self,
         doc: &Document,
@@ -359,7 +396,14 @@ pub(crate) fn vectors(
                 return Color::default();
             }
             let mut rgba = [0; 4];
-            if !centerline && let Some(pixel) = displayed(n) {
+            if (!centerline
+                || doc
+                    .scene
+                    .file_objects
+                    .get(crate::layer_search::Key::Layer(Target::Vector(l.id)))
+                    .is_some())
+                && let Some(pixel) = displayed(n)
+            {
                 rgba = pixel;
             } else {
                 for p in &l.paths {

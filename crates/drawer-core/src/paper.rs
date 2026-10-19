@@ -649,6 +649,12 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 crate::layer_properties::raster(doc, n),
             ))
             .is_none()
+        && doc
+            .scene
+            .layer_effects
+            .rasters
+            .get(&doc.scene.layer_ids.id(n))
+            .is_none_or(|e| e.mask.is_none())
         && !graph.layers.contains_key(&n)
         && !doc
             .scene

@@ -257,3 +257,6 @@ pub mod file_objects;
 pub mod file_objects_verify;
 pub mod material_layer;
 pub mod material_layer_verify;
+pub mod raster_conversion;
+pub mod raster_conversion_verify;
+pub mod render_order;

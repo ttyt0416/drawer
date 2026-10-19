@@ -96,6 +96,7 @@ fn finish(
     notes: Vec<String>,
     maximum_delta: u8,
 ) -> Result<Prepared, String> {
+    crate::render_order::reconcile(&mut state);
     crate::file_objects::prune(&mut state);
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
@@ -132,6 +133,7 @@ pub fn prepare(
         Operation::Down(t) => (vec![t], true),
         Operation::Flatten => unreachable!(),
     };
+    crate::render_order::allow_partial_merge(doc, &requested)?;
     if requested.is_empty()
         || requested.len() > 512
         || requested.iter().collect::<BTreeSet<_>>().len() != requested.len()
@@ -428,6 +430,7 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     after.scene.layer_effects = Default::default();
     after.scene.lines = Default::default();
     after.scene.gradients = Default::default();
+    after.scene.render_order = Default::default();
     after.scene.objects.clear();
     after.scene.worlds.clear();
     after.scene.camera = None;

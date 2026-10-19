@@ -184,6 +184,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::render_order::Data::is_default")]
+    pub render_order: crate::render_order::Data,
     #[serde(default, skip_serializing_if = "crate::file_objects::Data::is_default")]
     pub file_objects: crate::file_objects::Data,
     #[serde(default, skip_serializing_if = "crate::appearance::Data::is_default")]
@@ -258,7 +260,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
-        self.file_objects.valid(missing)
+        self.render_order.valid() && crate::render_order::relationships_valid(self)
+            && !self.clipping.rasters.iter().any(|(id,base)|self.render_order.deferred(*id)||matches!(base,crate::layer_properties::Target::Raster(id)if self.render_order.deferred(*id)))
+            && self.file_objects.valid(missing)
             && self.file_objects.entries.iter().all(|l| {
                 [l.cache.bounds().min, l.cache.bounds().max]
                     .into_iter()
@@ -359,7 +363,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.file_objects.bytes()
+        self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()
+            + self.file_objects.bytes()
             + self.appearance.bytes()
             + self.catalog.bytes()
             + self.clipping.bytes()

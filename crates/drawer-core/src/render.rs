@@ -16,12 +16,110 @@ pub struct Renderer<'a> {
     references: Option<&'a crate::eyedropper::References>,
     text_contours: Vec<Vec<Contour>>,
     vector_bounds: Vec<Vec<Rect>>,
+    order: Vec<crate::render_order::Entry>,
+    deferred: Vec<bool>,
 }
 struct Contour {
     points: Vec<Point>,
     bounds: Rect,
 }
 impl<'a> Renderer<'a> {
+    fn ordered(&self, mut result: [u8; 4], point: Point, original: Point) -> [u8; 4] {
+        use crate::{layer_properties::Target, layer_search::Key};
+        let d = self.doc();
+        let mut i = 0;
+        let objects = d.scene.clipping.solo.is_none()
+            && self.references.is_none_or(|r| r.objects)
+            && self.fill.is_none_or(|(_, s)| {
+                matches!(
+                    s.reference,
+                    crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                )
+            });
+        while i < self.order.len() {
+            let key = self.order[i].key;
+            if matches!(key, Key::Layer(Target::Vector(_))) {
+                let mut end = i + 1;
+                while end < self.order.len()
+                    && matches!(self.order[end].key, Key::Layer(Target::Vector(_)))
+                {
+                    end += 1;
+                }
+                result = crate::paper::clipped_vectors(
+                    d,
+                    point,
+                    original,
+                    result,
+                    |n, l| {
+                        self.order[i..end]
+                            .iter()
+                            .any(|e| e.key == Key::Layer(Target::Vector(l.id)))
+                            && self.references.is_none_or(|r| r.vectors)
+                            && self
+                                .fill
+                                .is_none_or(|(_, s)| crate::fill_reference::vector(l, n, s))
+                    },
+                    self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline),
+                    |n| Some(self.vector_pixel(n, point)),
+                );
+                i = end;
+                continue;
+            }
+            match key {
+                Key::Layer(Target::Raster(id)) => {
+                    if let Some(n) = crate::layers::index(d, id)
+                        && self.references.is_none_or(|r| r.raster(n))
+                        && self
+                            .fill
+                            .is_none_or(|(a, s)| crate::fill_reference::raster(d, n, a, s))
+                    {
+                        let source = self.source_pixel_unbounded(key, point);
+                        let mut output = crate::paper::Color::default();
+                        output.add(result);
+                        crate::layer_blend::mode(d, Target::Raster(id)).over(&mut output, {
+                            let mut c = crate::paper::Color::default();
+                            c.add(source);
+                            c
+                        });
+                        result = output.rgba();
+                    }
+                }
+                Key::Gradient(id) if objects => {
+                    if let Some(g) = d.scene.gradients.layers.iter().find(|g| g.id == id) {
+                        let c = d
+                            .scene
+                            .file_objects
+                            .pixel(key, original)
+                            .unwrap_or_else(|| g.pixel(original));
+                        result = crate::layer_catalog::compose(d, key, result, c);
+                    }
+                }
+                Key::Object(_) if objects => {
+                    if let Some(n) = crate::layer_catalog::source_index(d, key) {
+                        result = crate::layer_catalog::compose(
+                            d,
+                            key,
+                            result,
+                            self.object_pixel(n, &d.scene.objects[n], original),
+                        );
+                    }
+                }
+                Key::World(_) if objects => {
+                    if let Some(n) = crate::layer_catalog::source_index(d, key) {
+                        result = crate::layer_catalog::compose(
+                            d,
+                            key,
+                            result,
+                            self.world_pixel(n, original),
+                        );
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        result
+    }
     pub fn error(&self) -> Option<&str> {
         self.appearance.as_ref().err().map(String::as_str)
     }
@@ -205,17 +303,27 @@ impl<'a> Renderer<'a> {
     }
     /// Isolated page-source contribution; the normal layer tree handles its own blending.
     pub fn source_pixel(&self, key: crate::layer_search::Key, point: Point) -> [u8; 4] {
+        let d = self.doc();
+        if point[0] < 0.
+            || point[1] < 0.
+            || point[0] >= d.width as f64
+            || point[1] >= d.height as f64
+        {
+            return [0; 4];
+        }
+        self.source_pixel_unbounded(key, point)
+    }
+    pub(crate) fn source_pixel_unbounded(
+        &self,
+        key: crate::layer_search::Key,
+        point: Point,
+    ) -> [u8; 4] {
         if self.error().is_some() {
             return [0; 4];
         }
         use crate::{layer_properties::Target, layer_search::Key};
         let d = self.doc();
-        if point.iter().any(|n| !n.is_finite())
-            || point[0] < 0.
-            || point[1] < 0.
-            || point[0] >= d.width as f64
-            || point[1] >= d.height as f64
-        {
+        if point.iter().any(|n| !n.is_finite()) {
             return [0; 4];
         }
         let original = d.scene.transform.inverse().map(point);
@@ -413,6 +521,19 @@ impl<'a> Renderer<'a> {
             fill: None,
             fill_graph: None,
             text_contours,
+            deferred: (0..document.layers.len())
+                .map(|n| {
+                    document
+                        .scene
+                        .render_order
+                        .deferred(document.scene.layer_ids.id(n))
+                })
+                .collect(),
+            order: if document.scene.render_order.is_default() {
+                vec![]
+            } else {
+                crate::render_order::normalized(&document.scene)
+            },
             vector_bounds: document
                 .scene
                 .lines
@@ -453,6 +574,9 @@ impl<'a> Renderer<'a> {
                 }),
             self.fill_graph.as_ref().unwrap_or(&doc.scene.paper),
             |index, _layer| {
+                if self.deferred.get(index).copied().unwrap_or(false) {
+                    return [0; 4];
+                }
                 if self.references.is_some_and(|r| !r.raster(index))
                     || self
                         .fill
@@ -467,6 +591,9 @@ impl<'a> Renderer<'a> {
         let original = scene.transform.inverse().map(point);
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
             return result;
+        }
+        if !self.order.is_empty() {
+            return self.ordered(result, point, original);
         }
         if scene.clipping.solo.is_none()
             && self.references.is_none_or(|r| r.objects)
