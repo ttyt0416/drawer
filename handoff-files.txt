@@ -486,3 +486,7 @@ crates/drawer-core/src/layer_defaults_verify.rs
 crates/drawer-app/src/appearance.rs
 crates/drawer-app/src/layer_defaults.rs
 docs/process/layer-appearance.md
+crates/drawer-core/src/material_layer.rs
+crates/drawer-core/src/material_layer_verify.rs
+crates/drawer-app/src/material_layer.rs
+docs/process/material-layers.md

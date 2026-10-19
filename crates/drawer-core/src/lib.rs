@@ -252,3 +252,6 @@ pub mod layer_catalog;
 mod catalog_guard;
 
 pub mod search_edit;
+
+pub mod material_layer;
+pub mod material_layer_verify;

@@ -73,6 +73,7 @@ impl Affine {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum PageObject {
+    Material(Box<crate::material_layer::Layer>),
     Text {
         baseline: Point,
         text: String,
@@ -100,6 +101,7 @@ pub enum PageObject {
 impl PageObject {
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Material(m) => m.bounds(),
             Self::Text {
                 baseline,
                 text,
@@ -147,10 +149,11 @@ impl PageObject {
             },
         }
     }
-    fn valid(&self) -> bool {
+    fn valid(&self, missing: bool) -> bool {
         let positive = |v: f64| v.is_finite() && v > 0.0 && v <= 1e6;
         self.bounds().valid()
             && match self {
+                Self::Material(m) => m.valid(missing),
                 Self::Text { text, size_px, .. } => text.len() <= 65536 && positive(*size_px),
                 Self::Line { width_px, .. } => positive(*width_px),
                 Self::Tone {
@@ -247,6 +250,12 @@ pub struct Scene {
 }
 impl Scene {
     pub fn valid(&self) -> bool {
+        self.valid_images(false)
+    }
+    pub(crate) fn metadata_valid(&self) -> bool {
+        self.valid_images(true)
+    }
+    fn valid_images(&self, missing: bool) -> bool {
         self.appearance.valid()
             && self
                 .lines
@@ -293,7 +302,7 @@ impl Scene {
                 .as_ref()
                 .is_none_or(crate::selection::Mask::valid)
             && self.objects.len() <= 4096
-            && self.objects.iter().all(PageObject::valid)
+            && self.objects.iter().all(|o| o.valid(missing))
             && self
                 .objects
                 .iter()
@@ -358,6 +367,7 @@ impl Scene {
                     std::mem::size_of_val(o)
                         + match o {
                             PageObject::Text { text, .. } => text.len(),
+                            PageObject::Material(m) => m.bytes(),
                             _ => 0,
                         }
                 })

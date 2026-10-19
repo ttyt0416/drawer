@@ -475,6 +475,13 @@ impl Drawer {
             self.status = Some(e);
         }
         if kind != Kind::Timeline {
+            for (label, edit) in [("New material layer", false), ("Edit material layer", true)] {
+                if ui.button(label).clicked()
+                    && let Err(e) = self.begin_material_layer(edit)
+                {
+                    self.status = Some(e);
+                }
+            }
             if ui.button("Display effects").clicked()
                 && let Err(e) = self.begin_appearance()
             {

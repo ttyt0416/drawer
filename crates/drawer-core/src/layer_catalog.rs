@@ -584,6 +584,14 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
                 Kind::Text,
             ),
             PageObject::Tone { .. } => (format!("Tone {}", n + 1), Kind::Tone),
+            PageObject::Material(m) => (
+                format!("Material {}", c.objects.id(n)),
+                match &m.source {
+                    crate::material_layer::Source::Solid(_) => Kind::Solid,
+                    crate::material_layer::Source::Gradient(_) => Kind::Gradient,
+                    crate::material_layer::Source::Image(_) => Kind::Image,
+                },
+            ),
             _ => (format!("Page object {}", c.objects.id(n)), Kind::Image),
         };
         rows.push(extra_row(c, key, name, kind));

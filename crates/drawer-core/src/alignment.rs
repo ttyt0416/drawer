@@ -481,6 +481,10 @@ pub(crate) fn shift(
             )?;
         }
         Item::Object(n) => match &mut state.scene.objects[n] {
+            PageObject::Material(m) => {
+                m.transform.0[4] += delta[0];
+                m.transform.0[5] += delta[1];
+            }
             PageObject::Text { baseline, .. } => move_point(baseline),
             PageObject::Line { start, end, .. } => {
                 move_point(start);

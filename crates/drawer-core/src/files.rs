@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 53;
+const VERSION: u32 = 54;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -180,8 +180,11 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
-        if !document.scene.valid()
-            || !document.scene.layer_ids.matches(document.layers.len())
+        if !(if version >= 54 {
+            document.scene.metadata_valid()
+        } else {
+            document.scene.valid()
+        }) || !document.scene.layer_ids.matches(document.layers.len())
             || !document.scene.paper.valid_for(document.layers.len())
             || document.memory_bytes() > budget
         {
@@ -202,6 +205,12 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         if document.memory_bytes() > budget {
             return Err(invalid("Animation exceeds document memory budget"));
         }
+    }
+    if version >= 54 {
+        crate::material_layer::read(&mut document.scene, &mut reader)?;
+    }
+    if !document.scene.valid() || document.memory_bytes() > budget {
+        return Err(invalid("Invalid material image payload or budget"));
     }
     if !document
         .scene
@@ -334,6 +343,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         } else {
             writer.write_all(&0u32.to_le_bytes())?;
         }
+        crate::material_layer::write(&document.scene, &mut writer)?;
         writer.flush()?;
         writer.get_ref().sync_all()
     })();

@@ -69,6 +69,7 @@ impl<'a> Renderer<'a> {
     }
     fn object_pixel(&self, index: usize, object: &PageObject, original: Point) -> [u8; 4] {
         match object {
+            PageObject::Material(m) => m.pixel(original),
             PageObject::Text { color, .. } => {
                 let winding: i32 = self.text_contours[index]
                     .iter()
