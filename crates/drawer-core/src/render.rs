@@ -113,6 +113,15 @@ impl<'a> Renderer<'a> {
         if scene.clips.iter().any(|clip| !inside(clip, original)) {
             return result;
         }
+        if self.references.is_none_or(|r| r.objects)
+            && self
+                .fill
+                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
+        {
+            for layer in &scene.gradients.layers {
+                result = over(result, layer.pixel(original));
+            }
+        }
         for (index, object) in scene.objects.iter().enumerate().filter(|(_, o)| {
             self.references.is_none_or(|r| r.objects)
                 && self

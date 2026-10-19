@@ -360,3 +360,9 @@ docs/process/fill-reference-sets.md
 crates/drawer-core/src/enclosure.rs
 crates/drawer-app/src/enclosure.rs
 docs/process/enclosed-fill.md
+
+crates/drawer-core/src/gradient.rs
+crates/drawer-core/src/gradient_regions.rs
+crates/drawer-core/src/gradient_verify.rs
+crates/drawer-app/src/gradient.rs
+docs/process/gradients.md

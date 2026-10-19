@@ -163,7 +163,7 @@ impl Data {
                 * std::mem::size_of::<Target>()
             + self.settings.intersections.len() * 8
     }
-    fn id(&mut self) -> Result<u64, String> {
+    pub(crate) fn id(&mut self) -> Result<u64, String> {
         let id = self.next_id;
         self.next_id = id.checked_add(1).ok_or("Vector ID limit")?;
         Ok(id)
@@ -342,7 +342,7 @@ fn piece(points: &[Point], lengths: &[f64], a: f64, b: f64) -> Vec<Point> {
     out.push(at(points, lengths, b));
     out
 }
-fn cut(
+pub(crate) fn cut(
     path: &Path,
     transform: Affine,
     p: Point,

@@ -422,6 +422,28 @@ pub(crate) fn paint_coverage(
     alpha_lock: bool,
     coverage: impl Fn(u32, u32) -> u8,
 ) -> Result<DocumentState, String> {
+    paint(doc, layer, erase, alpha_lock, |x, y| {
+        (color, coverage(x, y))
+    })
+}
+pub(crate) fn paint_pixels(
+    doc: &Document,
+    layer: usize,
+    alpha_lock: bool,
+    pixel: impl Fn(u32, u32) -> [u8; 4],
+) -> Result<DocumentState, String> {
+    paint(doc, layer, false, alpha_lock, |x, y| {
+        let c = pixel(x, y);
+        (c, if c[3] > 0 { 255 } else { 0 })
+    })
+}
+fn paint(
+    doc: &Document,
+    layer: usize,
+    erase: bool,
+    alpha_lock: bool,
+    sample: impl Fn(u32, u32) -> ([u8; 4], u8),
+) -> Result<DocumentState, String> {
     let raster = doc
         .layers
         .get(layer)
@@ -444,7 +466,7 @@ pub(crate) fn paint_coverage(
     }
     for y in 0..doc.height {
         for x in 0..doc.width {
-            if coverage(x, y) > 0 {
+            if sample(x, y).1 > 0 {
                 min = [min[0].min(x as i64), min[1].min(y as i64)];
                 max = [max[0].max(x as i64 + 1), max[1].max(y as i64 + 1)];
             }
@@ -486,7 +508,7 @@ pub(crate) fn paint_coverage(
     let mut changed = false;
     for y in min[1]..max[1] {
         for x in min[0]..max[0] {
-            let c = coverage(x as u32, y as u32);
+            let (color, c) = sample(x as u32, y as u32);
             if c == 0 {
                 continue;
             }

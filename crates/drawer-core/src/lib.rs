@@ -152,3 +152,6 @@ pub mod fill_reference;
 pub mod fill_reference_verify;
 
 pub mod enclosure;
+pub mod gradient;
+mod gradient_regions;
+pub mod gradient_verify;

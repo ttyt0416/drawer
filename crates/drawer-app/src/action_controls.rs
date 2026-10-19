@@ -256,6 +256,7 @@ impl Drawer {
                 "quick-mask" => self.toggle_quick_mask(),
                 "color-range" => self.begin_color_range()?,
                 "selection-border" => self.begin_selection_border()?,
+                "gradient-tool" => self.begin_gradient()?,
                 "bucket-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = super::precision::Mode::Fill;

@@ -197,7 +197,14 @@ impl<'a> Sampler<'a> {
         {
             return Err("Invalid raster fill reference".into());
         }
-        let complexity = doc.layers.len()
+        let complexity = doc
+            .scene
+            .gradients
+            .layers
+            .iter()
+            .map(|l| l.areas.len() * 3 + 1)
+            .sum::<usize>()
+            + doc.layers.len()
             + doc.scene.objects.len()
             + doc
                 .scene
