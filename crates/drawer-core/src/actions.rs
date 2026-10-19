@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 53] = [
+pub const EXTRA_COMMANDS: [&str; 56] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -47,6 +47,9 @@ pub const EXTRA_COMMANDS: [&str; 53] = [
     "selection-reselect",
     "selection-tools",
     "selection-save",
+    "selection-expand",
+    "selection-shrink",
+    "selection-feather",
     "duplicate-page",
     "move-selection-boundary",
     "move-selected-pixels",

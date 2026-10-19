@@ -664,3 +664,7 @@ V는 이후 획의 스냅을 임시로 켜거나 끕니다. 직선/원근은 획
 
 Ellipse select는 두 모서리를 드래그해 놓으면 선택됩니다. Polygon select는 꼭짓점을 차례로 클릭한 뒤 Enter로 닫습니다. Backspace로 마지막 점을 지우고 Escape로 취소합니다.
 Selection 연산에서 Replace/추가 Add/빼기 Subtract/교차 Intersect를 선택합니다. 사각형·올가미·마술봉도 같은 연산 설정을 씁니다. 선택 변경은 한 번의 Undo로 되돌리고 문서와 함께 저장하며 그림 픽셀은 바뀌지 않습니다.
+
+## selection-boundary | 선택 확대·축소·경계 흐림 | 팽창 침식 흐림 반경
+
+Expand selection/Shrink selection/Feather selection에서 반경을 정하고 Apply selection boundary를 누릅니다. 반경은 문서 픽셀0~64이며0은 선택을 그대로 유지합니다. 확대·축소는 정사각형 이웃, 흐림은 상자 평균을 사용합니다. Cancel/Escape는 취소하고 Undo는 적용 전체를 되돌립니다. 그림 픽셀은 바뀌지 않습니다.

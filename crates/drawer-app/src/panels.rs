@@ -175,6 +175,7 @@ impl Drawer {
             || self.textures.modal()
             || self.lines.modal()
             || self.ruler_tools.open
+            || self.selection_filter.draft.is_some()
             || self.controls.open
             || self.controls.radial.is_some()
             || self.workspaces.staged.is_some()

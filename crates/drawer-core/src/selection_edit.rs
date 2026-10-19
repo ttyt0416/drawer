@@ -67,6 +67,9 @@ pub(crate) struct Grid {
 }
 impl Grid {
     pub(crate) fn new(doc: &Document) -> Result<Self, String> {
+        Self::with_bounds(doc, &[])
+    }
+    pub(crate) fn with_bounds(doc: &Document, extra: &[Point]) -> Result<Self, String> {
         let inv = doc.scene.transform.inverse();
         let points = [
             [0.0; 2],
@@ -74,6 +77,8 @@ impl Grid {
             [doc.width as f64, doc.height as f64],
             [0.0, doc.height as f64],
         ]
+        .into_iter()
+        .chain(extra.iter().copied())
         .map(|p| inv.map(p));
         let mut min = [f64::INFINITY; 2];
         let mut max = [f64::NEG_INFINITY; 2];

@@ -295,6 +295,12 @@ impl Drawer {
                     self.drawing.mode = super::precision::Mode::Move;
                     self.drawing.connect_line = false;
                 }
+                "selection-expand" | "selection-shrink" | "selection-feather" => self
+                    .begin_selection_filter(match command {
+                        "selection-expand" => drawer_core::selection_filter::Operation::Expand,
+                        "selection-shrink" => drawer_core::selection_filter::Operation::Shrink,
+                        _ => drawer_core::selection_filter::Operation::Feather,
+                    })?,
                 "screen-eyedropper" => self.begin_screen_sample(ctx)?,
                 "select-rectangle" | "select-lasso" | "select-ellipse" | "select-polygon"
                 | "selection-clear" | "selection-invert" | "selection-reselect"

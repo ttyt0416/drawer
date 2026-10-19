@@ -80,6 +80,9 @@ impl Drawer {
         }
         ui.horizontal_wrapped(|ui| {
             for (command, label) in [
+                ("selection-expand", "Expand selection…"),
+                ("selection-shrink", "Shrink selection…"),
+                ("selection-feather", "Feather selection…"),
                 ("move-selection-boundary", "Move boundary"),
                 ("move-selected-pixels", "Move selected pixels"),
                 ("copy-selection", "Copy selected pixels"),
