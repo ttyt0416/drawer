@@ -278,6 +278,7 @@ pub(crate) fn prepare(
             }
         }
     }
+    lines.prune_selection();
     if !lines.valid() {
         return Err("Freeform vector result exceeds path limit".into());
     }

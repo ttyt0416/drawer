@@ -3,6 +3,9 @@ use eframe::egui;
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    pub selection_outline: bool,
+    pub selection_edges: usize,
+    pub vector_selection_marks: usize,
     proof_settings: Option<drawer_core::soft_proof::Settings>,
     proof: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
     pub(super) proof_error: Option<String>,
@@ -77,6 +80,9 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            selection_outline: true,
+            selection_edges: 0,
+            vector_selection_marks: 0,
             image: None,
             proof_settings: None,
             proof: None,
@@ -938,6 +944,14 @@ impl CanvasView {
                 egui::Color32::WHITE,
             );
         }
+        (self.selection_edges, self.vector_selection_marks) = crate::layer_selection::paint(
+            &painter,
+            document,
+            view,
+            rect,
+            ppp,
+            self.selection_outline,
+        );
     }
     pub fn show_only(
         &mut self,
@@ -1164,7 +1178,7 @@ impl CanvasView {
                     egui::Stroke::NONE,
                 ));
             }
-            if self.navigator.selection_outline {
+            if self.selection_outline && self.navigator.selection_outline {
                 mask.boundaries()
             } else {
                 Vec::new()
@@ -1175,7 +1189,7 @@ impl CanvasView {
                 egui::Color32::from_rgba_unmultiplied(90, 130, 255, 90),
                 egui::Stroke::NONE,
             ));
-            if self.navigator.selection_outline {
+            if self.selection_outline && self.navigator.selection_outline {
                 let p = [
                     rect.min,
                     [rect.max[0], rect.min[1]],

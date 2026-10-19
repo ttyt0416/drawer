@@ -386,3 +386,9 @@ crates/drawer-core/src/snapping.rs
 crates/drawer-core/src/snapping_verify.rs
 crates/drawer-app/src/snapping.rs
 docs/process/drawing-snapping.md
+
+crates/drawer-core/src/layer_selection.rs
+crates/drawer-core/src/vector_selection.rs
+crates/drawer-core/src/layer_selection_verify.rs
+crates/drawer-app/src/layer_selection.rs
+docs/process/layer-and-vector-selections.md

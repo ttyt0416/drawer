@@ -116,6 +116,8 @@ impl Drawer {
                 ("selection-border", "Draw selection border…"),
                 ("gradient-tool", "Gradient…"),
                 ("align-objects", "Align/distribute objects…"),
+                ("layer-selection-tools", "Layer alpha / vector selections…"),
+                ("selection-outline", "Show/hide selection outline"),
                 ("selection-expand", "Expand selection…"),
                 ("selection-shrink", "Shrink selection…"),
                 ("selection-feather", "Feather selection…"),

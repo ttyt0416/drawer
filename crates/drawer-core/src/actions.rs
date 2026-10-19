@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 65] = [
+pub const EXTRA_COMMANDS: [&str; 72] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -69,6 +69,13 @@ pub const EXTRA_COMMANDS: [&str; 65] = [
     "gradient-tool",
     "shape-tool",
     "align-objects",
+    "layer-selection-tools",
+    "vector-selection-clear",
+    "selection-outline",
+    "alpha-selection-replace",
+    "alpha-selection-add",
+    "alpha-selection-subtract",
+    "alpha-selection-intersect",
     "wand-tool",
     "selection-brush-tool",
     "selection-erase-tool",
@@ -371,6 +378,13 @@ impl Settings {
             "gradient-tool" => "Gradient and freeform gradient",
             "shape-tool" => "Draw shape",
             "align-objects" => "Align and distribute objects",
+            "layer-selection-tools" => "Layer alpha and vector editing selections",
+            "vector-selection-clear" => "Clear vector editing selection",
+            "selection-outline" => "Show/hide area selection outline",
+            "alpha-selection-replace" => "Select from layer alpha",
+            "alpha-selection-add" => "Add layer alpha to selection",
+            "alpha-selection-subtract" => "Subtract layer alpha from selection",
+            "alpha-selection-intersect" => "Intersect selection with layer alpha",
             "save-as" => "Save as",
             "undo" => "Undo",
             "redo" => "Redo",

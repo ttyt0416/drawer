@@ -304,9 +304,14 @@ impl Scratchpad {
         }
     }
 }
+fn selection_outline_default() -> bool {
+    true
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(default = "selection_outline_default")]
+    pub selection_outline: bool,
     #[serde(default)]
     pub snapping: crate::snapping::Settings,
     #[serde(default)]
@@ -409,6 +414,7 @@ impl Default for Snapshot {
             gradient_presets: Default::default(),
             shapes: Default::default(),
             snapping: Default::default(),
+            selection_outline: true,
             shapes_vector: false,
             layer_pick: Default::default(),
             color_modes: Default::default(),
@@ -576,6 +582,7 @@ impl Snapshot {
             next.gradient_presets = incoming.gradient_presets.clone();
             next.shapes = incoming.shapes;
             next.snapping = incoming.snapping;
+            next.selection_outline = incoming.selection_outline;
             next.shapes_vector = incoming.shapes_vector;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;

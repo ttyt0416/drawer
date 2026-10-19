@@ -118,6 +118,11 @@ impl Default for Settings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Data {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::vector_selection::State::is_default"
+    )]
+    pub selection: crate::vector_selection::State,
     pub next_id: u64,
     pub layers: Vec<Layer>,
     pub settings: Settings,
@@ -125,6 +130,7 @@ pub struct Data {
 impl Default for Data {
     fn default() -> Self {
         Self {
+            selection: Default::default(),
             next_id: 1,
             layers: vec![],
             settings: Default::default(),
@@ -138,6 +144,9 @@ pub fn point_valid(p: Point) -> bool {
     p.iter().all(|v| v.is_finite() && v.abs() <= 1e9)
 }
 impl Data {
+    pub fn prune_selection(&mut self) {
+        self.selection.prune(&self.layers);
+    }
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }
@@ -145,7 +154,8 @@ impl Data {
         let mut ids = BTreeSet::new();
         let mut paths = 0;
         let mut points = 0;
-        self.next_id > 0
+        self.selection.valid(&self.layers)
+            && self.next_id > 0
             && self.layers.len() <= 32
             && self.layers.iter().all(|l| {
                 ids.insert(l.id)
@@ -184,6 +194,7 @@ impl Data {
             return 0;
         }
         std::mem::size_of::<Self>()
+            + self.selection.bytes()
             + self
                 .layers
                 .iter()
@@ -593,6 +604,7 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
             _ => unreachable!(),
         }
     }
+    after.lines.prune_selection();
     if !after.valid() {
         return Err("Erasing exceeds vector path limits; no layers changed".into());
     }

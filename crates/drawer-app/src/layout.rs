@@ -455,6 +455,7 @@ impl Drawer {
                 && !self.lines.modal();
             canvas.filters = self.workspaces.store.current.input.filters;
             canvas.profiles = self.workspaces.store.current.input.profiles;
+            canvas.selection_outline = self.workspaces.store.current.selection_outline;
             canvas.smoothing = self.workspaces.store.current.input.smoothing;
             canvas.cursors = self.workspaces.store.current.cursors;
             canvas.behavior = self.workspaces.store.current.behavior;

@@ -170,3 +170,8 @@ pub mod alignment_verify;
 pub mod snapping;
 
 pub mod snapping_verify;
+
+pub mod layer_selection;
+pub mod vector_selection;
+
+pub mod layer_selection_verify;

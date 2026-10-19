@@ -192,6 +192,10 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if command == "selection-outline" {
+            self.toggle_selection_outline();
+            return;
+        }
         let preserve_prepared_contact = matches!(
             command,
             "primary-color"
@@ -260,6 +264,20 @@ impl Drawer {
                 "selection-border" => self.begin_selection_border()?,
                 "gradient-tool" => self.begin_gradient()?,
                 "align-objects" => self.begin_alignment()?,
+                "layer-selection-tools" => self.begin_layer_selection()?,
+                "vector-selection-clear" => self.clear_vector_selection()?,
+                "alpha-selection-replace" => {
+                    self.alpha_selection_command(drawer_core::selection_edit::Combine::Replace)?
+                }
+                "alpha-selection-add" => {
+                    self.alpha_selection_command(drawer_core::selection_edit::Combine::Add)?
+                }
+                "alpha-selection-subtract" => {
+                    self.alpha_selection_command(drawer_core::selection_edit::Combine::Subtract)?
+                }
+                "alpha-selection-intersect" => {
+                    self.alpha_selection_command(drawer_core::selection_edit::Combine::Intersect)?
+                }
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

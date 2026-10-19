@@ -182,6 +182,7 @@ impl Drawer {
                 if ui.button("Add path to selected draft layer").clicked(){let result=(||{let id=e.layer.ok_or("Select a vector layer")?;let points=parse_points(&e.points)?.into_iter().map(|p|core::snap(&e.draft,d.scene.transform,p).map(|q|d.scene.transform.inverse().map(q))).collect::<Result<Vec<_>,_>>()?;e.draft.add_path(id,points,e.closed,e.width,color)?;Ok::<_,String>(())})();if let Err(err)=result{self.status=Some(err)}}
                 if let Some(l)=e.draft.layers.iter_mut().find(|l|Some(l.id)==e.layer){let mut remove=None;for(i,p)in l.paths.iter().enumerate(){ui.horizontal(|ui|{ui.label(format!("Path #{}: {} vertices{}",p.id,p.points.len(),if p.closed{" (closed)"}else{""}));if ui.add_enabled(!l.locked&&!l.hidden,egui::Button::new("Remove path")).clicked(){remove=Some(i)}});}if let Some(i)=remove{l.paths.remove(i);}}
             });
+            e.draft.prune_selection();
             let s=&mut e.draft.settings;ui.checkbox(&mut s.clip_paint,"Restrict brush coloring to the closed reference region at stroke start");ui.checkbox(&mut s.magnet,"Magnet new vector vertices to chosen vector references");super::edit::number(ui,&mut s.distance,0.0..=1024.0,0.5," document px magnet distance","line-references");super::edit::number(ui,&mut s.darkness,1.0..=255.0,1.0," raster darkness × alpha barrier threshold","line-references");
             ui.label("Each row: boundary/magnet · intersection · actual erase target");
             for(i,l)in d.layers.iter().enumerate(){ui.push_id(("raster",i),|ui|{ui.horizontal(|ui|{ui.label(format!("Raster {}: {}{}{}",i+1,l.name,if l.locked{" [LOCKED]"}else{""},if !d.scene.paper.raster_visible(i,d.layers.len()){" [HIDDEN]"}else{""}));toggle(ui,&mut s.references,Target::Raster(i),"Boundary");toggle(ui,&mut s.erase,Target::Raster(i),"Erase");});});}
@@ -214,6 +215,7 @@ impl Drawer {
             let d = &mut self.documents[n];
             let mut scene = d.scene.clone();
             scene.lines = e.draft.clone();
+            scene.lines.prune_selection();
             match d.edit_scene(scene) {
                 Err(err) => {
                     self.status = Some(err);
