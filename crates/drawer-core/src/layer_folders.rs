@@ -273,6 +273,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
                 .folders
                 .remove(&(folder as u16));
             state.scene.layer_effects.folders.remove(&(folder as u16));
+            state.scene.catalog.folders.remove(&(folder as u16));
             state
                 .scene
                 .clipping

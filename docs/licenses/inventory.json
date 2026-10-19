@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "1a37b916d7400d40ab721f0d5e388d0a151509bf4d4553b9f4d3e1fcda91fdce",
+  "cargo_lock_sha256": "1fc0adfdd6884b0303b1ed13df08eca68e380ad36ae274ea0e8d03292510e4a3",
   "libraries": [
     {
       "name": "accesskit",
@@ -417,6 +417,25 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "8c9612877aacfa1b42f5e80b679e6c3c93a7ba2bb99dfaf6e87e200dca4b4e6c"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "displaydoc",
+      "version": "0.2.7",
+      "source": "https://crates.io/crates/displaydoc/0.2.7",
+      "repository": "https://github.com/yaahc/displaydoc",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "c6232dd377dcc64799954cbd3a9bb882e9cdc1308ccd87b1c098f1fb2eaf82a8",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ],
       "supplement_sources": []
@@ -1021,6 +1040,156 @@
       "supplement_sources": []
     },
     {
+      "name": "icu_casemap",
+      "version": "1.5.1",
+      "source": "https://crates.io/crates/icu_casemap/1.5.1",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "9ff0c8ae9f8d31b12e27fc385ff9ab1f3cd9b17417c665c49e4ec958c37da75f",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_casemap_data",
+      "version": "1.5.1",
+      "source": "https://crates.io/crates/icu_casemap_data/1.5.1",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "02bd9f6276270c85a5cd54611adbbf94e993ec464a2a86a452a6c565b7ded5d9",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_collections",
+      "version": "1.5.0",
+      "source": "https://crates.io/crates/icu_collections/1.5.0",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "db2fa452206ebee18c4b5c2274dbf1de17008e874b4dc4f0aea9d01ca79e4526",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_locid",
+      "version": "1.5.0",
+      "source": "https://crates.io/crates/icu_locid/1.5.0",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "13acbb8371917fc971be86fc8057c41a64b521c184808a698c02acc242dbf637",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_locid_transform",
+      "version": "1.5.0",
+      "source": "https://crates.io/crates/icu_locid_transform/1.5.0",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "01d11ac35de8e40fdeda00d9e1e9d92525f3f9d887cdd7aa81d727596788b54e",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_locid_transform_data",
+      "version": "1.5.1",
+      "source": "https://crates.io/crates/icu_locid_transform_data/1.5.1",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "7515e6d781098bf9f7205ab3fc7e9709d34554ae0b21ddbcb5febfa4bc7df11d",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_properties",
+      "version": "1.5.1",
+      "source": "https://crates.io/crates/icu_properties/1.5.1",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "93d6020766cfc6302c15dbbc9c8778c37e62c14427cb7f6e601d849e092aeef5",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_properties_data",
+      "version": "1.5.1",
+      "source": "https://crates.io/crates/icu_properties_data/1.5.1",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "85fb8799753b75aee8d2a21d7c14d9f38921b54b3dbda10f5a3c7a7b82dba5e2",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_provider",
+      "version": "1.5.0",
+      "source": "https://crates.io/crates/icu_provider/1.5.0",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "6ed421c8a8ef78d3e2dbc98a973be2f3770cb42b606e3ab18d6237c4dfde68d9",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "icu_provider_macros",
+      "version": "1.5.0",
+      "source": "https://crates.io/crates/icu_provider_macros/1.5.0",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "1ec89e9337638ecdc08744df490b221a7399bf8d164eb52a665454e60e075ad6",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "ident_case",
       "version": "1.0.1",
       "source": "https://crates.io/crates/ident_case/1.0.1",
@@ -1173,6 +1342,21 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "litemap",
+      "version": "0.7.5",
+      "source": "https://crates.io/crates/litemap/0.7.5",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
       "supplement_sources": []
@@ -1873,6 +2057,25 @@
       "supplement_sources": []
     },
     {
+      "name": "stable_deref_trait",
+      "version": "1.2.1",
+      "source": "https://crates.io/crates/stable_deref_trait/1.2.1",
+      "repository": "https://github.com/storyyeller/stable_deref_trait",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "5e05b024f653a5ce199e77cbbbd42fb5553562ec714b819421ed0c3e552a75d7"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "static_assertions",
       "version": "1.1.0",
       "source": "https://crates.io/crates/static_assertions/1.1.0",
@@ -1945,6 +2148,36 @@
       "supplement_sources": []
     },
     {
+      "name": "synstructure",
+      "version": "0.13.2",
+      "source": "https://crates.io/crates/synstructure/0.13.2",
+      "repository": "https://github.com/mystor/synstructure",
+      "license": "MIT",
+      "crate_sha256": "728a70f3dbaf5bab7f0c4b1ac8d7ae5ea60a4b5549c8a5914361c99147a709d2",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "synstructure",
+      "version": "0.14.0",
+      "source": "https://crates.io/crates/synstructure/0.14.0",
+      "repository": "https://github.com/mystor/synstructure",
+      "license": "MIT",
+      "crate_sha256": "901704edd0dfe137f1987838ee4f259e4e063c31371bdb423f7ae38ec6f77f02",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "thiserror",
       "version": "2.0.21",
       "source": "https://crates.io/crates/thiserror/2.0.21",
@@ -1993,6 +2226,44 @@
         {
           "name": "LICENSE",
           "sha256": "20c097d0de27e2adc179140a3d542091951a030699c7e1c78655f2a2d08d4e3e"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "tinystr",
+      "version": "0.7.6",
+      "source": "https://crates.io/crates/tinystr/0.7.6",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "9117f5d4db391c1cf6927e7bea3db74b9a1c1add8f7eda9ffd5364f40f57b82f",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "tinyvec",
+      "version": "1.13.3",
+      "source": "https://crates.io/crates/tinyvec/1.13.3",
+      "repository": "https://github.com/Lokathor/tinyvec",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "crate_sha256": "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE.md",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "name": "LICENSE-MIT.md",
+          "sha256": "fd80a26fbb3f644af1fa994134446702932968519797227e07a1368dea80f0bc"
+        },
+        {
+          "name": "LICENSE-ZLIB.md",
+          "sha256": "84b34dd7608f7fb9b17bd588a6bf392bf7de504e2716f024a77d89f1b145a151"
         }
       ],
       "supplement_sources": []
@@ -2095,6 +2366,25 @@
         {
           "name": "LICENSE-UNICODE",
           "sha256": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "unicode-normalization",
+      "version": "0.1.25",
+      "source": "https://crates.io/crates/unicode-normalization/0.1.25",
+      "repository": "https://github.com/unicode-rs/unicode-normalization",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
       "supplement_sources": []
@@ -2605,6 +2895,21 @@
       "supplement_sources": []
     },
     {
+      "name": "writeable",
+      "version": "0.5.5",
+      "source": "https://crates.io/crates/writeable/0.5.5",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "1e9df38ee2d2c3c5948ea468a8406ff0db0b29ae1ffde1bcf20ef305bcc95c51",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "xml-rs",
       "version": "0.8.29",
       "source": "https://crates.io/crates/xml-rs/0.8.29",
@@ -2615,6 +2920,36 @@
         {
           "name": "LICENSE",
           "sha256": "0dc18d924dc0a5f41172a393012843a5eaaef338e795b3645da9cc3b6068220b"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "yoke",
+      "version": "0.7.5",
+      "source": "https://crates.io/crates/yoke/0.7.5",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "120e6aef9aa629e3d4f52dc8cc43a015c7724194c97dfaf45180d2daf2b77f40",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "yoke-derive",
+      "version": "0.7.5",
+      "source": "https://crates.io/crates/yoke-derive/0.7.5",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "2380878cad4ac9aac1e2435f3eb4020e8374b5f13c296cb75b4620ff8e229154",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
       "supplement_sources": []
@@ -2661,6 +2996,66 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "zerofrom",
+      "version": "0.1.8",
+      "source": "https://crates.io/crates/zerofrom/0.1.8",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "0ec05a11813ea801ff6d75110ad09cd0824ddba17dfe17128ea0d5f68e6c5272",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "zerofrom-derive",
+      "version": "0.1.8",
+      "source": "https://crates.io/crates/zerofrom-derive/0.1.8",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "f75b4683f6c7f45248d4d64056a24298c6281e0993356d7d1b4a1a962ef10d4a",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "zerovec",
+      "version": "0.10.4",
+      "source": "https://crates.io/crates/zerovec/0.10.4",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "aa2b893d79df23bfb12d5461018d408ea19dfafe76c2c7ef6d4eba614f8ff079",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "zerovec-derive",
+      "version": "0.10.4",
+      "source": "https://crates.io/crates/zerovec-derive/0.10.4",
+      "repository": "https://github.com/unicode-org/icu4x",
+      "license": "Unicode-3.0",
+      "crate_sha256": "3e3c6377872d72510393f688a555d7097b0f741995c7a00f0407f786dd486b2d",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2"
         }
       ],
       "supplement_sources": []

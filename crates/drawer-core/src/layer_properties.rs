@@ -2,11 +2,15 @@
 use crate::{document::Document, sizing::DocumentState};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Target {
     Raster(u64),
     Vector(u64),
     Folder(u16),
+    Object(u64),
+    Gradient(u64),
+    World(u64),
+    Selection(u64),
     Track(u16),
     Cell { track: u16, cell: u16 },
 }
@@ -95,6 +99,7 @@ impl Data {
             Target::Folder(id) => self.folders.get(&id),
             Target::Track(id) => self.tracks.get(&id),
             Target::Cell { track, cell } => self.cells.get(&((track as u64) << 32 | cell as u64)),
+            _ => None,
         };
         p.copied().unwrap_or_default()
     }
@@ -114,6 +119,7 @@ impl Data {
             Target::Folder(id) => set!(self.folders, id),
             Target::Track(id) => set!(self.tracks, id),
             Target::Cell { track, cell } => set!(self.cells, (track as u64) << 32 | cell as u64),
+            _ => {}
         }
     }
 }
@@ -121,7 +127,14 @@ pub fn raster(doc: &Document, n: usize) -> Target {
     Target::Raster(doc.scene.layer_ids.id(n))
 }
 pub fn properties(doc: &Document, t: Target) -> Properties {
-    let mut p = doc.scene.layer_properties.get(t);
+    let mut p = match t {
+        Target::Object(id) => doc.scene.catalog.object_info.get(&id),
+        Target::World(id) => doc.scene.catalog.world_info.get(&id),
+        Target::Gradient(id) => doc.scene.catalog.gradients.get(&id),
+        Target::Selection(id) => doc.scene.catalog.selections.get(&id),
+        _ => None,
+    }
+    .map_or_else(|| doc.scene.layer_properties.get(t), |i| i.properties);
     match t {
         Target::Raster(id) => {
             if let Some(n) = crate::layers::index(doc, id) {
@@ -142,6 +155,15 @@ pub fn properties(doc: &Document, t: Target) -> Properties {
                 .folders
                 .get(id as usize)
                 .is_some_and(|f| f.paper.hidden)
+        }
+        Target::Gradient(id) => {
+            p.hidden |= doc
+                .scene
+                .gradients
+                .layers
+                .iter()
+                .find(|g| g.id == id)
+                .is_none_or(|g| g.hidden)
         }
         _ => {}
     }
@@ -169,10 +191,36 @@ pub fn targets(doc: &Document) -> Vec<Target> {
                     ))
                 }),
         )
+        .chain(
+            (0..doc.scene.objects.len()).map(|n| Target::Object(doc.scene.catalog.objects.id(n))),
+        )
+        .chain(
+            doc.scene
+                .gradients
+                .layers
+                .iter()
+                .map(|g| Target::Gradient(g.id)),
+        )
+        .chain((0..doc.scene.worlds.len()).map(|n| Target::World(doc.scene.catalog.worlds.id(n))))
+        .chain(
+            doc.scene
+                .selections
+                .saved
+                .iter()
+                .map(|s| Target::Selection(s.id)),
+        )
         .collect()
 }
 pub fn inherited(doc: &Document, t: Target) -> Properties {
     let mut p = properties(doc, t);
+    if doc.scene.clipping.solo.is_some()
+        && matches!(
+            t,
+            Target::Object(_) | Target::Gradient(_) | Target::World(_)
+        )
+    {
+        p.hidden = true;
+    }
     let mut node = match t {
         Target::Raster(id) => crate::layers::index(doc, id).map(crate::paper::Node::Raster),
         Target::Folder(id) => Some(crate::paper::Node::Folder(id as usize)),
@@ -312,7 +360,7 @@ pub fn prepare_patch(
     patch: Patch,
 ) -> Result<DocumentState, String> {
     if selected.is_empty()
-        || selected.len() > 11000
+        || selected.len() > 16384
         || patch.opacity.is_some_and(|n| n > 100)
         || selected
             .iter()
@@ -397,6 +445,22 @@ pub(crate) fn set_state(
             state.scene.paper.folders[n as usize].paper.hidden = p.hidden;
             if !p.blend.is_normal() {
                 state.scene.paper.folders[n as usize].through = false;
+            }
+        }
+        Target::Object(id) | Target::Gradient(id) | Target::World(id) | Target::Selection(id) => {
+            let key = match t {
+                Target::Object(_) => crate::layer_search::Key::Object(id),
+                Target::Gradient(_) => crate::layer_search::Key::Gradient(id),
+                Target::World(_) => crate::layer_search::Key::World(id),
+                _ => crate::layer_search::Key::Selection(id),
+            };
+            let mut info = state.scene.catalog.info(key).cloned().unwrap_or_default();
+            info.properties = p;
+            state.scene.catalog.set(key, info);
+            if let Target::Gradient(id) = t
+                && let Some(g) = state.scene.gradients.layers.iter_mut().find(|g| g.id == id)
+            {
+                g.hidden = p.hidden;
             }
         }
         _ => {}
@@ -540,7 +604,19 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
     if let Some(animation) = &doc.animation {
         for (track, t) in animation.tracks.iter().enumerate() {
             let tp = inherited(doc, Target::Track(track as u16));
-            let next = after.animation.as_ref().and_then(|a| a.tracks.get(track));
+            let track_id = doc.scene.catalog.tracks.id(track);
+            let next_target = crate::layer_catalog::state_target(
+                after,
+                crate::layer_search::Key::Track(track_id),
+            );
+            let next = if let Some(Target::Track(n)) = next_target {
+                after
+                    .animation
+                    .as_ref()
+                    .and_then(|a| a.tracks.get(n as usize))
+            } else {
+                None
+            };
             if tp.locked
                 && next.is_none_or(|n| {
                     n.name != t.name
@@ -559,7 +635,23 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
                         cell: cell as u16,
                     },
                 );
-                let new = next.and_then(|n| n.cells.get(cell));
+                let cell_id = doc.scene.catalog.cell_id(track_id, cell);
+                let new = if let Some(Target::Cell { track, cell }) =
+                    crate::layer_catalog::state_target(
+                        after,
+                        crate::layer_search::Key::Cell {
+                            track: track_id,
+                            cell: cell_id,
+                        },
+                    ) {
+                    after
+                        .animation
+                        .as_ref()
+                        .and_then(|a| a.tracks.get(track as usize))
+                        .and_then(|t| t.cells.get(cell as usize))
+                } else {
+                    None
+                };
                 if p.locked && new.is_none() {
                     return Err("Animation cell is locked".into());
                 }
@@ -580,6 +672,7 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
 }
 
 pub fn validate_scene(doc: &Document, after: &crate::scene::Scene) -> Result<(), String> {
+    crate::catalog_guard::validate(doc, after)?;
     for old in &doc.scene.lines.layers {
         let p = inherited(doc, Target::Vector(old.id));
         let next = after.lines.layers.iter().find(|l| l.id == old.id);
@@ -640,6 +733,9 @@ pub fn from_thumbnail(doc: &Document, t: crate::thumbnail::Target) -> Target {
         crate::thumbnail::Target::Vector(id) => Target::Vector(id),
         crate::thumbnail::Target::Folder(n) => Target::Folder(n as u16),
         crate::thumbnail::Target::Track(n) => Target::Track(n as u16),
+        crate::thumbnail::Target::Source(key) => {
+            crate::layer_catalog::target(doc, key).unwrap_or(Target::Raster(0))
+        }
     }
 }
 pub fn canvas_mark(doc: &Document, t: crate::thumbnail::Target) -> Mark {

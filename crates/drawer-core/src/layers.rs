@@ -450,6 +450,9 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(e) = state.scene.layer_effects.rasters.get(&id).cloned() {
                 state.scene.layer_effects.rasters.insert(copy_id, e);
             }
+            if let Some(info) = state.scene.catalog.rasters.get(&id).cloned() {
+                state.scene.catalog.rasters.insert(copy_id, info);
+            }
             selected = Target::Raster(copy_id);
         }
         Command::Duplicate(Target::Vector(id)) => {
@@ -492,6 +495,9 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(e) = state.scene.layer_effects.vectors.get(&id).cloned() {
                 state.scene.layer_effects.vectors.insert(to, e);
             }
+            if let Some(info) = state.scene.catalog.vectors.get(&id).cloned() {
+                state.scene.catalog.vectors.insert(to, info);
+            }
             selected = Target::Vector(to);
         }
         Command::Delete(Target::Raster(id)) => {
@@ -514,6 +520,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             state.layers.remove(i);
             state.scene.layer_properties.rasters.remove(&id);
             state.scene.layer_effects.rasters.remove(&id);
+            state.scene.catalog.rasters.remove(&id);
             state
                 .scene
                 .clipping
@@ -540,6 +547,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             state.scene.lines.layers.remove(i);
             state.scene.layer_properties.vectors.remove(&id);
             state.scene.layer_effects.vectors.remove(&id);
+            state.scene.catalog.vectors.remove(&id);
             state
                 .scene
                 .clipping

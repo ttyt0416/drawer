@@ -52,8 +52,21 @@ pub fn visible(doc: &Document, settings: Settings) -> Vec<Target> {
             }
         }
     }
+    for g in &doc.scene.gradients.layers {
+        out.push(Target::Source(crate::layer_search::Key::Gradient(g.id)));
+    }
+    for n in 0..doc.scene.objects.len() {
+        out.push(Target::Source(crate::layer_search::Key::Object(
+            doc.scene.catalog.objects.id(n),
+        )));
+    }
     for l in doc.scene.lines.layers.iter().filter(|l| !l.hidden) {
         out.push(Target::Vector(l.id));
+    }
+    for n in 0..doc.scene.worlds.len() {
+        out.push(Target::Source(crate::layer_search::Key::World(
+            doc.scene.catalog.worlds.id(n),
+        )));
     }
     out.retain(|target| {
         !crate::layer_properties::inherited(
@@ -88,6 +101,9 @@ pub fn locked(doc: &Document, target: Target) -> bool {
 }
 pub fn label(doc: &Document, target: Target) -> String {
     match target {
+        Target::Source(key) => crate::layer_catalog::rows(doc)
+            .ok()
+            .and_then(|rows| rows.into_iter().find(|r| r.key == key).map(|r| r.name)),
         Target::Raster(n) => doc.layers.get(n).map(|l| {
             format!(
                 "Raster {}: {}{}",
@@ -150,6 +166,9 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
     visible(doc, settings)
         .into_iter()
         .filter(|target| match *target {
+            Target::Source(key) => {
+                crate::render::Renderer::new(doc).source_pixel(key, point)[3] > 0
+            }
             Target::Raster(n) => {
                 if doc
                     .scene

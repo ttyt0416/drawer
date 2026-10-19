@@ -331,7 +331,12 @@ pub fn solo(doc: &Document, folder: Option<usize>) -> Result<DocumentState, Stri
         let members = doc.scene.paper.raster_indices(Node::Folder(folder));
         let targets = properties::targets(doc)
             .into_iter()
-            .filter(|t| !matches!(t, Target::Cell { .. }))
+            .filter(|t| {
+                matches!(
+                    t,
+                    Target::Raster(_) | Target::Vector(_) | Target::Folder(_) | Target::Track(_)
+                )
+            })
             .collect::<Vec<_>>();
         let mut original = vec![];
         for t in targets {
@@ -418,11 +423,23 @@ pub fn validate_state(doc: &Document, after: &DocumentState) -> Result<(), Strin
                 .as_ref()
                 .and_then(|a| a.tracks.get(track as usize))
                 .and_then(|t| t.cells.get(cell as usize));
-            let new = after
-                .animation
-                .as_ref()
-                .and_then(|a| a.tracks.get(track as usize))
-                .and_then(|t| t.cells.get(cell as usize));
+            let track_id = doc.scene.catalog.tracks.id(track as usize);
+            let cell_id = doc.scene.catalog.cell_id(track_id, cell as usize);
+            let new = if let Some(Target::Cell { track, cell }) = crate::layer_catalog::state_target(
+                after,
+                crate::layer_search::Key::Cell {
+                    track: track_id,
+                    cell: cell_id,
+                },
+            ) {
+                after
+                    .animation
+                    .as_ref()
+                    .and_then(|a| a.tracks.get(track as usize))
+                    .and_then(|t| t.cells.get(cell as usize))
+            } else {
+                None
+            };
             if let (Some(old), Some(new)) = (old, new)
                 && old.width == new.width
                 && old.height == new.height

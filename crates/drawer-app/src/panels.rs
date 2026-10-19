@@ -390,6 +390,22 @@ impl Drawer {
             }
         }
         if kind != Kind::Timeline {
+            if ui.button("Search / select layers").clicked() {
+                self.layer_search.open = true;
+            }
+            if let Ok(sources) = drawer_core::layer_catalog::rows(doc) {
+                for row in sources.into_iter().filter(|r| {
+                    matches!(
+                        r.key,
+                        drawer_core::layer_search::Key::Object(_)
+                            | drawer_core::layer_search::Key::Gradient(_)
+                            | drawer_core::layer_search::Key::World(_)
+                            | drawer_core::layer_search::Key::Selection(_)
+                    )
+                }) {
+                    rows.push((Target::Source(row.key), row.name));
+                }
+            }
             for layer in &doc.scene.lines.layers {
                 rows.push((Target::Vector(layer.id), format!("Vector: {}", layer.name)));
             }
@@ -489,7 +505,7 @@ impl Drawer {
                             .map(|track| {
                                 format!("{} · {} exposures", track.name, track.exposures.len())
                             }),
-                        Target::Folder(_) | Target::Vector(_) => {
+                        Target::Folder(_) | Target::Vector(_) | Target::Source(_) => {
                             Some(drawer_core::layer_pick::label(doc, target))
                         }
                     };

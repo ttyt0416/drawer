@@ -127,6 +127,7 @@ pub(super) struct Drawing {
     pub fill_config: ([u8; 4], bool, bool),
     pub move_target: drawer_core::precision::Target,
     pub move_layer: Option<usize>,
+    pub move_source: Option<drawer_core::layer_search::Key>,
     pub pick_settings: drawer_core::layer_pick::Settings,
     pub pick_point: Option<(u64, Point)>,
     pub picked_layer: Option<(u64, drawer_core::thumbnail::Target, bool)>,
@@ -1207,6 +1208,7 @@ impl Drawing {
                     if moving {
                         self.move_target = drawer_core::precision::Target::Layer;
                         self.move_layer = layer;
+                        self.move_source = drawer_core::layer_catalog::from_thumbnail(doc, target);
                     }
                 } else {
                     self.ownership.clear();
@@ -1815,6 +1817,17 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.move_target = self.precision.target;
+        self.drawing.move_source = self.active.and_then(|n| {
+            let d = &self.documents[n];
+            drawer_core::layer_catalog::from_thumbnail(
+                d,
+                self.panels
+                    .targets
+                    .get(&d.id)
+                    .copied()
+                    .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
+            )
+        });
         self.drawing.move_layer = self.active.and_then(|n| {
             match self
                 .panels

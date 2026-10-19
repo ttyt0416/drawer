@@ -693,6 +693,10 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             for target in &members {
                 after.scene.clipping.remove_owner(*target);
                 after.scene.layer_effects.remove(*target);
+                after
+                    .scene
+                    .catalog
+                    .set(crate::layer_search::Key::Layer(*target), Default::default());
             }
             for n in &indices {
                 after

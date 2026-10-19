@@ -463,3 +463,13 @@ crates/drawer-core/src/adjustments.rs
 crates/drawer-core/src/adjustments_verify.rs
 crates/drawer-app/src/adjustments.rs
 docs/process/adjustment-layers.md
+
+crates/drawer-core/src/catalog_guard.rs
+crates/drawer-core/src/layer_catalog.rs
+crates/drawer-core/src/layer_search.rs
+crates/drawer-core/src/search_delete.rs
+crates/drawer-core/src/search_edit.rs
+crates/drawer-core/src/search_move.rs
+crates/drawer-core/src/search_verify.rs
+crates/drawer-app/src/layer_search.rs
+docs/process/layer-search.md

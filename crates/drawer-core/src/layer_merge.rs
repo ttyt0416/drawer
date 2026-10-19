@@ -304,6 +304,10 @@ pub fn prepare(
         after.scene.layer_properties.set(*t, Default::default());
         after.scene.clipping.remove_owner(*t);
         after.scene.layer_effects.remove(*t);
+        after
+            .scene
+            .catalog
+            .set(crate::layer_search::Key::Layer(*t), Default::default());
     }
     let mut raster = Some(raster);
     let mut map = vec![None; doc.layers.len()];
@@ -404,6 +408,7 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
         placement: None,
         pixels,
     }];
+    crate::layer_catalog::clear_rendered(doc, &mut after)?;
     after.animation = None;
     after.scene.paper = Default::default();
     after.scene.clipping = Default::default();

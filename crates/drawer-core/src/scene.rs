@@ -183,6 +183,11 @@ pub struct WorldMesh {
 pub struct Scene {
     #[serde(
         default,
+        skip_serializing_if = "crate::layer_catalog::Data::is_default"
+    )]
+    pub catalog: crate::layer_catalog::Data,
+    #[serde(
+        default,
         skip_serializing_if = "crate::layer_effects::Data::is_default"
     )]
     pub layer_effects: crate::layer_effects::Data,
@@ -249,6 +254,9 @@ impl Scene {
                     .iter()
                     .all(|v| v.is_finite() && v.abs() <= 1e12)
             })
+            && self.catalog.valid()
+            && self.catalog.objects.matches(self.objects.len())
+            && self.catalog.worlds.matches(self.worlds.len())
             && self.clipping.valid()
             && self.layer_effects.valid()
             && self.layer_properties.valid()
@@ -323,7 +331,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.clipping.bytes()
+        self.catalog.bytes()
+            + self.clipping.bytes()
             + self.layer_effects.bytes()
             + self.layer_properties.bytes()
             + self.layer_ids.rasters.len() * 8

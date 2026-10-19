@@ -5,6 +5,7 @@ pub enum Target {
     Track(usize),
     Folder(usize),
     Vector(u64),
+    Source(crate::layer_search::Key),
 }
 type SourcePixels<'a> = (&'a [[u8; 4]], [u32; 2], [i64; 2]);
 fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
@@ -37,10 +38,16 @@ fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
                         .map(|c| (c.pixels.as_slice(), [c.width, c.height], c.offset))
                 }
             }),
-        Target::Folder(_) | Target::Vector(_) => None,
+        Target::Folder(_) | Target::Vector(_) | Target::Source(_) => None,
     }
 }
 pub fn bounds(document: &Document, target: Target, content: bool) -> Rect {
+    if let Target::Source(key) = target {
+        return crate::layer_catalog::bounds(document, key).unwrap_or(Rect {
+            min: [0.; 2],
+            max: [1.; 2],
+        });
+    }
     if !content {
         return Rect {
             min: [0.0; 2],
@@ -85,6 +92,8 @@ pub fn image(
         return Err("Thumbnail size must be from 1 to 128".into());
     }
     let source = source(document, target);
+    let renderer =
+        matches!(target, Target::Source(_)).then(|| crate::render::Renderer::new(document));
     let bounds = bounds(document, target, content);
     let width = bounds.max[0] - bounds.min[0];
     let height = bounds.max[1] - bounds.min[1];
@@ -99,17 +108,21 @@ pub fn image(
             let px = (x as f64 + 0.5 - pad[0]) / scale;
             let py = (y as f64 + 0.5 - pad[1]) / scale;
             let value = if px >= 0.0 && py >= 0.0 && px < width && py < height {
-                source
-                    .and_then(|(pixels, extent, offset)| {
-                        let x = (px + bounds.min[0]).floor() as i64 - offset[0];
-                        let y = (py + bounds.min[1]).floor() as i64 - offset[1];
-                        if x < 0 || y < 0 || x >= extent[0] as i64 || y >= extent[1] as i64 {
-                            None
-                        } else {
-                            pixels.get((y * extent[0] as i64 + x) as usize).copied()
-                        }
-                    })
-                    .unwrap_or([0; 4])
+                if let (Target::Source(key), Some(renderer)) = (target, &renderer) {
+                    renderer.source_pixel(key, [px + bounds.min[0], py + bounds.min[1]])
+                } else {
+                    source
+                        .and_then(|(pixels, extent, offset)| {
+                            let x = (px + bounds.min[0]).floor() as i64 - offset[0];
+                            let y = (py + bounds.min[1]).floor() as i64 - offset[1];
+                            if x < 0 || y < 0 || x >= extent[0] as i64 || y >= extent[1] as i64 {
+                                None
+                            } else {
+                                pixels.get((y * extent[0] as i64 + x) as usize).copied()
+                            }
+                        })
+                        .unwrap_or([0; 4])
+                }
             } else {
                 [0; 4]
             };

@@ -56,6 +56,13 @@ pub(super) fn label(d: &Document, t: Target) -> String {
             .map_or("Missing cell".into(), |c| {
                 format!("Track {} / cell {} · {}", track + 1, cell + 1, c.name)
             }),
+        t => drawer_core::layer_catalog::rows(d)
+            .ok()
+            .and_then(|rows| {
+                rows.into_iter()
+                    .find(|r| r.key == drawer_core::layer_catalog::key(d, t))
+            })
+            .map_or("Missing source".into(), |r| r.name),
     }
 }
 pub(super) fn badge(ui: &mut egui::Ui, mark: Mark) {

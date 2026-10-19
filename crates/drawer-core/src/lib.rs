@@ -236,3 +236,13 @@ pub mod layer_folders_verify;
 pub mod adjustments;
 
 pub mod adjustments_verify;
+
+pub mod layer_search;
+pub mod search_move;
+pub mod search_verify;
+
+pub mod layer_catalog;
+
+mod catalog_guard;
+
+pub mod search_edit;

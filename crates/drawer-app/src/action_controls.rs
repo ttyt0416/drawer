@@ -289,6 +289,7 @@ impl Drawer {
                 "merge-layers" => self.begin_layer_merge()?,
                 "layer-folders" => self.begin_layer_folders()?,
                 "adjustment-layer" => self.begin_adjustment()?,
+                "layer-search" => self.layer_search.open = true,
                 "layer-properties" | "layer-clipping" | "layer-blend" => {
                     self.begin_layer_properties()?
                 }

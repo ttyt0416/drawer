@@ -436,7 +436,12 @@ fn prepare_inner(
     }
     Ok(after)
 }
-fn shift(doc: &Document, state: &mut DocumentState, item: Item, d: Point) -> Result<(), String> {
+pub(crate) fn shift(
+    doc: &Document,
+    state: &mut DocumentState,
+    item: Item,
+    d: Point,
+) -> Result<(), String> {
     if d.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
         return Err("Alignment movement limit".into());
     }

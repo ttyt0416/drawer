@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub layer_search: crate::layer_search::Settings,
+    #[serde(default)]
     pub layer_colors: crate::layer_properties::Display,
     #[serde(default)]
     pub auto_shape: crate::auto_shape::Settings,
@@ -394,6 +396,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             version: 1,
+            layer_search: Default::default(),
             placements: std::array::from_fn(|_| Placement::default()),
             order: panels::Kind::ALL,
             panels: Default::default(),
@@ -486,7 +489,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.auto_shape.valid()
+        if !self.layer_search.valid()
+            || !self.auto_shape.valid()
             || !self.magnetic_lasso.valid()
             || !self.selection_shortcuts.valid()
             || !self.selection_edit.valid()
@@ -602,6 +606,7 @@ impl Snapshot {
             next.snapping = incoming.snapping;
             next.selection_outline = incoming.selection_outline;
             next.layer_colors = incoming.layer_colors;
+            next.layer_search = incoming.layer_search.clone();
             next.shapes_vector = incoming.shapes_vector;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;

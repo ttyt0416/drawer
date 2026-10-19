@@ -20,6 +20,228 @@ struct Contour {
     bounds: Rect,
 }
 impl<'a> Renderer<'a> {
+    fn object_pixel(&self, index: usize, object: &PageObject, original: Point) -> [u8; 4] {
+        match object {
+            PageObject::Text { color, .. } => {
+                let winding: i32 = self.text_contours[index]
+                    .iter()
+                    .filter(|path| path.bounds.contains(original))
+                    .map(|path| winding(&path.points, original))
+                    .sum();
+                if winding != 0 { *color } else { [0; 4] }
+            }
+            PageObject::Line {
+                start,
+                end,
+                width_px,
+                color,
+            } => {
+                if distance(original, *start, *end) <= width_px / 2.0 {
+                    *color
+                } else {
+                    [0; 4]
+                }
+            }
+            PageObject::Tone {
+                bounds,
+                period_px,
+                coverage,
+            } => {
+                let cell = [
+                    (original[0] / period_px).rem_euclid(1.0) - 0.5,
+                    (original[1] / period_px).rem_euclid(1.0) - 0.5,
+                ];
+                if bounds.contains(original)
+                    && *coverage > 0.0
+                    && (*coverage == 1.0
+                        || cell[0] * cell[0] + cell[1] * cell[1] <= coverage / std::f64::consts::PI)
+                {
+                    [0, 0, 0, 255]
+                } else {
+                    [0; 4]
+                }
+            }
+            PageObject::Shadow {
+                bounds,
+                offset,
+                radius_px,
+                color,
+            } => {
+                let point = [original[0] - offset[0], original[1] - offset[1]];
+                let delta = [
+                    (bounds.min[0] - point[0])
+                        .max(0.0)
+                        .max(point[0] - bounds.max[0]),
+                    (bounds.min[1] - point[1])
+                        .max(0.0)
+                        .max(point[1] - bounds.max[1]),
+                ];
+                let alpha = (1.0 - delta[0].hypot(delta[1]) / radius_px).clamp(0.0, 1.0);
+                [
+                    color[0],
+                    color[1],
+                    color[2],
+                    (color[3] as f64 * alpha).round() as u8,
+                ]
+            }
+        }
+    }
+    fn world_pixel(&self, index: usize, original: Point) -> [u8; 4] {
+        let Some(camera) = &self.document.scene.camera else {
+            return [0; 4];
+        };
+        if !camera.page_bounds.contains(original) {
+            return [0; 4];
+        }
+        let Some(mesh) = self.document.scene.worlds.get(index) else {
+            return [0; 4];
+        };
+        let center = [
+            (camera.page_bounds.min[0] + camera.page_bounds.max[0]) / 2.,
+            (camera.page_bounds.min[1] + camera.page_bounds.max[1]) / 2.,
+        ];
+        let project = |v: [f64; 3]| {
+            [
+                center[0] + (v[0] - camera.position[0]) * camera.pixels_per_unit,
+                center[1] - (v[1] - camera.position[1]) * camera.pixels_per_unit,
+            ]
+        };
+        if mesh.edges.iter().any(|e| {
+            distance(
+                original,
+                project(mesh.vertices[e[0]]),
+                project(mesh.vertices[e[1]]),
+            ) <= 0.5
+        }) {
+            mesh.color
+        } else {
+            [0; 4]
+        }
+    }
+    /// Isolated page-source contribution; the normal layer tree handles its own blending.
+    pub fn source_pixel(&self, key: crate::layer_search::Key, point: Point) -> [u8; 4] {
+        use crate::{layer_properties::Target, layer_search::Key};
+        let d = self.document;
+        if point.iter().any(|n| !n.is_finite())
+            || point[0] < 0.
+            || point[1] < 0.
+            || point[0] >= d.width as f64
+            || point[1] >= d.height as f64
+        {
+            return [0; 4];
+        }
+        let original = d.scene.transform.inverse().map(point);
+        let raw = match key {
+            Key::Object(_) => {
+                if d.scene.clipping.solo.is_some()
+                    || d.scene.clips.iter().any(|r| !inside(r, original))
+                {
+                    return [0; 4];
+                }
+                let Some(n) = crate::layer_catalog::source_index(d, key) else {
+                    return [0; 4];
+                };
+                self.object_pixel(n, &d.scene.objects[n], original)
+            }
+            Key::World(_) => {
+                if d.scene.clipping.solo.is_some()
+                    || d.scene.clips.iter().any(|r| !inside(r, original))
+                {
+                    return [0; 4];
+                }
+                let Some(n) = crate::layer_catalog::source_index(d, key) else {
+                    return [0; 4];
+                };
+                self.world_pixel(n, original)
+            }
+            Key::Gradient(id) => {
+                if d.scene.clipping.solo.is_some()
+                    || d.scene.clips.iter().any(|r| !inside(r, original))
+                {
+                    return [0; 4];
+                }
+                let Some(g) = d.scene.gradients.layers.iter().find(|g| g.id == id) else {
+                    return [0; 4];
+                };
+                g.pixel(original)
+            }
+            Key::Selection(_) => return [0; 4],
+            _ => {
+                let Some(t) = crate::layer_catalog::target(d, key) else {
+                    return [0; 4];
+                };
+                return match t {
+                    Target::Raster(id) => crate::layers::index(d, id).map_or([0; 4], |n| {
+                        d.scene.paper.node_pixel(
+                            d,
+                            crate::paper::Node::Raster(n),
+                            point.map(|n| n.floor() as i64),
+                        )
+                    }),
+                    Target::Folder(n) => d.scene.paper.node_pixel(
+                        d,
+                        crate::paper::Node::Folder(n as usize),
+                        point.map(|n| n.floor() as i64),
+                    ),
+                    Target::Cell { track, cell } => {
+                        let Some(c) = d
+                            .animation
+                            .as_ref()
+                            .and_then(|a| a.tracks.get(track as usize))
+                            .and_then(|t| t.cells.get(cell as usize))
+                        else {
+                            return [0; 4];
+                        };
+                        let mut value = c.pixel(point[0].floor() as i64, point[1].floor() as i64);
+                        value[3] = (value[3] as f64
+                            * crate::layer_properties::factor(d, t)
+                            * crate::layer_properties::factor(d, Target::Track(track)))
+                        .round() as u8;
+                        value
+                    }
+                    Target::Track(track) => {
+                        let Some((_, cell, _)) = d.animation.as_ref().and_then(|a| {
+                            a.indexed_visible_cells(d.current_frame)
+                                .find(|(n, _, _)| *n == track as usize)
+                        }) else {
+                            return [0; 4];
+                        };
+                        let id = d.scene.catalog.tracks.id(track as usize);
+                        self.source_pixel(
+                            Key::Cell {
+                                track: id,
+                                cell: d.scene.catalog.cell_id(id, cell),
+                            },
+                            point,
+                        )
+                    }
+                    Target::Vector(id) => {
+                        if d.scene.clips.iter().any(|r| !inside(r, original)) {
+                            return [0; 4];
+                        }
+                        let Some(l) = d.scene.lines.layers.iter().find(|l| l.id == id) else {
+                            return [0; 4];
+                        };
+                        if l.hidden {
+                            return [0; 4];
+                        }
+                        let mut value = l
+                            .paths
+                            .iter()
+                            .fold([0; 4], |out, p| over(out, p.pixel(original)));
+                        value[3] = (value[3] as f64
+                            * crate::layer_properties::factor(d, t)
+                            * d.scene.layer_effects.mask(t, original) as f64)
+                            .round() as u8;
+                        value
+                    }
+                    _ => [0; 4],
+                };
+            }
+        };
+        crate::layer_catalog::compose(d, key, [0; 4], raw)
+    }
+
     pub fn new(document: &'a Document) -> Self {
         Self::preview(document, None)
     }
@@ -120,7 +342,12 @@ impl<'a> Renderer<'a> {
                 .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
         {
             for layer in &scene.gradients.layers {
-                result = over(result, layer.pixel(original));
+                result = crate::layer_catalog::compose(
+                    doc,
+                    crate::layer_search::Key::Gradient(layer.id),
+                    result,
+                    layer.pixel(original),
+                );
             }
         }
         for (index, object) in scene.objects.iter().enumerate().filter(|(_, o)| {
@@ -130,72 +357,13 @@ impl<'a> Renderer<'a> {
                     .fill
                     .is_none_or(|(_, s)| crate::fill_reference::object(o, s))
         }) {
-            let color = match object {
-                PageObject::Text { color, .. } => {
-                    let winding: i32 = self.text_contours[index]
-                        .iter()
-                        .filter(|path| path.bounds.contains(original))
-                        .map(|path| winding(&path.points, original))
-                        .sum();
-                    if winding != 0 { *color } else { [0; 4] }
-                }
-                PageObject::Line {
-                    start,
-                    end,
-                    width_px,
-                    color,
-                } => {
-                    if distance(original, *start, *end) <= width_px / 2.0 {
-                        *color
-                    } else {
-                        [0; 4]
-                    }
-                }
-                PageObject::Tone {
-                    bounds,
-                    period_px,
-                    coverage,
-                } => {
-                    let cell = [
-                        (original[0] / period_px).rem_euclid(1.0) - 0.5,
-                        (original[1] / period_px).rem_euclid(1.0) - 0.5,
-                    ];
-                    if bounds.contains(original)
-                        && *coverage > 0.0
-                        && (*coverage == 1.0
-                            || cell[0] * cell[0] + cell[1] * cell[1]
-                                <= coverage / std::f64::consts::PI)
-                    {
-                        [0, 0, 0, 255]
-                    } else {
-                        [0; 4]
-                    }
-                }
-                PageObject::Shadow {
-                    bounds,
-                    offset,
-                    radius_px,
-                    color,
-                } => {
-                    let point = [original[0] - offset[0], original[1] - offset[1]];
-                    let delta = [
-                        (bounds.min[0] - point[0])
-                            .max(0.0)
-                            .max(point[0] - bounds.max[0]),
-                        (bounds.min[1] - point[1])
-                            .max(0.0)
-                            .max(point[1] - bounds.max[1]),
-                    ];
-                    let alpha = (1.0 - delta[0].hypot(delta[1]) / radius_px).clamp(0.0, 1.0);
-                    [
-                        color[0],
-                        color[1],
-                        color[2],
-                        (color[3] as f64 * alpha).round() as u8,
-                    ]
-                }
-            };
-            result = over(result, color);
+            let color = self.object_pixel(index, object, original);
+            result = crate::layer_catalog::compose(
+                doc,
+                crate::layer_search::Key::Object(scene.catalog.objects.id(index)),
+                result,
+                color,
+            );
         }
         if !scene.clipping.vectors.is_empty()
             || crate::layer_blend::vectors_active(doc)
@@ -276,29 +444,14 @@ impl<'a> Renderer<'a> {
             && self
                 .fill
                 .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
-            && let Some(camera) = &scene.camera
-            && camera.page_bounds.contains(original)
         {
-            let center = [
-                (camera.page_bounds.min[0] + camera.page_bounds.max[0]) / 2.0,
-                (camera.page_bounds.min[1] + camera.page_bounds.max[1]) / 2.0,
-            ];
-            for mesh in &scene.worlds {
-                let project = |vertex: [f64; 3]| {
-                    [
-                        center[0] + (vertex[0] - camera.position[0]) * camera.pixels_per_unit,
-                        center[1] - (vertex[1] - camera.position[1]) * camera.pixels_per_unit,
-                    ]
-                };
-                if mesh.edges.iter().any(|edge| {
-                    distance(
-                        original,
-                        project(mesh.vertices[edge[0]]),
-                        project(mesh.vertices[edge[1]]),
-                    ) <= 0.5
-                }) {
-                    result = over(result, mesh.color);
-                }
+            for index in 0..scene.worlds.len() {
+                result = crate::layer_catalog::compose(
+                    doc,
+                    crate::layer_search::Key::World(scene.catalog.worlds.id(index)),
+                    result,
+                    self.world_pixel(index, original),
+                );
             }
         }
         result

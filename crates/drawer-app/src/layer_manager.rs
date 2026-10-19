@@ -11,17 +11,17 @@ pub(super) struct Panel {
     movement: Option<egui::Rect>,
 }
 #[derive(Clone)]
-struct Tracked {
+pub(super) struct Tracked {
     revision: u64,
-    target: Target,
+    key: Option<drawer_core::layer_search::Key>,
     shown: drawer_core::thumbnail::Target,
     rasters: Vec<u64>,
     vectors: Vec<u64>,
 }
-fn stamp(d: &Document, target: Target, shown: drawer_core::thumbnail::Target) -> Tracked {
+fn stamp(d: &Document, shown: drawer_core::thumbnail::Target) -> Tracked {
     Tracked {
         revision: d.revision,
-        target,
+        key: drawer_core::layer_catalog::from_thumbnail(d, shown),
         shown,
         rasters: (0..d.layers.len())
             .map(|n| d.scene.layer_ids.id(n))
@@ -94,7 +94,8 @@ fn current(app: &Drawer, doc: &Document) -> Target {
         Some(drawer_core::thumbnail::Target::Raster(n)) if *n < doc.layers.len() => {
             Target::Raster(doc.scene.layer_ids.id(*n))
         }
-        _ => Target::Raster(doc.scene.layer_ids.id(0)),
+        None => Target::Raster(doc.scene.layer_ids.id(0)),
+        _ => Target::Raster(0),
     }
 }
 fn resolve(doc: &Document, target: Target) -> Option<drawer_core::thumbnail::Target> {
@@ -123,6 +124,12 @@ fn title(doc: &Document, t: Target) -> String {
     }
 }
 impl Drawer {
+    pub(super) fn finish_search_identity(&mut self, n: usize, before: &Tracked) {
+        let d = &self.documents[n];
+        remap_tools(&mut self.workspaces.store.current, d, before);
+        self.layer_manager.tracked.remove(&d.id);
+        self.sync_layer_identity();
+    }
     pub(super) fn sync_layer_identity(&mut self) {
         self.layer_manager
             .tracked
@@ -135,27 +142,16 @@ impl Drawer {
                 .get(&d.id)
                 .copied()
                 .unwrap_or(drawer_core::thumbnail::Target::Raster(0));
-            if !matches!(
-                shown,
-                drawer_core::thumbnail::Target::Raster(_)
-                    | drawer_core::thumbnail::Target::Vector(_)
-            ) {
-                self.layer_manager.tracked.remove(&d.id);
-                continue;
-            }
-            let invalid = match shown {
-                drawer_core::thumbnail::Target::Raster(i) => i >= d.layers.len(),
-                drawer_core::thumbnail::Target::Vector(id) => {
-                    !d.scene.lines.layers.iter().any(|l| l.id == id)
-                }
-                _ => false,
-            };
+            let invalid = drawer_core::layer_catalog::from_thumbnail(d, shown).is_none();
             if invalid {
                 let target = self
                     .layer_manager
                     .tracked
                     .get(&d.id)
-                    .and_then(|old| resolve(d, old.target))
+                    .and_then(|old| {
+                        old.key
+                            .and_then(|k| drawer_core::layer_catalog::thumbnail(d, k))
+                    })
                     .unwrap_or(drawer_core::thumbnail::Target::Raster(0));
                 self.panels.targets.insert(d.id, target);
             }
@@ -166,21 +162,20 @@ impl Drawer {
                     remap_tools(&mut self.workspaces.store.current, d, &old);
                 }
                 if shown == old.shown {
-                    let value =
-                        resolve(d, old.target).unwrap_or(drawer_core::thumbnail::Target::Raster(0));
+                    let value = old
+                        .key
+                        .and_then(|k| drawer_core::layer_catalog::thumbnail(d, k))
+                        .unwrap_or(drawer_core::thumbnail::Target::Raster(0));
                     self.panels.targets.insert(d.id, value);
                 }
             }
-            let target = current(self, d);
             let shown = self
                 .panels
                 .targets
                 .get(&d.id)
                 .copied()
                 .unwrap_or(drawer_core::thumbnail::Target::Raster(0));
-            self.layer_manager
-                .tracked
-                .insert(d.id, stamp(d, target, shown));
+            self.layer_manager.tracked.insert(d.id, stamp(d, shown));
         }
     }
     pub(super) fn begin_layer_manager(&mut self) -> Result<(), String> {
@@ -215,7 +210,6 @@ impl Drawer {
         let n = self.active.ok_or("Open a page first")?;
         let old = stamp(
             &self.documents[n],
-            current(self, &self.documents[n]),
             self.panels
                 .targets
                 .get(&self.documents[n].id)
@@ -239,9 +233,7 @@ impl Drawer {
         remap_tools(&mut self.workspaces.store.current, d, &old);
         let target = resolve(d, selected).unwrap_or(drawer_core::thumbnail::Target::Raster(0));
         self.panels.targets.insert(d.id, target);
-        self.layer_manager
-            .tracked
-            .insert(d.id, stamp(d, selected, target));
+        self.layer_manager.tracked.insert(d.id, stamp(d, target));
         if let Some(e) = self.layer_manager.draft.as_mut().filter(|e| e.id == d.id) {
             e.revision = d.revision;
             e.target = selected;
@@ -258,6 +250,28 @@ impl Drawer {
     pub(super) fn layer_quick_command(&mut self, command: &str) -> Result<(), String> {
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let target = current(self, d);
+        if target == Target::Raster(0) && matches!(command, "duplicate-layer" | "delete-layer") {
+            if command == "duplicate-layer" {
+                return Err("Select a raster or vector layer to duplicate".into());
+            }
+            let key = self
+                .panels
+                .targets
+                .get(&d.id)
+                .copied()
+                .and_then(|t| drawer_core::layer_catalog::from_thumbnail(d, t))
+                .ok_or("Select a layer")?;
+            let selection = drawer_core::layer_search::Selection {
+                keys: [key].into_iter().collect(),
+                primary: Some(key),
+                anchor: Some(key),
+            };
+            return self.search_edit(
+                &Default::default(),
+                &selection,
+                drawer_core::search_edit::Edit::Delete,
+            );
+        }
         let command = match command {
             "new-raster-layer" => Command::Create {
                 kind: Kind::Raster,
@@ -328,6 +342,9 @@ impl Drawer {
             self.status = Some(err);
         }
     }
+}
+pub(super) fn search_stamp(d: &Document) -> Tracked {
+    stamp(d, drawer_core::thumbnail::Target::Raster(0))
 }
 
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {

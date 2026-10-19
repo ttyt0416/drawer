@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 50;
+const VERSION: u32 = 51;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -203,6 +203,13 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
             return Err(invalid("Animation exceeds document memory budget"));
         }
     }
+    if !document
+        .scene
+        .catalog
+        .valid_animation(document.animation.as_ref())
+    {
+        return Err(invalid("Invalid animation source identities"));
+    }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
@@ -256,6 +263,13 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         || document.scene.size_bytes() > MAX_SCENE_BYTES
     {
         return Err(invalid("Invalid or oversized page geometry"));
+    }
+    if !document
+        .scene
+        .catalog
+        .valid_animation(document.animation.as_ref())
+    {
+        return Err(invalid("Invalid animation source identities"));
     }
     let scene = serde_json::to_vec(&document.scene).map_err(|e| invalid(e.to_string()))?;
     if scene.len() > MAX_SCENE_BYTES {

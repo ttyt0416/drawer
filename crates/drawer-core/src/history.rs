@@ -244,7 +244,8 @@ impl Document {
         self.history_changed();
         Ok(true)
     }
-    pub fn edit_scene(&mut self, after: crate::scene::Scene) -> Result<bool, String> {
+    pub fn edit_scene(&mut self, mut after: crate::scene::Scene) -> Result<bool, String> {
+        crate::layer_catalog::reconcile_scene(&self.scene, &mut after)?;
         crate::layer_properties::validate_scene(self, &after)?;
         if !after.valid()
             || !after.layer_ids.matches(self.layers.len())
@@ -315,6 +316,7 @@ impl Document {
         group: Option<u64>,
     ) -> Result<bool, String> {
         after.scene.layer_ids.append(after.layers.len())?;
+        crate::layer_catalog::reconcile(self, &mut after)?;
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
