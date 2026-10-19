@@ -167,3 +167,30 @@ impl Data {
 pub fn adjustment(d: &Document, t: Target) -> Option<Adjustment> {
     d.scene.layer_effects.get(t).and_then(|e| e.adjustment)
 }
+
+pub fn shift(
+    scene: &mut crate::scene::Scene,
+    t: crate::line_tools::Target,
+    delta: Point,
+) -> Result<(), String> {
+    let inv = scene.transform.inverse();
+    let shift = [
+        inv.0[0] * delta[0] + inv.0[2] * delta[1],
+        inv.0[1] * delta[0] + inv.0[3] * delta[1],
+    ];
+    let effect = match t {
+        crate::line_tools::Target::Raster(n) => {
+            scene.layer_effects.rasters.get_mut(&scene.layer_ids.id(n))
+        }
+        crate::line_tools::Target::Vector(n) => scene.layer_effects.vectors.get_mut(&n),
+        _ => None,
+    };
+    if let Some(mask) = effect.and_then(|e| e.mask.as_mut()).filter(|m| m.linked) {
+        let next = [mask.offset[0] + shift[0], mask.offset[1] + shift[1]];
+        if next.iter().any(|n| !n.is_finite() || n.abs() > 1e9) {
+            return Err("Linked mask position limit".into());
+        }
+        mask.offset = next;
+    }
+    Ok(())
+}

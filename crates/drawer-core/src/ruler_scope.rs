@@ -79,6 +79,7 @@ pub fn applies(doc: &Document, g: &crate::rulers::Guide, target: Target) -> bool
         && g.link.is_none_or(|t| linked_visible(doc, t))
 }
 pub fn shift(scene: &mut Scene, target: Target, delta: Point) -> Result<(), String> {
+    crate::layer_effects::shift(scene, target, delta)?;
     let inverse = scene.transform.inverse();
     let p = inverse.map(delta);
     let zero = inverse.map([0.0; 2]);

@@ -228,3 +228,7 @@ pub mod layer_effects;
 pub mod layer_merge;
 
 pub mod layer_merge_verify;
+
+pub mod layer_folders;
+
+pub mod layer_folders_verify;

@@ -733,3 +733,9 @@ Layers… → Layer blend modes에서 대상을 선택하고 Normal / Multiply /
 Layers… → Merge layers / flatten에서 Merge selected / Merge down / Flatten page를 고릅니다. 선택/아래 병합은 같은 폴더의 연속된 래스터·폴더를 합칩니다. Include hidden layers는 숨김층을 결과에 표시하고, Include lower siblings는 혼합에 필요한 아래 배경도 포함합니다. 불완전한 클리핑 연쇄나 외부 배경 의존 결과는 설명과 함께 거절합니다.
 
 Prepare merge preview에서 전후 이미지와 영향 목록을 검토하고 확인란을 켠 뒤 Apply merge를 누릅니다. Flatten page는 현재 프레임과 모든 표시 개체를 한 래스터로 만들며 애니메이션·오디오·캔버스 밖 픽셀과 편집 효과를 대체합니다. 한 Undo로 원래 구조를 복구합니다. 취소와 미리보기는 그림을 바꾸지 않습니다.
+
+## layer-folders | 레이어 폴더·회색조 마스크 | 감싸기 해제 중첩 일반 통과
+
+Layers… → Folders / grayscale masks에서 Create empty folder 또는 Wrap selected in folder를 누릅니다. 감싸기는 같은 부모의 연속된 대상을 사용합니다. 폴더 하나를 고르면 부모·슬롯 이동, Through folder 전환과 Unwrap을 사용할 수 있습니다. 해제로 마스크·불투명도·배경 효과가 달라지면 Open raster preservation preview로 배경을 포함한 병합을 검토합니다.
+
+층 또는 폴더 하나를 선택해 사각 영역과 Visible strength를 지정하고 Replace rectangle mask를 누릅니다.0은 숨김,255는 표시이며 사각 밖은 숨깁니다. 부모와 자식 마스크는 함께 적용됩니다. Remove mask로 제거합니다. 연결 마스크는 전체층 이동을 따라가며 각 버튼은 한 Undo로 복구합니다.

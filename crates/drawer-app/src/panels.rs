@@ -560,6 +560,7 @@ impl Drawer {
                                 ("Alpha protection / clipping / solo…", "layer-clipping"),
                                 ("Layer blend modes…", "layer-blend"),
                                 ("Merge layers / flatten…", "merge-layers"),
+                                ("Folders / grayscale masks…", "layer-folders"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),

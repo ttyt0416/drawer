@@ -117,6 +117,25 @@ pub fn label(doc: &Document, target: Target) -> String {
     }
     .unwrap_or_else(|| "Unavailable layer".into())
 }
+fn ancestor_weight(doc: &Document, mut node: Node, original: Point) -> f64 {
+    let mut weight = 1.0;
+    for _ in 0..16 {
+        let Some(parent) = doc
+            .scene
+            .paper
+            .folders
+            .iter()
+            .position(|f| f.children.contains(&node))
+        else {
+            break;
+        };
+        let target = crate::layer_properties::Target::Folder(parent as u16);
+        weight *= crate::layer_properties::factor(doc, target)
+            * doc.scene.layer_effects.mask(target, original) as f64;
+        node = Node::Folder(parent);
+    }
+    weight
+}
 pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Target> {
     if point.iter().any(|v| !v.is_finite())
         || point[0] < 0.0
@@ -143,24 +162,11 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                         Node::Raster(n),
                         [x as i64, y as i64],
                     )[3] as f64;
-                    let mut weight = 1.0;
-                    let mut node = Node::Raster(n);
-                    for _ in 0..16 {
-                        let Some(parent) = doc
-                            .scene
-                            .paper
-                            .folders
-                            .iter()
-                            .position(|f| f.children.contains(&node))
-                        else {
-                            break;
-                        };
-                        weight *= crate::layer_properties::factor(
-                            doc,
-                            crate::layer_properties::Target::Folder(parent as u16),
-                        );
-                        node = Node::Folder(parent);
-                    }
+                    let weight = ancestor_weight(
+                        doc,
+                        Node::Raster(n),
+                        doc.scene.transform.inverse().map(point),
+                    );
                     return (alpha * weight).round() > 0.0;
                 }
                 doc.composite_pixel_filtered(x, y, false, |i, l| {
@@ -173,10 +179,19 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                     > 0
             }
             Target::Folder(n) => {
-                doc.scene
+                let alpha = doc
+                    .scene
                     .paper
                     .node_pixel(doc, Node::Folder(n), [x as i64, y as i64])[3]
-                    > 0
+                    as f64;
+                (alpha
+                    * ancestor_weight(
+                        doc,
+                        Node::Folder(n),
+                        doc.scene.transform.inverse().map(point),
+                    ))
+                .round()
+                    > 0.0
             }
             Target::Track(n) => doc
                 .animation
@@ -231,6 +246,11 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                             doc,
                             crate::layer_properties::Target::Vector(base),
                         )
+                        * doc
+                            .scene
+                            .layer_effects
+                            .mask(crate::layer_properties::Target::Vector(base), p)
+                            as f64
                 } else {
                     1.0
                 };
@@ -248,6 +268,11 @@ pub fn candidates(doc: &Document, point: Point, settings: Settings) -> Vec<Targe
                                 .fold([0; 4], |out, path| crate::render::over(out, path.pixel(p)));
                             (pixel[3] as f64
                                 * mask
+                                * doc
+                                    .scene
+                                    .layer_effects
+                                    .mask(crate::layer_properties::Target::Vector(id), p)
+                                    as f64
                                 * crate::layer_properties::factor(
                                     doc,
                                     crate::layer_properties::Target::Vector(id),
