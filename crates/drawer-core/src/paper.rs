@@ -608,6 +608,13 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             }
             after.layers = layers;
             after.scene.paper = g;
+            crate::ruler_scope::remap_rasters(
+                &mut after.scene,
+                &map,
+                &indices,
+                replacement,
+                &consumed,
+            );
         }
     }
     doc.commit_state(after)

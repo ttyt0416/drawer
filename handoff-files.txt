@@ -417,3 +417,9 @@ crates/drawer-core/src/auto_shape.rs
 crates/drawer-core/src/auto_shape_verify.rs
 crates/drawer-app/src/auto_shape.rs
 docs/process/stroke-shape-correction.md
+
+crates/drawer-core/src/special_rulers.rs
+crates/drawer-core/src/ruler_scope.rs
+crates/drawer-core/src/special_rulers_verify.rs
+crates/drawer-app/src/special_rulers.rs
+docs/process/special-rulers.md

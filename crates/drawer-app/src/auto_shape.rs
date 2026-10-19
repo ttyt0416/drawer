@@ -26,6 +26,9 @@ pub(super) struct VectorCapture {
     color: [u8; 4],
     capture: Capture,
     settings: Settings,
+    assistance: drawer_core::rulers::Runtime,
+    snapping: drawer_core::snapping::Settings,
+    paint_points: Vec<Point>,
     pub preview: Option<Document>,
 }
 enum Original {
@@ -152,7 +155,19 @@ impl Drawing {
         let mut color = style.color;
         color[3] = (color[3] as f64 * style.opacity).round() as u8;
         let width = style.shape.size.clamp(0.05, 4096.0);
-        let state = core::freehand_vector(doc, layer, &[point], width, color)?;
+        let mut assistance = drawer_core::rulers::Runtime::for_target(
+            doc,
+            drawer_core::line_tools::Target::Vector(layer),
+        )?;
+        assistance.configure_snapping(
+            doc,
+            self.snap_settings,
+            projection.ppp / projection.view.zoom,
+        )?;
+        assistance.set_snap_disabled(self.snap_disabled);
+        let projected = assistance.constrain(point);
+        assistance.check_snapping()?;
+        let state = core::freehand_vector(doc, layer, &[projected], width, color)?;
         if state
             .memory_bytes()
             .saturating_mul(3)
@@ -173,6 +188,9 @@ impl Drawing {
             width,
             color,
             capture: Capture::new(point, self.frame_time)?,
+            assistance,
+            snapping: self.snap_settings,
+            paint_points: vec![projected],
             settings: self.auto_settings,
             preview: Some(bucket::preview(doc, state)?),
         }));
@@ -223,6 +241,7 @@ impl Drawing {
         if self.vector_auto.as_ref().is_some_and(|v| {
             self.mode != super::super::precision::Mode::Paint
                 || v.settings != self.auto_settings
+                || v.snapping != self.snap_settings
                 || v.root != ctx.content_rect()
                 || (v.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8
                 || docs.iter().find(|d| d.id == v.document).is_none_or(|d| {
@@ -278,7 +297,19 @@ impl Drawing {
                     self.frame_time,
                     v.settings.motion_pixels * v.projection.ppp / v.projection.view.zoom,
                 )?;
-                let state = core::freehand_vector(d, v.layer, &v.capture.points, v.width, v.color)?;
+                v.assistance.set_snap_disabled(self.snap_disabled);
+                let projected = v.assistance.constrain(p);
+                v.assistance.check_snapping()?;
+                if v.paint_points
+                    .last()
+                    .is_none_or(|q| (q[0] - projected[0]).hypot(q[1] - projected[1]) >= 0.25)
+                {
+                    if v.paint_points.len() == 4096 {
+                        return Err("Vector ruler input point limit".into());
+                    }
+                    v.paint_points.push(projected);
+                }
+                let state = core::freehand_vector(d, v.layer, &v.paint_points, v.width, v.color)?;
                 if e.phase == Phase::Up {
                     d.commit_state(state)?;
                     v.preview = None;
@@ -427,7 +458,7 @@ impl Drawing {
                     d.commit_state(core::freehand_vector(
                         d,
                         v.layer,
-                        &v.capture.points,
+                        &v.paint_points,
                         v.width,
                         v.color,
                     )?)?;

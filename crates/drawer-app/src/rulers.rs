@@ -88,6 +88,7 @@ impl Editor {
             self.name = g.name.clone();
             self.edit = Some(id);
             let points = match &g.kind {
+                Kind::Special(_) => return,
                 Kind::Straight { a, b } => {
                     self.kind = 0;
                     vec![*a, *b]
@@ -166,16 +167,24 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
+        let mut advanced = false;
+        let mut follow = false;
+        let mut move_layer = false;
         self.ruler_tools.apply_button = None;
         egui::Window::new("Drawing rulers").open(&mut open).vscroll(true).show(ctx,|ui|{
             ui.label("Coordinates are document pixels. Rulers are saved with the page. V switches snapping for following strokes without changing the page.");
+            ui.horizontal_wrapped(|ui|{
+                if ui.button("Special rulers and layer scope…").clicked(){advanced=true;}
+                if ui.button("Draw along saved ruler…").clicked(){follow=true;}
+                if ui.button("Move layer with rulers…").clicked(){move_layer=true;}
+            });
             egui::ComboBox::from_id_salt("drawing-ruler-kind").selected_text(["Straight","Axial symmetry","Radial symmetry","1-point perspective","2-point perspective","3-point perspective"][e.kind]).show_ui(ui,|ui|{for(i,label)in["Straight","Axial symmetry","Radial symmetry","1-point perspective","2-point perspective","3-point perspective"].into_iter().enumerate(){ui.selectable_value(&mut e.kind,i,label);}});
             ui.text_edit_singleline(&mut e.name);ui.label("One x,y per line: straight/axis 2; radial/1-point 1; 2/3-point perspective 2/3.");ui.text_edit_multiline(&mut e.points);
             if e.kind==2{ui.add(egui::Slider::new(&mut e.arms,2..=16).text("Symmetry arms"));}
             ui.horizontal(|ui|{if ui.button(if e.edit.is_some(){"Replace draft ruler"}else{"Add draft ruler"}).clicked()&&let Err(err)=e.add(&self.documents[n]){self.status=Some(err);}
 if ui.button("New ruler fields").clicked(){e.edit=None;}});
             let mut load=None;let mut remove=None;for g in &e.data.guides{ui.push_id(g.id,|ui|{ui.horizontal_wrapped(|ui|{if ui.selectable_label(e.data.active==Some(g.id),format!("{} · {}",g.name,g.kind.label())).clicked(){e.data.active=Some(g.id);}
-if ui.button("Edit fields").clicked(){load=Some(g.id);}
+if ui.button("Edit fields").clicked(){if matches!(g.kind,Kind::Special(_)){e.data.active=Some(g.id);advanced=true;}else{load=Some(g.id);}}
 if ui.button("Remove").clicked(){remove=Some(g.id);}});});}
             if let Some(id)=load{e.load(id,&self.documents[n]);}
 if let Some(id)=remove{e.data.guides.retain(|g|g.id!=id);if e.data.active==Some(id){e.data.active=None;}
@@ -183,6 +192,27 @@ if e.edit==Some(id){e.edit=None;}}
             if ui.button("No active ruler").clicked(){e.data.active=None;}
             ui.horizontal(|ui|{let button=ui.button("Apply rulers");self.ruler_tools.apply_button=Some(button.rect);apply=button.clicked();if ui.button("Cancel").clicked(){cancel=true;}});
         });
+        if advanced {
+            if let Err(err) = self.begin_special_rulers_with(e.id, e.revision, e.data.clone()) {
+                self.status = Some(err);
+            } else {
+                open = false;
+            }
+        }
+        if follow {
+            if let Err(err) = self.begin_follow_ruler() {
+                self.status = Some(err);
+            } else {
+                open = false;
+            }
+        }
+        if move_layer {
+            if let Err(err) = self.begin_ruler_layer_move() {
+                self.status = Some(err);
+            } else {
+                open = false;
+            }
+        }
         open &= !cancel;
         self.ruler_tools.open = open;
         self.ruler_tools.editor = if open { Some(e) } else { None };

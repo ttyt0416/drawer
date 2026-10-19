@@ -3,6 +3,9 @@ use eframe::egui;
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    pub ruler_target: drawer_core::line_tools::Target,
+    pub ruler_aids: drawer_core::aids::AidPreferences,
+    pub ruler_segments: usize,
     pub selection_outline: bool,
     pub selection_edges: usize,
     pub vector_selection_marks: usize,
@@ -80,6 +83,9 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            ruler_target: drawer_core::line_tools::Target::Raster(0),
+            ruler_aids: Default::default(),
+            ruler_segments: 0,
             selection_outline: true,
             selection_edges: 0,
             vector_selection_marks: 0,
@@ -572,7 +578,7 @@ impl CanvasView {
                 }
             });
         }
-        self.paint_aids(ui, document, rect, aids, ppp);
+        self.paint_aids(ui, document, document.view, rect, aids, ppp);
         self.first_point = None;
         if input_active
             && !self.area_zoom
@@ -1013,6 +1019,7 @@ impl CanvasView {
         }
         self.update_image(ui, document, None);
         self.paint_paper(ui, document, *view, rect, None);
+        self.paint_aids(ui, document, *view, rect, self.ruler_aids, ppp);
     }
     #[cfg(test)]
     pub fn rendered_stroke(&self) -> (u64, u64) {
@@ -1210,13 +1217,15 @@ impl CanvasView {
         }
     }
     fn paint_aids(
-        &self,
+        &mut self,
         ui: &egui::Ui,
         document: &Document,
+        view: drawer_core::view::View,
         rect: egui::Rect,
         preferences: drawer_core::aids::AidPreferences,
         ppp: f64,
     ) {
+        self.ruler_segments = 0;
         use drawer_core::aids;
         let painter = ui.painter_at(rect);
         let size = [document.width as f64, document.height as f64];
@@ -1235,7 +1244,7 @@ impl CanvasView {
         };
         if preferences.grid {
             for line in aids::grid_lines(
-                document.view,
+                view,
                 document.scene.transform,
                 document.scene.grid,
                 size,
@@ -1247,9 +1256,11 @@ impl CanvasView {
         }
         if preferences.guides {
             for guide in &document.scene.rulers.guides {
-                for line in drawer_core::rulers::lines(guide, document.scene.transform, size) {
+                let lines = drawer_core::rulers::lines_for(document, guide, self.ruler_target);
+                self.ruler_segments += lines.len();
+                for line in lines {
                     segment(
-                        line.map(|p| document.view.document_to_screen(p, size, center, ppp)),
+                        line.map(|p| view.document_to_screen(p, size, center, ppp)),
                         if document.scene.rulers.active == Some(guide.id) {
                             egui::Color32::LIGHT_GREEN
                         } else {
@@ -1261,7 +1272,7 @@ impl CanvasView {
             for line in &document.scene.guides {
                 segment(
                     line.map(|point| {
-                        document.view.document_to_screen(
+                        view.document_to_screen(
                             document.scene.transform.map(point),
                             size,
                             center,
@@ -1286,7 +1297,7 @@ impl CanvasView {
             );
             for horizontal in [true, false] {
                 let ruler = aids::ruler(
-                    document.view,
+                    view,
                     size,
                     viewport,
                     ppp,

@@ -22,6 +22,13 @@ struct Draft {
     key: Option<(Source, Combine)>,
     preview: Option<Result<Preview, String>>,
 }
+fn selectable_ruler(kind: &drawer_core::rulers::Kind) -> bool {
+    match kind {
+        drawer_core::rulers::Kind::Straight { .. } => true,
+        drawer_core::rulers::Kind::Special(s) => s.contour().is_ok_and(|p| p.is_some()),
+        _ => false,
+    }
+}
 impl Drawer {
     pub(super) fn begin_contour_selection(&mut self) -> Result<(), String> {
         let d = &self.documents[self.active.ok_or("Open a page first")?];
@@ -33,7 +40,7 @@ impl Drawer {
                     .rulers
                     .guides
                     .iter()
-                    .filter(|g| matches!(g.kind, drawer_core::rulers::Kind::Straight { .. }))
+                    .filter(|g| selectable_ruler(&g.kind))
                     .map(|g| g.id)
                     .collect(),
             )
@@ -133,7 +140,7 @@ impl Drawer {
             if rulers!=before {e.source=if rulers {Source::Rulers(vec![])}else{Source::Vector(doc.scene.lines.layers.iter().flat_map(|l|&l.paths).next().map_or(0,|p|p.id))};}
             match &mut e.source {
                 Source::Vector(id)=>{egui::ComboBox::from_id_salt("selection-contour-path").selected_text(format!("Path {id}")).show_ui(ui,|ui|{for l in &doc.scene.lines.layers{for p in &l.paths{ui.selectable_value(id,p.id,format!("{} / {} · {}",l.name,p.id,if p.closed{"closed"}else{"open"}));}}});},
-                Source::Rulers(ids)=>{ui.label("Select one connected chain of finite straight ruler endpoints.");egui::ScrollArea::vertical().id_salt("contour-ruler-list").max_height(140.0).show(ui,|ui|{for g in &doc.scene.rulers.guides {if matches!(g.kind,drawer_core::rulers::Kind::Straight{..}) {let mut selected=ids.contains(&g.id);if ui.checkbox(&mut selected,&g.name).changed(){if selected{ids.push(g.id);}else{ids.retain(|id|*id!=g.id);}}}}});},
+                Source::Rulers(ids)=>{ui.label("Select a connected straight-ruler chain or one closed circle / curve ruler.");egui::ScrollArea::vertical().id_salt("contour-ruler-list").max_height(140.0).show(ui,|ui|{for g in &doc.scene.rulers.guides {if selectable_ruler(&g.kind) {let mut selected=ids.contains(&g.id);if ui.checkbox(&mut selected,&g.name).changed(){if selected{ids.push(g.id);}else{ids.retain(|id|*id!=g.id);}}}}});},
             }
             egui::ComboBox::from_id_salt("selection-contour-combine").selected_text(format!("{:?}",e.combine)).show_ui(ui,|ui|{for op in Combine::ALL{ui.selectable_value(&mut e.combine,op,format!("{op:?}"));}});
             let key=(e.source.clone(),e.combine);if fresh && e.key.as_ref()!=Some(&key){e.confirm=false;e.preview=Some(core::preview(doc,&e.source,e.combine));e.key=Some(key);}

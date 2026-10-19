@@ -113,6 +113,11 @@ impl Nudge {
                     .scene
                     .paper
                     .shift_layer(self.layer, [delta[0] - origin[0], delta[1] - origin[1]]);
+                crate::ruler_scope::shift(
+                    &mut after.scene,
+                    crate::line_tools::Target::Raster(self.layer),
+                    [x as f64, y as f64],
+                )?;
                 after.layers[self.layer].placement = if total == [0; 2] {
                     self.base.layers[self.layer].placement
                 } else {

@@ -1316,7 +1316,16 @@ impl Drawing {
                 };
                 let assistance = if shape.is_some() {
                     match (|| -> Result<_, String> {
-                        let mut r = drawer_core::rulers::Runtime::new(doc)?;
+                        let target = match shape.unwrap().target {
+                            drawer_core::shapes::Target::Raster(i) => {
+                                drawer_core::line_tools::Target::Raster(i)
+                            }
+                            drawer_core::shapes::Target::Vector(Some(id)) => {
+                                drawer_core::line_tools::Target::Vector(id)
+                            }
+                            _ => drawer_core::line_tools::Target::PageObjects,
+                        };
+                        let mut r = drawer_core::rulers::Runtime::for_target(doc, target)?;
                         r.configure_snapping(
                             doc,
                             self.snap_settings,

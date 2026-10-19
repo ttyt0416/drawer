@@ -194,3 +194,9 @@ pub mod extended_fill_verify;
 pub mod auto_shape;
 
 pub mod auto_shape_verify;
+
+pub mod special_rulers;
+
+pub mod ruler_scope;
+
+pub mod special_rulers_verify;

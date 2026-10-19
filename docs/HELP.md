@@ -693,3 +693,9 @@ Fill options에서 현재층·단일층·전체 합성·Reference layers·Select
 
 Lasso and enclosed-area fill에서 도구를 고르고 경로를 드래그해 놓습니다. Lasso fill은 도형 전체,Enclose and fill은 참조 선에서 실제로 닫힌 미채색 영역만 채웁니다. 바깥 배경에 이어진 틈은 채우지 않습니다. Fill options의 참조/제외와 Alpha tolerance를 사용합니다.
 Patch small unpainted areas는 현재 선택 안의 닫힌 미채색 영역 중 지정한 최대 픽셀 수 이하만 보정합니다. Escape로 초안을 취소하고 Undo로 한 번의 채우기를 되돌립니다. 원래 선택은 유지됩니다.
+
+## special-rulers | 특수 자·투시점·레이어 연동 | 평행 곡선 방사 동심원 어안 등분 황금비 눈높이 가이드
+
+Drawing rulers의 Advanced special rulers 또는 Special rulers and layer scope 명령에서 자 종류·기하·표시·적용 레이어/폴더/프레임을 편집하고 Apply special rulers로 저장합니다. 눈금·곡선·연결 투시 가이드도 편집할 수 있습니다. 고정 투시점은 움직이지 않으며 Infinitize는 일반 투시의 방향을 무한원으로 전환합니다. 어안은 유한한 한두 극점을 사용합니다.
+
+Draw along saved ruler에서 곡선/가이드 번호·폭·색을 고르고 Draw ruler path로 현재 래스터/벡터층에 한 획을 만듭니다. Move layer with rulers는 연결된 자와 층을 함께 옮깁니다. 자 편집·획·이동은 각각 Undo로 되돌립니다. 표시 Hidden은 스냅과 독립입니다. 저장한 원/닫힌 곡선은 contour selection에서도 선택할 수 있습니다.

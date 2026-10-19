@@ -362,6 +362,11 @@ fn shift(doc: &Document, state: &mut DocumentState, item: Item, d: Point) -> Res
                 return Err("Raster alignment placement limit".into());
             }
             state.layers[n].placement = Some(p);
+            crate::ruler_scope::shift(
+                &mut state.scene,
+                crate::line_tools::Target::Raster(n),
+                shift.map(|v| v as f64),
+            )?;
         }
         Item::Object(n) => match &mut state.scene.objects[n] {
             PageObject::Text { baseline, .. } => move_point(baseline),

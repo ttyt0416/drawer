@@ -367,6 +367,9 @@ impl Drawer {
                 }
                 "contour-selection" => self.begin_contour_selection()?,
                 "animation-output-frame" => self.begin_animation_output()?,
+                "special-ruler-tools" => self.begin_special_rulers()?,
+                "ruler-follow" => self.begin_follow_ruler()?,
+                "ruler-move-layer" => self.begin_ruler_layer_move()?,
                 "selection-shortcuts" => self.edit_selection_shortcuts(),
                 "selection-expand" | "selection-shrink" | "selection-feather" => self
                     .begin_selection_filter(match command {

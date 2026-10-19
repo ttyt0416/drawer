@@ -437,7 +437,7 @@ impl Replay {
         let mut assistance = if self.ruler_disabled {
             crate::rulers::Runtime::default()
         } else {
-            crate::rulers::Runtime::new(doc)?
+            crate::rulers::Runtime::for_target(doc, crate::line_tools::Target::Raster(self.layer))?
         };
         if let Some((settings, scale)) = self.snapping {
             assistance.configure_snapping(doc, settings, scale)?;

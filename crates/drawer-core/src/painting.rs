@@ -795,12 +795,14 @@ impl Stroke {
         assisted: bool,
     ) -> Result<Self, String> {
         let ruler = if assisted {
-            crate::rulers::Runtime::new(doc)?
+            crate::rulers::Runtime::for_target(doc, crate::line_tools::Target::Raster(layer))?
         } else {
             Default::default()
         };
         let copies = ruler.copies.clone();
-        let total_budget = budget.min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()));
+        let total_budget = budget
+            .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()))
+            .saturating_sub(ruler.memory_bytes());
         let free_limit = total_budget.saturating_sub(std::mem::size_of::<Self>() + 256) / 96;
         // Reserve a quarter for the single-history merge of independent arms.
         let budget = if copies.is_empty() {

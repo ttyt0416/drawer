@@ -1057,7 +1057,7 @@
   저장·취소: 확정 도형 또는 픽셀만 저장; 자유획부터 도형 확정까지 사용자 한 동작으로 취소  
   완료 검증: 유지시간 직전/직후·0길이 점·형태 오판 후보 변경·제어점 수정·자동보정 취소/전체 취소 차이와 래스터/벡터 저장을 시험한다.
 
-- [ ] **114.** 자 표시 범위·레이어 연동·가이드 연결, 자를 따라 선 그리기, 원근 자 눈높이 고정·어안·등분/황금비 눈금
+- [x] **114.** 자 표시 범위·레이어 연동·가이드 연결, 자를 따라 선 그리기, 원근 자 눈높이 고정·어안·등분/황금비 눈금
 
   입력·결과: 자·가이드·레이어 범위·대칭/투시/어안 매개변수 → 자 적용 레이어를 제한하고 자 따라 그리기·지평선/어안/황금비 보조선 제공  
   필수 옵션: 특수 자 종류와 투시점 편집 — Parallel line, Parallel curve, Multiple curve, Radial line, Radial curve, Concentric circle, Guide, Equal division, Golden ratio, Add vanishing point, Delete vanishing point, Add guide, Delete guide, Fix vanishing point, Infinitize. 평행 직선/곡선·다중곡선·방사 직선/곡선·동심원·가이드를 명시하고 투시점 추가/삭제/고정/무한원, 등분/황금비 눈금을 각각 제공한다.  

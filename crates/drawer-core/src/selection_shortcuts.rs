@@ -205,7 +205,35 @@ pub fn preview(doc: &Document, source: &Source, combine: Combine) -> Result<Prev
                 path.closed || near(path.points[0], *path.points.last().unwrap()),
             )
         }
-        Source::Rulers(ids) => chain(doc, ids)?,
+        Source::Rulers(ids) => {
+            if ids.len() == 1 {
+                let guide = doc
+                    .scene
+                    .rulers
+                    .guides
+                    .iter()
+                    .find(|g| g.id == ids[0])
+                    .ok_or("Ruler is missing")?;
+                if let crate::rulers::Kind::Special(s) = &guide.kind {
+                    let points = s
+                        .contour()?
+                        .ok_or("Choose a closed ruler contour or connected straight segments")?;
+                    let t = crate::ruler_scope::transform(doc, guide)
+                        .ok_or("Invalid ruler transform")?;
+                    (
+                        points
+                            .into_iter()
+                            .map(|p| doc.scene.transform.inverse().map(t.map(p)))
+                            .collect(),
+                        true,
+                    )
+                } else {
+                    return Err("One straight ruler has no area; choose a closed chain".into());
+                }
+            } else {
+                chain(doc, ids)?
+            }
+        }
     };
     let points = points
         .into_iter()

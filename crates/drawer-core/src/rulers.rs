@@ -10,10 +10,23 @@ pub enum Kind {
     Mirror { a: Point, b: Point },
     Radial { center: Point, arms: u8 },
     Perspective { points: Vec<Point> },
+    Special(crate::special_rulers::Spec),
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Guide {
+    #[serde(default = "enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub display: crate::ruler_scope::Display,
+    #[serde(default)]
+    pub scope: crate::ruler_scope::Scope,
+    #[serde(default)]
+    pub frames: Option<[u32; 2]>,
+    #[serde(default)]
+    pub link: Option<crate::line_tools::Target>,
+    #[serde(default)]
+    pub offset: Point,
     pub id: u64,
     pub name: String,
     pub kind: Kind,
@@ -34,12 +47,16 @@ impl Default for Data {
         }
     }
 }
+fn enabled() -> bool {
+    true
+}
 fn point(p: Point) -> bool {
     p.iter().all(|v| v.is_finite() && v.abs() <= 1e6)
 }
 impl Kind {
     pub fn valid(&self) -> bool {
         match self {
+            Self::Special(s) => s.valid(),
             Self::Straight { a, b } | Self::Mirror { a, b } => {
                 point(*a) && point(*b) && (a[0] - b[0]).hypot(a[1] - b[1]) >= 1e-6
             }
@@ -51,6 +68,7 @@ impl Kind {
     }
     pub fn label(&self) -> &'static str {
         match self {
+            Self::Special(s) => s.label(),
             Self::Straight { .. } => "Straight",
             Self::Mirror { .. } => "Axial symmetry",
             Self::Radial { .. } => "Radial symmetry",
@@ -80,6 +98,11 @@ impl Data {
                     && g.name.chars().count() <= 64
                     && !g.name.chars().any(char::is_control)
                     && g.kind.valid()
+                    && g.scope.valid()
+                    && g.link.is_none_or(crate::ruler_scope::target_valid)
+                    && g.frames
+                        .is_none_or(|r| r[0] <= r[1] && r[1] < crate::animation::MAX_FRAMES)
+                    && g.offset.iter().all(|v| v.is_finite() && v.abs() <= 1e9)
             })
             && self
                 .guides
@@ -88,13 +111,28 @@ impl Data {
                 .all(|(i, g)| self.guides[..i].iter().all(|x| x.id != g.id))
     }
     pub fn bytes(&self) -> usize {
-        self.guides.iter().map(|g| 128 + g.name.len()).sum()
+        self.guides
+            .iter()
+            .map(|g| {
+                256 + g.name.len()
+                    + match &g.kind {
+                        Kind::Special(s) => s.bytes(),
+                        _ => 0,
+                    }
+            })
+            .sum()
     }
     pub fn add(&mut self, name: &str, kind: Kind) -> Result<u64, String> {
         let mut next = self.clone();
         let id = next.next_id;
         next.next_id = next.next_id.checked_add(1).ok_or("Ruler identity limit")?;
         next.guides.push(Guide {
+            enabled: true,
+            display: Default::default(),
+            scope: Default::default(),
+            frames: None,
+            link: None,
+            offset: [0.0; 2],
             id,
             name: name.trim().into(),
             kind,
@@ -130,6 +168,7 @@ pub struct Runtime {
 #[derive(Clone)]
 enum Constraint {
     None,
+    Special(Box<crate::special_rulers::Runtime>),
     Line(Point, Point),
     Perspective {
         points: Vec<Point>,
@@ -174,6 +213,9 @@ pub fn reflected(t: Affine) -> bool {
 }
 impl Runtime {
     pub fn new(doc: &Document) -> Result<Self, String> {
+        Self::for_target(doc, crate::line_tools::Target::Raster(0))
+    }
+    pub fn for_target(doc: &Document, target: crate::line_tools::Target) -> Result<Self, String> {
         let data = &doc.scene.rulers;
         if !data.valid() {
             return Err("Invalid document rulers".into());
@@ -183,8 +225,16 @@ impl Runtime {
             .active
             .and_then(|id| data.guides.iter().find(|g| g.id == id))
         {
-            let t = doc.scene.transform;
+            if !crate::ruler_scope::applies(doc, g, target) {
+                return Ok(r);
+            }
+            let t = crate::ruler_scope::transform(doc, g)
+                .ok_or("Linked ruler exceeds page transform limits")?;
             match &g.kind {
+                Kind::Special(s) => {
+                    r.constraint =
+                        Constraint::Special(Box::new(crate::special_rulers::Runtime::new(s, t)?));
+                }
                 Kind::Straight { a, b } => {
                     let a = t.map(*a);
                     let b = t.map(*b);
@@ -240,6 +290,9 @@ impl Runtime {
         }
         let lower = crate::snapping::Lower::new(doc, settings, scale)?;
         let bytes = lower.bytes();
+        if let Constraint::Special(r) = &mut self.constraint {
+            r.set_distance(settings.screen_distance * scale);
+        }
         if !settings.rulers {
             self.constraint = Constraint::None;
             self.copies.clear();
@@ -247,9 +300,19 @@ impl Runtime {
         self.lower = Some(lower);
         Ok(bytes)
     }
+    pub fn memory_bytes(&self) -> usize {
+        self.copies.capacity() * std::mem::size_of::<Affine>()
+            + match &self.constraint {
+                Constraint::Special(s) => std::mem::size_of_val(s.as_ref()) + s.bytes(),
+                _ => 0,
+            }
+            + self.lower.as_ref().map_or(0, |l| l.bytes())
+    }
     pub fn check_snapping(&self) -> Result<(), String> {
-        if self.lower.as_ref().is_some_and(|l| l.failed()) {
-            Err("Snapping exceeds guide/grid work limit; pending input cancelled".into())
+        if matches!(&self.constraint,Constraint::Special(s) if s.failed())
+            || self.lower.as_ref().is_some_and(|l| l.failed())
+        {
+            Err("Snapping exceeds ruler/guide/grid work limit; pending input cancelled".into())
         } else {
             Ok(())
         }
@@ -280,6 +343,7 @@ impl Runtime {
         }
         let result = match &mut self.constraint {
             Constraint::None => p,
+            Constraint::Special(s) => s.project(p),
             Constraint::Line(a, d) => project(*a, *d, p),
             Constraint::Perspective {
                 points,
@@ -318,6 +382,12 @@ fn project(a: Point, d: Point, p: Point) -> Point {
 pub fn lines(guide: &Guide, transform: Affine, size: Point) -> Vec<[Point; 2]> {
     let span = size[0].hypot(size[1]).max(1.0) * 4.0;
     match &guide.kind {
+        Kind::Special(s) => s
+            .lines(span)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|line| line.map(|p| transform.map(p)))
+            .collect(),
         Kind::Straight { a, b } | Kind::Mirror { a, b } => {
             let a = transform.map(*a);
             let b = transform.map(*b);
@@ -637,6 +707,23 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub fn lines_for(doc: &Document, g: &Guide, target: crate::line_tools::Target) -> Vec<[Point; 2]> {
+    if g.link
+        .is_some_and(|t| !crate::ruler_scope::linked_visible(doc, t))
+        || g.display == crate::ruler_scope::Display::Hidden
+        || g.frames
+            .is_some_and(|r| doc.current_frame < r[0] || doc.current_frame > r[1])
+        || g.display == crate::ruler_scope::Display::AppliedLayers
+            && !crate::ruler_scope::applies(doc, g, target)
+    {
+        return vec![];
+    }
+    crate::ruler_scope::transform(doc, g).map_or(vec![], |t| {
+        lines(g, t, [doc.width as f64, doc.height as f64])
+    })
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

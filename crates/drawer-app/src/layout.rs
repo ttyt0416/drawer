@@ -456,6 +456,19 @@ impl Drawer {
             canvas.filters = self.workspaces.store.current.input.filters;
             canvas.profiles = self.workspaces.store.current.input.profiles;
             canvas.selection_outline = self.workspaces.store.current.selection_outline;
+            canvas.ruler_aids = self.aids.preferences;
+            canvas.ruler_target = self.panels.targets.get(&doc.id).copied().map_or(
+                drawer_core::line_tools::Target::Raster(0),
+                |t| match t {
+                    drawer_core::thumbnail::Target::Raster(i) => {
+                        drawer_core::line_tools::Target::Raster(i)
+                    }
+                    drawer_core::thumbnail::Target::Vector(id) => {
+                        drawer_core::line_tools::Target::Vector(id)
+                    }
+                    _ => drawer_core::line_tools::Target::PageObjects,
+                },
+            );
             canvas.smoothing = self.workspaces.store.current.input.smoothing;
             canvas.cursors = self.workspaces.store.current.cursors;
             canvas.behavior = self.workspaces.store.current.behavior;

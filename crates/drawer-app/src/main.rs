@@ -76,6 +76,7 @@ mod size_fields;
 mod sizing_dialog;
 mod snapping;
 mod soft_proof;
+mod special_rulers;
 mod stroke_filter;
 mod texture_panel;
 mod tip_profile;
@@ -160,6 +161,7 @@ struct Drawer {
     preferences: preferences::Preferences,
     drawing: Box<drawing::Drawing>,
     ruler_tools: rulers::Panel,
+    special_rulers: special_rulers::Panel,
     selection_filter: selection_filter::Panel,
     color_range: color_range::Panel,
     selection_border: selection_border::Panel,
@@ -291,6 +293,7 @@ impl Drawer {
             preferences: Default::default(),
             drawing: Default::default(),
             ruler_tools: Default::default(),
+            special_rulers: Default::default(),
             selection_filter: Default::default(),
             color_range: Default::default(),
             selection_border: Default::default(),
@@ -519,6 +522,19 @@ impl Drawer {
         self.screen_mode_inputs(ui.ctx());
         self.canvas_view.simple = self.simple_view;
         self.canvas_view.selection_outline = self.workspaces.store.current.selection_outline;
+        self.canvas_view.ruler_aids = self.aids.preferences;
+        self.canvas_view.ruler_target = self
+            .active
+            .and_then(|n| self.panels.targets.get(&self.documents[n].id).copied())
+            .map_or(drawer_core::line_tools::Target::Raster(0), |t| match t {
+                drawer_core::thumbnail::Target::Raster(i) => {
+                    drawer_core::line_tools::Target::Raster(i)
+                }
+                drawer_core::thumbnail::Target::Vector(id) => {
+                    drawer_core::line_tools::Target::Vector(id)
+                }
+                _ => drawer_core::line_tools::Target::PageObjects,
+            });
         self.screen_modes_seen |= if self.simple_view { 1 } else { 2 };
         self.held_tool_inputs(ui.ctx());
         self.observe_scale(ui.ctx());
@@ -644,6 +660,9 @@ impl Drawer {
         self.animation_output_window(ui.ctx());
         self.auto_shape_window(ui.ctx());
         self.ruler_window(ui.ctx());
+        self.special_ruler_window(ui.ctx());
+        self.follow_ruler_window(ui.ctx());
+        self.ruler_layer_move_window(ui.ctx());
         self.selection_filter_window(ui.ctx());
         self.color_range_window(ui.ctx());
         self.selection_border_window(ui.ctx());
@@ -1395,6 +1414,10 @@ impl eframe::App for Drawer {
                     eprintln!("Stroke shape correction: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = special_rulers::smoke(&root) {
+                    eprintln!("Special rulers/layer scope: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = layer_selection::smoke(&root) {
                     eprintln!("Layer/vector selection conversion: {e}");
                     fail_smoke();
@@ -1626,7 +1649,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
