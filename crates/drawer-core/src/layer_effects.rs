@@ -203,6 +203,18 @@ pub fn shift(
     delta: Point,
 ) -> Result<(), String> {
     crate::appearance::shift(scene, t, delta);
+    let key = match t {
+        crate::line_tools::Target::Raster(n) => Some(crate::layer_search::Key::Layer(
+            crate::layer_properties::Target::Raster(scene.layer_ids.id(n)),
+        )),
+        crate::line_tools::Target::Vector(id) => Some(crate::layer_search::Key::Layer(
+            crate::layer_properties::Target::Vector(id),
+        )),
+        _ => None,
+    };
+    if let Some(key) = key {
+        crate::file_objects::shift(scene, key, delta);
+    }
     let inv = scene.transform.inverse();
     let shift = [
         inv.0[0] * delta[0] + inv.0[2] * delta[1],

@@ -490,3 +490,7 @@ crates/drawer-core/src/material_layer.rs
 crates/drawer-core/src/material_layer_verify.rs
 crates/drawer-app/src/material_layer.rs
 docs/process/material-layers.md
+crates/drawer-core/src/file_objects.rs
+crates/drawer-core/src/file_objects_verify.rs
+crates/drawer-app/src/file_objects.rs
+docs/process/file-objects.md

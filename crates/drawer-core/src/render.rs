@@ -27,6 +27,18 @@ impl<'a> Renderer<'a> {
     }
     pub(crate) fn raster_pixel(&self, n: usize, point: [i64; 2]) -> [u8; 4] {
         let doc = self.doc();
+        let key = crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(
+            doc.scene.layer_ids.id(n),
+        ));
+        if let Some(c) = doc.scene.file_objects.pixel(
+            key,
+            doc.scene
+                .transform
+                .inverse()
+                .map(point.map(|v| v as f64 + 0.5)),
+        ) {
+            return c;
+        }
         if let Ok(caches) = &self.appearance
             && let Some(c) = caches.rasters.get(n).and_then(|c| c.as_ref())
         {
@@ -47,6 +59,14 @@ impl<'a> Renderer<'a> {
     }
     pub(crate) fn vector_pixel(&self, n: usize, point: Point) -> [u8; 4] {
         let doc = self.doc();
+        if let Some(l) = doc.scene.lines.layers.get(n)
+            && let Some(c) = doc.scene.file_objects.pixel(
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(l.id)),
+                doc.scene.transform.inverse().map(point),
+            )
+        {
+            return c;
+        }
         if let Ok(caches) = &self.appearance
             && let Some(c) = caches.vectors.get(n).and_then(|c| c.as_ref())
         {
@@ -67,7 +87,18 @@ impl<'a> Renderer<'a> {
         r.owned = crate::layer_roles::output_view(document)?;
         Ok(r)
     }
-    fn object_pixel(&self, index: usize, object: &PageObject, original: Point) -> [u8; 4] {
+    pub(crate) fn object_pixel(
+        &self,
+        index: usize,
+        object: &PageObject,
+        original: Point,
+    ) -> [u8; 4] {
+        if let Some(c) = self.doc().scene.file_objects.pixel(
+            crate::layer_search::Key::Object(self.doc().scene.catalog.objects.id(index)),
+            original,
+        ) {
+            return c;
+        }
         match object {
             PageObject::Material(m) => m.pixel(original),
             PageObject::Text { color, .. } => {
@@ -134,7 +165,13 @@ impl<'a> Renderer<'a> {
             }
         }
     }
-    fn world_pixel(&self, index: usize, original: Point) -> [u8; 4] {
+    pub(crate) fn world_pixel(&self, index: usize, original: Point) -> [u8; 4] {
+        if let Some(c) = self.doc().scene.file_objects.pixel(
+            crate::layer_search::Key::World(self.doc().scene.catalog.worlds.id(index)),
+            original,
+        ) {
+            return c;
+        }
         let Some(camera) = &self.doc().scene.camera else {
             return [0; 4];
         };
@@ -214,7 +251,10 @@ impl<'a> Renderer<'a> {
                 let Some(g) = d.scene.gradients.layers.iter().find(|g| g.id == id) else {
                     return [0; 4];
                 };
-                g.pixel(original)
+                d.scene
+                    .file_objects
+                    .pixel(key, original)
+                    .unwrap_or_else(|| g.pixel(original))
             }
             Key::Selection(_) => return [0; 4],
             _ => {
@@ -245,9 +285,22 @@ impl<'a> Renderer<'a> {
                         else {
                             return [0; 4];
                         };
-                        let mut value = c.pixel(point[0].floor() as i64, point[1].floor() as i64);
+                        let track_id = d.scene.catalog.tracks.id(track as usize);
+                        let track_key = Key::Track(track_id);
+                        let mut value = d
+                            .scene
+                            .file_objects
+                            .pixel(track_key, original)
+                            .or_else(|| d.scene.file_objects.pixel(key, original))
+                            .unwrap_or_else(|| {
+                                c.pixel(point[0].floor() as i64, point[1].floor() as i64)
+                            });
                         value[3] = (value[3] as f64
-                            * crate::layer_properties::factor(d, t)
+                            * if d.scene.file_objects.get(track_key).is_some() {
+                                1.
+                            } else {
+                                crate::layer_properties::factor(d, t)
+                            }
                             * crate::layer_properties::factor(d, Target::Track(track)))
                         .round() as u8;
                         value
@@ -429,7 +482,10 @@ impl<'a> Renderer<'a> {
                     doc,
                     crate::layer_search::Key::Gradient(layer.id),
                     result,
-                    layer.pixel(original),
+                    scene
+                        .file_objects
+                        .pixel(crate::layer_search::Key::Gradient(layer.id), original)
+                        .unwrap_or_else(|| layer.pixel(original)),
                 );
             }
         }
@@ -458,6 +514,12 @@ impl<'a> Renderer<'a> {
         if !scene.clipping.vectors.is_empty()
             || crate::layer_blend::vectors_active(doc)
             || !doc.scene.layer_effects.vectors.is_empty()
+            || doc.scene.file_objects.entries.iter().any(|l| {
+                matches!(
+                    l.target,
+                    crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(_))
+                )
+            })
         {
             result = crate::paper::clipped_vectors(
                 doc,
@@ -472,6 +534,16 @@ impl<'a> Renderer<'a> {
                 },
                 self.fill.is_some_and(|(_, s)| s.advanced.vector_centerline),
                 |index| {
+                    if let Some(l) = doc.scene.lines.layers.get(index)
+                        && let Some(c) = doc.scene.file_objects.pixel(
+                            crate::layer_search::Key::Layer(
+                                crate::layer_properties::Target::Vector(l.id),
+                            ),
+                            original,
+                        )
+                    {
+                        return Some(c);
+                    }
                     self.appearance
                         .as_ref()
                         .ok()

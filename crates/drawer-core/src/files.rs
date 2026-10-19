@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 54;
+const VERSION: u32 = 55;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -180,6 +180,9 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 55 && !document.scene.file_objects.is_default() {
+            return Err(invalid("File objects require document version 55"));
+        }
         if !(if version >= 54 {
             document.scene.metadata_valid()
         } else {
@@ -218,6 +221,9 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         .valid_animation(document.animation.as_ref())
     {
         return Err(invalid("Invalid animation source identities"));
+    }
+    if !crate::file_objects::valid_live(&document) {
+        return Err(invalid("Invalid file-layer source identity"));
     }
     crate::appearance::limits(
         document.width,
@@ -286,6 +292,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         .valid_animation(document.animation.as_ref())
     {
         return Err(invalid("Invalid animation source identities"));
+    }
+    if !crate::file_objects::valid_live(document) {
+        return Err(invalid("Invalid file-layer source identity"));
     }
     crate::appearance::limits(
         document.width,

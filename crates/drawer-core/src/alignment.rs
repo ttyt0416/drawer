@@ -480,21 +480,25 @@ pub(crate) fn shift(
                 shift.map(|v| v as f64),
             )?;
         }
-        Item::Object(n) => match &mut state.scene.objects[n] {
-            PageObject::Material(m) => {
-                m.transform.0[4] += delta[0];
-                m.transform.0[5] += delta[1];
+        Item::Object(n) => {
+            let key = crate::layer_search::Key::Object(state.scene.catalog.objects.id(n));
+            crate::file_objects::shift(&mut state.scene, key, d);
+            match &mut state.scene.objects[n] {
+                PageObject::Material(m) => {
+                    m.transform.0[4] += delta[0];
+                    m.transform.0[5] += delta[1];
+                }
+                PageObject::Text { baseline, .. } => move_point(baseline),
+                PageObject::Line { start, end, .. } => {
+                    move_point(start);
+                    move_point(end);
+                }
+                PageObject::Tone { bounds, .. } | PageObject::Shadow { bounds, .. } => {
+                    move_point(&mut bounds.min);
+                    move_point(&mut bounds.max);
+                }
             }
-            PageObject::Text { baseline, .. } => move_point(baseline),
-            PageObject::Line { start, end, .. } => {
-                move_point(start);
-                move_point(end);
-            }
-            PageObject::Tone { bounds, .. } | PageObject::Shadow { bounds, .. } => {
-                move_point(&mut bounds.min);
-                move_point(&mut bounds.max);
-            }
-        },
+        }
         Item::Vector(id) => {
             let p = state
                 .scene
@@ -512,6 +516,7 @@ pub(crate) fn shift(
             }
         }
         Item::Gradient(id) => {
+            crate::file_objects::shift(&mut state.scene, crate::layer_search::Key::Gradient(id), d);
             let l = state
                 .scene
                 .gradients

@@ -678,6 +678,11 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
     if rows.len() > 16384 {
         return Err("Layer catalog record limit".into());
     }
+    for row in &mut rows {
+        if d.scene.file_objects.get(row.key).is_some() {
+            row.kind = Kind::Image;
+        }
+    }
     Ok(rows)
 }
 fn extra_row(c: &Data, key: Key, name: String, kind: Kind) -> Row {
@@ -720,6 +725,9 @@ pub fn properties(d: &Document, key: Key) -> Properties {
         },
         |t| p::properties(d, t),
     );
+    if d.scene.file_objects.get(key).is_some() {
+        value.pixels_locked = true;
+    }
     if let Key::Gradient(id) = key {
         value.hidden |= d
             .scene
@@ -756,6 +764,13 @@ pub fn source_index(d: &Document, key: Key) -> Option<usize> {
 
 pub fn bounds(d: &Document, key: Key) -> Option<crate::scene::Rect> {
     use crate::scene::{Affine, Rect};
+    if let Some(l) = d.scene.file_objects.get(key) {
+        let m = crate::material_layer::Layer {
+            transform: l.cache.transform.then(d.scene.transform),
+            ..l.cache.clone()
+        };
+        return Some(m.bounds());
+    }
     let transformed = |r: Rect, t: Affine| {
         let points = [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]].map(|p| t.map(p));
         Rect {

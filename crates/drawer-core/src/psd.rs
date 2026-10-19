@@ -37,6 +37,7 @@ fn r32(r: &mut impl Read) -> io::Result<u32> {
 pub fn layers_supported(d: &Document) -> bool {
     (d.scene.include_drafts_in_output || !crate::layer_roles::has_drafts(d))
         && d.animation.is_none()
+        && d.scene.gradients.layers.is_empty()
         && d.scene.objects.is_empty()
         && d.scene.lines.layers.is_empty()
         && d.scene.worlds.is_empty()
@@ -51,7 +52,7 @@ pub fn layers_supported(d: &Document) -> bool {
             .iter()
             .all(|f| !f.paper.hidden && f.paper.blend == crate::brush_composite::Mode::Normal)
 }
-pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
+pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
 pub fn export(
     d: &Document,
     path: &Path,

@@ -456,6 +456,11 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(info) = state.scene.catalog.rasters.get(&id).cloned() {
                 state.scene.catalog.rasters.insert(copy_id, info);
             }
+            crate::file_objects::duplicate(
+                &mut state,
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(id)),
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(copy_id)),
+            );
             selected = Target::Raster(copy_id);
         }
         Command::Duplicate(Target::Vector(id)) => {
@@ -504,6 +509,11 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             if let Some(info) = state.scene.catalog.vectors.get(&id).cloned() {
                 state.scene.catalog.vectors.insert(to, info);
             }
+            crate::file_objects::duplicate(
+                &mut state,
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(id)),
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(to)),
+            );
             selected = Target::Vector(to);
         }
         Command::Delete(Target::Raster(id)) => {

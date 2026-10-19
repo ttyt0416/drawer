@@ -291,6 +291,7 @@ impl Drawer {
                 "adjustment-layer" => self.begin_adjustment()?,
                 "layer-search" => self.layer_search.open = true,
                 "layer-roles" => self.begin_layer_roles()?,
+                "linked-file-layer" => self.begin_file_objects()?,
                 "material-layer-new" => self.begin_material_layer(false)?,
                 "material-layer-edit" => self.begin_material_layer(true)?,
                 "layer-appearance" => self.begin_appearance()?,

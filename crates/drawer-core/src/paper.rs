@@ -505,21 +505,14 @@ impl Graph {
         if !self.valid_for(doc.layers.len()) {
             return Err("Invalid folder graph".into());
         }
-        let indices = self.raster_indices(node);
-        if indices.is_empty() {
-            return Err("The folder contains no raster layers".into());
-        }
         let appearance = crate::appearance::Caches::new(doc, None)?;
+        let extents = crate::file_objects::render_extents(doc, self, &[node], &appearance)?;
+        if extents.is_empty() {
+            return Err("The folder contains no renderable layers".into());
+        }
         let mut min = [i64::MAX; 2];
         let mut max = [i64::MIN; 2];
-        for n in &indices {
-            let layer = doc.layers.get(*n).ok_or("Missing raster layer")?;
-            if !layer.valid(doc.width, doc.height) {
-                return Err("Invalid raster layer".into());
-            }
-            let e = appearance.rasters[*n]
-                .as_ref()
-                .map_or_else(|| layer.extent(doc.width, doc.height), |c| c.extent);
+        for e in extents {
             for a in 0..2 {
                 min[a] = min[a].min(e.offset[a]);
                 max[a] = max[a].max(e.offset[a] + [e.width, e.height][a] as i64);
@@ -637,10 +630,25 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     }) {
         return Err("Bake requires the complete clipping run inside the selected folder".into());
     }
+    let targets = members.iter().copied().collect::<Vec<_>>();
+    crate::file_objects::validate_consumed(doc, &targets)?;
+    if targets.iter().any(|t| {
+        let p = crate::file_objects::stored_flags(doc, *t);
+        p.locked || p.pixels_locked
+    }) {
+        return Err("Unlock affected layers before baking".into());
+    }
     if indices.iter().any(|n| doc.layers[*n].locked) {
         return Err("Unlock all affected layers before baking".into());
     }
     if let Node::Raster(n) = node
+        && doc
+            .scene
+            .file_objects
+            .get(crate::layer_search::Key::Layer(
+                crate::layer_properties::raster(doc, n),
+            ))
+            .is_none()
         && !graph.layers.contains_key(&n)
         && !doc
             .scene
@@ -664,6 +672,13 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
     match node {
         Node::Raster(n) => {
             after.layers[n] = raster;
+            let linked_key =
+                crate::layer_search::Key::Layer(crate::layer_properties::raster(doc, n));
+            after
+                .scene
+                .file_objects
+                .entries
+                .retain(|l| l.target != linked_key);
             after
                 .scene
                 .appearance

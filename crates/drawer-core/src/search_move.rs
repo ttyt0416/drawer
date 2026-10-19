@@ -15,6 +15,46 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
     let t = c::target(d, key).ok_or("Movement source was removed")?;
     p::movable(d, t)?;
     let dp = delta.map(|v| v as f64);
+    if d.scene.file_objects.get(key).is_some() {
+        let mut s = d.snapshot();
+        crate::file_objects::shift(&mut s.scene, key, dp);
+        let inv = s.scene.transform.inverse();
+        let v = [
+            inv.0[0] * dp[0] + inv.0[2] * dp[1],
+            inv.0[1] * dp[0] + inv.0[3] * dp[1],
+        ];
+        let effect = match t {
+            p::Target::Raster(id) => s.scene.layer_effects.rasters.get_mut(&id),
+            p::Target::Vector(id) => s.scene.layer_effects.vectors.get_mut(&id),
+            p::Target::Folder(n) => s.scene.layer_effects.folders.get_mut(&n),
+            _ => None,
+        };
+        if let Some(mask) = effect.and_then(|e| e.mask.as_mut()).filter(|m| m.linked) {
+            for (a, b) in mask.offset.iter_mut().zip(v) {
+                *a += b;
+            }
+        }
+        match t {
+            p::Target::Raster(id) => {
+                if let Some(n) = crate::layers::index(d, id) {
+                    s.scene.paper.shift_layer(n, v);
+                }
+            }
+            p::Target::Folder(n) if !s.scene.paper.folders[n as usize].through => {
+                for (a, b) in s.scene.paper.folders[n as usize]
+                    .paper
+                    .origin
+                    .iter_mut()
+                    .zip(v)
+                {
+                    *a += b;
+                }
+            }
+            _ => {}
+        }
+        crate::file_objects::validate(d, &s)?;
+        return Ok(s);
+    }
     if let p::Target::Raster(id) = t {
         return crate::precision::Nudge::begin(
             d,
@@ -100,6 +140,13 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                     return Err("Folder movement depth limit".into());
                 }
                 p::movable(d, p::Target::Folder(n as u16))?;
+                if depth > 0 {
+                    crate::file_objects::shift(
+                        &mut s.scene,
+                        Key::Layer(p::Target::Folder(n as u16)),
+                        dp,
+                    );
+                }
                 let inv = d.scene.transform.inverse();
                 let v = [
                     inv.0[0] * dp[0] + inv.0[2] * dp[1],
@@ -144,6 +191,9 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
             visit(d, &mut s, n as usize, dp, 0)?;
         }
         _ => return Err("This source has no movable canvas content".into()),
+    }
+    if !matches!(t, p::Target::Object(_) | p::Target::Gradient(_)) {
+        crate::file_objects::shift(&mut s.scene, key, dp);
     }
     if !s.scene.valid() || !s.scene.catalog.valid_animation(s.animation.as_ref()) {
         return Err("Moved source exceeds limits".into());

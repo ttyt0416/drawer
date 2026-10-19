@@ -70,8 +70,9 @@ fn check(doc: &Document) -> Result<(), String> {
     Ok(())
 }
 fn unlock(doc: &Document, targets: &[Target]) -> Result<(), String> {
+    crate::file_objects::validate_consumed(doc, targets)?;
     if targets.iter().any(|t| {
-        let p = p::inherited(doc, *t);
+        let p = crate::file_objects::stored_flags(doc, *t);
         p.locked || p.pixels_locked || p.position_locked
     }) {
         Err("Unlock the affected layers/folders before rasterizing".into())
@@ -89,12 +90,13 @@ fn unhide(doc: &Document, state: &mut DocumentState, targets: &[Target]) -> Resu
 }
 fn finish(
     doc: &Document,
-    state: DocumentState,
+    mut state: DocumentState,
     selected: Target,
     affected: Vec<Target>,
     notes: Vec<String>,
     maximum_delta: u8,
 ) -> Result<Prepared, String> {
+    crate::file_objects::prune(&mut state);
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
         || !state.scene.layer_ids.matches(state.layers.len())
@@ -221,11 +223,9 @@ pub fn prepare(
     let appearance = crate::appearance::Caches::new(&working, None)?;
     let mut min = [i64::MAX; 2];
     let mut max = [i64::MIN; 2];
-    for n in &indices {
-        let e = appearance.rasters[*n].as_ref().map_or_else(
-            || doc.layers[*n].extent(doc.width, doc.height),
-            |c| c.extent,
-        );
+    for e in
+        crate::file_objects::render_extents(&working, &working.scene.paper, &nodes, &appearance)?
+    {
         for a in 0..2 {
             min[a] = min[a].min(e.offset[a]);
             max[a] = max[a].max(e.offset[a] + [e.width, e.height][a] as i64);

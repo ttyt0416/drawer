@@ -179,10 +179,19 @@ fn invalid(s: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, s)
 }
 pub(crate) fn write(scene: &crate::scene::Scene, w: &mut impl Write) -> io::Result<()> {
-    for o in &scene.objects {
-        if let PageObject::Material(m) = o
-            && let Source::Image(i) = &m.source
-        {
+    for m in scene
+        .objects
+        .iter()
+        .filter_map(|o| {
+            if let PageObject::Material(m) = o {
+                Some(m.as_ref())
+            } else {
+                None
+            }
+        })
+        .chain(scene.file_objects.entries.iter().map(|l| &l.cache))
+    {
+        if let Source::Image(i) = &m.source {
             w.write_all(&(i.pixels.len() as u64 * 4).to_le_bytes())?;
             for chunk in i.pixels.chunks(4096) {
                 let mut buffer = [0; 16384];
@@ -196,10 +205,19 @@ pub(crate) fn write(scene: &crate::scene::Scene, w: &mut impl Write) -> io::Resu
     Ok(())
 }
 pub(crate) fn read(scene: &mut crate::scene::Scene, r: &mut impl Read) -> io::Result<()> {
-    for o in &mut scene.objects {
-        if let PageObject::Material(m) = o
-            && let Source::Image(i) = &mut m.source
-        {
+    for m in scene
+        .objects
+        .iter_mut()
+        .filter_map(|o| {
+            if let PageObject::Material(m) = o {
+                Some(m.as_mut())
+            } else {
+                None
+            }
+        })
+        .chain(scene.file_objects.entries.iter_mut().map(|l| &mut l.cache))
+    {
+        if let Source::Image(i) = &mut m.source {
             let mut size = [0; 8];
             r.read_exact(&mut size)?;
             let count = i.width as usize * i.height as usize;

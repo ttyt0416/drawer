@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 97] = [
+pub const EXTRA_COMMANDS: [&str; 98] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -83,6 +83,7 @@ pub const EXTRA_COMMANDS: [&str; 97] = [
     "layer-roles",
     "layer-appearance",
     "material-layer-new",
+    "linked-file-layer",
     "material-layer-edit",
     "layer-defaults",
     "import-image-layer",
@@ -406,6 +407,7 @@ impl Settings {
             "manage-layers" => "Manage local layers",
             "adjustment-layer" => "Nondestructive brightness, contrast, hue and saturation layers",
             "layer-search" => "Search, filter and select local layers",
+            "linked-file-layer" => "Local file layers: create, refresh, relink and convert content",
             "material-layer-new" => "Create an editable solid, gradient or local image material",
             "material-layer-edit" => "Edit the selected material and preserve its source",
             "layer-roles" => "Reference and draft layer roles; rendered output policy",

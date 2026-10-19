@@ -94,6 +94,17 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
             graph.mark_layers(n, &mut self.seen, 0);
             return Color::default();
         }
+        if let Node::Folder(_) = n
+            && let Some(pixel) = self.doc.scene.file_objects.pixel(
+                crate::layer_search::Key::Layer(clipping::node_key(self.doc, n)),
+                self.original,
+            )
+        {
+            graph.mark_layers(n, &mut self.seen, 0);
+            let mut c = Color::from(paper.shade(pixel, self.original));
+            c.scale(self.weight(n));
+            return c;
+        }
         let pixel = match n {
             Node::Raster(n) => {
                 self.seen[n] = true;
@@ -155,6 +166,14 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
             }
             if let Node::Folder(index) = n
                 && graph.folders[index].through
+                && self
+                    .doc
+                    .scene
+                    .file_objects
+                    .get(crate::layer_search::Key::Layer(clipping::node_key(
+                        self.doc, n,
+                    )))
+                    .is_none()
             {
                 let folder = &graph.folders[index];
                 if folder.paper.hidden {

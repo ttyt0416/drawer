@@ -67,6 +67,13 @@ fn source(document: &Document, target: Target) -> Option<SourcePixels<'_>> {
     }
 }
 pub fn bounds(document: &Document, target: Target, content: bool) -> Rect {
+    if let Some(key) = crate::layer_catalog::from_thumbnail(document, target)
+        && let Some(l) = document.scene.file_objects.get(key)
+    {
+        let mut m = l.cache.clone();
+        m.transform = m.transform.then(document.scene.transform);
+        return m.bounds();
+    }
     if content
         && displayed(document, target)
         && let Ok(caches) = crate::appearance::Caches::new(document, None)
@@ -123,6 +130,9 @@ pub fn image(
     if !(1..=128).contains(&size) {
         return Err("Thumbnail size must be from 1 to 128".into());
     }
+    let linked = crate::layer_catalog::from_thumbnail(document, target)
+        .filter(|k| document.scene.file_objects.get(*k).is_some());
+    let target = linked.map_or(target, Target::Source);
     let source = source(document, target);
     let caches = displayed(document, target)
         .then(|| crate::appearance::Caches::new(document, None))

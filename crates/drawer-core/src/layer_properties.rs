@@ -213,6 +213,14 @@ pub fn targets(doc: &Document) -> Vec<Target> {
 }
 pub fn inherited(doc: &Document, t: Target) -> Properties {
     let mut p = properties(doc, t);
+    if doc
+        .scene
+        .file_objects
+        .get(crate::layer_catalog::key(doc, t))
+        .is_some()
+    {
+        p.pixels_locked = true;
+    }
     if doc.scene.clipping.solo.is_some()
         && matches!(
             t,
@@ -240,16 +248,42 @@ pub fn inherited(doc: &Document, t: Target) -> Properties {
             break;
         };
         let q = properties(doc, Target::Folder(parent as u16));
-        p.locked |= q.locked;
-        p.pixels_locked |= q.pixels_locked;
+        p.locked |= q.locked
+            || doc
+                .scene
+                .file_objects
+                .get(crate::layer_catalog::key(
+                    doc,
+                    Target::Folder(parent as u16),
+                ))
+                .is_some();
+        p.pixels_locked |= q.pixels_locked
+            || doc
+                .scene
+                .file_objects
+                .get(crate::layer_catalog::key(
+                    doc,
+                    Target::Folder(parent as u16),
+                ))
+                .is_some();
         p.position_locked |= q.position_locked;
         p.hidden |= q.hidden;
         node = Some(crate::paper::Node::Folder(parent));
     }
     if let Target::Cell { track, .. } = t {
         let q = properties(doc, Target::Track(track));
-        p.locked |= q.locked;
-        p.pixels_locked |= q.pixels_locked;
+        p.locked |= q.locked
+            || doc
+                .scene
+                .file_objects
+                .get(crate::layer_catalog::key(doc, Target::Track(track)))
+                .is_some();
+        p.pixels_locked |= q.pixels_locked
+            || doc
+                .scene
+                .file_objects
+                .get(crate::layer_catalog::key(doc, Target::Track(track)))
+                .is_some();
         p.position_locked |= q.position_locked;
         p.hidden |= q.hidden;
     }
@@ -570,7 +604,7 @@ impl Default for Display {
 pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String> {
     crate::appearance::limits(after.width, after.height, &after.layers, &after.scene)?;
     for (n, old) in doc.layers.iter().enumerate() {
-        let p = inherited(doc, raster(doc, n));
+        let p = crate::file_objects::validation_flags(doc, &after.scene, raster(doc, n));
         if !p.locked && !p.pixels_locked && !p.position_locked && !p.hidden {
             continue;
         }
@@ -604,7 +638,11 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
     }
     if let Some(animation) = &doc.animation {
         for (track, t) in animation.tracks.iter().enumerate() {
-            let tp = inherited(doc, Target::Track(track as u16));
+            let tp = crate::file_objects::validation_flags(
+                doc,
+                &after.scene,
+                Target::Track(track as u16),
+            );
             let track_id = doc.scene.catalog.tracks.id(track);
             let next_target = crate::layer_catalog::state_target(
                 after,
@@ -629,8 +667,9 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
                 return Err("Animation track is locked".into());
             }
             for (cell, c) in t.cells.iter().enumerate() {
-                let p = inherited(
+                let p = crate::file_objects::validation_flags(
                     doc,
+                    &after.scene,
                     Target::Cell {
                         track: track as u16,
                         cell: cell as u16,
@@ -675,7 +714,7 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
 pub fn validate_scene(doc: &Document, after: &crate::scene::Scene) -> Result<(), String> {
     crate::catalog_guard::validate(doc, after)?;
     for old in &doc.scene.lines.layers {
-        let p = inherited(doc, Target::Vector(old.id));
+        let p = crate::file_objects::validation_flags(doc, after, Target::Vector(old.id));
         let next = after.lines.layers.iter().find(|l| l.id == old.id);
         if p.locked && next.is_none_or(|l| l.paths != old.paths || l.name != old.name) {
             return Err("Vector layer is locked".into());
@@ -707,14 +746,14 @@ pub fn validate_scene(doc: &Document, after: &crate::scene::Scene) -> Result<(),
     }
     if doc.scene.transform != after.transform
         && targets(doc).into_iter().any(|t| {
-            let p = inherited(doc, t);
+            let p = crate::file_objects::validation_flags(doc, after, t);
             p.locked || p.position_locked
         })
     {
         return Err("A locked layer prevents changing page geometry".into());
     }
     for (n, old) in doc.scene.paper.folders.iter().enumerate() {
-        let p = inherited(doc, Target::Folder(n as u16));
+        let p = crate::file_objects::validation_flags(doc, after, Target::Folder(n as u16));
         if p.locked
             && after
                 .paper

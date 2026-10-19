@@ -184,6 +184,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::file_objects::Data::is_default")]
+    pub file_objects: crate::file_objects::Data,
     #[serde(default, skip_serializing_if = "crate::appearance::Data::is_default")]
     pub appearance: crate::appearance::Data,
     #[serde(default, skip_serializing_if = "crate::layer_roles::is_false")]
@@ -256,7 +258,18 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
-        self.appearance.valid()
+        self.file_objects.valid(missing)
+            && self.file_objects.entries.iter().all(|l| {
+                [l.cache.bounds().min, l.cache.bounds().max]
+                    .into_iter()
+                    .all(|p| {
+                        self.transform
+                            .map(p)
+                            .iter()
+                            .all(|v| v.is_finite() && v.abs() <= 1e12)
+                    })
+            })
+            && self.appearance.valid()
             && self
                 .lines
                 .layers
@@ -346,7 +359,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.appearance.bytes()
+        self.file_objects.bytes()
+            + self.appearance.bytes()
             + self.catalog.bytes()
             + self.clipping.bytes()
             + self.layer_effects.bytes()

@@ -318,6 +318,7 @@ impl Document {
     ) -> Result<bool, String> {
         after.scene.layer_ids.append(after.layers.len())?;
         crate::layer_catalog::reconcile(self, &mut after)?;
+        crate::file_objects::prune(&mut after);
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)

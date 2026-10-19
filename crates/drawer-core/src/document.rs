@@ -224,14 +224,44 @@ impl Document {
             let weight = crate::layer_properties::factor(
                 self,
                 crate::layer_properties::Target::Track(track as u16),
-            ) * crate::layer_properties::factor(
-                self,
-                crate::layer_properties::Target::Cell {
-                    track: track as u16,
-                    cell: cell_index as u16,
-                },
-            );
-            let pixel = cell.pixel(x as i64, y as i64);
+            ) * if self
+                .scene
+                .file_objects
+                .get(crate::layer_search::Key::Track(
+                    self.scene.catalog.tracks.id(track),
+                ))
+                .is_some()
+            {
+                1.
+            } else {
+                crate::layer_properties::factor(
+                    self,
+                    crate::layer_properties::Target::Cell {
+                        track: track as u16,
+                        cell: cell_index as u16,
+                    },
+                )
+            };
+            let track_id = self.scene.catalog.tracks.id(track);
+            let original = self
+                .scene
+                .transform
+                .inverse()
+                .map([x as f64 + 0.5, y as f64 + 0.5]);
+            let pixel = self
+                .scene
+                .file_objects
+                .pixel(crate::layer_search::Key::Track(track_id), original)
+                .or_else(|| {
+                    self.scene.file_objects.pixel(
+                        crate::layer_search::Key::Cell {
+                            track: track_id,
+                            cell: self.scene.catalog.cell_id(track_id, cell_index),
+                        },
+                        original,
+                    )
+                })
+                .unwrap_or_else(|| cell.pixel(x as i64, y as i64));
             let blend = crate::layer_blend::mode(
                 self,
                 crate::layer_properties::Target::Track(track as u16),

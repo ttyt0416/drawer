@@ -183,6 +183,14 @@ pub fn prepare_expression(
     s: Style,
     value: Option<Expression>,
 ) -> Result<DocumentState, String> {
+    if d.scene
+        .file_objects
+        .get(crate::layer_catalog::key(d, t))
+        .is_some()
+    {
+        return Err("Edit the linked source document, then refresh its cache".into());
+    }
+
     if !s.valid()
         || !p::targets(d).contains(&t)
         || !matches!(t, Target::Raster(_) | Target::Vector(_))
@@ -578,6 +586,15 @@ impl Caches {
         Ok(Self { rasters, vectors })
     }
     pub fn raster(&self, d: &Document, n: usize, point: [i64; 2]) -> [u8; 4] {
+        if let Some(c) = d.scene.file_objects.pixel(
+            crate::layer_search::Key::Layer(Target::Raster(d.scene.layer_ids.id(n))),
+            d.scene
+                .transform
+                .inverse()
+                .map(point.map(|v| v as f64 + 0.5)),
+        ) {
+            return c;
+        }
         self.rasters.get(n).and_then(|c| c.as_ref()).map_or_else(
             || d.layers[n].pixel(d.width, d.height, point[0], point[1]),
             |c| c.pixel(point),

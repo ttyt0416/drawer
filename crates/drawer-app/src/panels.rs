@@ -475,6 +475,11 @@ impl Drawer {
             self.status = Some(e);
         }
         if kind != Kind::Timeline {
+            if ui.button("Local linked file layer").clicked()
+                && let Err(e) = self.begin_file_objects()
+            {
+                self.status = Some(e);
+            }
             for (label, edit) in [("New material layer", false), ("Edit material layer", true)] {
                 if ui.button(label).clicked()
                     && let Err(e) = self.begin_material_layer(edit)

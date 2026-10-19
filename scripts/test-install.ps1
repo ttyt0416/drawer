@@ -124,6 +124,7 @@ try {
     if ($smokeResult -notmatch 'alignment_detail=true') { throw '세부 정렬·개체 스냅 검증 실패' }
     if ($smokeResult -notmatch 'layer_management=true') { throw '레이어 생성·복제·순서·식별자 검증 실패' }
     if ($smokeResult -notmatch 'layer_appearance=true') { throw '레이어 표시 효과 검증 실패' }
+    if ($smokeResult -notmatch 'file_objects=true') { throw 'Local file object verification failed' }
     if ($smokeResult -notmatch 'material_layers=true') { throw 'Editable material layer verification failed' }
     if ($smokeResult -notmatch 'layer_defaults=true') { throw '레이어 종류별 생성 기본값 검증 실패' }
     if ($smokeResult -notmatch 'layer_roles=true') { throw '참조층 및 밑그림 출력 정책 검증 실패' }

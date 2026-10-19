@@ -200,6 +200,9 @@ impl Drawer {
                     .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
             )
             .ok_or("Select a material layer")?;
+            if d.scene.file_objects.get(key).is_some() {
+                return Err("Use Linked file layer to refresh or transform this source".into());
+            }
             let drawer_core::layer_search::Key::Object(id) = key else {
                 return Err("Select a material layer".into());
             };
