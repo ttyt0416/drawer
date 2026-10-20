@@ -853,3 +853,11 @@ Move의 Layer movement settings에서 Current layer/Clicked layer/Layers touchin
 Auto-select moved layer는 이동한 층 또는 새 복사본을 자동 선택합니다. 끄면 원래 선택을 유지합니다. Keep original; move a new copy는 원본을 남기고 복사한 층/하위 트리/소재/벡터/애니메이션 트랙을 이동합니다. 선택 픽셀 모드에서는 선택 강도를 한 번 적용해 새 래스터로 복사하며 원본은 유지합니다. 이동량0은 복사본을 만들지 않습니다. 연결된 파일 폴더는 내장 원래 층을 복원한 뒤 복사하고, 개별 애니메이션 셀 대신 트랙을 복사합니다.
 
 문자·말풍선·초안·이동 잠금·종이질감/표시 효과·이미지 소재/파일 연결·채움층을 각각 제외할 수 있습니다. 제외한 층을 건너뛰어 아래 적격 클릭층을 찾으며, 선택한 층에 연동된 구성원이 제외/잠금 상태라면 일부만 움직이지 않고 전체를 거절합니다. 마우스를 놓기 전에는 원본이 바뀌지 않습니다. Escape/포커스 상실/설정·문서·프레임·뷰 변경은 미리보기를 버리고, 확정은 복사본 전체를 포함해 한 Undo입니다. 설정은 로컬 작업공간/이름 있는 설정에 저장하고 Reset movement settings로 기본값을 복원합니다.
+
+
+<a id="expression-thresholds"></a>
+### Expression color and thresholds
+
+Layer display effects offers Color, Gray and Mono. Gray uses encoded linear-sRGB luminance and preserves alpha. In Mono, brightness >= the brightness threshold is white and alpha >= the alpha threshold is opaque; original zero alpha stays transparent. Thresholds range from0 to255, default128. Preview first. Apply live effects preserves the source ink; expression color is independent of Enable display effects and affects rendered exports.
+
+Select Convert stored ink for a separate lossy conversion preview. Applying changes stored raster samples or vector stroke/fill colors and clears live expression conversion; one Undo restores both ink and settings. Vector live thresholds act after coverage, while stored vector color conversion keeps editable antialiased geometry. Bake into raster pixels instead bakes the complete displayed raster recipe. Existing documents retain their older expression calculation until the new editor is previewed/applied. Cancel/Escape changes nothing.

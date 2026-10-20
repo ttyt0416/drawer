@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, VecDeque};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Style {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expression_settings: Option<crate::expression_color::Settings>,
     #[serde(default, skip_serializing_if = "crate::scene::Affine::is_identity")]
     pub scope_space: crate::scene::Affine,
     pub enabled: bool,
@@ -24,6 +26,7 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
+            expression_settings: None,
             scope_space: Default::default(),
             enabled: false,
             color: None,
@@ -455,9 +458,10 @@ impl Caches {
             let mut pixels = Vec::with_capacity(n);
             for y in 0..h {
                 for x in 0..w {
-                    pixels.push(color(
-                        pixel([extent.offset[0] + x as i64, extent.offset[1] + y as i64]),
-                        expression,
+                    let raw = pixel([extent.offset[0] + x as i64, extent.offset[1] + y as i64]);
+                    pixels.push(style.expression_settings.map_or_else(
+                        || color(raw, expression),
+                        |settings| crate::expression_color::pixel(raw, expression, settings),
                     ));
                 }
             }

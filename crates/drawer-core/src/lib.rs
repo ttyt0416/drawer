@@ -280,3 +280,6 @@ pub mod layer_move;
 pub mod layer_groups_verify;
 
 pub mod layer_move_verify;
+
+pub mod expression_color;
+pub mod expression_color_verify;

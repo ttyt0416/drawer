@@ -526,3 +526,7 @@ crates/drawer-core/src/layer_move_verify.rs
 crates/drawer-app/src/layer_groups.rs
 crates/drawer-app/src/layer_move.rs
 docs/process/linked-layers.md
+
+crates/drawer-core/src/expression_color.rs
+crates/drawer-core/src/expression_color_verify.rs
+docs/process/expression-color.md
