@@ -8,6 +8,8 @@ pub(crate) mod magnetic_lasso;
 mod movement;
 #[path = "selection_edit.rs"]
 pub(crate) mod selection_edit;
+#[path = "vector_edit_ui.rs"]
+pub(crate) mod vector_edit;
 use super::*;
 use drawer_core::{
     painting::{Stroke, Style},
@@ -100,6 +102,12 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    vector_capture: Option<Box<vector_edit::Gesture>>,
+    pub vector_settings: drawer_core::vector_edit::Settings,
+    pub vector_layer: Option<u64>,
+    pub vector_selection: drawer_core::vector_edit::Selection,
+    pub vector_document: Option<u64>,
+    vector_hover: Option<Box<vector_edit::Hover>>,
     pub move_settings: drawer_core::layer_move::Settings,
     pub move_selected: Option<drawer_core::layer_search::Key>,
     pub quick_mask: bool,
@@ -210,9 +218,10 @@ impl Drawing {
         self.native_mouse = true;
     }
     pub fn active_view(&self) -> Option<u64> {
-        self.active
+        self.vector_capture
             .as_ref()
             .map(|s| s.view)
+            .or_else(|| self.active.as_ref().map(|s| s.view))
             .or_else(|| self.selection.as_ref().map(|s| s.view))
             .or_else(|| self.lasso.as_ref().map(|s| s.view))
             .or_else(|| self.correction.as_ref().map(|c| c.view))
@@ -222,7 +231,8 @@ impl Drawing {
             .or_else(|| self.selection_edit.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
-        self.active.is_some()
+        self.vector_capture.is_some()
+            || self.active.is_some()
             || self.selection.is_some()
             || self.lasso.is_some()
             || self.correction.is_some()
@@ -247,6 +257,7 @@ impl Drawing {
         self.sample_pending = None;
     }
     fn cancel(&mut self) {
+        self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
         self.correction = None;
@@ -329,6 +340,7 @@ impl Drawing {
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
         self.correction = None;
@@ -351,6 +363,7 @@ impl Drawing {
         }
     }
     fn finish_document(&mut self, doc: &mut Document) {
+        self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
         self.correction = None;
@@ -930,6 +943,7 @@ impl Drawing {
             }
         }
         self.promote_auto(ctx, documents);
+        self.advance_vector_edit(ctx, documents);
         self.advance_auto_input(ctx, documents);
         self.advance_lasso(ctx, documents);
         self.advance_selection_edit(ctx, documents);
@@ -989,6 +1003,10 @@ impl Drawing {
             center: [rect.center().x as f64, rect.center().y as f64],
             ppp: ui.ctx().pixels_per_point() as f64,
         };
+        if self.mode == super::precision::Mode::VectorEdit {
+            self.vector_edit_canvas(ui, response, doc, view, projection, style.color, enabled);
+            return;
+        }
         if let Some(s) = &mut self.active
             && s.stroke.document == doc.id
             && s.view == view
@@ -1619,9 +1637,7 @@ impl Drawing {
                 }
                 continue;
             }
-            if self.auto_settings.enabled
-                && let Some(drawer_core::shapes::Target::Vector(Some(id))) = self.auto_target
-            {
+            if let Some(drawer_core::shapes::Target::Vector(Some(id))) = self.auto_target {
                 if let Err(err) = self.begin_vector_auto(
                     doc,
                     view,
@@ -1631,6 +1647,7 @@ impl Drawing {
                     id,
                     projection.point(pos),
                     style,
+                    event.pressure,
                 ) {
                     self.error = Some(err);
                     self.ownership.clear();
@@ -1774,6 +1791,29 @@ impl Drawer {
             }
         }
         self.drawing.auto_settings = self.workspaces.store.current.auto_shape;
+        self.drawing.vector_settings = self.workspaces.store.current.vector_edit;
+        let vector_layer =
+            self.active
+                .and_then(|n| match self.panels.targets.get(&self.documents[n].id) {
+                    Some(drawer_core::thumbnail::Target::Vector(id)) => Some(*id),
+                    _ => None,
+                });
+        let vector_document = self.active.map(|n| self.documents[n].id);
+        if self.drawing.vector_document != vector_document
+            || self.drawing.vector_layer != vector_layer
+        {
+            self.drawing.cancel_vector_edit();
+            self.drawing.vector_selection = self
+                .active
+                .and_then(|n| {
+                    vector_layer.map(|id| {
+                        drawer_core::vector_edit::Selection::current(&self.documents[n], id)
+                    })
+                })
+                .unwrap_or_default();
+        }
+        self.drawing.vector_document = vector_document;
+        self.drawing.vector_layer = vector_layer;
         self.drawing.auto_target = self.active.and_then(|n| {
             match self
                 .panels

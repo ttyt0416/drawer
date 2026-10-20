@@ -224,7 +224,7 @@ pub fn prepare(
             }
             Kind::Strokes => {
                 let radius = if include_width && path.stroke {
-                    path.width / 2.0
+                    path.maximum_width() / 2.0
                 } else {
                     0.0
                 };

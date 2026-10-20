@@ -360,3 +360,47 @@ pub fn freehand_vector(
     }
     Ok(state)
 }
+
+pub fn freehand_vector_pressure(
+    doc: &Document,
+    layer: u64,
+    points: &[Point],
+    width: f64,
+    color: [u8; 4],
+    device: &[Option<f64>],
+    device_enabled: bool,
+) -> Result<crate::sizing::DocumentState, String> {
+    let mut state = freehand_vector(doc, layer, points, width, color)?;
+    attach_device(&mut state, layer, device, device_enabled)?;
+    Ok(state)
+}
+pub fn attach_device(
+    state: &mut crate::sizing::DocumentState,
+    layer: u64,
+    device: &[Option<f64>],
+    device_enabled: bool,
+) -> Result<(), String> {
+    let path = state
+        .scene
+        .lines
+        .layers
+        .iter_mut()
+        .find(|l| l.id == layer)
+        .and_then(|l| l.paths.last_mut())
+        .ok_or("Missing vector pressure target")?;
+    path.pressure.device = if device.iter().any(Option::is_some) {
+        device.to_vec()
+    } else {
+        vec![]
+    };
+    path.pressure.device_enabled = path.pressure.device.is_empty() || device_enabled;
+    if !state.scene.valid()
+        || serde_json::to_vec(&state.scene)
+            .map_err(|e| e.to_string())?
+            .len()
+            > 4 * 1024 * 1024
+    {
+        return Err("Vector input pressure exceeds geometry limits".into());
+    }
+    Ok(())
+}

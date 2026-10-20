@@ -320,3 +320,9 @@ pub mod material_transform;
 pub mod material_transform_verify;
 
 pub mod vector_creation_verify;
+
+pub mod vector_pressure;
+
+pub mod vector_edit;
+
+pub mod vector_edit_verify;

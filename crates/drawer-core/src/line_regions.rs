@@ -1,7 +1,7 @@
 //! Frozen, four-connected closed-region masks. References are read-only.
 use crate::{
     document::{DEFAULT_DOCUMENT_BUDGET, Document},
-    line_tools::{Target, distance, point_valid},
+    line_tools::{Target, point_valid},
     scene::Point,
 };
 pub struct Region {
@@ -107,12 +107,24 @@ impl Region {
                         if !path.stroke || path.color[3] == 0 {
                             continue;
                         }
-                        for (a, b) in path.segments() {
+                        for (a, b, wa, wb) in path.pressure_segments() {
+                            if wa <= 0. && wb <= 0. {
+                                continue;
+                            }
                             let a = doc.scene.transform.map(a);
                             let b = doc.scene.transform.map(b);
                             let scale = crate::line_tools::maximum_scale(doc.scene.transform);
                             // At least half the diagonal closes subpixel lines on a four-connected grid.
-                            let r = (path.width * scale / 2.0).max(std::f64::consts::FRAC_1_SQRT_2);
+                            let radius = |w: f64| {
+                                if w > 0. {
+                                    (w * scale / 2.).max(std::f64::consts::FRAC_1_SQRT_2)
+                                } else {
+                                    0.
+                                }
+                            };
+                            let ra = radius(wa);
+                            let rb = radius(wb);
+                            let r = ra.max(rb);
                             let lo = [
                                 (a[0].min(b[0]) - r).floor().max(0.0) as u32,
                                 (a[1].min(b[1]) - r).floor().max(0.0) as u32,
@@ -127,7 +139,13 @@ impl Region {
                                     if work > 64 * 1024 * 1024 {
                                         return Err("Reference region work limit".into());
                                     }
-                                    if distance([x as f64 + 0.5, y as f64 + 0.5], a, b).0 <= r {
+                                    if crate::vector_pressure::taper_hit(
+                                        [x as f64 + 0.5, y as f64 + 0.5],
+                                        a,
+                                        b,
+                                        ra * 2.,
+                                        rb * 2.,
+                                    ) {
                                         bits[y as usize * doc.width as usize + x as usize] = 1
                                     }
                                 }

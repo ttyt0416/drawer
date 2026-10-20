@@ -583,9 +583,11 @@ impl CanvasView {
         }
         paint.drawing.refresh_selection_edit(document);
         paint.drawing.refresh_movement(document);
+        let original_id = document.id;
         let document = paint
             .drawing
-            .conversion_preview(document.id)
+            .vector_edit_preview(document.id)
+            .or_else(|| paint.drawing.conversion_preview(document.id))
             .or_else(|| paint.drawing.selection_edit_preview(document.id))
             .or_else(|| paint.drawing.bucket_preview(document.id))
             .or_else(|| paint.drawing.movement_preview(document.id))
@@ -594,6 +596,9 @@ impl CanvasView {
         self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
+        paint
+            .drawing
+            .vector_edit_overlay(ui, document, original_id, paint.view, rect);
         self.mask_overlay_regions = 0;
         if self.mask_overlay
             && let Some(t) = self.label_target

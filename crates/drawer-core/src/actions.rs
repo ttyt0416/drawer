@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 112] = [
+pub const EXTRA_COMMANDS: [&str; 116] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -73,6 +73,10 @@ pub const EXTRA_COMMANDS: [&str; 112] = [
     "shape-tool",
     "vector-line-tool",
     "vector-curve-tool",
+    "vector-point-tool",
+    "vector-pressure-tool",
+    "vector-color-tool",
+    "vector-edit-tools",
     "align-objects",
     "manage-layers",
     "layer-properties",
@@ -417,6 +421,12 @@ impl Settings {
             "save" => "Save",
             "gradient-tool" => "Gradient and freeform gradient",
             "vector-line-tool" => "Draw an editable vector line with clicked control points",
+            "vector-point-tool" => "Move selected vector control points on the canvas",
+            "vector-pressure-tool" => "Edit vector point pressure with a horizontal drag",
+            "vector-color-tool" => "Recolor vector strokes with the current drawing color",
+            "vector-edit-tools" => {
+                "Edit vector point position, pressure, width and color numerically"
+            }
             "vector-curve-tool" => "Draw an editable vector curve with clicked control points",
             "shape-tool" => "Draw shape",
             "align-objects" => "Align and distribute objects",

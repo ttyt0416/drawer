@@ -137,8 +137,8 @@ pub fn bounds(doc: &Document, item: Item) -> Result<Rect, String> {
             let mut r = p.bounds();
             if !p.stroke {
                 for k in 0..2 {
-                    r.min[k] += p.width / 2.0;
-                    r.max[k] -= p.width / 2.0;
+                    r.min[k] += p.maximum_width() / 2.0;
+                    r.max[k] -= p.maximum_width() / 2.0;
                 }
             }
             mapped(r, doc.scene.transform)

@@ -151,6 +151,7 @@ try {
     if ($smokeResult -notmatch 'drawing_snapping=true') { throw '스냅 우선순위·확대·수정키 복원 검증 실패' }
     if ($smokeResult -notmatch 'object_alignment=true') { throw '개체 정렬·균등 간격·한 취소 검증 실패' }
     if ($smokeResult -notmatch 'vector_creation=true') { throw '벡터 직선·곡선 생성 검증 실패' }
+    if ($smokeResult -notmatch 'vector_edit=true') { throw '벡터 제어점·폭·색·필압 편집 검증 실패' }
     if ($smokeResult -notmatch 'shape_creation=true') { throw '도형·곡선·래스터/벡터·입력 취소 검증 실패' }
     if ($smokeResult -notmatch 'gradient_ramps=true') { throw '그라데이션 색상 지점·혼색·밝기·프리셋 검증 실패' }
     if ($smokeResult -notmatch 'gradient_tools=true') { throw '그라데이션·자유형 영역·편집 레이어 검증 실패' }

@@ -445,6 +445,7 @@ fn prepare_inner(
         return Err("Shape page coordinate limit".into());
     }
     let path = Path {
+        pressure: Default::default(),
         id: 1,
         points,
         closed: geometry.closed,

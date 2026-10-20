@@ -29,6 +29,8 @@ pub(super) struct VectorCapture {
     assistance: drawer_core::rulers::Runtime,
     snapping: drawer_core::snapping::Settings,
     paint_points: Vec<Point>,
+    device_samples: Vec<Option<f64>>,
+    device_enabled: bool,
     pub preview: Option<Document>,
 }
 enum Original {
@@ -77,7 +79,10 @@ impl Correction {
         }
         self.key = Some(self.plan.clone());
         let result = (|| {
-            let state = self.plan.prepare(doc, self.target)?;
+            let mut state = self.plan.prepare(doc, self.target)?;
+            if let Original::Vector(v) = &self.original {
+                core::attach_device(&mut state, v.layer, &v.device_samples, v.device_enabled)?;
+            }
             if state
                 .memory_bytes()
                 .saturating_mul(2)
@@ -148,6 +153,7 @@ impl Drawing {
         layer: u64,
         point: Point,
         style: Style,
+        device_pressure: Option<f64>,
     ) -> Result<(), String> {
         if style.erases() {
             return Err("Choose a drawing tool/color for vector shape conversion".into());
@@ -167,7 +173,15 @@ impl Drawing {
         assistance.set_snap_disabled(self.snap_disabled);
         let projected = assistance.constrain(point);
         assistance.check_snapping()?;
-        let state = core::freehand_vector(doc, layer, &[projected], width, color)?;
+        let state = core::freehand_vector_pressure(
+            doc,
+            layer,
+            &[projected],
+            width,
+            color,
+            &[device_pressure],
+            style.pressure.size,
+        )?;
         if state
             .memory_bytes()
             .saturating_mul(3)
@@ -191,6 +205,8 @@ impl Drawing {
             assistance,
             snapping: self.snap_settings,
             paint_points: vec![projected],
+            device_samples: vec![device_pressure],
+            device_enabled: style.pressure.size,
             settings: self.auto_settings,
             preview: Some(bucket::preview(doc, state)?),
         }));
@@ -308,8 +324,21 @@ impl Drawing {
                         return Err("Vector ruler input point limit".into());
                     }
                     v.paint_points.push(projected);
+                    v.device_samples.push(e.pressure);
+                } else if let Some(value) = e.pressure
+                    && let Some(last) = v.device_samples.last_mut()
+                {
+                    *last = Some(last.map_or(value, |old| old.max(value)));
                 }
-                let state = core::freehand_vector(d, v.layer, &v.paint_points, v.width, v.color)?;
+                let state = core::freehand_vector_pressure(
+                    d,
+                    v.layer,
+                    &v.paint_points,
+                    v.width,
+                    v.color,
+                    &v.device_samples,
+                    v.device_enabled,
+                )?;
                 if e.phase == Phase::Up {
                     d.commit_state(state)?;
                     v.preview = None;
@@ -455,12 +484,14 @@ impl Drawing {
             }
             Original::Vector(v) => {
                 if c.released {
-                    d.commit_state(core::freehand_vector(
+                    d.commit_state(core::freehand_vector_pressure(
                         d,
                         v.layer,
                         &v.paint_points,
                         v.width,
                         v.color,
+                        &v.device_samples,
+                        v.device_enabled,
                     )?)?;
                 } else {
                     self.vector_auto = Some(v);
@@ -485,7 +516,10 @@ impl Drawing {
         if !c.fresh(ctx, d, self.auto_settings) {
             return Err("Page/frame/view changed; correction cancelled".into());
         }
-        let state = c.plan.prepare(d, c.target)?;
+        let mut state = c.plan.prepare(d, c.target)?;
+        if let Original::Vector(v) = &c.original {
+            core::attach_device(&mut state, v.layer, &v.device_samples, v.device_enabled)?;
+        }
         if state
             .memory_bytes()
             .saturating_mul(2)
@@ -673,7 +707,16 @@ pub(crate) fn smoke(root: &std::path::Path) -> Result<(), String> {
                 frame(&mut app, 1.04, vec![]);
                 let c = app.drawing.correction.as_ref().unwrap();
                 let expected = if action == 0 {
-                    Some(c.plan.prepare(&app.documents[0], c.target)?)
+                    let mut state = c.plan.prepare(&app.documents[0], c.target)?;
+                    if let Original::Vector(v) = &c.original {
+                        core::attach_device(
+                            &mut state,
+                            v.layer,
+                            &v.device_samples,
+                            v.device_enabled,
+                        )?;
+                    }
+                    Some(state)
                 } else {
                     None
                 };

@@ -18,6 +18,7 @@ pub(super) enum Mode {
     SelectionBrush,
     ShapeClick,
     ShapeDrag,
+    VectorEdit,
 }
 impl Mode {
     pub(super) fn creation_shape(self) -> bool {

@@ -643,6 +643,10 @@ impl Drawer {
                                 ("New vector", "new-vector-layer"),
                                 ("Draw vector line", "vector-line-tool"),
                                 ("Draw vector curve", "vector-curve-tool"),
+                                ("Edit vector points", "vector-point-tool"),
+                                ("Edit vector pressure", "vector-pressure-tool"),
+                                ("Recolor vector strokes", "vector-color-tool"),
+                                ("Vector numeric editor…", "vector-edit-tools"),
                                 ("Duplicate selected layer", "duplicate-layer"),
                                 ("Delete selected layer", "delete-layer"),
                             ] {

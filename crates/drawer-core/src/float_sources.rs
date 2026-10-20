@@ -364,11 +364,7 @@ impl Renderer<'_> {
                     [0; 4]
                 };
                 let mut sample = Sample::from8(fill);
-                if path.stroke
-                    && path.segments().any(|(a, b)| {
-                        crate::line_tools::distance(original, a, b).0 <= path.width / 2.
-                    })
-                {
+                if path.stroke && path.stroke_hit(original) {
                     sample = self.plan().space.compose(
                         sample,
                         Sample::from8(path.color),

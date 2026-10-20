@@ -16,6 +16,11 @@ pub enum Target {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Path {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::vector_pressure::Profile::is_default"
+    )]
+    pub pressure: crate::vector_pressure::Profile,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill: Option<[u8; 4]>,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
@@ -44,10 +49,11 @@ impl Path {
     pub fn bounds(&self) -> crate::scene::Rect {
         let mut min = [f64::INFINITY; 2];
         let mut max = [f64::NEG_INFINITY; 2];
+        let radius = self.maximum_width() / 2.;
         for p in &self.points {
             for i in 0..2 {
-                min[i] = min[i].min(p[i] - self.width / 2.0);
-                max[i] = max[i].max(p[i] + self.width / 2.0);
+                min[i] = min[i].min(p[i] - radius);
+                max[i] = max[i].max(p[i] + radius);
             }
         }
         crate::scene::Rect { min, max }
@@ -56,18 +62,11 @@ impl Path {
         self.fill.is_some_and(|c| c[3] > 0)
             && self.closed
             && crate::shapes::contains(&self.points, p)
-            || self.stroke
-                && self.color[3] > 0
-                && self
-                    .segments()
-                    .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+            || self.stroke && self.color[3] > 0 && self.stroke_hit(p)
     }
     pub fn hit(&self, p: Point) -> bool {
         self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
-            || self.stroke
-                && self
-                    .segments()
-                    .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
+            || self.stroke && self.stroke_hit(p)
     }
     pub fn pixel(&self, p: Point) -> [u8; 4] {
         let fill = if self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
@@ -76,11 +75,7 @@ impl Path {
         } else {
             [0; 4]
         };
-        if self.stroke
-            && self
-                .segments()
-                .any(|(a, b)| distance(p, a, b).0 <= self.width / 2.0)
-        {
+        if self.stroke && self.stroke_hit(p) {
             crate::render::over(fill, self.color)
         } else {
             fill
@@ -188,7 +183,8 @@ impl Data {
                             && p.definition
                                 .as_ref()
                                 .is_none_or(crate::shapes::Definition::valid)
-                            && (0.1..=512.0).contains(&p.width)
+                            && (0.0..=512.0).contains(&p.width)
+                            && p.pressure.valid()
                     })
             })
             && paths <= 128
@@ -216,6 +212,7 @@ impl Data {
                             .map(|p| {
                                 std::mem::size_of::<Path>()
                                     + p.points.len() * 16
+                                    + p.pressure.bytes()
                                     + p.definition
                                         .as_ref()
                                         .map_or(0, crate::shapes::Definition::bytes)
@@ -268,6 +265,7 @@ impl Data {
             return Err("Vector target is hidden or locked".into());
         }
         l.paths.push(Path {
+            pressure: Default::default(),
             fill: None,
             stroke: true,
             definition: None,
@@ -447,7 +445,7 @@ pub(crate) fn cut(
         }
         lengths.push(start + len);
     }
-    if best.0 > r + path.width / 2.0 * maximum_scale(transform) {
+    if best.0 > r + path.maximum_width() / 2.0 * maximum_scale(transform) {
         return Ok(None);
     }
     if path.fill.is_some() {
@@ -633,7 +631,9 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
                     {
                         for points in parts {
                             let id = after.lines.id()?;
+                            let pressure = path.fragment_pressure(&points);
                             paths.push(Path {
+                                pressure,
                                 fill: None,
                                 stroke: true,
                                 definition: None,

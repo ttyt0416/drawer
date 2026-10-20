@@ -337,6 +337,16 @@ impl Drawer {
                 "vector-line-tool" | "vector-curve-tool" => {
                     self.begin_vector_shape(command == "vector-curve-tool")
                 }
+                "vector-point-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Point))?
+                }
+                "vector-pressure-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Pressure))?
+                }
+                "vector-color-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Color))?
+                }
+                "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

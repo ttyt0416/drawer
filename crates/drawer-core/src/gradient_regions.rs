@@ -192,7 +192,9 @@ pub(crate) fn prepare(
                                 Some(parts) => {
                                     for points in parts {
                                         let id = lines.id()?;
+                                        let pressure = part.fragment_pressure(&points);
                                         next.push(Path {
+                                            pressure,
                                             fill: None,
                                             stroke: true,
                                             definition: None,
