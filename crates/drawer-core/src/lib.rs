@@ -326,3 +326,5 @@ pub mod vector_pressure;
 pub mod vector_edit;
 
 pub mod vector_edit_verify;
+pub mod vector_erase;
+pub mod vector_erase_verify;

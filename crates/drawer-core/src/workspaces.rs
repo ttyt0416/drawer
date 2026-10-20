@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub vector_erase: crate::vector_erase::Settings,
+    #[serde(default)]
     pub vector_edit: crate::vector_edit::Settings,
     #[serde(default = "crate::paper_background::checker_default")]
     pub transparency_colors: [[u8; 3]; 2],
@@ -446,6 +448,7 @@ impl Default for Snapshot {
             auto_shape: Default::default(),
             shapes_vector: false,
             vector_edit: Default::default(),
+            vector_erase: Default::default(),
             layer_pick: Default::default(),
             color_modes: Default::default(),
             related_colors: Default::default(),
@@ -504,7 +507,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.vector_edit.valid()
+        if !self.vector_erase.valid()
+            || !self.vector_edit.valid()
             || !self.layer_defaults.valid()
             || !self.layer_search.valid()
             || !self.auto_shape.valid()
@@ -630,6 +634,7 @@ impl Snapshot {
             next.layer_defaults = incoming.layer_defaults.clone();
             next.shapes_vector = incoming.shapes_vector;
             next.vector_edit = incoming.vector_edit;
+            next.vector_erase = incoming.vector_erase;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
             next.related_colors = incoming.related_colors;

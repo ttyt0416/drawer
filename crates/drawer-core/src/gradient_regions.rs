@@ -190,16 +190,17 @@ pub(crate) fn prepare(
                             )? {
                                 None => next.push(part),
                                 Some(parts) => {
-                                    for points in parts {
+                                    for fragment in parts {
                                         let id = lines.id()?;
-                                        let pressure = part.fragment_pressure(&points);
+                                        let pressure =
+                                            part.fragment_pressure_at(&fragment.parameters)?;
                                         next.push(Path {
                                             pressure,
                                             fill: None,
                                             stroke: true,
                                             definition: None,
                                             id,
-                                            points,
+                                            points: fragment.points,
                                             closed: false,
                                             width: part.width,
                                             color: part.color,

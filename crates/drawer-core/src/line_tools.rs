@@ -385,27 +385,44 @@ fn intersection(a: Point, b: Point, c: Point, d: Point) -> Option<f64> {
     ((-1e-9..=1.0 + 1e-9).contains(&t) && (-1e-9..=1.0 + 1e-9).contains(&s))
         .then_some(t.clamp(0.0, 1.0))
 }
-fn at(points: &[Point], lengths: &[f64], s: f64) -> Point {
+fn at(points: &[Point], lengths: &[f64], s: f64) -> (Point, f64) {
     let i = lengths
         .partition_point(|v| *v < s)
         .saturating_sub(1)
         .min(points.len() - 2);
     let n = lengths[i + 1] - lengths[i];
     let t = if n == 0.0 { 0.0 } else { (s - lengths[i]) / n }.clamp(0.0, 1.0);
-    [
-        points[i][0] + t * (points[i + 1][0] - points[i][0]),
-        points[i][1] + t * (points[i + 1][1] - points[i][1]),
-    ]
+    (
+        [
+            points[i][0] + t * (points[i + 1][0] - points[i][0]),
+            points[i][1] + t * (points[i + 1][1] - points[i][1]),
+        ],
+        i as f64 + t,
+    )
 }
-fn piece(points: &[Point], lengths: &[f64], a: f64, b: f64) -> Vec<Point> {
-    let mut out = vec![at(points, lengths, a)];
+fn piece(
+    points: &[Point],
+    lengths: &[f64],
+    a: f64,
+    b: f64,
+    count: usize,
+) -> crate::vector_erase::Part {
+    let (first, t) = at(points, lengths, a);
+    let mut out = vec![first];
+    let mut parameters = vec![t / count as f64];
     for (i, p) in points.iter().enumerate().skip(1) {
         if lengths[i] > a + 1e-8 && lengths[i] < b - 1e-8 {
-            out.push(*p)
+            out.push(*p);
+            parameters.push(i as f64 / count as f64);
         }
     }
-    out.push(at(points, lengths, b));
-    out
+    let (last, t) = at(points, lengths, b);
+    out.push(last);
+    parameters.push(t / count as f64);
+    crate::vector_erase::Part {
+        points: out,
+        parameters,
+    }
 }
 pub(crate) fn cut(
     path: &Path,
@@ -414,7 +431,8 @@ pub(crate) fn cut(
     r: f64,
     refs: &[(Point, Point)],
     work: &mut usize,
-) -> Result<Option<Vec<Vec<Point>>>, String> {
+) -> Result<Option<Vec<crate::vector_erase::Part>>, String> {
+    let count = path.points.len() - 1;
     let mut points = path.points.clone();
     if path.closed {
         points.push(points[0])
@@ -467,9 +485,13 @@ pub(crate) fn cut(
         let a = lower.unwrap_or(cuts[cuts.len() - 1] - total);
         let b = upper.unwrap_or(cuts[0] + total);
         if a >= 0.0 && b <= total {
-            let mut remain = piece(&points, &lengths, b, total);
-            let tail = piece(&points, &lengths, 0.0, a);
-            remain.extend(tail.into_iter().skip(1));
+            let mut remain = piece(&points, &lengths, b, total, count);
+            let tail = piece(&points, &lengths, 0.0, a, count);
+            remain.points.extend(tail.points.into_iter().skip(1));
+            let period = points.len().saturating_sub(1) as f64 / count as f64;
+            remain
+                .parameters
+                .extend(tail.parameters.into_iter().skip(1).map(|t| t + period));
             result.push(remain)
         } else {
             result.push(piece(
@@ -477,16 +499,17 @@ pub(crate) fn cut(
                 &lengths,
                 b.rem_euclid(total),
                 a.rem_euclid(total),
+                count,
             ))
         }
     } else {
         let a = lower.unwrap_or(0.0);
         let b = upper.unwrap_or(total);
         if a > 1e-8 {
-            result.push(piece(&points, &lengths, 0.0, a))
+            result.push(piece(&points, &lengths, 0.0, a, count))
         }
         if b < total - 1e-8 {
-            result.push(piece(&points, &lengths, b, total))
+            result.push(piece(&points, &lengths, b, total, count))
         }
     }
     Ok(Some(result))
@@ -629,16 +652,16 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
                     if let Some(parts) =
                         cut(&path, doc.scene.transform, point, radius, &refs, &mut work)?
                     {
-                        for points in parts {
+                        for part in parts {
                             let id = after.lines.id()?;
-                            let pressure = path.fragment_pressure(&points);
+                            let pressure = path.fragment_pressure_at(&part.parameters)?;
                             paths.push(Path {
                                 pressure,
                                 fill: None,
                                 stroke: true,
                                 definition: None,
                                 id,
-                                points,
+                                points: part.points,
                                 closed: false,
                                 width: path.width,
                                 color: path.color,

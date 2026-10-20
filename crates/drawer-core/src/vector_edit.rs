@@ -15,6 +15,7 @@ pub enum Tool {
     Point,
     Pressure,
     Color,
+    Select,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Modifier {
@@ -145,7 +146,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
                 }
             }
         }
-        if tool == Tool::Color && !found {
+        if matches!(tool, Tool::Color | Tool::Select) && !found {
             let mut best = (f64::INFINITY, point);
             for (a, b) in path.segments() {
                 let a = d.scene.transform.map(a);
@@ -179,7 +180,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
     // Preserve visual/topmost order at crossings; proximity orders candidates
     // only within a practically equal visual location.
     hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-    if tool == Tool::Color {
+    if matches!(tool, Tool::Color | Tool::Select) {
         let mut seen = BTreeSet::new();
         hits.retain(|h| seen.insert(h.path));
     }

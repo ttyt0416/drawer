@@ -926,3 +926,13 @@ Layers… → Edit vector points / Edit vector pressure / Recolor vector strokes
 Vector numeric editor…에서 현재 선택을 불러오거나 층 전체 점을 선택합니다. 바꿀 속성을 체크한 뒤 폭·RGBA·필압·이동량을 입력하고 Prepare → 전후 미리보기 → Apply로 확정합니다. 혼합 속성은 그대로 두고 선택한 속성만 바꿉니다. Reset 1.00으로 필압 배수를 되돌립니다. 필압 감도와 일시 점편집 키도 설정할 수 있습니다.
 
 기본 Ctrl을 누르는 동안 점편집이 되고 놓으면 원래 벡터 편집 도구로 돌아옵니다. 한 드래그/색 적용/숫자 적용은 한 Undo입니다. Escape·포커스 상실은 드래그 전 선택과 그림을 복원합니다. 래스터·잠긴 층·빈 곳은 바꾸지 않습니다. 펜 입력압력과 편집 배수는 별도로 문서에 저장됩니다. 실물 펜 검증은 별도 예정입니다.
+
+## vector-erase | 선 전체 선택·삭제와 벡터 지우개 | 교차점 접촉 구간 지우기 전체선 참조 모든 레이어 압력 보존
+
+Layers… → Select vector strokes로 점 또는 선을 클릭해 획 전체를 고릅니다. Shift는 추가 선택, Tab은 겹친 후보 순환입니다. Delete selected strokes는 선택한 획만 한 번에 삭제하며 Undo로 복원합니다.
+
+Vector eraser…에서 Do not erase / Erase touched areas / Erase up to intersection / Whole line을 선택합니다. 지우지 않음은 벡터만 보존합니다. 접촉 모드는 원형 지우개가 닿은 구간, 교차점 모드는 중심선 교차점 사이 구간, 전체 선은 닿은 획 전체를 지웁니다. 채움 객체는 전체 선 모드를 사용하세요.
+
+Refer all layers는 보이는 벡터를 교차 참조로만 읽습니다. Erase on all layers는 실제로 편집할 래스터/벡터 범위를 넓히는 별도 스위치입니다. 숨김·잠금·알파 보호·연결 원본과 다른 객체 종류는 유지합니다. 래스터 선택을 해제해야 벡터를 지울 수 있습니다.
+
+문서 픽셀 반경을 정하고 드래그해 결과를 미리본 뒤 놓으면 한 Undo로 확정됩니다. Escape·포커스 상실은 전체 드래그를 취소합니다. 분리된 선의 폭·색·남은 압력 곡선은 문서에 보존하며 모드와 범위 스위치는 로컬 설정입니다.

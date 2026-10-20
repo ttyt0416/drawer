@@ -586,7 +586,8 @@ impl CanvasView {
         let original_id = document.id;
         let document = paint
             .drawing
-            .vector_edit_preview(document.id)
+            .vector_erase_preview(document.id)
+            .or_else(|| paint.drawing.vector_edit_preview(document.id))
             .or_else(|| paint.drawing.conversion_preview(document.id))
             .or_else(|| paint.drawing.selection_edit_preview(document.id))
             .or_else(|| paint.drawing.bucket_preview(document.id))
@@ -599,6 +600,9 @@ impl CanvasView {
         paint
             .drawing
             .vector_edit_overlay(ui, document, original_id, paint.view, rect);
+        paint
+            .drawing
+            .vector_erase_overlay(ui, document, original_id, paint.view, rect);
         self.mask_overlay_regions = 0;
         if self.mask_overlay
             && let Some(t) = self.label_target

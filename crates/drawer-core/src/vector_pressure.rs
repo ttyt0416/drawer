@@ -10,6 +10,10 @@ pub struct Profile {
     pub device: Vec<Option<f64>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub device_positions: Vec<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub control_positions: Vec<f64>,
 }
 fn device_enabled_default() -> bool {
     true
@@ -20,6 +24,8 @@ impl Default for Profile {
             device_enabled: true,
             device: vec![],
             controls: vec![],
+            device_positions: vec![],
+            control_positions: vec![],
         }
     }
 }
@@ -35,13 +41,42 @@ fn interpolate(values: impl Fn(usize) -> f64, count: usize, t: f64) -> f64 {
     let f = x - n as f64;
     values(n) * (1. - f) + values(n + 1) * f
 }
+fn positions_valid(p: &[f64], count: usize) -> bool {
+    p.is_empty()
+        || p.len() == count
+            && p.iter().all(|t| t.is_finite() && (0. ..=1.).contains(t))
+            && p.windows(2).all(|w| w[0] < w[1])
+}
+fn located(values: impl Fn(usize) -> f64, count: usize, positions: &[f64], t: f64) -> f64 {
+    if positions.is_empty() {
+        return interpolate(values, count, t);
+    }
+    if t <= positions[0] {
+        return values(0);
+    }
+    let n = positions
+        .partition_point(|v| *v < t)
+        .saturating_sub(1)
+        .min(count - 1);
+    if n + 1 == count {
+        return values(n);
+    }
+    let f = ((t - positions[n]) / (positions[n + 1] - positions[n])).clamp(0., 1.);
+    values(n) * (1. - f) + values(n + 1) * f
+}
 impl Profile {
     pub fn is_default(&self) -> bool {
-        self.device_enabled && self.device.is_empty() && self.controls.is_empty()
+        self.device_enabled
+            && self.device.is_empty()
+            && self.controls.is_empty()
+            && self.device_positions.is_empty()
+            && self.control_positions.is_empty()
     }
     pub fn valid(&self) -> bool {
         self.device.len() <= 8192
             && self.controls.len() <= 8192
+            && positions_valid(&self.device_positions, self.device.len())
+            && positions_valid(&self.control_positions, self.controls.len())
             && self
                 .device
                 .iter()
@@ -53,13 +88,24 @@ impl Profile {
                 .all(|v| v.is_finite() && (0. ..=2.).contains(v))
     }
     pub fn bytes(&self) -> usize {
-        self.device.len() * std::mem::size_of::<Option<f64>>() + self.controls.len() * 8
+        self.device.len() * std::mem::size_of::<Option<f64>>()
+            + (self.controls.len() + self.device_positions.len() + self.control_positions.len()) * 8
     }
     pub fn device_at(&self, t: f64) -> f64 {
-        interpolate(|n| self.device[n].unwrap_or(1.), self.device.len(), t)
+        located(
+            |n| self.device[n].unwrap_or(1.),
+            self.device.len(),
+            &self.device_positions,
+            t,
+        )
     }
     pub fn control_at(&self, t: f64) -> f64 {
-        interpolate(|n| self.controls[n], self.controls.len(), t)
+        located(
+            |n| self.controls[n],
+            self.controls.len(),
+            &self.control_positions,
+            t,
+        )
     }
     pub fn factor(&self, t: f64) -> f64 {
         if self.device_enabled {
@@ -77,7 +123,7 @@ impl Profile {
         {
             return Err("Vector pressure requires a live control and a 0–2 multiplier".into());
         }
-        if self.controls.len() != count {
+        if self.controls.len() != count || !self.control_positions.is_empty() {
             self.controls = (0..count)
                 .map(|n| {
                     self.control_at(if count == 1 {
@@ -87,6 +133,7 @@ impl Profile {
                     })
                 })
                 .collect();
+            self.control_positions.clear();
         }
         self.controls[n] = (value * 100.).round() / 100.;
         if self.controls.iter().all(|v| *v == 1.) {
@@ -115,6 +162,23 @@ fn lerp(a: Point, b: Point, t: f64) -> Point {
     [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 impl Path {
+    pub(crate) fn pressure_values(&self, parameter: f64) -> (f64, f64) {
+        let count = self.points.len().saturating_sub(1).max(1) as f64;
+        let period = (count + 1.) / count;
+        let t = if self.closed {
+            parameter.rem_euclid(period)
+        } else {
+            parameter.clamp(0., 1.)
+        };
+        if t <= 1. {
+            return (self.pressure.device_at(t), self.pressure.control_at(t));
+        }
+        let f = ((t - 1.) * count).clamp(0., 1.);
+        (
+            self.pressure.device_at(1.) * (1. - f) + self.pressure.device_at(0.) * f,
+            self.pressure.control_at(1.) * (1. - f) + self.pressure.control_at(0.) * f,
+        )
+    }
     pub fn maximum_width(&self) -> f64 {
         self.width * self.pressure.maximum()
     }
@@ -122,6 +186,12 @@ impl Path {
         self.width * self.pressure.factor(t)
     }
     pub fn pressure_segments(&self) -> impl Iterator<Item = (Point, Point, f64, f64)> + '_ {
+        self.parameter_segments()
+            .map(|(_, _, a, b, wa, wb)| (a, b, wa, wb))
+    }
+    pub(crate) fn parameter_segments(
+        &self,
+    ) -> impl Iterator<Item = (f64, f64, Point, Point, f64, f64)> + '_ {
         let count = self.points.len().saturating_sub(1).max(1);
         let steps = if self.pressure.is_default() {
             1
@@ -138,12 +208,26 @@ impl Path {
                 let t1 = (part + 1) as f64 / steps as f64;
                 let width = |t: f64| {
                     if n == self.points.len() - 1 {
-                        self.width_at(1.) * (1. - t) + self.width_at(0.) * t
+                        let (device, control) = self.pressure_values((n as f64 + t) / count as f64);
+                        self.width
+                            * control
+                            * if self.pressure.device_enabled {
+                                device
+                            } else {
+                                1.
+                            }
                     } else {
                         self.width_at((n as f64 + t) / count as f64)
                     }
                 };
-                (lerp(a, b, t0), lerp(a, b, t1), width(t0), width(t1))
+                (
+                    (n as f64 + t0) / count as f64,
+                    (n as f64 + t1) / count as f64,
+                    lerp(a, b, t0),
+                    lerp(a, b, t1),
+                    width(t0),
+                    width(t1),
+                )
             })
         })
     }
@@ -161,8 +245,8 @@ impl Path {
     }
     /// Preserve the sampled profile when an older intersection eraser emits a
     /// polyline fragment. The search follows source order across closed wraps.
-    pub(crate) fn fragment_pressure(&self, points: &[Point]) -> Profile {
-        fragment_pressure(self, points)
+    pub(crate) fn fragment_pressure_at(&self, parameters: &[f64]) -> Result<Profile, String> {
+        fragment_pressure(self, parameters)
     }
 }
 /// Coverage of the union of disks whose radius varies linearly along an edge.
@@ -188,50 +272,108 @@ pub(crate) fn taper_hit(p: Point, a: Point, b: Point, wa: f64, wb: f64) -> bool 
     let r = r0 + dr * t;
     r > 0. && (q[0] - v[0] * t).powi(2) + (q[1] - v[1] * t).powi(2) <= r * r + 1e-12
 }
-fn fragment_pressure(path: &Path, points: &[Point]) -> Profile {
+fn fragment_pressure(path: &Path, parameters: &[f64]) -> Result<Profile, String> {
     if path.pressure.is_default() {
-        return Profile::default();
+        return Ok(Profile::default());
     }
-    let edges = path.segments().collect::<Vec<_>>();
-    let count = path.points.len().saturating_sub(1).max(1);
-    let mut cursor = 0usize;
-    let mut device = vec![];
-    let mut controls = vec![];
-    for point in points {
-        let mut best = (f64::INFINITY, 0usize, 0.);
-        for delta in 0..edges.len() {
-            let n = (cursor + delta) % edges.len();
-            let (a, b) = edges[n];
-            let (distance, near) = crate::line_tools::distance(*point, a, b);
-            let length = (b[0] - a[0]).hypot(b[1] - a[1]);
-            let t = if length > 0. {
-                (near[0] - a[0]).hypot(near[1] - a[1]) / length
-            } else {
-                0.
-            };
-            if distance < best.0 {
-                best = (distance, n, t);
-                if distance < 1e-8 {
-                    break;
-                }
+    if parameters.len() < 2
+        || parameters.len() > 4096
+        || parameters.iter().any(|t| !t.is_finite() || *t < 0.)
+        || parameters.windows(2).any(|w| w[0] > w[1])
+    {
+        return Err("Invalid fragment source parameters".into());
+    }
+    let count = path.points.len().saturating_sub(1).max(1) as f64;
+    let period = if path.closed {
+        (count + 1.) / count
+    } else {
+        1.
+    };
+    let mut knots = vec![0., 1., period];
+    for (length, positions) in [
+        (path.pressure.device.len(), &path.pressure.device_positions),
+        (
+            path.pressure.controls.len(),
+            &path.pressure.control_positions,
+        ),
+    ] {
+        if positions.is_empty() {
+            knots.extend((0..length).map(|n| n as f64 / length.saturating_sub(1).max(1) as f64));
+        } else {
+            knots.extend(positions);
+        }
+    }
+    let base = knots.clone();
+    if path.closed {
+        for n in 1..=2 {
+            knots.extend(base.iter().map(|t| t + n as f64 * period));
+        }
+    }
+    knots.sort_by(f64::total_cmp);
+    knots.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+    let mut samples = vec![(0., parameters[0])];
+    let edges = parameters.len() - 1;
+    for (n, w) in parameters.windows(2).enumerate() {
+        if w[1] > w[0] {
+            let first = knots.partition_point(|t| *t <= w[0] + 1e-12);
+            for t in knots[first..].iter().take_while(|t| **t < w[1] - 1e-12) {
+                samples.push(((n as f64 + (t - w[0]) / (w[1] - w[0])) / edges as f64, *t));
             }
         }
-        cursor = best.1;
-        let t = ((best.1 as f64 + best.2) / count as f64).clamp(0., 1.);
-        device.push(Some(path.pressure.device_at(t)));
-        controls.push(path.pressure.control_at(t));
+        samples.push(((n + 1) as f64 / edges as f64, w[1]));
+        if samples.len() > 8192 {
+            return Err("Fragment pressure sample limit; no paths changed".into());
+        }
     }
-    if path.pressure.device.is_empty() {
-        device.clear();
-    }
-    if path.pressure.controls.is_empty() {
-        controls.clear();
-    }
-    Profile {
+    let positions = samples.iter().map(|(t, _)| *t).collect::<Vec<_>>();
+    let mut result = Profile {
         device_enabled: path.pressure.device_enabled,
-        device,
-        controls,
+        ..Default::default()
+    };
+    if !path.pressure.device.is_empty() {
+        result.device = samples
+            .iter()
+            .map(|(_, t)| {
+                let local = if path.closed {
+                    t.rem_euclid(period)
+                } else {
+                    *t
+                };
+                let original = if path.pressure.device_positions.is_empty() {
+                    let x = local * path.pressure.device.len().saturating_sub(1) as f64;
+                    ((x - x.round()).abs() < 1e-10 && local <= 1.).then_some(x.round() as usize)
+                } else {
+                    path.pressure
+                        .device_positions
+                        .iter()
+                        .position(|p| (*p - local).abs() < 1e-10)
+                };
+                original
+                    .filter(|n| *n < path.pressure.device.len())
+                    .map_or_else(
+                        || Some(path.pressure_values(*t).0),
+                        |n| path.pressure.device[n],
+                    )
+            })
+            .collect();
+        result.device_positions = positions.clone();
     }
+    if !path.pressure.controls.is_empty() {
+        result.controls = samples
+            .iter()
+            .map(|(_, t)| path.pressure_values(*t).1)
+            .collect();
+        result.control_positions = positions;
+    }
+    if !result.valid() {
+        return Err("Invalid fragment pressure".into());
+    }
+    Ok(result)
+}
+pub fn requires_v65(scene: &crate::scene::Scene) -> bool {
+    scene.lines.layers.iter().flat_map(|l| &l.paths).any(|p| {
+        !p.pressure.device_positions.is_empty() || !p.pressure.control_positions.is_empty()
+    })
 }
 pub fn requires_v64(scene: &crate::scene::Scene) -> bool {
     scene

@@ -347,6 +347,11 @@ impl Drawer {
                     self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Color))?
                 }
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
+                "vector-stroke-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Select))?
+                }
+                "vector-delete-strokes" => self.delete_vector_strokes()?,
+                "vector-eraser-tool" => self.begin_vector_eraser(),
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

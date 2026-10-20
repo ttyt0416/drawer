@@ -24,6 +24,7 @@ pub(super) struct Gesture {
     preview: Option<Document>,
 }
 pub(super) struct Hover {
+    canvas_layer: egui::LayerId,
     document: u64,
     view: u64,
     point: egui::Pos2,
@@ -80,6 +81,7 @@ impl Gesture {
                 color: Some(self.color),
                 ..Default::default()
             },
+            Tool::Select => Patch::default(),
         }
     }
 }
@@ -98,6 +100,37 @@ impl Drawing {
             .and_then(|s| s.preview.as_ref())
     }
     pub(super) fn advance_vector_edit(&mut self, ctx: &egui::Context, docs: &mut [Document]) {
+        // Consume canvas Tab before egui assigns focus to widgets. This method
+        // only runs when text entry and modal UI have not captured shortcuts.
+        if self.mode == crate::precision::Mode::VectorEdit
+            && self.vector_capture.is_none()
+            && ctx.input(|i| i.key_pressed(egui::Key::Tab))
+            && let Some(h) = &mut self.vector_hover
+            && self.vector_document == Some(h.document)
+            && !h.candidates.is_empty()
+        {
+            let pos = self
+                .events
+                .iter()
+                .rev()
+                .find_map(|(e, _)| match e {
+                    drawer_core::touch::Effect::Pointer(e) => {
+                        Some(egui::pos2(e.position[0] as f32, e.position[1] as f32))
+                    }
+                    _ => None,
+                })
+                .or_else(|| ctx.input(|i| i.pointer.hover_pos()))
+                .unwrap_or(h.point);
+            if ctx.layer_id_at(pos) == Some(h.canvas_layer)
+                && pos.distance(h.point) <= self.vector_settings.radius as f32
+            {
+                h.index = (h.index + 1) % h.candidates.len();
+                ctx.input_mut(|i| {
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Tab);
+                });
+                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
+        }
         if self.vector_capture.as_ref().is_some_and(|s| {
             docs.iter()
                 .find(|d| d.id == s.document)
@@ -143,7 +176,8 @@ impl Drawing {
                         self.ownership.clear();
                         // A click can select locally without dirtying the page.
                         // Color clicks deliberately recolor the selected stroke(s).
-                        let changed = s.tool == Tool::Color || s.start.distance(s.last) > 0.01;
+                        let changed = matches!(s.tool, Tool::Color | Tool::Select)
+                            || s.start.distance(s.last) > 0.01;
                         if changed && let Err(error) = doc.commit_state(state) {
                             self.error = Some(error);
                         }
@@ -233,29 +267,13 @@ impl Drawing {
                     })
                     .map_or(0, |h| h.index);
                 self.vector_hover = Some(Box::new(Hover {
+                    canvas_layer: response.layer_id,
                     document: doc.id,
                     view,
                     point: pos,
                     candidates,
                     index,
                 }));
-                if ui.input(|i| i.key_pressed(egui::Key::Tab))
-                    && let Some(h) = &mut self.vector_hover
-                    && !h.candidates.is_empty()
-                {
-                    h.index = (h.index + 1) % h.candidates.len();
-                    ui.ctx().input_mut(|i| {
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::Tab);
-                    });
-                    // egui plans Tab focus traversal before widgets run. This
-                    // canvas shortcut consumes that plan as well as the key.
-                    ui.ctx().memory_mut(|m| {
-                        if let Some(id) = m.focused() {
-                            m.surrender_focus(id);
-                        }
-                        m.move_focus(egui::FocusDirection::None);
-                    });
-                }
             } else {
                 self.vector_hover = None;
             }
@@ -306,7 +324,20 @@ impl Drawing {
             self.events[index].1 = true;
             let previous = self.vector_selection.clone();
             let mut selection = previous.clone();
-            if tool == Tool::Color {
+            if tool == Tool::Select {
+                let mut paths = if ui.input(|i| i.modifiers.shift) {
+                    previous.path_ids().into_iter().collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
+                if !paths.contains(&hit.path) {
+                    paths.push(hit.path);
+                }
+                selection = Selection {
+                    paths,
+                    controls: vec![],
+                };
+            } else if tool == Tool::Color {
                 if !selection.path_ids().contains(&hit.path) {
                     selection = Selection {
                         controls: vec![],
@@ -381,6 +412,17 @@ impl Drawing {
             egui::pos2(p[0] as f32, p[1] as f32)
         };
         for path in &layer.paths {
+            if self.vector_selection.paths.contains(&path.id) {
+                for (a, b) in path.segments() {
+                    painter.line_segment(
+                        [
+                            project(doc.scene.transform.map(a)),
+                            project(doc.scene.transform.map(b)),
+                        ],
+                        egui::Stroke::new(1.5, egui::Color32::YELLOW),
+                    );
+                }
+            }
             for n in 0..path.control_count() {
                 if let Some(p) = path.control_point(n) {
                     let p = project(doc.scene.transform.map(p));
@@ -434,6 +476,7 @@ impl Drawing {
                     format!("Move: {:.2}, {:.2}", delta[0], delta[1])
                 }
                 Tool::Color => format!("RGBA: {:?}", s.color),
+                Tool::Select => format!("{} whole strokes", s.selection.path_ids().len()),
             };
             painter.text(
                 s.last + egui::vec2(12., -18.),
@@ -618,7 +661,7 @@ impl Drawer {
         let fresh = e.fresh(d) && e.layer == self.drawing.vector_layer;
         egui::Window::new("Vector points, width, color and pressure").open(&mut open).collapsible(false).default_width(340.).default_pos(egui::pos2(645.,55.)).show(ctx, |ui| {
             let settings = &mut self.workspaces.store.current.vector_edit;
-            ui.horizontal(|ui| { for (tool,label) in [(Tool::Point,"Point"),(Tool::Pressure,"Pressure"),(Tool::Color,"Color")] { ui.radio_value(&mut settings.tool,tool,label); } });
+            ui.horizontal(|ui| { for (tool,label) in [(Tool::Point,"Point"),(Tool::Pressure,"Pressure"),(Tool::Color,"Color"),(Tool::Select,"Stroke")] { ui.radio_value(&mut settings.tool,tool,label); } });
             ui.add(egui::DragValue::new(&mut settings.sensitivity).speed(0.001).range(0.001..=1.).prefix("Pressure / screen point: "));
             ui.add(egui::DragValue::new(&mut settings.radius).range(2. ..=32.).prefix("Pick radius: "));
             egui::ComboBox::from_id_salt("vector-temporary").selected_text(format!("Temporary point tool: {:?}",settings.temporary)).show_ui(ui,|ui|{ for m in [Modifier::Control,Modifier::Alt,Modifier::Shift,Modifier::None] { ui.selectable_value(&mut settings.temporary,m,format!("{m:?}")); } });

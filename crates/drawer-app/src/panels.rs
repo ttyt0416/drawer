@@ -647,6 +647,9 @@ impl Drawer {
                                 ("Edit vector pressure", "vector-pressure-tool"),
                                 ("Recolor vector strokes", "vector-color-tool"),
                                 ("Vector numeric editor…", "vector-edit-tools"),
+                                ("Select vector strokes", "vector-stroke-tool"),
+                                ("Delete selected strokes", "vector-delete-strokes"),
+                                ("Vector eraser…", "vector-eraser-tool"),
                                 ("Duplicate selected layer", "duplicate-layer"),
                                 ("Delete selected layer", "delete-layer"),
                             ] {

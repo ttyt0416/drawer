@@ -579,3 +579,8 @@ crates/drawer-core/src/vector_edit.rs
 crates/drawer-core/src/vector_edit_verify.rs
 crates/drawer-app/src/vector_edit_ui.rs
 docs/process/vector-edit.md
+
+crates/drawer-core/src/vector_erase.rs
+crates/drawer-core/src/vector_erase_verify.rs
+crates/drawer-app/src/vector_erase_ui.rs
+docs/process/vector-erase.md

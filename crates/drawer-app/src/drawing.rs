@@ -10,6 +10,8 @@ mod movement;
 pub(crate) mod selection_edit;
 #[path = "vector_edit_ui.rs"]
 pub(crate) mod vector_edit;
+#[path = "vector_erase_ui.rs"]
+pub(crate) mod vector_erase;
 use super::*;
 use drawer_core::{
     painting::{Stroke, Style},
@@ -102,6 +104,8 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    vector_eraser: Option<Box<vector_erase::Gesture>>,
+    pub erase_settings: drawer_core::vector_erase::Settings,
     vector_capture: Option<Box<vector_edit::Gesture>>,
     pub vector_settings: drawer_core::vector_edit::Settings,
     pub vector_layer: Option<u64>,
@@ -218,9 +222,10 @@ impl Drawing {
         self.native_mouse = true;
     }
     pub fn active_view(&self) -> Option<u64> {
-        self.vector_capture
+        self.vector_eraser
             .as_ref()
             .map(|s| s.view)
+            .or_else(|| self.vector_capture.as_ref().map(|s| s.view))
             .or_else(|| self.active.as_ref().map(|s| s.view))
             .or_else(|| self.selection.as_ref().map(|s| s.view))
             .or_else(|| self.lasso.as_ref().map(|s| s.view))
@@ -231,7 +236,8 @@ impl Drawing {
             .or_else(|| self.selection_edit.as_ref().map(|s| s.view))
     }
     pub fn pending(&self) -> bool {
-        self.vector_capture.is_some()
+        self.vector_eraser.is_some()
+            || self.vector_capture.is_some()
             || self.active.is_some()
             || self.selection.is_some()
             || self.lasso.is_some()
@@ -257,6 +263,7 @@ impl Drawing {
         self.sample_pending = None;
     }
     fn cancel(&mut self) {
+        self.vector_eraser = None;
         self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
@@ -340,6 +347,7 @@ impl Drawing {
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.vector_eraser = None;
         self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
@@ -363,6 +371,7 @@ impl Drawing {
         }
     }
     fn finish_document(&mut self, doc: &mut Document) {
+        self.vector_eraser = None;
         self.cancel_vector_edit();
         self.selection = None;
         self.lasso = None;
@@ -944,6 +953,7 @@ impl Drawing {
         }
         self.promote_auto(ctx, documents);
         self.advance_vector_edit(ctx, documents);
+        self.advance_vector_erase(ctx, documents);
         self.advance_auto_input(ctx, documents);
         self.advance_lasso(ctx, documents);
         self.advance_selection_edit(ctx, documents);
@@ -1003,6 +1013,10 @@ impl Drawing {
             center: [rect.center().x as f64, rect.center().y as f64],
             ppp: ui.ctx().pixels_per_point() as f64,
         };
+        if self.mode == super::precision::Mode::VectorErase {
+            self.vector_erase_canvas(ui, response, doc, view, projection, enabled);
+            return;
+        }
         if self.mode == super::precision::Mode::VectorEdit {
             self.vector_edit_canvas(ui, response, doc, view, projection, style.color, enabled);
             return;
@@ -1792,6 +1806,7 @@ impl Drawer {
         }
         self.drawing.auto_settings = self.workspaces.store.current.auto_shape;
         self.drawing.vector_settings = self.workspaces.store.current.vector_edit;
+        self.drawing.erase_settings = self.workspaces.store.current.vector_erase;
         let vector_layer =
             self.active
                 .and_then(|n| match self.panels.targets.get(&self.documents[n].id) {
