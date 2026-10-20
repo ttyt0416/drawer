@@ -47,7 +47,7 @@ pub fn prepare(
     if canonical.len() != affected.len() {
         return Err("Search source changed; refresh results".into());
     }
-    let mut state = match edit {
+    let state = match edit {
         Edit::Properties(patch) => p::prepare_patch(d, &canonical, patch)?,
         Edit::Alpha(enabled) => {
             let eligible = canonical
@@ -154,9 +154,24 @@ pub fn prepare(
             }
             s
         }
-        Edit::Delete => delete::prepare(d, &affected)?,
+        Edit::Delete => delete::prepare(d, &affected, false)?,
     };
+    let state = finish(d, state)?;
+    Ok(Prepared { state, affected })
+}
+pub(crate) fn delete_batch(
+    d: &Document,
+    keys: &[Key],
+    exposures: bool,
+) -> Result<DocumentState, String> {
+    finish(d, delete::prepare(d, keys, exposures)?)
+}
+fn finish(d: &Document, mut state: DocumentState) -> Result<DocumentState, String> {
     c::reconcile(d, &mut state)?;
+    crate::render_order::reconcile(&mut state);
+    crate::file_objects::prune(&mut state);
+    crate::layer_groups::prune(&mut state)?;
+    crate::paper_background::prune(&mut state);
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
         || !state
@@ -172,5 +187,5 @@ pub fn prepare(
         return Err("Search edit scene/Undo budget".into());
     }
     p::validate_edit(d, &state)?;
-    Ok(Prepared { state, affected })
+    Ok(state)
 }

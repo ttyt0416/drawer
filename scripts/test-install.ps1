@@ -135,6 +135,7 @@ try {
     if ($smokeResult -notmatch 'layer_search=true') { throw '레이어 검색 및 직접 선택 검증 실패' }
     if ($smokeResult -notmatch 'adjustment_layers=true') { throw '비파괴 보정 레이어 검증 실패' }
     if ($smokeResult -notmatch 'layer_folders=true') { throw '레이어 폴더·회색조 마스크 검증 실패' }
+    if ($smokeResult -notmatch 'layer_maintenance=true') { throw '보이는 층 복제·빈/숨김층 정리 검증 실패' }
     if ($smokeResult -notmatch 'individual_merge=true') { throw '원본 픽셀·마스크 개별 결합 검증 실패' }
     if ($smokeResult -notmatch 'layer_merge=true') { throw '레이어 병합·전체 합치기 검증 실패' }
     if ($smokeResult -notmatch 'linked_layers=true' -or $smokeResult -notmatch 'layer_movement=true') { throw 'Linked layer and movement verification failed' }

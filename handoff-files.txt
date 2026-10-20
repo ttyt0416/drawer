@@ -555,3 +555,8 @@ docs/process/document-color.md
 crates/drawer-core/src/individual_merge.rs
 crates/drawer-core/src/individual_merge_verify.rs
 docs/process/individual-combine.md
+
+crates/drawer-core/src/layer_maintenance.rs
+crates/drawer-core/src/layer_maintenance_verify.rs
+crates/drawer-app/src/layer_maintenance.rs
+docs/process/layer-maintenance.md

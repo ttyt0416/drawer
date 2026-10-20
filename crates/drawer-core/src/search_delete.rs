@@ -1,6 +1,10 @@
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
-pub(super) fn prepare(d: &Document, selected: &[Key]) -> Result<DocumentState, String> {
+pub(super) fn prepare(
+    d: &Document,
+    selected: &[Key],
+    drop_exposures: bool,
+) -> Result<DocumentState, String> {
     let chosen = selected.iter().copied().collect::<BTreeSet<_>>();
     let targets = c::target_map(d);
     if selected.iter().any(|k| {
@@ -203,7 +207,7 @@ pub(super) fn prepare(d: &Document, selected: &[Key]) -> Result<DocumentState, S
             _ => {}
         }
     }
-    animation(&mut s, &chosen)?;
+    animation(&mut s, &chosen, drop_exposures)?;
     if s.scene
         .rulers
         .active
@@ -213,7 +217,11 @@ pub(super) fn prepare(d: &Document, selected: &[Key]) -> Result<DocumentState, S
     }
     Ok(s)
 }
-fn animation(s: &mut DocumentState, selected: &BTreeSet<Key>) -> Result<(), String> {
+fn animation(
+    s: &mut DocumentState,
+    selected: &BTreeSet<Key>,
+    drop_exposures: bool,
+) -> Result<(), String> {
     if !selected
         .iter()
         .any(|k| matches!(k, Key::Track(_) | Key::Cell { .. }))
@@ -263,7 +271,7 @@ fn animation(s: &mut DocumentState, selected: &BTreeSet<Key>) -> Result<(), Stri
         for (i, cell) in t.cells.iter().enumerate() {
             let id = ids.id(i);
             if selected.contains(&Key::Cell { track, cell: id }) {
-                if t.exposures.iter().any(|e| e.cell == i) {
+                if !drop_exposures && t.exposures.iter().any(|e| e.cell == i) {
                     return Err("A selected cell has exposures; select its complete animation folder or edit the timeline first".into());
                 }
                 if let Some(info) = s.scene.catalog.cell_info.get_mut(&track) {
@@ -277,6 +285,12 @@ fn animation(s: &mut DocumentState, selected: &BTreeSet<Key>) -> Result<(), Stri
         }
         if cell_values.is_empty() {
             return Err("Keep at least one cell in an animation folder".into());
+        }
+        if drop_exposures {
+            track_value.exposures.retain(|e| map[e.cell].is_some());
+            if track_value.exposures.is_empty() {
+                return Err("Keep at least one exposure in a retained animation folder".into());
+            }
         }
         for e in &mut track_value.exposures {
             e.cell = map[e.cell].ok_or("Selected cell exposure remains")?;

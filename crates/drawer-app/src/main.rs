@@ -49,6 +49,7 @@ mod layer_comps;
 mod layer_defaults;
 mod layer_folders;
 mod layer_groups;
+mod layer_maintenance;
 mod layer_manager;
 mod layer_masks;
 mod layer_merge;
@@ -184,6 +185,7 @@ struct Drawer {
     layer_manager: layer_manager::Panel,
     layer_properties: layer_properties::Panel,
     layer_merge: layer_merge::Panel,
+    layer_maintenance: layer_maintenance::Panel,
     layer_folders: layer_folders::Panel,
     adjustments: adjustments::Panel,
     layer_search: layer_search::Panel,
@@ -334,6 +336,7 @@ impl Drawer {
             layer_manager: Default::default(),
             layer_properties: Default::default(),
             layer_merge: Default::default(),
+            layer_maintenance: Default::default(),
             layer_folders: Default::default(),
             adjustments: Default::default(),
             layer_search: Default::default(),
@@ -775,6 +778,7 @@ impl Drawer {
         self.layer_manager_window(ui.ctx());
         self.layer_property_window(ui.ctx());
         self.layer_merge_window(ui.ctx());
+        self.layer_maintenance_window(ui.ctx());
         self.layer_folder_window(ui.ctx());
         self.adjustment_window(ui.ctx());
         self.layer_search_window(ui.ctx());
@@ -1613,6 +1617,10 @@ impl eframe::App for Drawer {
                     eprintln!("Layer folders/masks: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = layer_maintenance::smoke(&root) {
+                    eprintln!("Layer maintenance: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = layer_merge::smoke(&root) {
                     eprintln!("Layer merge/flatten: {e}");
                     fail_smoke();
@@ -1860,7 +1868,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

@@ -287,6 +287,15 @@ impl Drawer {
                 "align-objects" => self.begin_alignment()?,
                 "manage-layers" => self.begin_layer_manager()?,
                 "merge-layers" => self.begin_layer_merge()?,
+                "merge-visible-copy" => self.begin_layer_maintenance(
+                    drawer_core::layer_maintenance::Operation::VisibleCopy,
+                )?,
+                "delete-empty-layers" => {
+                    self.begin_layer_maintenance(drawer_core::layer_maintenance::Operation::Empty)?
+                }
+                "delete-hidden-layers" => {
+                    self.begin_layer_maintenance(drawer_core::layer_maintenance::Operation::Hidden)?
+                }
                 "layer-folders" => self.begin_layer_folders()?,
                 "adjustment-layer" => self.begin_adjustment()?,
                 "layer-search" => self.layer_search.open = true,

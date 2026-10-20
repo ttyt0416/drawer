@@ -303,3 +303,6 @@ mod color_storage_verify;
 pub mod float_render;
 #[cfg(test)]
 mod float_render_verify;
+
+pub mod layer_maintenance;
+pub mod layer_maintenance_verify;

@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 105] = [
+pub const EXTRA_COMMANDS: [&str; 108] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -77,6 +77,9 @@ pub const EXTRA_COMMANDS: [&str; 105] = [
     "layer-clipping",
     "layer-blend",
     "merge-layers",
+    "merge-visible-copy",
+    "delete-empty-layers",
+    "delete-hidden-layers",
     "layer-folders",
     "adjustment-layer",
     "layer-search",
@@ -430,6 +433,9 @@ impl Settings {
             "layer-appearance" => "Layer display color, border and watercolor edge",
             "layer-defaults" => "Choose and save defaults for new layers of the same kind",
             "layer-folders" => "Layer folders, wrapping and grayscale masks",
+            "merge-visible-copy" => "Copy the visible page to a new editable raster",
+            "delete-empty-layers" => "Preview and delete empty layers",
+            "delete-hidden-layers" => "Preview and delete hidden layers and review references",
             "merge-layers" => "Merge selected, merge down or flatten page",
             "layer-blend" => "Layer blend modes: Normal, Multiply, Screen, Overlay",
             "layer-clipping" => "Layer alpha protection, clipping and folder solo",
