@@ -339,6 +339,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         name: "Cut group".into(),
         children: vec![crate::paper::Node::Raster(0), crate::paper::Node::Raster(1)],
         paper: crate::paper::Paper {
+            space: Default::default(),
             fill: Default::default(),
             hidden: false,
             blend: Default::default(),

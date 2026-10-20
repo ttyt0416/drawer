@@ -36,6 +36,7 @@ fn pixels(d: &Document) -> Vec<[u8; 4]> {
 }
 fn mask(alpha: u8) -> Mask {
     Mask {
+        space: Default::default(),
         coverage: crate::selection::Mask {
             runs: if alpha == 0 {
                 vec![]

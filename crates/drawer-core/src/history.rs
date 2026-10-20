@@ -320,6 +320,7 @@ impl Document {
         crate::layer_catalog::reconcile(self, &mut after)?;
         crate::render_order::reconcile(&mut after);
         crate::file_objects::prune(&mut after);
+        crate::layer_groups::prune(&mut after)?;
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)

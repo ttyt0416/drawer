@@ -4,6 +4,13 @@ use crate::{
     sizing::DocumentState,
 };
 pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState, String> {
+    crate::layer_groups::move_linked(d, &[key], delta)
+}
+pub(crate) fn prepare_single(
+    d: &Document,
+    key: Key,
+    delta: [i64; 2],
+) -> Result<DocumentState, String> {
     if c::thumbnail(d, key).is_none() {
         return Err("Movement source was removed".into());
     }
@@ -30,9 +37,7 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
             _ => None,
         };
         if let Some(mask) = effect.and_then(|e| e.mask.as_mut()).filter(|m| m.linked) {
-            for (a, b) in mask.offset.iter_mut().zip(v) {
-                *a += b;
-            }
+            mask.shift(v)?;
         }
         match t {
             p::Target::Raster(id) => {
@@ -41,14 +46,7 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                 }
             }
             p::Target::Folder(n) if !s.scene.paper.folders[n as usize].through => {
-                for (a, b) in s.scene.paper.folders[n as usize]
-                    .paper
-                    .origin
-                    .iter_mut()
-                    .zip(v)
-                {
-                    *a += b;
-                }
+                s.scene.paper.folders[n as usize].paper.shift(v);
             }
             _ => {}
         }
@@ -61,7 +59,7 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
             crate::layers::index(d, id).ok_or("Missing raster")?,
             crate::precision::Target::Layer,
         )?
-        .preview_total(d, delta);
+        .preview_total_single(d, delta);
     }
     if let p::Target::Vector(id) = t {
         return crate::ruler_scope::translate_layer(d, crate::line_tools::Target::Vector(id), dp);
@@ -139,7 +137,10 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                 if depth > 16 {
                     return Err("Folder movement depth limit".into());
                 }
-                p::movable(d, p::Target::Folder(n as u16))?;
+                let flags = p::inherited(d, p::Target::Folder(n as u16));
+                if flags.locked || flags.position_locked {
+                    return Err("A child folder is locked".into());
+                }
                 if depth > 0 {
                     crate::file_objects::shift(
                         &mut s.scene,
@@ -153,9 +154,7 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                     inv.0[1] * dp[0] + inv.0[3] * dp[1],
                 ];
                 if !s.scene.paper.folders[n].through {
-                    for (a, b) in s.scene.paper.folders[n].paper.origin.iter_mut().zip(v) {
-                        *a += b;
-                    }
+                    s.scene.paper.folders[n].paper.shift(v);
                 }
                 if let Some(m) = s
                     .scene
@@ -165,14 +164,15 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                     .and_then(|e| e.mask.as_mut())
                     .filter(|m| m.linked)
                 {
-                    for (a, b) in m.offset.iter_mut().zip(v) {
-                        *a += b;
-                    }
+                    m.shift(v)?;
                 }
                 for node in d.scene.paper.folders[n].children.iter().copied() {
                     match node {
                         crate::paper::Node::Raster(i) => {
-                            p::movable(d, p::raster(d, i))?;
+                            let flags = p::inherited(d, p::raster(d, i));
+                            if flags.locked || flags.position_locked {
+                                return Err("A child layer is locked".into());
+                            }
                             crate::alignment::shift(d, s, crate::alignment::Item::Raster(i), dp)?;
                             s.scene.paper.shift_layer(i, v);
                         }
@@ -183,6 +183,7 @@ pub fn prepare(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState,
                     if g.scope == crate::ruler_scope::Scope::Folder(n as u16)
                         && let Some(old) = d.scene.rulers.guides.iter().find(|v| v.id == g.id)
                     {
+                        let v = old.space.inverse().vector(v);
                         g.offset = [old.offset[0] + v[0], old.offset[1] + v[1]];
                     }
                 }

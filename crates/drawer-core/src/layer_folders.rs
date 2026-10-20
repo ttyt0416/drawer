@@ -474,6 +474,7 @@ pub fn rectangle_mask(d: &Document, bounds: crate::scene::Rect, gray: u8) -> Res
         return Err("Mask coordinate/run limit".into());
     }
     Ok(Mask {
+        space: Default::default(),
         coverage,
         offset: [0.; 2],
         enabled: true,

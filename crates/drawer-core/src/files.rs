@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 58;
+const VERSION: u32 = 59;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -180,6 +180,11 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 59 && crate::layer_groups::requires_v59(&document.scene) {
+            return Err(invalid(
+                "Linked groups and local appearance frames require document version 59",
+            ));
+        }
         if version < 58 && !document.scene.layer_comps.is_default() {
             return Err(invalid("Layer comps require document version 58"));
         }
@@ -230,7 +235,10 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     {
         return Err(invalid("Invalid animation source identities"));
     }
-    if !crate::render_order::valid_live(&document) || !crate::file_objects::valid_live(&document) {
+    if !crate::layer_groups::valid_live(&document)
+        || !crate::render_order::valid_live(&document)
+        || !crate::file_objects::valid_live(&document)
+    {
         return Err(invalid("Invalid file-layer source identity"));
     }
     crate::appearance::limits(
@@ -301,7 +309,10 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     {
         return Err(invalid("Invalid animation source identities"));
     }
-    if !crate::render_order::valid_live(document) || !crate::file_objects::valid_live(document) {
+    if !crate::layer_groups::valid_live(document)
+        || !crate::render_order::valid_live(document)
+        || !crate::file_objects::valid_live(document)
+    {
         return Err(invalid("Invalid file-layer source identity"));
     }
     crate::appearance::limits(

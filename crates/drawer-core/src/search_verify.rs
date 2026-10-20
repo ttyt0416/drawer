@@ -549,6 +549,7 @@ mod tests {
         );
         scene.rulers.next_id = 2;
         scene.rulers.guides.push(crate::rulers::Guide {
+            space: Default::default(),
             enabled: true,
             display: Default::default(),
             scope: crate::ruler_scope::Scope::Folder(1),

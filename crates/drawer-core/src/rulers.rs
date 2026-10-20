@@ -15,6 +15,8 @@ pub enum Kind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Guide {
+    #[serde(default, skip_serializing_if = "Affine::is_identity")]
+    pub space: Affine,
     #[serde(default = "enabled")]
     pub enabled: bool,
     #[serde(default)]
@@ -91,7 +93,8 @@ impl Data {
                 .active
                 .is_none_or(|id| self.guides.iter().any(|g| g.id == id))
             && self.guides.iter().all(|g| {
-                g.id > 0
+                g.space.valid()
+                    && g.id > 0
                     && g.id < self.next_id
                     && g.name == g.name.trim()
                     && !g.name.is_empty()
@@ -127,6 +130,7 @@ impl Data {
         let id = next.next_id;
         next.next_id = next.next_id.checked_add(1).ok_or("Ruler identity limit")?;
         next.guides.push(Guide {
+            space: Default::default(),
             enabled: true,
             display: Default::default(),
             scope: Default::default(),

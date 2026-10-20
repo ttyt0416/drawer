@@ -474,6 +474,11 @@ impl Drawer {
         {
             self.status = Some(e);
         }
+        if ui.button("Linked layer groups").clicked()
+            && let Err(e) = self.begin_layer_groups()
+        {
+            self.status = Some(e);
+        }
         if ui.button("Transfer content down").clicked()
             && let Err(e) = self.begin_transfer_down()
         {

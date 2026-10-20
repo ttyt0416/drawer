@@ -100,6 +100,8 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub move_settings: drawer_core::layer_move::Settings,
+    pub move_selected: Option<drawer_core::layer_search::Key>,
     pub quick_mask: bool,
     pub quick_previous: Option<super::precision::Mode>,
     pub ruler_disabled: bool,
@@ -1183,6 +1185,8 @@ impl Drawing {
                 drawer_core::layer_pick::Modifier::Shift => ui.input(|i| i.modifiers.shift),
             };
             if pick
+                && !(self.mode == super::precision::Mode::Move
+                    && self.move_settings.source != drawer_core::layer_move::Source::Current)
                 && matches!(
                     self.mode,
                     super::precision::Mode::Move
@@ -1196,11 +1200,25 @@ impl Drawing {
                 self.pick_point = Some((doc.id, point));
                 if let Some(target) =
                     drawer_core::layer_pick::candidates(doc, point, self.pick_settings)
-                        .first()
-                        .copied()
+                        .into_iter()
+                        .find(|t| {
+                            self.mode != super::precision::Mode::Move
+                                || self.move_settings == Default::default()
+                                || drawer_core::layer_catalog::from_thumbnail(doc, *t).is_some_and(
+                                    |k| {
+                                        drawer_core::layer_move::eligible(
+                                            doc,
+                                            k,
+                                            self.move_settings,
+                                        )
+                                    },
+                                )
+                        })
                 {
                     let moving = self.mode == super::precision::Mode::Move;
-                    self.picked_layer = Some((doc.id, target, moving));
+                    if !moving || self.move_settings.auto_select {
+                        self.picked_layer = Some((doc.id, target, moving));
+                    }
                     layer = match target {
                         drawer_core::thumbnail::Target::Raster(n) => Some(n),
                         _ => None,
@@ -1817,6 +1835,7 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         self.drawing.frame_time = ctx.input(|i| i.time);
         self.drawing.move_target = self.precision.target;
+        self.drawing.move_settings = self.workspaces.store.current.layer_move;
         self.drawing.move_source = self.active.and_then(|n| {
             let d = &self.documents[n];
             drawer_core::layer_catalog::from_thumbnail(
@@ -1828,6 +1847,7 @@ impl Drawer {
                     .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
             )
         });
+        self.drawing.move_selected = self.drawing.move_source;
         self.drawing.move_layer = self.active.and_then(|n| {
             match self
                 .panels

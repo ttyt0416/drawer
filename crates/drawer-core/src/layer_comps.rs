@@ -118,7 +118,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
         return Err("Layer comp snapshot exceeds document budget".into());
     }
     if matches!(command, Command::Capture { .. } | Command::Apply(_))
-        && d.scene.clipping.solo.is_some()
+        && (d.scene.clipping.solo.is_some() || d.scene.layer_groups.solo.is_some())
     {
         return Err("Restore folder solo before saving or applying a comp".into());
     }

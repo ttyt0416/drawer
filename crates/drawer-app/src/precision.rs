@@ -61,6 +61,7 @@ fn arrow(key: egui::Key) -> Option<[i64; 2]> {
 }
 impl Drawer {
     pub(super) fn precision_controls(&mut self, ui: &mut egui::Ui) {
+        self.layer_move_controls(ui);
         self.enclosure_controls(ui);
         self.shapes_controls(ui);
         self.snapping_controls(ui);

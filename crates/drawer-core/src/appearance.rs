@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, VecDeque};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Style {
+    #[serde(default, skip_serializing_if = "crate::scene::Affine::is_identity")]
+    pub scope_space: crate::scene::Affine,
     pub enabled: bool,
     pub color: Option<[u8; 3]>,
     pub border: u8,
@@ -22,6 +24,7 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
+            scope_space: Default::default(),
             enabled: false,
             color: None,
             border: 0,
@@ -36,7 +39,8 @@ impl Style {
         self.enabled && (self.color.is_some() || self.border > 0 || self.rim > 0.)
     }
     pub fn valid(&self) -> bool {
-        self.border <= 32
+        self.scope_space.valid()
+            && self.border <= 32
             && (0. ..=1.).contains(&self.rim)
             && self.scope.as_ref().is_none_or(Shape::valid)
     }
@@ -44,6 +48,7 @@ impl Style {
         let Some(s) = &self.scope else {
             return 1.;
         };
+        let original = self.scope_space.inverse().map(original);
         let point = [
             original[0] - s.translation[0],
             original[1] - s.translation[1],
@@ -249,9 +254,12 @@ pub(crate) fn shift(scene: &mut crate::scene::Scene, t: crate::line_tools::Targe
         crate::line_tools::Target::Vector(id) => scene.appearance.vectors.get_mut(&id),
         _ => None,
     };
-    if let Some(shape) = style.and_then(|s| s.scope.as_mut()) {
-        for (a, b) in shape.translation.iter_mut().zip(v) {
-            *a += b;
+    if let Some(style) = style {
+        let v = style.scope_space.inverse().vector(v);
+        if let Some(shape) = &mut style.scope {
+            for (a, b) in shape.translation.iter_mut().zip(v) {
+                *a += b;
+            }
         }
     }
 }

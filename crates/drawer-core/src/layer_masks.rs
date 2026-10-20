@@ -51,9 +51,11 @@ fn bounds(mask: &Mask) -> Option<([f64; 2], [f64; 2])> {
     for r in &mask.coverage.runs {
         let a = [r.x as f64 + mask.offset[0], r.y as f64 + mask.offset[1]];
         let b = [a[0] + r.length as f64, a[1] + 1.];
-        for k in 0..2 {
-            min[k] = min[k].min(a[k]);
-            max[k] = max[k].max(b[k]);
+        for p in [a, [b[0], a[1]], b, [a[0], b[1]]].map(|p| mask.space.map(p)) {
+            for k in 0..2 {
+                min[k] = min[k].min(p[k]);
+                max[k] = max[k].max(p[k]);
+            }
         }
     }
     Some((min, max))
@@ -123,6 +125,7 @@ fn selection(d: &Document, hide_inside: bool) -> Result<Mask, String> {
         return Err("Create a nonempty area selection first".into());
     }
     Ok(Mask {
+        space: Default::default(),
         coverage,
         offset,
         enabled: true,
@@ -137,6 +140,7 @@ fn intersect(old: &Mask, new: &Mask) -> Result<Mask, String> {
     let mut all = bounds(old).into_iter().chain(bounds(new));
     let Some((mut min, mut max)) = all.next() else {
         return Ok(Mask {
+            space: Default::default(),
             coverage: Default::default(),
             offset: [0.; 2],
             enabled: true,
@@ -156,6 +160,7 @@ fn intersect(old: &Mask, new: &Mask) -> Result<Mask, String> {
         if inverted { 255 - a } else { a }
     })?;
     Ok(Mask {
+        space: Default::default(),
         coverage,
         offset: [0.; 2],
         enabled: true,
@@ -233,8 +238,7 @@ pub fn prepare(d: &Document, target: Target, command: Command) -> Result<Prepare
                         return Err("Mask movement limit".into());
                     }
                     let inv = d.scene.transform.inverse();
-                    mask.offset[0] += inv.0[0] * delta[0] + inv.0[2] * delta[1];
-                    mask.offset[1] += inv.0[1] * delta[0] + inv.0[3] * delta[1];
+                    mask.shift(inv.vector(delta))?;
                 }
                 _ => unreachable!(),
             };

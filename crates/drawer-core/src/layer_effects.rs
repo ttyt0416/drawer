@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Mask {
+    #[serde(default, skip_serializing_if = "crate::scene::Affine::is_identity")]
+    pub space: crate::scene::Affine,
     pub coverage: crate::selection::Mask,
     pub offset: Point,
     pub enabled: bool,
@@ -12,10 +14,21 @@ pub struct Mask {
     pub inverted: bool,
 }
 impl Mask {
+    pub(crate) fn shift(&mut self, delta: Point) -> Result<(), String> {
+        let v = self.space.inverse().vector(delta);
+        self.offset[0] += v[0];
+        self.offset[1] += v[1];
+        if self.valid() {
+            Ok(())
+        } else {
+            Err("Mask position limit".into())
+        }
+    }
     pub fn factor(&self, p: Point) -> f32 {
         if !self.enabled {
             return 1.;
         }
+        let p = self.space.inverse().map(p);
         let a = self
             .coverage
             .coverage([p[0] - self.offset[0], p[1] - self.offset[1]]) as f32
@@ -23,7 +36,9 @@ impl Mask {
         if self.inverted { 1. - a } else { a }
     }
     fn valid(&self) -> bool {
-        self.coverage.valid() && self.offset.iter().all(|n| n.is_finite() && n.abs() <= 1e9)
+        self.space.valid()
+            && self.coverage.valid()
+            && self.offset.iter().all(|n| n.is_finite() && n.abs() <= 1e9)
     }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,11 +243,7 @@ pub fn shift(
         _ => None,
     };
     if let Some(mask) = effect.and_then(|e| e.mask.as_mut()).filter(|m| m.linked) {
-        let next = [mask.offset[0] + shift[0], mask.offset[1] + shift[1]];
-        if next.iter().any(|n| !n.is_finite() || n.abs() > 1e9) {
-            return Err("Linked mask position limit".into());
-        }
-        mask.offset = next;
+        mask.shift(shift)?;
     }
     Ok(())
 }

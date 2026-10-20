@@ -36,6 +36,23 @@ impl Nudge {
         if target != Target::Boundary {
             crate::layer_properties::movable(doc, crate::layer_properties::raster(doc, layer))?;
         }
+        if target == Target::Layer {
+            let key = crate::layer_search::Key::Layer(crate::layer_properties::raster(doc, layer));
+            if doc
+                .scene
+                .layer_groups
+                .groups
+                .iter()
+                .any(|g| g.linked[0] && g.members.contains(&key))
+            {
+                let keys = crate::layer_groups::expanded(
+                    doc,
+                    &[key],
+                    crate::layer_groups::Operation::Move,
+                )?;
+                crate::layer_groups::preflight(doc, &keys, crate::layer_groups::Operation::Move)?;
+            }
+        }
         if target == Target::Pixels {
             crate::layer_properties::paintable(doc, layer)?;
         }
@@ -94,6 +111,32 @@ impl Nudge {
     }
     /// Preview against a frozen source; releasing a drag commits this state once.
     pub fn preview_total(&self, doc: &Document, total: [i64; 2]) -> Result<DocumentState, String> {
+        if !self.matches(doc, self.layer, self.target) {
+            return Err("The movement target changed; start a fresh key press".into());
+        }
+        let key = crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(
+            self.base.scene.layer_ids.id(self.layer),
+        ));
+        if self.target == Target::Layer
+            && self
+                .base
+                .scene
+                .layer_groups
+                .groups
+                .iter()
+                .any(|g| g.linked[0] && g.members.contains(&key))
+        {
+            let base = crate::layer_merge::preview(&self.base, doc.current_frame)?;
+            crate::layer_groups::move_linked(&base, &[key], total)
+        } else {
+            self.preview_total_single(doc, total)
+        }
+    }
+    pub(crate) fn preview_total_single(
+        &self,
+        doc: &Document,
+        total: [i64; 2],
+    ) -> Result<DocumentState, String> {
         if !self.matches(doc, self.layer, self.target) {
             return Err("The movement target changed; start a fresh key press".into());
         }

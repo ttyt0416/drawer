@@ -1,7 +1,13 @@
 //! Pointer movement shares the precision engine and commits only on release.
 use super::*;
 use drawer_core::precision::{Nudge, Target};
+struct Plan {
+    settings: drawer_core::layer_move::Settings,
+    keys: Vec<drawer_core::layer_search::Key>,
+    initial: Option<drawer_core::layer_search::Key>,
+}
 pub(super) struct Gesture {
+    plan: Option<Box<Plan>>,
     pub document: u64,
     pub view: u64,
     pub projection: Projection,
@@ -39,23 +45,78 @@ impl Drawing {
         root: egui::Rect,
         pos: egui::Pos2,
     ) -> Result<(), String> {
-        let key = (self.move_target == Target::Layer)
-            .then_some(self.move_source)
-            .flatten()
-            .filter(|k| {
-                !matches!(
-                    k,
-                    drawer_core::layer_search::Key::Layer(
-                        drawer_core::layer_properties::Target::Raster(_)
+        use drawer_core::{
+            layer_catalog as catalog, layer_properties as properties, layer_search::Key,
+        };
+        let current = self
+            .move_source
+            .or_else(|| layer.map(|n| Key::Layer(properties::raster(doc, n))));
+        let linked = current.is_some_and(|k| {
+            doc.scene
+                .layer_groups
+                .groups
+                .iter()
+                .any(|g| g.linked[0] && g.members.contains(&k))
+        });
+        let plan = if self.move_target == Target::Layer
+            && (linked || self.move_settings != Default::default())
+        {
+            let keys = drawer_core::layer_move::resolve(
+                doc,
+                current.ok_or("Select a movement layer")?,
+                projection.point(pos),
+                self.move_settings,
+            )?;
+            if self.move_settings.auto_select
+                && let Some(t) = catalog::thumbnail(doc, keys[0])
+            {
+                self.picked_layer = Some((doc.id, t, true));
+            }
+            Some(Box::new(Plan {
+                settings: self.move_settings,
+                keys,
+                initial: self.move_selected,
+            }))
+        } else if self.move_target == Target::Pixels && self.move_settings.keep_original {
+            let n = layer.ok_or("Select a raster layer for selected pixel copies")?;
+            properties::paintable(doc, n)?;
+            if doc.scene.selection_empty() {
+                return Err("Create a nonempty pixel selection first".into());
+            }
+            Some(Box::new(Plan {
+                settings: self.move_settings,
+                keys: vec![Key::Layer(properties::raster(doc, n))],
+                initial: self.move_selected,
+            }))
+        } else {
+            None
+        };
+        let key = plan.as_ref().map(|p| p.keys[0]).or_else(|| {
+            (self.move_target == Target::Layer)
+                .then_some(self.move_source)
+                .flatten()
+                .filter(|k| {
+                    !matches!(
+                        k,
+                        drawer_core::layer_search::Key::Layer(
+                            drawer_core::layer_properties::Target::Raster(_)
+                        )
                     )
-                )
-            });
+                })
+        });
         let layer = if self.move_target == Target::Boundary || key.is_some() {
             layer.unwrap_or(0)
         } else {
             layer.ok_or("Select a raster layer")?
         };
-        let engine = if let Some(key) = key {
+        let layer = if let Some(Key::Layer(properties::Target::Raster(id))) = key {
+            drawer_core::layers::index(doc, id).ok_or("Missing movement raster")?
+        } else {
+            layer
+        };
+        let engine = if plan.is_some() {
+            None
+        } else if let Some(key) = key {
             drawer_core::search_move::prepare(doc, key, [0; 2])?;
             None
         } else {
@@ -90,13 +151,66 @@ impl Drawing {
             Some(_) => vec![],
             None => vec![drawer_core::alignment::Item::Raster(layer)],
         };
+        let excluded = if let Some(plan) = &plan {
+            let mut out = vec![];
+            for key in drawer_core::layer_groups::content_members(doc, &plan.keys)? {
+                match catalog::target(doc, key) {
+                    Some(properties::Target::Raster(id)) => {
+                        if let Some(n) = drawer_core::layers::index(doc, id) {
+                            out.push(drawer_core::alignment::Item::Raster(n));
+                        }
+                    }
+                    Some(properties::Target::Vector(id)) => {
+                        for l in doc.scene.lines.layers.iter().filter(|l| l.id == id) {
+                            out.extend(
+                                l.paths
+                                    .iter()
+                                    .map(|p| drawer_core::alignment::Item::Vector(p.id)),
+                            );
+                        }
+                    }
+                    Some(properties::Target::Object(id)) => {
+                        if let Some(n) = catalog::source_index(doc, Key::Object(id)) {
+                            out.push(drawer_core::alignment::Item::Object(n));
+                        }
+                    }
+                    Some(properties::Target::Gradient(id)) => {
+                        out.push(drawer_core::alignment::Item::Gradient(id))
+                    }
+                    _ => {}
+                }
+            }
+            out
+        } else {
+            excluded
+        };
         let geometry = drawer_core::object_snap::Geometry::new(doc, self.snap_settings, &excluded)?;
-        let bounds = if let Some(key) = key {
-            drawer_core::layer_catalog::bounds(doc, key).ok_or("Source has no canvas bounds")?
+        let bounds = if let Some(plan) = &plan {
+            let all = plan
+                .keys
+                .iter()
+                .filter_map(|k| catalog::bounds(doc, *k))
+                .collect::<Vec<_>>();
+            if all.is_empty() {
+                return Err("Selected movement sources have no canvas bounds".into());
+            }
+            drawer_core::scene::Rect {
+                min: std::array::from_fn(|k| {
+                    all.iter().map(|r| r.min[k]).fold(f64::INFINITY, f64::min)
+                }),
+                max: std::array::from_fn(|k| {
+                    all.iter()
+                        .map(|r| r.max[k])
+                        .fold(f64::NEG_INFINITY, f64::max)
+                }),
+            }
+        } else if let Some(key) = key {
+            catalog::bounds(doc, key).ok_or("Source has no canvas bounds")?
         } else {
             drawer_core::alignment::bounds(doc, drawer_core::alignment::Item::Raster(layer))?
         };
         self.movement = Some(Gesture {
+            plan,
             document: doc.id,
             revision: doc.revision,
             view,
@@ -151,7 +265,10 @@ impl Drawing {
                 event.position[1] as f32,
             ));
             let mut delta = [p[0] - s.origin[0], p[1] - s.origin[1]];
-            if s.target == Target::Layer && s.key.is_none() && !self.snap_disabled {
+            if s.target == Target::Layer
+                && (s.key.is_none() || s.plan.is_some())
+                && !self.snap_disabled
+            {
                 s.snap_work = s
                     .snap_work
                     .saturating_add(s.geometry.work().saturating_mul(5));
@@ -178,8 +295,17 @@ impl Drawing {
         }
         if event.phase == Phase::Up {
             self.ownership.clear();
-            if let Err(e) = s.state(doc).and_then(|state| doc.commit_state(state)) {
-                self.error = Some(e);
+            match s.prepared(doc) {
+                Ok(result) => {
+                    if let Err(e) = doc.commit_state(result.state) {
+                        self.error = Some(e);
+                    } else if s.plan.as_ref().is_some_and(|p| p.settings.auto_select)
+                        && let Some(t) = drawer_core::layer_catalog::thumbnail(doc, result.selected)
+                    {
+                        self.picked_layer = Some((doc.id, t, s.target == Target::Layer));
+                    }
+                }
+                Err(e) => self.error = Some(e),
             }
             return;
         }
@@ -270,6 +396,10 @@ impl Drawing {
 }
 impl Gesture {
     fn selected(&self, d: &Drawing) -> bool {
+        if let Some(p) = &self.plan {
+            return p.settings == d.move_settings
+                && (d.move_source == p.initial || d.move_source == Some(p.keys[0]));
+        }
         if let Some(k) = self.key {
             d.move_source == Some(k)
         } else {
@@ -277,15 +407,37 @@ impl Gesture {
         }
     }
     fn state(&self, d: &Document) -> Result<drawer_core::sizing::DocumentState, String> {
-        if let Some(e) = &self.engine {
-            e.preview_total(d, self.total)
+        Ok(self.prepared(d)?.state)
+    }
+    fn prepared(&self, d: &Document) -> Result<drawer_core::layer_move::Prepared, String> {
+        if let Some(plan) = &self.plan {
+            if self.target == Target::Pixels {
+                return drawer_core::layer_move::copy_selected_pixels(d, self.layer, self.total);
+            }
+            return drawer_core::layer_move::prepare(
+                d,
+                &plan.keys,
+                self.total,
+                plan.settings.keep_original,
+            );
+        }
+        let state = if let Some(e) = &self.engine {
+            e.preview_total(d, self.total)?
         } else {
             drawer_core::search_move::prepare(
                 d,
                 self.key.ok_or("Missing movement source")?,
                 self.total,
-            )
-        }
+            )?
+        };
+        Ok(drawer_core::layer_move::Prepared {
+            state,
+            selected: self.key.unwrap_or_else(|| {
+                drawer_core::layer_search::Key::Layer(drawer_core::layer_properties::raster(
+                    d, self.layer,
+                ))
+            }),
+        })
     }
 }
 fn movement_revision(total: [i64; 2]) -> u64 {

@@ -516,3 +516,13 @@ crates/drawer-core/src/transfer_down.rs
 crates/drawer-core/src/transfer_down_verify.rs
 crates/drawer-app/src/transfer_down.rs
 docs/process/transfer-down.md
+
+crates/drawer-core/src/layer_groups.rs
+crates/drawer-core/src/group_edits.rs
+crates/drawer-core/src/layer_move.rs
+crates/drawer-core/src/layer_move_copy.rs
+crates/drawer-core/src/layer_groups_verify.rs
+crates/drawer-core/src/layer_move_verify.rs
+crates/drawer-app/src/layer_groups.rs
+crates/drawer-app/src/layer_move.rs
+docs/process/linked-layers.md

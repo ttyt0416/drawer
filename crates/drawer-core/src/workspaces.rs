@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub layer_move: crate::layer_move::Settings,
+    #[serde(default)]
     pub layer_mask_overlay: bool,
     #[serde(default)]
     pub layer_defaults: crate::layer_defaults::Data,
@@ -400,6 +402,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             version: 1,
+            layer_move: Default::default(),
             layer_mask_overlay: false,
             layer_search: Default::default(),
             layer_defaults: Default::default(),
@@ -613,6 +616,7 @@ impl Snapshot {
             next.snapping = incoming.snapping;
             next.selection_outline = incoming.selection_outline;
             next.layer_mask_overlay = incoming.layer_mask_overlay;
+            next.layer_move = incoming.layer_move;
             next.layer_colors = incoming.layer_colors;
             next.layer_search = incoming.layer_search.clone();
             next.layer_defaults = incoming.layer_defaults.clone();

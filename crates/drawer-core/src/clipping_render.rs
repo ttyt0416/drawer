@@ -33,7 +33,11 @@ fn atop(
             opaque,
             top.rgba(),
             1.0,
-            original.map(|n| n.floor() as i64),
+            paper
+                .space
+                .inverse()
+                .map(original)
+                .map(|n| n.floor() as i64),
             paper.seed,
         );
         for (i, c) in result[..3].iter().enumerate() {
@@ -154,13 +158,19 @@ impl<F: FnMut(usize, &RasterLayer) -> [u8; 4]> Sample<'_, F> {
         if paper.blend == crate::brush_composite::Mode::Normal {
             dst.over(source);
         } else {
-            *dst = Color::from(paper.blend.compose(
-                dst.rgba(),
-                source.rgba(),
-                1.0,
-                self.original.map(|p| p.floor() as i64),
-                paper.seed,
-            ));
+            *dst = Color::from(
+                paper.blend.compose(
+                    dst.rgba(),
+                    source.rgba(),
+                    1.0,
+                    paper
+                        .space
+                        .inverse()
+                        .map(self.original)
+                        .map(|p| p.floor() as i64),
+                    paper.seed,
+                ),
+            );
         }
     }
     fn nodes(&mut self, nodes: &[Node], dst: &mut Color, depth: usize) {

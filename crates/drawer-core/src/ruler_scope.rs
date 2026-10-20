@@ -68,7 +68,9 @@ pub fn linked_visible(doc: &Document, target: Target) -> bool {
     }
 }
 pub fn transform(doc: &Document, g: &crate::rulers::Guide) -> Option<Affine> {
-    let t = Affine([1.0, 0.0, 0.0, 1.0, g.offset[0], g.offset[1]]).then(doc.scene.transform);
+    let t = Affine([1.0, 0.0, 0.0, 1.0, g.offset[0], g.offset[1]])
+        .then(g.space)
+        .then(doc.scene.transform);
     t.valid().then_some(t)
 }
 pub fn applies(doc: &Document, g: &crate::rulers::Guide, target: Target) -> bool {
@@ -86,6 +88,7 @@ pub fn shift(scene: &mut Scene, target: Target, delta: Point) -> Result<(), Stri
     let delta = [p[0] - zero[0], p[1] - zero[1]];
     for g in &mut scene.rulers.guides {
         if g.link == Some(target) {
+            let delta = g.space.inverse().vector(delta);
             g.offset = [g.offset[0] + delta[0], g.offset[1] + delta[1]];
             if g.offset.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
                 return Err("Linked ruler movement exceeds coordinate limit".into());

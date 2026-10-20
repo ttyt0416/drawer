@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paper {
+    #[serde(default, skip_serializing_if = "crate::scene::Affine::is_identity")]
+    pub space: crate::scene::Affine,
     #[serde(
         default,
         skip_serializing_if = "crate::fill_reference::Tags::is_default"
@@ -27,6 +29,11 @@ pub struct Paper {
     pub origin: Point,
 }
 impl Paper {
+    pub(crate) fn shift(&mut self, delta: Point) {
+        let v = self.space.inverse().vector(delta);
+        self.origin[0] += v[0];
+        self.origin[1] += v[1];
+    }
     fn add(self, color: &mut Color, pixel: [u8; 4], original: Point, opacity: f64) {
         if self.hidden || opacity <= 0.0 {
             return;
@@ -41,15 +48,18 @@ impl Paper {
                 color.rgba(),
                 pixel,
                 opacity,
-                original.map(|v| v.floor() as i64),
+                self.space.inverse().map(original).map(|v| v.floor() as i64),
                 self.seed,
             ));
         }
     }
     fn valid(self) -> bool {
-        self.pattern.valid() && self.origin.iter().all(|v| v.is_finite() && v.abs() <= 1e12)
+        self.space.valid()
+            && self.pattern.valid()
+            && self.origin.iter().all(|v| v.is_finite() && v.abs() <= 1e12)
     }
     pub fn shade(self, color: [u8; 4], original: Point) -> [u8; 4] {
+        let original = self.space.inverse().map(original);
         self.pattern.shade(
             color,
             [original[0] - self.origin[0], original[1] - self.origin[1]],
@@ -300,8 +310,7 @@ impl Graph {
     }
     pub fn shift_layer(&mut self, index: usize, delta: Point) {
         if let Some(p) = self.layers.get_mut(&index) {
-            p.origin[0] += delta[0];
-            p.origin[1] += delta[1];
+            p.shift(delta);
         }
     }
     pub fn missing(&self) -> Vec<String> {

@@ -312,6 +312,9 @@ fn contains_folder(g: &Graph, root: usize, target: usize, depth: usize) -> bool 
             })
 }
 pub fn solo(doc: &Document, folder: Option<usize>) -> Result<DocumentState, String> {
+    if doc.scene.layer_groups.solo.is_some() {
+        return Err("Restore linked-layer solo visibility first".into());
+    }
     if doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Solo snapshot budget".into());
     }
@@ -399,7 +402,7 @@ pub fn validate_state(doc: &Document, after: &DocumentState) -> Result<(), Strin
         else {
             continue;
         };
-        if old.pixels == new.pixels {
+        if old.pixels == new.pixels || crate::group_edits::geometry_matches(doc, after, id) {
             continue;
         }
         if !new.valid(after.width, after.height) {

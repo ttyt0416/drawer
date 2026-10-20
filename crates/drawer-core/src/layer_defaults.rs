@@ -181,6 +181,7 @@ pub fn capture(d: &Document, key: Key, fields: Fields) -> Result<Entry, String> 
     let properties = p::properties(d, t);
     let mut appearance = d.scene.appearance.get(t).cloned().unwrap_or_default();
     appearance.scope = None;
+    appearance.scope_space = Default::default();
     let e = Entry {
         class,
         fields,

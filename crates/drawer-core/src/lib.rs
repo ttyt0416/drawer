@@ -270,3 +270,13 @@ pub mod layer_masks_verify;
 
 pub mod transfer_down;
 pub mod transfer_down_verify;
+
+pub mod layer_groups;
+
+pub mod group_edits;
+
+pub mod layer_move;
+
+pub mod layer_groups_verify;
+
+pub mod layer_move_verify;

@@ -37,6 +37,15 @@ impl Default for Affine {
     }
 }
 impl Affine {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
+    pub fn vector(self, p: Point) -> Point {
+        [
+            self.0[0] * p[0] + self.0[2] * p[1],
+            self.0[1] * p[0] + self.0[3] * p[1],
+        ]
+    }
     pub fn map(self, [x, y]: Point) -> Point {
         let [a, b, c, d, e, f] = self.0;
         [a * x + c * y + e, b * x + d * y + f]
@@ -184,6 +193,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::layer_groups::Data::is_default")]
+    pub layer_groups: crate::layer_groups::Data,
     #[serde(default, skip_serializing_if = "crate::layer_comps::Data::is_default")]
     pub layer_comps: crate::layer_comps::Data,
     #[serde(default, skip_serializing_if = "crate::render_order::Data::is_default")]
@@ -262,7 +273,7 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
-        self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
+        self.layer_groups.valid() && self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
             && !self.clipping.rasters.iter().any(|(id,base)|self.render_order.deferred(*id)||matches!(base,crate::layer_properties::Target::Raster(id)if self.render_order.deferred(*id)))
             && self.file_objects.valid(missing)
             && self.file_objects.entries.iter().all(|l| {
@@ -365,7 +376,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.layer_comps.bytes()
+        self.layer_groups.bytes()
+            + self.layer_comps.bytes()
             + self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()
             + self.file_objects.bytes()
             + self.appearance.bytes()
