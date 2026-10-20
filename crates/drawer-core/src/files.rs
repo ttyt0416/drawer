@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 57;
+const VERSION: u32 = 58;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -180,6 +180,9 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 58 && !document.scene.layer_comps.is_default() {
+            return Err(invalid("Layer comps require document version 58"));
+        }
         if version < 56 && !document.scene.render_order.is_default() {
             return Err(invalid(
                 "Source raster positions require document version 56",

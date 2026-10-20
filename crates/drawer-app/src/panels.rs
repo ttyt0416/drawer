@@ -474,6 +474,11 @@ impl Drawer {
         {
             self.status = Some(e);
         }
+        if ui.button("Layer comps").clicked()
+            && let Err(e) = self.begin_layer_comps()
+        {
+            self.status = Some(e);
+        }
         if kind != Kind::Timeline {
             if ui.button("Rasterize / content color").clicked()
                 && let Err(e) = self.begin_raster_conversion()

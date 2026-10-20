@@ -501,3 +501,8 @@ crates/drawer-app/src/raster_conversion.rs
 docs/process/raster-conversion.md
 crates/drawer-core/src/extended_blend_verify.rs
 docs/process/extended-blend.md
+
+crates/drawer-core/src/layer_comps.rs
+crates/drawer-core/src/layer_comps_verify.rs
+crates/drawer-app/src/layer_comps.rs
+docs/process/layer-comps.md

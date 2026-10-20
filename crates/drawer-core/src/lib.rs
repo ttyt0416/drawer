@@ -261,3 +261,6 @@ pub mod material_layer_verify;
 pub mod raster_conversion;
 pub mod raster_conversion_verify;
 pub mod render_order;
+
+pub mod layer_comps;
+pub mod layer_comps_verify;
