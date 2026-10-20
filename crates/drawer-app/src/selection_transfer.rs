@@ -129,6 +129,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                     _ => {
                         app.begin_paste(&ctx, || {
                             Ok(drawer_core::paste::ClipboardImage {
+                                color: None,
                                 image: drawer_core::references::LocalImage {
                                     width: 1,
                                     height: 1,

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 61;
+const VERSION: u32 = 62;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -166,6 +166,7 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
             }
         }
         document.layers.push(RasterLayer {
+            precise: None,
             locked,
             name,
             pixels,
@@ -257,6 +258,9 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         &document.scene,
     )
     .map_err(invalid)?;
+    if version >= 62 {
+        crate::color_storage::read(&mut document, &mut reader, budget)?;
+    }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
@@ -300,6 +304,11 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         if !layer.valid(document.width, document.height) {
             return Err(invalid("Invalid raster layer"));
         }
+    }
+    if !document.color.valid_layers(&document.layers) {
+        return Err(invalid(
+            "Invalid document channel precision/profile or stale pixel preview",
+        ));
     }
     if document.animation.as_ref().is_some_and(|a| !a.valid()) {
         return Err(invalid("Invalid animation"));
@@ -382,6 +391,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
             writer.write_all(&0u32.to_le_bytes())?;
         }
         crate::material_layer::write(&document.scene, &mut writer)?;
+        crate::color_storage::write(document, &mut writer)?;
         writer.flush()?;
         writer.get_ref().sync_all()
     })();
@@ -540,6 +550,7 @@ mod tests {
         document.layers[0].name = "원본 레이어".into();
         document.edit_pixel(0, 1, 0, [20, 40, 60, 255]);
         document.layers.push(RasterLayer {
+            precise: None,
             locked: false,
             name: "Second".into(),
             pixels: vec![[0; 4]; 2],

@@ -95,8 +95,25 @@ pub fn prepare_pixels(
             if state.layers[n].pixels.len() > 4 * 1024 * 1024 {
                 return Err("Expression conversion exceeds 4Mi samples".into());
             }
-            for p in &mut state.layers[n].pixels {
-                *p = pixel(*p, mode, settings);
+            if d.color != crate::color_storage::Config::legacy() {
+                let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
+                crate::color_storage::map_layer(
+                    &mut state.layers[n],
+                    &d.color,
+                    d.width,
+                    d.height,
+                    |p| {
+                        space.from_srgb(space.to_srgb(p)?.expression(
+                            mode,
+                            settings.brightness as f64 / 255.,
+                            settings.alpha as f64 / 255.,
+                        )?)
+                    },
+                )?;
+            } else {
+                for p in &mut state.layers[n].pixels {
+                    *p = pixel(*p, mode, settings);
+                }
             }
         }
         Target::Vector(id) => {

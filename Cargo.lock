@@ -643,6 +643,7 @@ name = "drawer-platform"
 version = "0.1.0"
 dependencies = [
  "drawer-core",
+ "glow",
  "raw-window-handle",
  "windows",
  "winit",

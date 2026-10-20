@@ -286,3 +286,18 @@ pub mod expression_color_verify;
 
 pub mod paper_background;
 pub mod paper_background_verify;
+
+pub mod color_precision;
+pub mod color_precision_verify;
+pub mod color_profile;
+
+pub mod color_storage;
+
+#[cfg(test)]
+mod color_edit_verify;
+#[cfg(test)]
+mod color_storage_verify;
+
+pub mod float_render;
+#[cfg(test)]
+mod float_render_verify;

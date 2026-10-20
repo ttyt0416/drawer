@@ -69,7 +69,7 @@ fn cubic(t: f64) -> f64 {
         0.0
     }
 }
-fn linear_sum(point: Point, at: &impl Fn(i64, i64) -> [u8; 4]) -> [f64; 4] {
+fn linear_sum<P: Pixel>(point: Point, at: &impl Fn(i64, i64) -> P) -> [f64; 4] {
     let x = point[0].floor() as i64;
     let y = point[1].floor() as i64;
     let fx = point[0] - x as f64;
@@ -81,7 +81,7 @@ fn linear_sum(point: Point, at: &impl Fn(i64, i64) -> [u8; 4]) -> [f64; 4] {
         (0, 1, (1.0 - fx) * fy),
         (1, 1, fx * fy),
     ] {
-        accumulate(&mut sum, at(x + dx, y + dy), w);
+        P::accumulate(&mut sum, at(x + dx, y + dy), w);
     }
     sum
 }
@@ -130,36 +130,85 @@ fn clipped(poly: &[Point], axis: usize, bound: f64, greater: bool) -> Vec<Point>
     out
 }
 /// Coordinates are pixel-center indices; footprint is the inverse-mapped output pixel quad.
+trait Pixel: Copy {
+    fn zero() -> Self;
+    fn accumulate(sum: &mut [f64; 4], pixel: Self, weight: f64);
+    fn resolve(sum: [f64; 4]) -> Self;
+}
+impl Pixel for [u8; 4] {
+    fn zero() -> Self {
+        [0; 4]
+    }
+    fn accumulate(sum: &mut [f64; 4], pixel: Self, weight: f64) {
+        accumulate(sum, pixel, weight);
+    }
+    fn resolve(sum: [f64; 4]) -> Self {
+        color(sum)
+    }
+}
+impl Pixel for crate::color_precision::Sample {
+    fn zero() -> Self {
+        Self::default()
+    }
+    fn accumulate(sum: &mut [f64; 4], pixel: Self, weight: f64) {
+        for (i, v) in pixel.rgb().iter().enumerate() {
+            sum[i] += v * pixel.alpha() * weight;
+        }
+        sum[3] += pixel.alpha() * weight;
+    }
+    fn resolve(sum: [f64; 4]) -> Self {
+        if sum[3] <= 1e-12 {
+            return Self::default();
+        }
+        Self::new([sum[0] / sum[3], sum[1] / sum[3], sum[2] / sum[3], sum[3]]).unwrap_or_default()
+    }
+}
 pub fn sample(
     point: Point,
     footprint: [Point; 4],
     filter: Filter,
     at: impl Fn(i64, i64) -> [u8; 4],
 ) -> [u8; 4] {
+    resample(point, footprint, filter, at)
+}
+pub fn sample_float(
+    point: Point,
+    footprint: [Point; 4],
+    filter: Filter,
+    at: impl Fn(i64, i64) -> crate::color_precision::Sample,
+) -> crate::color_precision::Sample {
+    resample(point, footprint, filter, at)
+}
+fn resample<P: Pixel>(
+    point: Point,
+    footprint: [Point; 4],
+    filter: Filter,
+    at: impl Fn(i64, i64) -> P,
+) -> P {
     if point
         .iter()
         .chain(footprint.iter().flatten())
         .any(|n| !n.is_finite() || n.abs() > 1e13)
     {
-        return [0; 4];
+        return P::zero();
     }
     match filter {
         Filter::Nearest => at(point[0].round() as i64, point[1].round() as i64),
-        Filter::Bilinear => color(linear_sum(point, &at)),
+        Filter::Bilinear => P::resolve(linear_sum(point, &at)),
         Filter::Bicubic => {
             let x = point[0].floor() as i64;
             let y = point[1].floor() as i64;
             let mut sum = [0.0; 4];
             for dy in -1..=2 {
                 for dx in -1..=2 {
-                    accumulate(
+                    P::accumulate(
                         &mut sum,
                         at(x + dx, y + dy),
                         cubic(point[0] - (x + dx) as f64) * cubic(point[1] - (y + dy) as f64),
                     );
                 }
             }
-            color(sum)
+            P::resolve(sum)
         }
         Filter::Oversample => {
             let mut sum = [0.0; 4];
@@ -181,7 +230,7 @@ pub fn sample(
                     }
                 }
             }
-            color(sum)
+            P::resolve(sum)
         }
         Filter::Area => {
             let total = area(&footprint);
@@ -218,11 +267,11 @@ pub fn sample(
                         area(&p) / total
                     };
                     if weight > 0.0 {
-                        accumulate(&mut sum, at(x, y), weight);
+                        P::accumulate(&mut sum, at(x, y), weight);
                     }
                 }
             }
-            color(sum)
+            P::resolve(sum)
         }
     }
 }
@@ -338,6 +387,34 @@ mod tests {
         test_support::TempDir,
     };
     use std::sync::atomic::AtomicBool;
+    #[test]
+    fn floating_filters_keep_sub_byte_samples_and_use_premultiplied_weights() {
+        use crate::color_precision::Sample;
+        let color = Sample::from16([12345, 23456, 34567, 1]);
+        for filter in Filter::ALL {
+            let result = sample_float(
+                [0.3, 0.2],
+                box_footprint([0.3, 0.2], [0.4, 0.8]),
+                filter,
+                |_, _| color,
+            );
+            assert_eq!(result.rgba16(), color.rgba16(), "{filter:?}");
+        }
+        let a = Sample::from16([12345, 23456, 34567, 123]);
+        let b = Sample::from16([54321, 43210, 32109, 456]);
+        let at = |x, _| if x <= 0 { a } else { b };
+        let alpha = (123. + 456.) / (2. * 65535.);
+        let rgb = [0, 1, 2].map(|n| (a.rgb()[n] * 123. + b.rgb()[n] * 456.) / (123. + 456.));
+        let expected = Sample::new([rgb[0], rgb[1], rgb[2], alpha])
+            .unwrap()
+            .rgba16();
+        for filter in [Filter::Bilinear, Filter::Area] {
+            assert_eq!(
+                sample_float([0.5, 0.], box_footprint([0.5, 0.], [1., 1.]), filter, at).rgba16(),
+                expected
+            );
+        }
+    }
     #[test]
     fn checker_reduction_alpha_rotated_footprints_and_distinct_oversampling() {
         let checker = |x: i64, y: i64| {

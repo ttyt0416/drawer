@@ -163,6 +163,9 @@ pub fn prepare(d: &Document, upper: u64) -> Result<Prepared, String> {
     {
         return Err("Transfer extent, render work or memory limit".into());
     }
+    if d.color != crate::color_storage::Config::legacy() {
+        return prepare_float(d, source, below, extent);
+    }
     let mut state = d.snapshot();
     let mut pixels = Vec::new();
     pixels.try_reserve_exact(count).map_err(|e| e.to_string())?;
@@ -249,6 +252,118 @@ pub fn prepare(d: &Document, upper: u64) -> Result<Prepared, String> {
         || state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
     {
         return Err("Transfer result exceeds document/Undo limits".into());
+    }
+    Ok(Prepared {
+        state,
+        lower: Some(p::raster(d, below)),
+        changed,
+        maximum_delta,
+    })
+}
+fn prepare_float(
+    d: &Document,
+    source: usize,
+    below: usize,
+    extent: PlacedRaster,
+) -> Result<Prepared, String> {
+    use crate::color_precision::Sample;
+    let a = d.layers[source].extent(d.width, d.height);
+    let count = extent.width as usize * extent.height as usize;
+    let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
+    if d.memory_bytes()
+        .saturating_mul(4)
+        .saturating_add(count.saturating_mul(88))
+        > DEFAULT_DOCUMENT_BUDGET / 2
+    {
+        return Err("Floating transfer memory limit".into());
+    }
+    let mut upper = Vec::with_capacity(d.layers[source].pixels.len());
+    let mut lower = Vec::with_capacity(count);
+    for y in 0..extent.height {
+        for x in 0..extent.width {
+            lower.push(d.layers[below].sample(
+                d.width,
+                d.height,
+                extent.offset[0] + x as i64,
+                extent.offset[1] + y as i64,
+            ));
+        }
+    }
+    let mut changed = 0;
+    for y in 0..a.height {
+        for x in 0..a.width {
+            let point = [a.offset[0] + x as i64, a.offset[1] + y as i64];
+            let n = y as usize * a.width as usize + x as usize;
+            let coverage = d.scene.selection_coverage(point.map(|v| v as f64 + 0.5)) as f64 / 255.;
+            let u = d.layers[source].sample_at(n);
+            if coverage == 0. || u.alpha() == 0. {
+                upper.push(u);
+                continue;
+            }
+            let at = ((point[1] - extent.offset[1]) * extent.width as i64 + point[0]
+                - extent.offset[0]) as usize;
+            let b = lower[at];
+            let up = u.coverage(1. - coverage)?;
+            let alpha = u.alpha() + b.alpha() * (1. - u.alpha());
+            let down_alpha = (alpha - up.alpha()) / (1. - up.alpha());
+            let down = if down_alpha <= 0. {
+                Sample::default()
+            } else {
+                let su = space.to_srgb(u)?;
+                let sb = space.to_srgb(b)?;
+                let rgb = [0, 1, 2].map(|k| {
+                    (su.rgb()[k] * u.alpha() + sb.rgb()[k] * b.alpha() * (1. - u.alpha())
+                        - su.rgb()[k] * up.alpha())
+                        / ((1. - up.alpha()) * down_alpha)
+                });
+                space
+                    .from_srgb(Sample::new([rgb[0], rgb[1], rgb[2], down_alpha])?)?
+                    .clamped()
+            };
+            changed += usize::from(up != u || down != b);
+            upper.push(up);
+            lower[at] = down;
+        }
+    }
+    if changed == 0 {
+        return Ok(Prepared {
+            state: d.snapshot(),
+            lower: Some(p::raster(d, below)),
+            changed: 0,
+            maximum_delta: 0,
+        });
+    }
+    let mut state = d.snapshot();
+    crate::color_storage::set_samples(&mut state.layers[source], &d.color, a, upper)?;
+    crate::color_storage::set_samples(&mut state.layers[below], &d.color, extent, lower)?;
+    state.layers[below].placement = Some(extent);
+    p::validate_edit(d, &state)?;
+    crate::clipping::validate_state(d, &state)?;
+    let after = crate::layer_merge::preview(&state, d.current_frame)?;
+    let before = crate::float_render::Renderer::new(d)?;
+    let rendered = crate::float_render::Renderer::new(&after)?;
+    let roots = d.scene.paper.root_nodes(d.layers.len());
+    let other = after.scene.paper.root_nodes(after.layers.len());
+    let mut maximum_delta = 0;
+    for y in 0..extent.height {
+        for x in 0..extent.width {
+            let point = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
+            for (a, b) in before
+                .nodes_sample(&roots, point)?
+                .rgba16()
+                .into_iter()
+                .zip(rendered.nodes_sample(&other, point)?.rgba16())
+            {
+                let delta = a.abs_diff(b);
+                if delta > 1 {
+                    return Err("Transfer exceeds one 16-bit step; use directly adjacent plain raster layers".into());
+                }
+                maximum_delta = maximum_delta.max(delta as u8);
+            }
+        }
+    }
+    if state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4 {
+        return Err("Floating transfer Undo limit".into());
     }
     Ok(Prepared {
         state,

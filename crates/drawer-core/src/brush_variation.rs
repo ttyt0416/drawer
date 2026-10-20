@@ -322,6 +322,39 @@ impl Dual {
         });
         (alpha, [color[0], color[1], color[2], 255])
     }
+    pub(crate) fn ink_float(
+        self,
+        a: f64,
+        b: f64,
+        primary: crate::color_precision::Sample,
+        rgb: bool,
+        secondary: crate::color_precision::Sample,
+    ) -> Result<(f64, crate::color_precision::Sample), String> {
+        use crate::color_precision::Sample;
+        if !self.active() {
+            return Ok((a, primary));
+        }
+        let b = self.secondary(b);
+        if !rgb {
+            return Ok((self.combined(a, b), primary));
+        }
+        let a = a * primary.alpha();
+        let alpha = self.combined(a, b);
+        let source = b * self.opacity;
+        let union = a + source * (1. - a);
+        if union <= 0. {
+            return Ok((0., Sample::default()));
+        }
+        let color = [0, 1, 2].map(|n| {
+            let base = primary.rgb()[n];
+            let ink = secondary.rgb()[n];
+            (source * (1. - a) * ink
+                + source * a * self.blend.channel(base, ink)
+                + (1. - source) * a * base)
+                / union
+        });
+        Ok((alpha, Sample::new([color[0], color[1], color[2], 1.])?))
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

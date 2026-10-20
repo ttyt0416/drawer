@@ -102,6 +102,9 @@ impl Document {
         mut layers: Vec<(usize, Vec<PixelChange>)>,
         after: Option<crate::scene::Scene>,
     ) -> Result<bool, String> {
+        if self.color != crate::color_storage::Config::legacy() {
+            return Err("This pixel operation requires its high precision edit path".into());
+        }
         if after
             .as_ref()
             .is_some_and(|s| !s.valid() || !s.paper.valid_for(self.layers.len()))
@@ -195,6 +198,9 @@ impl Document {
         mut changes: Vec<PixelChange>,
         after_scene: Option<crate::scene::Scene>,
     ) -> Result<bool, String> {
+        if self.color != crate::color_storage::Config::legacy() {
+            return Err("This pixel operation requires its high precision edit path".into());
+        }
         crate::layer_properties::paintable(self, layer)?;
         if crate::clipping::alpha_locked(self, layer) {
             for p in &mut changes {
@@ -272,6 +278,9 @@ impl Document {
         self.revision += 1;
     }
     pub fn edit_pixel(&mut self, layer: usize, x: u32, y: u32, after: [u8; 4]) -> bool {
+        if self.color != crate::color_storage::Config::legacy() {
+            return crate::color_storage::edit_pixel8(self, layer, x, y, after).unwrap_or(false);
+        }
         if crate::layer_properties::paintable(self, layer).is_err() {
             return false;
         }
@@ -329,6 +338,7 @@ impl Document {
             || !after.dpi.is_finite()
             || after.dpi <= 0.0
             || !(1..=256).contains(&after.layers.len())
+            || !after.color.valid_layers(&after.layers)
             || !after.scene.valid()
             || !after.scene.layer_ids.matches(after.layers.len())
             || !after.scene.paper.valid_for(after.layers.len())

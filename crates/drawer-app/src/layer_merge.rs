@@ -27,10 +27,19 @@ pub(super) fn image(ctx: &egui::Context, d: &Document, label: &str) -> egui::Tex
     let mut pixels = Vec::with_capacity(size[0] * size[1]);
     for y in 0..size[1] {
         for x in 0..size[0] {
-            let p = r.pixel([
+            let point = [
                 (x as f64 + 0.5) * d.width as f64 / size[0] as f64,
                 (y as f64 + 0.5) * d.height as f64 / size[1] as f64,
-            ]);
+            ];
+            let p = r
+                .display_sample(point)
+                .unwrap_or_default()
+                .store(
+                    drawer_core::color_precision::Depth::Eight,
+                    d.color.dither,
+                    point.map(|v| v.floor() as i64),
+                )
+                .map(|v| v as u8);
             pixels.push(egui::Color32::from_rgba_unmultiplied(
                 p[0], p[1], p[2], p[3],
             ));
@@ -319,5 +328,59 @@ mod tests {
     fn actual_merge_preview_review_apply_cancel_and_native() {
         let root = crate::tests::TestDirectory::new();
         super::smoke(&root.0).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod color_preview_tests {
+    use super::*;
+    #[test]
+    fn preview_uses_the_same_final_dither_as_the_canvas() {
+        use drawer_core::{
+            color_precision::{Depth, Dither, Sample},
+            color_storage::Config,
+        };
+        let ctx = egui::Context::default();
+        let mut d = Document::create_with_color(
+            CanvasSpec {
+                width: 1,
+                height: 1,
+                dpi: 300.,
+                background: Background::Transparent,
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+            Config {
+                dither: Dither {
+                    enabled: true,
+                    seed: 0,
+                },
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let source = [32768, 32768, 32768, 65535];
+        d.layers[0].precise = Some(vec![source]);
+        d.layers[0].pixels = vec![Sample::from16(source).rgba8()];
+        let original = d.snapshot();
+        let texture = image(&ctx, &d, "precision-preview");
+        let mut output = ctx.run_ui(Default::default(), |_| {});
+        let egui::ImageData::Color(pixels) =
+            &output.textures_delta.set.get(&texture.id()).unwrap()[0].image;
+        let pixel = pixels.pixels[0];
+        output.textures_delta.clear();
+        let expected = Sample::from16(source)
+            .store(Depth::Eight, d.color.dither, [0; 2])
+            .map(|v| v as u8);
+        assert_eq!(expected[0], 127);
+        assert_eq!(
+            pixel,
+            egui::Color32::from_rgba_unmultiplied(
+                expected[0],
+                expected[1],
+                expected[2],
+                expected[3]
+            )
+        );
+        assert_eq!(d.snapshot(), original);
     }
 }

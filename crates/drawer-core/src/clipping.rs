@@ -402,7 +402,7 @@ pub fn validate_state(doc: &Document, after: &DocumentState) -> Result<(), Strin
         else {
             continue;
         };
-        if old.pixels == new.pixels || crate::group_edits::geometry_matches(doc, after, id) {
+        if old.same_color(new) || crate::group_edits::geometry_matches(doc, after, id) {
             continue;
         }
         if !new.valid(after.width, after.height) {
@@ -414,10 +414,10 @@ pub fn validate_state(doc: &Document, after: &DocumentState) -> Result<(), Strin
         }
         for (layer, other) in [(old, new), (new, old)] {
             let e = layer.extent(doc.width, doc.height);
-            for (i, p) in layer.pixels.iter().enumerate() {
+            for i in 0..layer.pixels.len() {
                 let x = e.offset[0] + (i % e.width as usize) as i64;
                 let y = e.offset[1] + (i / e.width as usize) as i64;
-                if p[3] != other.pixel(doc.width, doc.height, x, y)[3] {
+                if layer.sample_at(i).alpha() != other.sample(doc.width, doc.height, x, y).alpha() {
                     return Err(
                         "Layer alpha is protected; unlock transparency before this content edit"
                             .into(),

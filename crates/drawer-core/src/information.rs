@@ -170,7 +170,9 @@ pub fn sample(document: &Document, point: Point) -> Option<Color> {
     }
     Some(color(
         crate::render::Renderer::new(document)
-            .pixel([point[0].floor() + 0.5, point[1].floor() + 0.5]),
+            .display_sample([point[0].floor() + 0.5, point[1].floor() + 0.5])
+            .ok()?
+            .rgba8(),
     ))
 }
 pub struct OutputProfile {

@@ -47,7 +47,7 @@ impl Style {
             && (0. ..=1.).contains(&self.rim)
             && self.scope.as_ref().is_none_or(Shape::valid)
     }
-    fn weight(&self, original: Point) -> f64 {
+    pub(crate) fn weight(&self, original: Point) -> f64 {
         let Some(s) = &self.scope else {
             return 1.;
         };
@@ -309,7 +309,7 @@ pub struct Caches {
     pub rasters: Vec<Option<Cache>>,
     pub vectors: Vec<Option<Cache>>,
 }
-fn vector_extent(
+pub(crate) fn vector_extent(
     scene: &crate::scene::Scene,
     l: &crate::line_tools::Layer,
 ) -> Result<Option<PlacedRaster>, String> {

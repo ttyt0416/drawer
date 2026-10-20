@@ -333,6 +333,7 @@ impl Drawing {
                 DEFAULT_DOCUMENT_BUDGET,
             )
             .map_err(|e| e.to_string())?;
+            p.color = state.color;
             p.width = state.width;
             p.height = state.height;
             p.layers = state.layers;

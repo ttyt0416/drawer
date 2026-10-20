@@ -540,6 +540,44 @@ impl Graph {
         if count > budget / 4 {
             return Err("Merged raster exceeds the memory budget".into());
         }
+        if doc.color != crate::color_storage::Config::legacy() {
+            if count.saturating_mul(
+                if doc.color.depth == crate::color_precision::Depth::Sixteen {
+                    12
+                } else {
+                    4
+                },
+            ) > budget
+                || count > 4 * 1024 * 1024
+            {
+                return Err("Precise rendered raster budget".into());
+            }
+            let renderer = crate::float_render::Renderer::new(doc)?;
+            let key = crate::layer_search::Key::Layer(crate::clipping::node_key(doc, node));
+            let mut samples = Vec::with_capacity(count);
+            for y in min[1]..max[1] {
+                for x in min[0]..max[0] {
+                    samples.push(renderer.source_pixel(key, [x as f64 + 0.5, y as f64 + 0.5])?);
+                }
+            }
+            let extent = crate::document::PlacedRaster {
+                width: size[0] as u32,
+                height: size[1] as u32,
+                offset: min,
+            };
+            let mut layer = RasterLayer {
+                precise: None,
+                locked: false,
+                name: match node {
+                    Node::Raster(n) => doc.layers[n].name.clone(),
+                    Node::Folder(n) => self.folders[n].name.clone(),
+                },
+                pixels: vec![],
+                placement: Some(extent),
+            };
+            crate::color_storage::set_samples(&mut layer, &doc.color, extent, samples)?;
+            return Ok(layer);
+        }
         let mut pixels = Vec::new();
         pixels
             .try_reserve_exact(count)
@@ -557,6 +595,7 @@ impl Graph {
             Node::Folder(n) => self.folders[n].name.clone(),
         };
         Ok(RasterLayer {
+            precise: None,
             locked: false,
             name,
             pixels,
@@ -850,6 +889,7 @@ pub fn verify() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     d.layers[0].pixels.fill([220, 140, 60, 96]);
     d.layers.push(RasterLayer {
+        precise: None,
         locked: false,
         name: "Top".into(),
         pixels: vec![[40, 80, 240, 128]; 32],
@@ -919,6 +959,7 @@ mod tests {
             offset: [-2, 1],
         });
         d.layers.push(RasterLayer {
+            precise: None,
             locked: false,
             name: "Above".into(),
             pixels: vec![[30, 90, 220, 128]; 32],
@@ -937,6 +978,7 @@ mod tests {
             ..Default::default()
         };
         d.layers.push(RasterLayer {
+            precise: None,
             locked: false,
             name: "Unreferenced top".into(),
             pixels: vec![[255, 20, 80, 30]; 32],
@@ -1111,6 +1153,7 @@ mod tests {
     fn huge_merge_extent_and_budget_reject_without_partial_history() {
         let mut d = doc();
         d.layers.push(RasterLayer {
+            precise: None,
             locked: false,
             name: "Far away".into(),
             pixels: vec![[255; 4]; 32],

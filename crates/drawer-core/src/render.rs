@@ -7,6 +7,7 @@ use crate::{
 };
 
 pub struct Renderer<'a> {
+    float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
     owned: Option<Box<Document>>,
     appearance: Result<crate::appearance::Caches, String>,
@@ -121,7 +122,51 @@ impl<'a> Renderer<'a> {
         result
     }
     pub fn error(&self) -> Option<&str> {
-        self.appearance.as_ref().err().map(String::as_str)
+        self.float_plan
+            .as_ref()
+            .err()
+            .map(String::as_str)
+            .or_else(|| self.appearance.as_ref().err().map(String::as_str))
+    }
+    fn float_renderer(&self) -> Result<Option<crate::float_render::Renderer<'_>>, String> {
+        match &self.float_plan {
+            Err(e) => Err(e.clone()),
+            Ok(None) => Ok(None),
+            Ok(Some(plan)) => Ok(Some(crate::float_render::Renderer::prepared(
+                self.doc(),
+                self.stroke,
+                plan,
+                crate::float_render::Sampling {
+                    references: self.references,
+                    fill: self.fill,
+                    graph: self.fill_graph.as_ref(),
+                },
+            ))),
+        }
+    }
+    pub fn sample(&self, point: Point) -> Result<crate::color_precision::Sample, String> {
+        if let Some(e) = self.error() {
+            return Err(e.into());
+        }
+        if let Some(renderer) = self.float_renderer()? {
+            renderer.pixel(point)
+        } else {
+            Ok(crate::color_precision::Sample::from8(self.pixel(point)))
+        }
+    }
+    pub fn display_sample(&self, point: Point) -> Result<crate::color_precision::Sample, String> {
+        let sample = self.sample(point)?;
+        self.to_display(sample)
+    }
+    pub fn to_display(
+        &self,
+        sample: crate::color_precision::Sample,
+    ) -> Result<crate::color_precision::Sample, String> {
+        if let Ok(Some(plan)) = &self.float_plan {
+            plan.display(sample)
+        } else {
+            Ok(sample)
+        }
     }
     pub(crate) fn raster_pixel(&self, n: usize, point: [i64; 2]) -> [u8; 4] {
         let doc = self.doc();
@@ -321,6 +366,11 @@ impl<'a> Renderer<'a> {
         if self.error().is_some() {
             return [0; 4];
         }
+        if let Ok(Some(renderer)) = self.float_renderer() {
+            return renderer
+                .source_pixel(key, point)
+                .map_or([0; 4], |p| p.rgba8());
+        }
         use crate::{layer_properties::Target, layer_search::Key};
         let d = self.doc();
         if point.iter().any(|n| !n.is_finite()) {
@@ -498,6 +548,29 @@ impl<'a> Renderer<'a> {
         r
     }
     pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
+        if document.color != crate::color_storage::Config::legacy() {
+            let mut renderer = Self::legacy_build(document, stroke, false);
+            renderer.float_plan =
+                crate::float_render::Renderer::prepare_plan(document, stroke).map(Some);
+            renderer
+        } else {
+            Self::legacy_preview(document, stroke)
+        }
+    }
+    pub(crate) fn legacy_preview(
+        document: &'a Document,
+        stroke: Option<&'a crate::painting::Stroke>,
+    ) -> Self {
+        Self::legacy_build(document, stroke, true)
+    }
+    pub(crate) fn geometry_preview(document: &'a Document) -> Self {
+        Self::legacy_build(document, None, false)
+    }
+    fn legacy_build(
+        document: &'a Document,
+        stroke: Option<&'a crate::painting::Stroke>,
+        caches: bool,
+    ) -> Self {
         let text_contours = document
             .scene
             .objects
@@ -513,9 +586,17 @@ impl<'a> Renderer<'a> {
             })
             .collect();
         Self {
+            float_plan: Ok(None),
             document,
             owned: None,
-            appearance: crate::appearance::Caches::new(document, stroke),
+            appearance: if caches {
+                crate::appearance::Caches::new(document, stroke)
+            } else {
+                Ok(crate::appearance::Caches {
+                    rasters: vec![],
+                    vectors: vec![],
+                })
+            },
             stroke,
             references: None,
             fill: None,
@@ -551,6 +632,9 @@ impl<'a> Renderer<'a> {
     pub fn pixel(&self, point: Point) -> [u8; 4] {
         if self.error().is_some() {
             return [0; 4];
+        }
+        if let Ok(Some(renderer)) = self.float_renderer() {
+            return renderer.pixel(point).map_or([0; 4], |p| p.rgba8());
         }
         let doc = self.doc();
         if point[0] < 0.0

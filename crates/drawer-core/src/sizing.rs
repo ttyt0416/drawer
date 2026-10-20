@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocumentState {
+    pub color: crate::color_storage::Config,
     pub width: u32,
     pub height: u32,
     pub dpi: f64,
@@ -17,12 +18,14 @@ impl DocumentState {
     pub fn memory_bytes(&self) -> usize {
         self.layers
             .iter()
-            .map(|l| l.pixels.len() * 4)
+            .map(RasterLayer::memory_bytes)
             .sum::<usize>()
+            + self.color.memory_bytes()
             + self.scene.size_bytes()
             + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
     pub(crate) fn restore(&self, document: &mut Document) {
+        document.color = self.color.clone();
         document.width = self.width;
         document.height = self.height;
         document.dpi = self.dpi;
@@ -38,6 +41,7 @@ impl DocumentState {
 impl Document {
     pub fn snapshot(&self) -> DocumentState {
         DocumentState {
+            color: self.color.clone(),
             width: self.width,
             height: self.height,
             dpi: self.dpi,
@@ -240,7 +244,15 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
             offset: [0; 2],
         });
         result_bytes = result_bytes
-            .checked_add(extent.width as usize * extent.height as usize * 4)
+            .checked_add(
+                extent.width as usize
+                    * extent.height as usize
+                    * if source.color.depth == crate::color_precision::Depth::Sixteen {
+                        12
+                    } else {
+                        4
+                    },
+            )
             .ok_or("Image size overflow.")?;
     }
     if let Some(animation) = &source.animation {
@@ -255,6 +267,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
         );
         for cell in animation.tracks.iter().flat_map(|t| &t.cells) {
             let layer = RasterLayer {
+                precise: None,
                 locked: false,
                 name: cell.name.clone(),
                 pixels: Vec::new(),
@@ -359,6 +372,7 @@ pub fn prepare(
         return Err("Change canceled.".into());
     }
     let mut result = DocumentState {
+        color: source.color.clone(),
         width: plan.width,
         height: plan.height,
         dpi: plan.dpi,
@@ -366,7 +380,6 @@ pub fn prepare(
         scene: source.scene.clone(),
         animation: source.animation.clone(),
     };
-    let resampling = matches!(change, Change::Resample { .. });
     let scale = [
         plan.width as f64 / source.width as f64,
         plan.height as f64 / source.height as f64,
@@ -375,6 +388,7 @@ pub fn prepare(
         if let Some(placement) = projected(source, layer, change, plan.width, plan.height)? {
             let extent = layer.placement.unwrap();
             let local = DocumentState {
+                color: source.color.clone(),
                 width: extent.width,
                 height: extent.height,
                 dpi: source.dpi,
@@ -404,61 +418,89 @@ pub fn prepare(
         if !layer.valid(source.width, source.height) {
             return Err("Invalid raster data.".into());
         }
+        let floating = source.color != crate::color_storage::Config::legacy();
+        let count = plan.width as usize * plan.height as usize;
         let mut pixels = Vec::new();
         pixels
-            .try_reserve_exact(plan.width as usize * plan.height as usize)
+            .try_reserve_exact(count)
             .map_err(|_| "Not enough image memory.")?;
+        let mut precise = (floating
+            && source.color.depth == crate::color_precision::Depth::Sixteen)
+            .then(|| Vec::with_capacity(count));
         for y in 0..plan.height {
             if cancel.load(Ordering::Relaxed) {
                 return Err("Change canceled.".into());
             }
             for x in 0..plan.width {
-                let color = if resampling {
-                    let filter = match change {
-                        Change::Resample { filter, .. } => filter,
-                        _ => unreachable!(),
-                    };
-                    sample(
-                        layer,
-                        source.width,
-                        source.height,
-                        [
-                            (x as f64 + 0.5) / scale[0] - 0.5,
-                            (y as f64 + 0.5) / scale[1] - 0.5,
-                        ],
-                        filter,
-                        [1.0 / scale[0], 1.0 / scale[1]],
-                    )
-                } else {
-                    let (sx, sy) = match change {
-                        Change::FlipHorizontal => {
-                            (i64::from(source.width) - 1 - i64::from(x), i64::from(y))
-                        }
-                        Change::FlipVertical => {
-                            (i64::from(x), i64::from(source.height) - 1 - i64::from(y))
-                        }
-                        Change::Rotate90 { clockwise: true } => {
-                            (i64::from(y), i64::from(source.height) - 1 - i64::from(x))
-                        }
-                        Change::Rotate90 { clockwise: false } => {
-                            (i64::from(source.width) - 1 - i64::from(y), i64::from(x))
-                        }
-                        _ => (x as i64 - plan.offset[0], y as i64 - plan.offset[1]),
-                    };
-                    if sx >= 0
-                        && sy >= 0
-                        && sx < i64::from(source.width)
-                        && sy < i64::from(source.height)
-                    {
-                        layer.pixel(source.width, source.height, sx, sy)
-                    } else {
-                        [0; 4]
+                let (sx, sy) = match change {
+                    Change::FlipHorizontal => {
+                        (i64::from(source.width) - 1 - i64::from(x), i64::from(y))
                     }
+                    Change::FlipVertical => {
+                        (i64::from(x), i64::from(source.height) - 1 - i64::from(y))
+                    }
+                    Change::Rotate90 { clockwise: true } => {
+                        (i64::from(y), i64::from(source.height) - 1 - i64::from(x))
+                    }
+                    Change::Rotate90 { clockwise: false } => {
+                        (i64::from(source.width) - 1 - i64::from(y), i64::from(x))
+                    }
+                    _ => (x as i64 - plan.offset[0], y as i64 - plan.offset[1]),
                 };
-                pixels.push(color);
+                let point = [
+                    (x as f64 + 0.5) / scale[0] - 0.5,
+                    (y as f64 + 0.5) / scale[1] - 0.5,
+                ];
+                if floating {
+                    let color = if let Change::Resample { filter, .. } = change {
+                        crate::interpolation::sample_float(
+                            point,
+                            crate::interpolation::box_footprint(
+                                point,
+                                [1. / scale[0], 1. / scale[1]],
+                            ),
+                            filter,
+                            |px, py| {
+                                layer.sample(
+                                    source.width,
+                                    source.height,
+                                    px.clamp(0, source.width as i64 - 1),
+                                    py.clamp(0, source.height as i64 - 1),
+                                )
+                            },
+                        )
+                    } else {
+                        layer.sample(source.width, source.height, sx, sy)
+                    };
+                    let stored = color.store(
+                        source.color.depth,
+                        source.color.dither,
+                        [x as i64, y as i64],
+                    );
+                    if let Some(high) = &mut precise {
+                        high.push(stored);
+                        pixels.push(crate::color_precision::Sample::from16(stored).rgba8());
+                    } else {
+                        pixels.push(stored.map(|v| v as u8));
+                    }
+                } else {
+                    pixels.push(if let Change::Resample { filter, .. } = change {
+                        sample(
+                            layer,
+                            source.width,
+                            source.height,
+                            point,
+                            filter,
+                            [1. / scale[0], 1. / scale[1]],
+                        )
+                    } else {
+                        layer.pixel(source.width, source.height, sx, sy)
+                    });
+                }
             }
         }
         result.layers.push(RasterLayer {
+            precise,
             locked: layer.locked,
             name: layer.name.clone(),
             pixels,
@@ -489,10 +531,12 @@ pub fn prepare(
     {
         for cell in animation.tracks.iter_mut().flat_map(|t| &mut t.cells) {
             let cell_source = DocumentState {
+                color: source.color.clone(),
                 width: source.width,
                 height: source.height,
                 dpi: source.dpi,
                 layers: vec![RasterLayer {
+                    precise: None,
                     name: cell.name.clone(),
                     locked: false,
                     pixels: cell.pixels.as_ref().clone(),

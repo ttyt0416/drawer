@@ -24,7 +24,7 @@ fn relative_path(text: &str) -> io::Result<PathBuf> {
     let extension = path.extension().and_then(|value| value.to_str());
     if !matches!(
         extension,
-        Some("rs" | "md" | "toml" | "txt" | "lock" | "ps1" | "py" | "json")
+        Some("rs" | "frag" | "md" | "toml" | "txt" | "lock" | "ps1" | "py" | "json")
     ) {
         return Err(invalid(format!("허용하지 않는 전달 파일 형식: {text}")));
     }
@@ -311,6 +311,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn text_fragment_shader_is_manifest_only_and_binary_shader_keeps_previous_bundle() {
+        let fixture = Fixture::new();
+        let shader = fixture.0.join("color.frag");
+        fs::write(&shader, "#version 330 core\nvoid main() {}\n").unwrap();
+        let manifest = fixture.0.join("handoff-files.txt");
+        let mut content = fs::read_to_string(&manifest).unwrap();
+        content.push_str("color.frag\n");
+        fs::write(&manifest, content).unwrap();
+        assert_eq!(prepare(&fixture.0).unwrap(), 3);
+        assert_eq!(
+            verify_bundle(&fixture.0, &fixture.0.join("handoff/latest")).unwrap(),
+            3
+        );
+        fs::write(&shader, b"MZ\0binary").unwrap();
+        assert!(prepare(&fixture.0).is_err());
+        assert_eq!(
+            fs::read_to_string(fixture.0.join("handoff/latest/color.frag")).unwrap(),
+            "#version 330 core\nvoid main() {}\n"
+        );
+    }
     #[test]
     fn copies_only_the_manifest_and_detects_tampering() {
         let fixture = Fixture::new();

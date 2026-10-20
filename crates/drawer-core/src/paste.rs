@@ -6,8 +6,14 @@ use crate::{
 
 const MAGIC: &[u8; 8] = b"DRAWCP\r\n";
 pub struct ClipboardImage {
+    pub color: Option<ClipboardColor>,
     pub image: LocalImage,
     pub origin: Option<[i64; 2]>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClipboardColor {
+    pub profile: crate::color_profile::RgbProfile,
+    pub pixels: Vec<[u16; 4]>,
 }
 impl ClipboardImage {
     pub fn encode(&self, budget: usize) -> Result<Vec<u8>, String> {
@@ -19,22 +25,61 @@ impl ClipboardImage {
             height: self.image.height,
             offset: self.origin.unwrap_or([0; 2]),
         };
-        if !p.valid() || self.image.pixels.len().saturating_mul(4).saturating_add(36) > budget {
+        let profile = self
+            .color
+            .as_ref()
+            .map(|c| serde_json::to_vec(&c.profile).map_err(|e| e.to_string()))
+            .transpose()?;
+        let extra = profile.as_ref().map_or(0, |p| {
+            p.len() + 4 + self.image.pixels.len().saturating_mul(8)
+        });
+        if self.color.as_ref().is_some_and(|c| {
+            !c.profile.valid()
+                || c.pixels.len() != self.image.pixels.len()
+                || c.pixels.len() > 4 * 1024 * 1024
+                || c.pixels.iter().zip(&self.image.pixels).any(|(p, l)| {
+                    (p[3] == 0 && p[..3] != [0; 3])
+                        || crate::color_precision::Sample::from16(*p).rgba8() != *l
+                })
+        }) {
+            return Err("Invalid high precision clipboard colors".into());
+        }
+        if !p.valid()
+            || self
+                .image
+                .pixels
+                .len()
+                .saturating_mul(4)
+                .saturating_add(36)
+                .saturating_add(extra)
+                > budget
+        {
             return Err("Clipboard image exceeds the transfer budget".into());
         }
         let mut bytes = Vec::new();
         bytes
-            .try_reserve_exact(self.image.pixels.len() * 4 + 36)
+            .try_reserve_exact(self.image.pixels.len() * 4 + 36 + extra)
             .map_err(|e| e.to_string())?;
         bytes.extend_from_slice(MAGIC);
         bytes.extend_from_slice(&self.image.width.to_le_bytes());
         bytes.extend_from_slice(&self.image.height.to_le_bytes());
-        bytes.extend_from_slice(&u32::from(self.origin.is_some()).to_le_bytes());
+        bytes.extend_from_slice(
+            &(u32::from(self.origin.is_some()) + 2 * u32::from(self.color.is_some())).to_le_bytes(),
+        );
         for n in p.offset {
             bytes.extend_from_slice(&n.to_le_bytes());
         }
         for pixel in &self.image.pixels {
             bytes.extend_from_slice(pixel);
+        }
+        if let (Some(profile), Some(color)) = (profile, &self.color) {
+            bytes.extend_from_slice(&(profile.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(&profile);
+            for pixel in &color.pixels {
+                for value in pixel {
+                    bytes.extend_from_slice(&value.to_le_bytes());
+                }
+            }
         }
         Ok(bytes)
     }
@@ -46,7 +91,7 @@ impl ClipboardImage {
         let width = u32at(8);
         let height = u32at(12);
         let flag = u32at(16);
-        if flag > 1 {
+        if flag > 3 {
             return Err("Invalid clipboard origin tag".into());
         }
         let offset = [
@@ -62,11 +107,50 @@ impl ClipboardImage {
         {
             return Err("Invalid clipboard placement".into());
         }
-        let image = LocalImage::from_rgba(width as usize, height as usize, &bytes[36..], budget)
+        let count = width as usize * height as usize;
+        let end = 36usize.saturating_add(count.saturating_mul(4));
+        if end > bytes.len() {
+            return Err("Truncated clipboard pixels".into());
+        }
+        let image = LocalImage::from_rgba(width as usize, height as usize, &bytes[36..end], budget)
             .map_err(|e| e.to_string())?;
+        let color = if flag & 2 != 0 {
+            if count > 4 * 1024 * 1024 || bytes.len() < end + 4 {
+                return Err("Truncated or oversized precise clipboard".into());
+            }
+            let size = u32at(end) as usize;
+            if size > 20 * 1024 * 1024 || end + 4 + size + count * 8 != bytes.len() {
+                return Err("Invalid clipboard color payload length".into());
+            }
+            let profile: crate::color_profile::RgbProfile =
+                serde_json::from_slice(&bytes[end + 4..end + 4 + size])
+                    .map_err(|e| e.to_string())?;
+            if !profile.valid() {
+                return Err("Invalid clipboard RGB profile".into());
+            }
+            let pixels = bytes[end + 4 + size..]
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|p| std::array::from_fn(|n| u16::from_le_bytes([p[n * 2], p[n * 2 + 1]])))
+                .collect::<Vec<_>>();
+            if pixels.iter().zip(&image.pixels).any(|(p, l)| {
+                (p[3] == 0 && p[..3] != [0; 3])
+                    || crate::color_precision::Sample::from16(*p).rgba8() != *l
+            }) {
+                return Err("Invalid clipboard precise preview".into());
+            }
+            Some(ClipboardColor { profile, pixels })
+        } else {
+            if end != bytes.len() {
+                return Err("Unexpected clipboard bytes".into());
+            }
+            None
+        };
         Ok(Self {
+            color,
             image,
-            origin: (flag == 1).then_some(offset),
+            origin: (flag & 1 == 1).then_some(offset),
         })
     }
 }
@@ -93,7 +177,12 @@ pub fn prepare(
     {
         return Err("Invalid paste dimensions, position or layer limit".into());
     }
-    let bytes = image.pixels.len() * 4;
+    let bytes = image.pixels.len()
+        * if document.color.depth == crate::color_precision::Depth::Sixteen {
+            12
+        } else {
+            4
+        };
     let history = document
         .memory_bytes()
         .checked_mul(2)
@@ -108,12 +197,54 @@ pub fn prepare(
     }
     let mut state = document.snapshot();
     state.layers.push(RasterLayer {
+        precise: None,
         locked: false,
         name: "Pasted image".into(),
         pixels: image.pixels.clone(),
         placement: Some(placement),
     });
     state.scene.layer_ids.append(state.layers.len())?;
+    if document.color != crate::color_storage::Config::legacy() {
+        let transform = crate::color_profile::Transform::new(
+            &crate::color_profile::RgbProfile::AssumedSrgb,
+            &document.color.profile,
+        )?;
+        let samples = image
+            .pixels
+            .iter()
+            .map(|p| transform.map(crate::color_precision::Sample::from8(*p)))
+            .collect::<Result<Vec<_>, _>>()?;
+        crate::color_storage::set_samples(
+            state.layers.last_mut().unwrap(),
+            &document.color,
+            placement,
+            samples,
+        )?;
+    }
+    Ok(state)
+}
+pub fn prepare_packet(
+    document: &Document,
+    packet: &ClipboardImage,
+    offset: [i64; 2],
+    budget: usize,
+) -> Result<DocumentState, String> {
+    let mut state = prepare(document, &packet.image, offset, budget)?;
+    if let Some(color) = &packet.color {
+        if color.pixels.len() != packet.image.pixels.len() || !color.profile.valid() {
+            return Err("Invalid precise paste".into());
+        }
+        let target = state.layers.last_mut().unwrap();
+        let extent = target.placement.unwrap();
+        let transform =
+            crate::color_profile::Transform::new(&color.profile, &document.color.profile)?;
+        let samples = color
+            .pixels
+            .iter()
+            .map(|p| transform.map(crate::color_precision::Sample::from16(*p)))
+            .collect::<Result<Vec<_>, _>>()?;
+        crate::color_storage::set_samples(target, &document.color, extent, samples)?;
+    }
     Ok(state)
 }
 #[cfg(test)]
@@ -142,6 +273,7 @@ mod tests {
         let before = doc.snapshot();
         let image = LocalImage::from_rgba(2, 1, &[100, 20, 40, 128, 30, 40, 50, 0], 8).unwrap();
         let packet = ClipboardImage {
+            color: None,
             image: image.clone(),
             origin: Some([-100, 500]),
         };

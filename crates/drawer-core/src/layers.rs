@@ -343,15 +343,39 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             let n = name(&n)?;
             materialize(&mut state.scene.paper, state.layers.len());
             let index = state.layers.len();
+            let floating = doc.color != crate::color_storage::Config::legacy();
+            let count = if floating {
+                doc.width as usize * doc.height as usize
+            } else {
+                1
+            };
+            let bytes = count.saturating_mul(
+                if doc.color.depth == crate::color_precision::Depth::Sixteen {
+                    12
+                } else {
+                    4
+                },
+            );
+            if bytes.saturating_add(doc.memory_bytes().saturating_mul(2))
+                > DEFAULT_DOCUMENT_BUDGET / 4
+            {
+                return Err("New raster exceeds Undo memory".into());
+            }
             state.layers.push(RasterLayer {
+                precise: (floating && doc.color.depth == crate::color_precision::Depth::Sixteen)
+                    .then(|| vec![[0; 4]; count]),
                 locked: false,
                 name: n,
-                pixels: vec![[0; 4]],
-                placement: Some(PlacedRaster {
-                    width: 1,
-                    height: 1,
-                    offset: [0; 2],
-                }),
+                pixels: vec![[0; 4]; count],
+                placement: if floating {
+                    None
+                } else {
+                    Some(PlacedRaster {
+                        width: 1,
+                        height: 1,
+                        offset: [0; 2],
+                    })
+                },
             });
             state.scene.layer_ids.append(state.layers.len())?;
             let position = p.map_or(state.scene.paper.roots.len(), |p| {

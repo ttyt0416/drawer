@@ -4,8 +4,7 @@ const WHITE: [f64; 3] = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290]
 fn matrix(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
     m.map(|row| row.iter().zip(v).map(|(a, b)| a * b).sum())
 }
-fn decode(n: u8) -> f64 {
-    let v = n as f64 / 255.0;
+fn decode(v: f64) -> f64 {
     if v <= 0.04045 {
         v / 12.92
     } else {
@@ -13,6 +12,9 @@ fn decode(n: u8) -> f64 {
     }
 }
 pub fn coordinates(rgb: [u8; 3]) -> [f64; 3] {
+    coordinates_float(rgb.map(|v| v as f64 / 255.))
+}
+pub(crate) fn coordinates_float(rgb: [f64; 3]) -> [f64; 3] {
     let xyz = matrix(
         [
             [506752.0 / 1228815.0, 87881.0 / 245763.0, 12673.0 / 70218.0],
@@ -34,6 +36,30 @@ pub fn coordinates(rgb: [u8; 3]) -> [f64; 3] {
         500.0 * (f[0] - f[1]),
         200.0 * (f[1] - f[2]),
     ]
+}
+pub(crate) fn correct_float(
+    result: crate::color_precision::Sample,
+    a: crate::color_precision::Sample,
+    b: crate::color_precision::Sample,
+    weight: f64,
+    strength: f64,
+) -> Result<crate::color_precision::Sample, String> {
+    if !weight.is_finite() || !strength.is_finite() {
+        return Err("Nonfinite mixing lightness".into());
+    }
+    if strength <= 0. || weight <= 0. || weight >= 1. || result.alpha() == 0. {
+        return Ok(result);
+    }
+    let aa = (1. - weight) * a.alpha();
+    let ba = weight * b.alpha();
+    let total = aa + ba;
+    if total <= 0. {
+        return Ok(result);
+    }
+    let target = (coordinates_float(a.rgb())[0] * aa + coordinates_float(b.rgb())[0] * ba) / total;
+    let mut lab = coordinates_float(result.rgb());
+    lab[0] += (target - lab[0]) * strength.clamp(0., 1.);
+    result.with_rgb(rgb_float(lab))
 }
 pub fn rgb(lab: [f64; 3]) -> [u8; 3] {
     rgb_float(lab).map(|v| (v * 255.0).round() as u8)

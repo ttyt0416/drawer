@@ -620,11 +620,11 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
         if (p.locked
             || p.pixels_locked
             || (p.hidden && !crate::group_edits::geometry_matches(doc, after, id)))
-            && old.pixels != new.pixels
+            && !old.same_color(new)
         {
             return Err("Layer pixels are hidden or locked".into());
         }
-        let same_storage = old.pixels == new.pixels
+        let same_storage = old.same_color(new)
             && old.extent(doc.width, doc.height).width
                 == new.extent(after.width, after.height).width
             && old.extent(doc.width, doc.height).height

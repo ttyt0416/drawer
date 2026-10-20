@@ -1,6 +1,90 @@
 use drawer_core::document::Document;
 use eframe::egui;
 
+#[cfg(test)]
+mod precision_tests {
+    use super::*;
+    #[test]
+    fn embedded_profile_canvas_upload_and_two_proof_views_preserve_original_sixteen_bits() {
+        use drawer_core::{
+            color_precision::Sample,
+            color_profile::{RgbProfile, Transform},
+            color_storage::Config,
+            document::{Background, CanvasSpec, DEFAULT_DOCUMENT_BUDGET},
+        };
+        let ctx = egui::Context::default();
+        let profile = RgbProfile::embedded("Display P3 fixture".into(), mox_profile()).unwrap();
+        let mut d = Document::create_with_color(
+            CanvasSpec {
+                width: 1,
+                height: 1,
+                dpi: 300.,
+                background: Background::Transparent,
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+            Config {
+                profile: profile.clone(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let source = [12001, 50003, 23007, 32768];
+        d.layers[0].precise = Some(vec![source]);
+        d.layers[0].pixels = vec![Sample::from16(source).rgba8()];
+        let original = d.snapshot();
+        let dirty = d.dirty;
+        let expected = Transform::new(&profile, &RgbProfile::Srgb)
+            .unwrap()
+            .map(Sample::from16(source))
+            .unwrap()
+            .rgba8();
+        assert_ne!(expected, d.layers[0].pixels[0]);
+        let mut a = CanvasView::new(&ctx);
+        let mut b = CanvasView::new(&ctx);
+        let upload = |view: &mut CanvasView| {
+            let mut output = ctx.run_ui(Default::default(), |ui| view.update_image(ui, &d, None));
+            let id = view.image.as_ref().unwrap().1.id();
+            let image = &output.textures_delta.set.get(&id).unwrap()[0].image;
+            let egui::ImageData::Color(image) = image;
+            assert_eq!(
+                image.pixels[0],
+                egui::Color32::from_rgba_unmultiplied(
+                    view.preview_sample.unwrap().1[0],
+                    view.preview_sample.unwrap().1[1],
+                    view.preview_sample.unwrap().1[2],
+                    expected[3]
+                )
+            );
+            output.textures_delta.clear();
+        };
+        upload(&mut a);
+        assert_eq!(a.preview_sample.unwrap(), (expected, expected));
+        let settings = drawer_core::soft_proof::Settings {
+            enabled: true,
+            tone: drawer_core::soft_proof::Tone {
+                gamma: 2.,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        b.set_proof(&settings);
+        upload(&mut b);
+        assert_eq!(b.preview_sample.unwrap().0, expected);
+        assert_ne!(b.preview_sample.unwrap().1, expected);
+        assert_eq!(a.preview_sample.unwrap().1, expected);
+        b.set_proof(&Default::default());
+        upload(&mut b);
+        assert_eq!(b.preview_sample.unwrap().1, expected);
+        assert_eq!(d.snapshot(), original);
+        assert_eq!(d.history_counts(), (0, 0));
+        assert_eq!(d.dirty, dirty);
+    }
+    fn mox_profile() -> Vec<u8> {
+        // The core fixture exposes a valid RGB ICC without adding a CMS dependency to the app.
+        drawer_core::color_precision_verify::display_p3_fixture()
+    }
+}
+
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
     pub mask_overlay: bool,
@@ -816,8 +900,20 @@ impl CanvasView {
             }
             for y in 0..height {
                 for x in 0..width {
-                    let pixel = renderer
-                        .pixel([(x * reduction) as f64 + 0.5, (y * reduction) as f64 + 0.5]);
+                    let point = [(x * reduction) as f64 + 0.5, (y * reduction) as f64 + 0.5];
+                    let pixel = if document.color != drawer_core::color_storage::Config::legacy() {
+                        renderer
+                            .display_sample(point)
+                            .unwrap_or_default()
+                            .store(
+                                drawer_core::color_precision::Depth::Eight,
+                                document.color.dither,
+                                point.map(|v| v.floor() as i64),
+                            )
+                            .map(|v| v as u8)
+                    } else {
+                        renderer.pixel(point)
+                    };
                     let original = pixel;
                     let pixel = self.displayed_color(pixel);
                     if x == 0 && y == 0 {
@@ -975,6 +1071,23 @@ impl CanvasView {
                             || footprint.iter().all(|p| p[1] >= size[1] - 0.5);
                         let pixel = if outside {
                             [0; 4]
+                        } else if document.color != drawer_core::color_storage::Config::legacy() {
+                            drawer_core::interpolation::sample_float(
+                                point,
+                                footprint,
+                                self.filter,
+                                |x, y| {
+                                    renderer
+                                        .display_sample([x as f64 + 0.5, y as f64 + 0.5])
+                                        .unwrap_or_default()
+                                },
+                            )
+                            .store(
+                                drawer_core::color_precision::Depth::Eight,
+                                document.color.dither,
+                                point.map(|v| v.round() as i64),
+                            )
+                            .map(|v| v as u8)
                         } else {
                             drawer_core::interpolation::sample(
                                 point,

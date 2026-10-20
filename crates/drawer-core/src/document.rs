@@ -44,6 +44,7 @@ impl std::error::Error for CreateError {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RasterLayer {
+    pub precise: Option<Vec<[u16; 4]>>,
     pub locked: bool,
     pub name: String,
     pub pixels: Vec<[u8; 4]>,
@@ -66,6 +67,61 @@ impl PlacedRaster {
     }
 }
 impl RasterLayer {
+    pub fn memory_bytes(&self) -> usize {
+        self.pixels.len().saturating_mul(4)
+            + self
+                .precise
+                .as_ref()
+                .map_or(0, |v| v.len().saturating_mul(8))
+    }
+    pub fn sample(
+        &self,
+        width: u32,
+        height: u32,
+        x: i64,
+        y: i64,
+    ) -> crate::color_precision::Sample {
+        self.pixel_index(width, height, x, y)
+            .map_or_else(Default::default, |n| self.sample_at(n))
+    }
+    pub fn sample_at(&self, n: usize) -> crate::color_precision::Sample {
+        self.precise
+            .as_ref()
+            .and_then(|v| v.get(n))
+            .copied()
+            .map(crate::color_precision::Sample::from16)
+            .unwrap_or_else(|| {
+                crate::color_precision::Sample::from8(self.pixels.get(n).copied().unwrap_or([0; 4]))
+            })
+    }
+    pub fn same_color(&self, other: &Self) -> bool {
+        if self.pixels.len() != other.pixels.len() {
+            return false;
+        }
+        match (&self.precise, &other.precise) {
+            (None, None) => self.pixels == other.pixels,
+            (Some(a), Some(b)) => a == b,
+            (Some(a), None) => a
+                .iter()
+                .zip(&other.pixels)
+                .all(|(a, b)| *a == b.map(|v| v as u16 * 257)),
+            (None, Some(b)) => self
+                .pixels
+                .iter()
+                .zip(b)
+                .all(|(a, b)| a.map(|v| v as u16 * 257) == *b),
+        }
+    }
+    pub fn color_valid(&self) -> bool {
+        self.precise.as_ref().is_none_or(|v| {
+            v.len() == self.pixels.len()
+                && v.iter().zip(&self.pixels).all(|(p, preview)| {
+                    (p[3] != 0 || p[..3] == [0; 3])
+                        && crate::color_precision::Sample::from16(*p).rgba8() == *preview
+                })
+        })
+    }
+
     pub fn extent(&self, width: u32, height: u32) -> PlacedRaster {
         self.placement.unwrap_or(PlacedRaster {
             width,
@@ -78,6 +134,10 @@ impl RasterLayer {
         p.valid()
             && (1..=4096).contains(&self.name.len())
             && self.pixels.len() == p.width as usize * p.height as usize
+            && self
+                .precise
+                .as_ref()
+                .is_none_or(|v| v.len() == self.pixels.len())
     }
     pub fn pixel_index(&self, width: u32, height: u32, x: i64, y: i64) -> Option<usize> {
         let p = self.extent(width, height);
@@ -97,6 +157,7 @@ impl RasterLayer {
 }
 pub struct Document {
     pub id: u64,
+    pub color: crate::color_storage::Config,
     pub title: String,
     pub source_path: Option<PathBuf>,
     pub width: u32,
@@ -143,12 +204,14 @@ impl Document {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
             id,
+            color: crate::color_storage::Config::legacy(),
             title: format!("Untitled {id}"),
             source_path: None,
             width: spec.width,
             height: spec.height,
             dpi: spec.dpi,
             layers: vec![RasterLayer {
+                precise: None,
                 locked: false,
                 name: "Layer 1".into(),
                 pixels,
@@ -168,8 +231,9 @@ impl Document {
     pub fn memory_bytes(&self) -> usize {
         self.layers
             .iter()
-            .map(|layer| layer.pixels.len() * 4)
+            .map(RasterLayer::memory_bytes)
             .sum::<usize>()
+            + self.color.memory_bytes()
             + self.scene.size_bytes()
             + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
@@ -314,6 +378,7 @@ mod tests {
         let mut document = Document::create(spec(), 4).unwrap();
         document.layers[0].pixels[0] = [255, 0, 0, 128];
         document.layers.push(RasterLayer {
+            precise: None,
             locked: false,
             name: "Top".into(),
             pixels: vec![[0, 0, 255, 128]],

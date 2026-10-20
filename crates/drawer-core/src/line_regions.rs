@@ -180,6 +180,17 @@ pub fn fill(doc: &mut Document, layer: usize, seed: Point, color: [u8; 4]) -> Re
     if raster.locked || !doc.scene.paper.raster_visible(layer, doc.layers.len()) {
         return Err("Fill target is hidden or locked".into());
     }
+    if doc.color != crate::color_storage::Config::legacy() {
+        let state = crate::bucket::paint_coverage(doc, layer, color, false, false, |x, y| {
+            let point = [x as f64 + 0.5, y as f64 + 0.5];
+            if region.contains(point) {
+                doc.scene.selection_coverage(point)
+            } else {
+                0
+            }
+        })?;
+        return doc.commit_state(state);
+    }
     let mut changes = vec![];
     let limit = (DEFAULT_DOCUMENT_BUDGET / 4)
         .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes() + region.bytes()));

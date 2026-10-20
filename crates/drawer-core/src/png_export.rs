@@ -9,7 +9,8 @@ use std::{
 /// Export pixels without changing document association, history, selection or view.
 pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()> {
     let invalid = |message: &str| io::Error::new(io::ErrorKind::InvalidInput, message);
-    if !document.scene.paper.valid_for(document.layers.len())
+    if !document.color.valid_layers(&document.layers)
+        || !document.scene.paper.valid_for(document.layers.len())
         || !document.scene.valid()
         || document
             .layers
@@ -55,10 +56,38 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
     if extra > budget / 2 {
         return Err(invalid("Draft output snapshot exceeds export memory"));
     }
-    let (width, height, pixels) = Renderer::for_export(document)
-        .map_err(|e| invalid(&e))?
-        .output(document.dpi, budget.saturating_sub(extra) / 2)
-        .map_err(|e| invalid(&e))?;
+    let floating = document.color != crate::color_storage::Config::legacy();
+    let (width, height, pixels) = if floating {
+        let owned = crate::layer_roles::output_view(document).map_err(|e| invalid(&e))?;
+        let d = owned.as_deref().unwrap_or(document);
+        let output = crate::float_render::Renderer::new(d)
+            .map_err(|e| invalid(&e))?
+            .output(
+                crate::color_precision::Depth::Eight,
+                d.color.dither,
+                budget.saturating_sub(extra) / 2,
+            )
+            .map_err(|e| invalid(&e))?;
+        let crate::color_precision::Pixels::Eight(pixels) = output else {
+            unreachable!()
+        };
+        (d.width, d.height, pixels)
+    } else {
+        Renderer::for_export(document)
+            .map_err(|e| invalid(&e))?
+            .output(document.dpi, budget.saturating_sub(extra) / 2)
+            .map_err(|e| invalid(&e))?
+    };
+    let icc = if floating {
+        Some(match &document.color.profile {
+            crate::color_profile::RgbProfile::Embedded { bytes, .. } => bytes.clone(),
+            _ => moxcms::ColorProfile::new_srgb()
+                .encode()
+                .map_err(|e| invalid(&e.to_string()))?,
+        })
+    } else {
+        None
+    };
     let mut bytes = Vec::new();
     bytes
         .try_reserve_exact(pixels.len() * 4)
@@ -75,7 +104,13 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
         .open(&temporary)?;
     let mut writer = BufWriter::new(file);
     let result = (|| {
-        image::codecs::png::PngEncoder::new(&mut writer)
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut writer);
+        if let Some(icc) = icc {
+            encoder
+                .set_icc_profile(icc)
+                .map_err(|e| invalid(&e.to_string()))?;
+        }
+        encoder
             .write_image(&bytes, width, height, image::ExtendedColorType::Rgba8)
             .map_err(|e| invalid(&e.to_string()))?;
         writer.flush()?;

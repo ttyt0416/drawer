@@ -55,6 +55,26 @@ impl Tone {
             && self.gamma.is_finite()
             && (0.1..=10.0).contains(&self.gamma)
     }
+    pub fn map_float(
+        self,
+        color: crate::color_precision::Sample,
+    ) -> Result<crate::color_precision::Sample, String> {
+        if !self.valid() {
+            return Err("Invalid curve or levels".into());
+        }
+        if self == Self::default() || color.alpha() == 0. {
+            return Ok(color);
+        }
+        color.with_rgb(color.rgb().map(|v| {
+            let x = ((v - self.black) / (self.white - self.black))
+                .clamp(0., 1.)
+                .powf(1. / self.gamma)
+                * 4.;
+            let i = (x.floor() as usize).min(3);
+            let y = self.curve[i] + (self.curve[i + 1] - self.curve[i]) * (x - i as f64);
+            self.output[0] + y * (self.output[1] - self.output[0])
+        }))
+    }
     fn table(self) -> [u8; 256] {
         std::array::from_fn(|i| self.map([i as u8, i as u8, i as u8, 255])[0])
     }
@@ -253,6 +273,44 @@ pub fn apply(
     let raster = doc.layers.get(layer).ok_or("Select a raster layer")?;
     if raster.locked {
         return Err("Selected raster layer is locked".into());
+    }
+    if doc.color != crate::color_storage::Config::legacy() {
+        crate::layer_properties::paintable(doc, layer)?;
+        if raster.pixels.len() > 4 * 1024 * 1024
+            || doc.memory_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8
+        {
+            return Err("Floating tone snapshot/work limit".into());
+        }
+        if tone == Tone::default() {
+            return Ok(false);
+        }
+        let extent = raster.extent(doc.width, doc.height);
+        let space = crate::color_profile::WorkingSpace::new(&doc.color.profile)?;
+        let mut samples = Vec::with_capacity(raster.pixels.len());
+        for n in 0..raster.pixels.len() {
+            if n % 4096 == 0 && cancel() {
+                return Err("Tone application cancelled; original pixels preserved".into());
+            }
+            let original = raster.sample_at(n);
+            let point = [
+                extent.offset[0] as f64 + (n % extent.width as usize) as f64 + 0.5,
+                extent.offset[1] as f64 + (n / extent.width as usize) as f64 + 0.5,
+            ];
+            let factor = doc.scene.selection_coverage(point) as f64 / 255.;
+            let source = space.to_srgb(original)?;
+            let mapped = tone.map_float(source)?;
+            samples.push(if mapped == source || factor == 0. {
+                original
+            } else {
+                space.from_srgb(source.mix(mapped, factor)?)?
+            });
+        }
+        if cancel() {
+            return Err("Tone application cancelled; original pixels preserved".into());
+        }
+        let mut state = doc.snapshot();
+        crate::color_storage::set_samples(&mut state.layers[layer], &doc.color, extent, samples)?;
+        return doc.commit_state(state);
     }
     let extent = raster.extent(doc.width, doc.height);
     let table = tone.table();

@@ -1,4 +1,6 @@
 //! A pending raster stroke is previewed separately, then committed as one pixel history entry.
+#[path = "painting_float.rs"]
+mod floating;
 use crate::{
     assets::BrushTip,
     brush_cursor::{Shape, Trace},
@@ -194,6 +196,7 @@ struct Arm {
     stroke: Box<Stroke>,
 }
 pub struct Stroke {
+    floating: Option<Box<floating::Floating>>,
     ruler: crate::rulers::Runtime,
     arms: Vec<Arm>,
     mirror_tip: bool,
@@ -251,11 +254,15 @@ impl Stroke {
         if !self.region_prepared {
             if doc.scene.lines.settings.clip_paint && !self.style.erases() {
                 let region = crate::line_regions::Region::build(doc, point)?;
-                let remaining = self.limit.saturating_mul(96).saturating_sub(region.bytes());
-                if remaining < 96 {
+                let pixel_bytes = if self.floating.is_some() { 256 } else { 96 };
+                let remaining = self
+                    .limit
+                    .saturating_mul(pixel_bytes)
+                    .saturating_sub(region.bytes());
+                if remaining < pixel_bytes {
                     return Err("Reference mask exceeds stroke memory budget".into());
                 }
-                self.limit = remaining / 96;
+                self.limit = remaining / pixel_bytes;
                 self.region = Some(region);
             }
             self.region_prepared = true;
@@ -387,6 +394,9 @@ impl Stroke {
         };
         self.strength = strength;
         self.carried = Some(self.candidate(doc, point[0].floor() as i64, point[1].floor() as i64));
+        if self.floating.is_some() {
+            self.initialize_float_material(doc, point);
+        }
         Ok(())
     }
     fn pigment_color(&mut self, picked: [u8; 4], center: Point, pressure: f64) -> [u8; 4] {
@@ -526,6 +536,9 @@ impl Stroke {
             .saturating_add(self.changes.len() as u64 * 4);
         if self.pixel_work > 64 * 1024 * 1024 {
             return Err("Water edge pixel-work budget exceeded".into());
+        }
+        if self.floating.is_some() {
+            return self.finish_float_edges(doc, cancel);
         }
         let layer = &doc.layers[self.layer];
         let extent = layer.extent(doc.width, doc.height);
@@ -678,6 +691,9 @@ impl Stroke {
                 "Final diffusion pixel-work budget exceeded; pending stroke cancelled".into(),
             );
         }
+        if self.floating.is_some() {
+            return self.diffuse_float(doc, strength, positions, cancel);
+        }
         let mut changes = Vec::new();
         changes
             .try_reserve_exact(positions.len())
@@ -794,6 +810,11 @@ impl Stroke {
         budget: usize,
         assisted: bool,
     ) -> Result<Self, String> {
+        let floating = (doc.color != crate::color_storage::Config::legacy())
+            .then(|| floating::Floating::new(doc, style.resolved()))
+            .transpose()?
+            .map(Box::new);
+        let pixel_bytes = if floating.is_some() { 256 } else { 96 };
         let ruler = if assisted {
             crate::rulers::Runtime::for_target(doc, crate::line_tools::Target::Raster(layer))?
         } else {
@@ -803,7 +824,8 @@ impl Stroke {
         let total_budget = budget
             .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()))
             .saturating_sub(ruler.memory_bytes());
-        let free_limit = total_budget.saturating_sub(std::mem::size_of::<Self>() + 256) / 96;
+        let free_limit =
+            total_budget.saturating_sub(std::mem::size_of::<Self>() + 256) / pixel_bytes;
         // Reserve a quarter for the single-history merge of independent arms.
         let budget = if copies.is_empty() {
             total_budget
@@ -829,11 +851,12 @@ impl Stroke {
         let limit = budget
             .min(DEFAULT_DOCUMENT_BUDGET.saturating_sub(doc.resident_bytes()))
             .saturating_sub(std::mem::size_of::<Self>() + 256)
-            / 96;
+            / pixel_bytes;
         if limit == 0 {
             return Err("No memory available for a stroke".into());
         }
         let mut stroke = Self {
+            floating,
             ruler,
             arms: vec![],
             mirror_tip: false,
@@ -1176,6 +1199,9 @@ impl Stroke {
         self.check(doc)?;
         self.finish_sample(doc)?;
         self.finish_material(doc, || false)?;
+        if self.floating.is_some() {
+            return self.commit_float(doc, None);
+        }
         let layer = self.layer;
         let changes = self.collect_changes()?;
         doc.commit_pixel_changes(layer, changes)
@@ -1188,6 +1214,9 @@ impl Stroke {
         self.check(doc)?;
         self.finish_sample(doc)?;
         self.finish_material(doc, || false)?;
+        if self.floating.is_some() {
+            return self.commit_float(doc, Some(metadata));
+        }
         let layer = self.layer;
         let changes = self.collect_changes()?;
         doc.commit_mouse_changes(layer, changes, metadata)
@@ -1562,6 +1591,11 @@ impl Stroke {
         } else {
             self.candidate(doc, center[0].floor() as i64, center[1].floor() as i64)
         };
+        let float_paint = if self.floating.is_some() {
+            Some(self.float_pigment(doc, center, pressure, [radius, minor], [cos, sin])?)
+        } else {
+            None
+        };
         let paint_color = self.pigment_color(picked, center, pressure);
         for y in low[1]..=high[1] {
             for x in low[0]..=high[0] {
@@ -1681,6 +1715,8 @@ impl Stroke {
                 } else {
                     amount
                 };
+                let mut float_ink = float_paint;
+                let mut float_amount = None;
                 let (amount, paint_color) = if self.style.variation.dual.active() {
                     let secondary = self.style.variation.dual.mask(
                         raw_q,
@@ -1699,6 +1735,11 @@ impl Stroke {
                     } else {
                         secondary
                     };
+                    if let Some(primary) = float_paint {
+                        let (a, c) = self.float_dual(amount, secondary, primary)?;
+                        float_ink = Some(c);
+                        float_amount = Some(a);
+                    }
                     self.style.variation.dual.ink(
                         amount,
                         secondary,
@@ -1708,13 +1749,20 @@ impl Stroke {
                 } else {
                     (amount, paint_color)
                 };
+                let amount = float_amount.unwrap_or(amount);
                 if amount <= 0.0 {
                     continue;
                 }
                 let offset = layer.pixel_index(doc.width, doc.height, x, y).unwrap();
                 let old = self.lookup.get(&offset).copied();
                 let original = old.map_or(layer.pixels[offset], |n| self.changes[n].before);
-                if self.style.material.alpha_lock && original[3] == 0 {
+                if self.style.material.alpha_lock
+                    && if self.floating.is_some() {
+                        layer.sample_at(offset).alpha() == 0.
+                    } else {
+                        original[3] == 0
+                    }
+                {
                     continue;
                 }
                 let unmasked = old.map_or(original, |n| self.unmasked[n]);
@@ -1748,7 +1796,7 @@ impl Stroke {
                     {
                         1.0
                     } else {
-                        paint_color[3] as f64 / 255.0
+                        float_ink.map_or(paint_color[3] as f64 / 255.0, |v| v.alpha())
                     };
                     self.style
                         .pattern
@@ -1819,7 +1867,42 @@ impl Stroke {
                 if self.style.material.alpha_lock {
                     result[3] = original[3];
                 }
-                if old.is_none() && result == original {
+                let precise = self
+                    .floating
+                    .as_ref()
+                    .map(|f| {
+                        f.compute(
+                            doc,
+                            self.layer,
+                            self.style,
+                            floating::Dab {
+                                offset,
+                                previous: old,
+                                amount,
+                                limited,
+                                color: if self.style.pixel_overwrite() {
+                                    crate::color_precision::Sample::from8(self.dab_color)
+                                } else {
+                                    float_ink.unwrap_or_else(|| {
+                                        crate::color_precision::Sample::from8(paint_color)
+                                    })
+                                },
+                                point: [x, y],
+                                paint_factor,
+                                mask,
+                                special,
+                            },
+                        )
+                    })
+                    .transpose()?;
+                if let Some(value) = &precise {
+                    result = value.preview();
+                }
+                if old.is_none()
+                    && precise
+                        .as_ref()
+                        .map_or(result == original, |v| !v.changed())
+                {
                     continue;
                 }
                 let index = if let Some(n) = old {
@@ -1846,6 +1929,10 @@ impl Stroke {
                     self.lookup.insert(offset, n);
                     n
                 };
+                if let Some(value) = precise {
+                    changed |= value.changed();
+                    self.floating.as_mut().unwrap().record(index, value)?;
+                }
                 changed |= self.changes[index].after != result;
                 self.changes[index].after = result;
                 self.unmasked[index] = next;

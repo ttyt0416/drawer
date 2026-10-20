@@ -22,18 +22,33 @@ pub(super) fn read_clipboard() -> Result<ClipboardImage, String> {
         }
     }
     Ok(ClipboardImage {
+        color: None,
         image: reference_pane::clipboard_image_with_budget(DEFAULT_DOCUMENT_BUDGET / 4)?,
         origin: None,
     })
 }
 pub(super) fn write_clipboard(packet: &ClipboardImage, budget: usize) -> Result<(), String> {
     let encoded = packet.encode(budget)?;
-    let rgba: Vec<u8> = packet
-        .image
-        .pixels
-        .iter()
-        .flat_map(|p| p.iter().copied())
-        .collect();
+    let rgba: Vec<u8> = if let Some(color) = &packet.color {
+        let transform = drawer_core::color_profile::Transform::new(
+            &color.profile,
+            &drawer_core::color_profile::RgbProfile::Srgb,
+        )?;
+        color
+            .pixels
+            .iter()
+            .map(|p| {
+                transform
+                    .map(drawer_core::color_precision::Sample::from16(*p))
+                    .map(|p| p.rgba8())
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect()
+    } else {
+        packet.image.pixels.iter().flatten().copied().collect()
+    };
     arboard::Clipboard::new()
         .and_then(|mut c| {
             c.set_image(arboard::ImageData {
@@ -96,6 +111,46 @@ impl PasteDialog {
                 > budget
         {
             return Err("Image fit exceeds preview memory/work limit".into());
+        }
+        if self.preview.color != drawer_core::color_storage::Config::legacy() {
+            let source = Box::new(drawer_core::sizing::DocumentState {
+                color: self.preview.color.clone(),
+                width: e.width,
+                height: e.height,
+                dpi: self.preview.dpi,
+                layers: vec![drawer_core::document::RasterLayer {
+                    placement: None,
+                    ..self.original.as_ref().clone()
+                }],
+                scene: Default::default(),
+                animation: None,
+            });
+            let mut result = drawer_core::sizing::prepare(
+                &source,
+                drawer_core::sizing::Change::Resample {
+                    width: w,
+                    height: h,
+                    dpi: self.preview.dpi,
+                    filter: drawer_core::interpolation::Filter::Bilinear,
+                },
+                budget,
+                &std::sync::atomic::AtomicBool::new(false),
+            )?;
+            let offset = [
+                (self.preview.width as i64 - w as i64).div_euclid(2),
+                (self.preview.height as i64 - h as i64).div_euclid(2),
+            ];
+            let mut layer = result.layers.remove(0);
+            layer.placement = Some(PlacedRaster {
+                width: w,
+                height: h,
+                offset,
+            });
+            *self.preview.layers.last_mut().unwrap() = layer;
+            self.offset = offset;
+            self.remainder = offset.map(|v| v as f64);
+            self.preview.revision += 1;
+            return Ok(());
         }
         let step = [e.width as f64 / w as f64, e.height as f64 / h as f64];
         let mut pixels = Vec::with_capacity(count);
@@ -182,7 +237,7 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
             .saturating_sub(reserved);
         let offset = paste::center(doc, &packet.image);
-        let mut state = paste::prepare(doc, &packet.image, offset, budget)?;
+        let mut state = paste::prepare_packet(doc, &packet, offset, budget)?;
         super::layer_defaults::apply(
             doc,
             &mut state,
@@ -199,6 +254,7 @@ impl Drawer {
             budget,
         )
         .map_err(|e| e.to_string())?;
+        preview.color = state.color;
         preview.width = state.width;
         preview.height = state.height;
         preview.layers = state.layers;
@@ -265,6 +321,7 @@ impl Drawer {
         }
         write(
             &ClipboardImage {
+                color: None,
                 image: drawer_core::references::LocalImage {
                     width: p.width,
                     height: p.height,

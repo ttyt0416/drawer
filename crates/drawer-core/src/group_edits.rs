@@ -129,23 +129,39 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
                     let inverse = matrix.inverse();
                     let mut pixels = Vec::new();
                     pixels.try_reserve_exact(count).map_err(|e| e.to_string())?;
+                    let mut precise = (d.color.depth == crate::color_precision::Depth::Sixteen)
+                        .then(|| Vec::with_capacity(count));
                     for y in 0..e.height {
                         for x in 0..e.width {
                             let p = inverse.map([
                                 e.offset[0] as f64 + x as f64 + 0.5,
                                 e.offset[1] as f64 + y as f64 + 0.5,
                             ]);
-                            pixels.push(old.pixel(
-                                d.width,
-                                d.height,
-                                p[0].floor() as i64,
-                                p[1].floor() as i64,
-                            ));
+                            if d.color != crate::color_storage::Config::legacy() {
+                                let sample = old.sample(
+                                    d.width,
+                                    d.height,
+                                    p[0].floor() as i64,
+                                    p[1].floor() as i64,
+                                );
+                                pixels.push(sample.rgba8());
+                                if let Some(precise) = &mut precise {
+                                    precise.push(sample.rgba16());
+                                }
+                            } else {
+                                pixels.push(old.pixel(
+                                    d.width,
+                                    d.height,
+                                    p[0].floor() as i64,
+                                    p[1].floor() as i64,
+                                ));
+                            }
                         }
                     }
                     let prior = d.scene.layer_groups.frame(*key).unwrap_or_default();
                     state.scene.layer_groups.set_frame(*key, prior.then(matrix));
                     state.layers[n].pixels = pixels;
+                    state.layers[n].precise = precise;
                     state.layers[n].placement = Some(e);
                 }
                 Target::Vector(id) => {
@@ -286,13 +302,27 @@ pub fn filter(
             return Err("Linked ink filters require editable image/vector layers; rasterize other members first".into());
         }
     }
+    if filter.identity() {
+        return Ok(d.snapshot());
+    }
     let mut state = d.snapshot();
     for k in members {
         match c::target(d, k).unwrap() {
             Target::Raster(id) => {
                 let n = crate::layers::index(d, id).unwrap();
-                for p in &mut state.layers[n].pixels {
-                    *p = filter.pixel(*p);
+                if d.color != crate::color_storage::Config::legacy() {
+                    let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
+                    crate::color_storage::map_layer(
+                        &mut state.layers[n],
+                        &d.color,
+                        d.width,
+                        d.height,
+                        |value| space.from_srgb(space.to_srgb(value)?.adjusted(filter)?),
+                    )?;
+                } else {
+                    for p in &mut state.layers[n].pixels {
+                        *p = filter.pixel(*p);
+                    }
                 }
             }
             Target::Vector(id) => {
@@ -377,6 +407,16 @@ pub(crate) fn geometry_matches(d: &Document, after: &DocumentState, id: u64) -> 
             b.offset[0] as f64 + (n % b.width as usize) as f64 + 0.5,
             b.offset[1] as f64 + (n / b.width as usize) as f64 + 0.5,
         ]);
-        *p == old.pixel(d.width, d.height, q[0].floor() as i64, q[1].floor() as i64)
+        if d.color != crate::color_storage::Config::legacy()
+            || old.precise.is_some()
+            || new.precise.is_some()
+        {
+            new.sample_at(n).rgba16()
+                == old
+                    .sample(d.width, d.height, q[0].floor() as i64, q[1].floor() as i64)
+                    .rgba16()
+        } else {
+            *p == old.pixel(d.width, d.height, q[0].floor() as i64, q[1].floor() as i64)
+        }
     })
 }

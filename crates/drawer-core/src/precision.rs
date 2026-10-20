@@ -204,6 +204,17 @@ fn move_pixels(
     if count.saturating_mul(4).saturating_add(base.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4 {
         return Err("Moved pixels exceed undo budget".into());
     }
+    if base.color != crate::color_storage::Config::legacy() {
+        return move_float_pixels(
+            base,
+            after,
+            layer,
+            delta,
+            width as u32,
+            height as u32,
+            offset,
+        );
+    }
     let mut pixels = Vec::new();
     pixels
         .try_reserve_exact(count)
@@ -254,6 +265,64 @@ fn move_pixels(
         }
     }
     after.layers[layer].pixels = pixels;
+    after.layers[layer].placement = Some(destination);
+    Ok(())
+}
+fn move_float_pixels(
+    base: &DocumentState,
+    after: &mut DocumentState,
+    layer: usize,
+    delta: [i64; 2],
+    width: u32,
+    height: u32,
+    offset: [i64; 2],
+) -> Result<(), String> {
+    use crate::color_precision::Sample;
+    let source = &base.layers[layer];
+    let e = source.extent(base.width, base.height);
+    let count = width as usize * height as usize;
+    if base
+        .memory_bytes()
+        .saturating_mul(2)
+        .saturating_add(count.saturating_mul(44))
+        > DEFAULT_DOCUMENT_BUDGET / 4
+    {
+        return Err("Floating movement exceeds Undo memory".into());
+    }
+    let destination = PlacedRaster {
+        width,
+        height,
+        offset,
+    };
+    if !destination.valid() {
+        return Err("Moved raster position limit".into());
+    }
+    let mut samples = vec![Sample::default(); count];
+    let index = |x: i64, y: i64| ((y - offset[1]) * width as i64 + x - offset[0]) as usize;
+    let coverage = |x, y| {
+        base.scene.selection_coverage([
+            (e.offset[0] + x) as f64 + 0.5,
+            (e.offset[1] + y) as f64 + 0.5,
+        ]) as f64
+            / 255.
+    };
+    for y in 0..e.height as i64 {
+        for x in 0..e.width as i64 {
+            let p = source.sample_at((y * e.width as i64 + x) as usize);
+            samples[index(e.offset[0] + x, e.offset[1] + y)] = p.coverage(1. - coverage(x, y))?;
+        }
+    }
+    let space = crate::color_profile::WorkingSpace::new(&base.color.profile)?;
+    for y in 0..e.height as i64 {
+        for x in 0..e.width as i64 {
+            let p = source
+                .sample_at((y * e.width as i64 + x) as usize)
+                .coverage(coverage(x, y))?;
+            let n = index(e.offset[0] + x + delta[0], e.offset[1] + y + delta[1]);
+            samples[n] = space.compose(samples[n], p, crate::layer_blend::Mode::Normal, 1.)?;
+        }
+    }
+    crate::color_storage::set_samples(&mut after.layers[layer], &base.color, destination, samples)?;
     after.layers[layer].placement = Some(destination);
     Ok(())
 }

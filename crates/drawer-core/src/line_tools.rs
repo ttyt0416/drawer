@@ -524,6 +524,7 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
         }
     }
     let mut after = doc.scene.clone();
+    let mut floating_layers = vec![];
     let mut deltas = vec![];
     let mut work = 0usize;
     let mut staged = after.size_bytes().saturating_add(doc.scene.size_bytes());
@@ -533,6 +534,44 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
         match *target {
             Target::Raster(n) => {
                 let l = &doc.layers[n];
+                if doc.color != crate::color_storage::Config::legacy() {
+                    let extent = l.extent(doc.width, doc.height);
+                    let count = l.pixels.len();
+                    work = work.saturating_add(count);
+                    if count > 4 * 1024 * 1024
+                        || work > 64 * 1024 * 1024
+                        || doc
+                            .memory_bytes()
+                            .saturating_mul(2)
+                            .saturating_add(count.saturating_mul(44))
+                            > delta_limit
+                    {
+                        return Err("Floating multi-layer erase memory/work limit".into());
+                    }
+                    let mut samples = Vec::with_capacity(count);
+                    for offset in 0..count {
+                        let p = [
+                            extent.offset[0] as f64 + (offset % extent.width as usize) as f64 + 0.5,
+                            extent.offset[1] as f64 + (offset / extent.width as usize) as f64 + 0.5,
+                        ];
+                        let before = l.sample_at(offset);
+                        let factor = if p[0] >= 0.
+                            && p[1] >= 0.
+                            && p[0] < doc.width as f64
+                            && p[1] < doc.height as f64
+                            && (p[0] - point[0]).hypot(p[1] - point[1]) <= radius
+                        {
+                            doc.scene.selection_coverage(p) as f64 / 255.
+                        } else {
+                            0.
+                        };
+                        samples.push(before.coverage(1. - factor)?);
+                    }
+                    let mut raster = l.clone();
+                    crate::color_storage::set_samples(&mut raster, &doc.color, extent, samples)?;
+                    floating_layers.push((n, raster));
+                    continue;
+                }
                 let mut changes = vec![];
                 let low = [
                     (point[0] - radius).floor().max(0.0) as i64,
@@ -617,6 +656,14 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
     after.lines.prune_selection();
     if !after.valid() {
         return Err("Erasing exceeds vector path limits; no layers changed".into());
+    }
+    if doc.color != crate::color_storage::Config::legacy() {
+        let mut state = doc.snapshot();
+        state.scene = after;
+        for (n, layer) in floating_layers {
+            state.layers[n] = layer;
+        }
+        return doc.commit_state(state);
     }
     doc.commit_multi(deltas, (after != doc.scene).then_some(after))
 }

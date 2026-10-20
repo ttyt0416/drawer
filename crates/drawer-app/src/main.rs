@@ -30,6 +30,7 @@ mod color_selector;
 mod color_tables;
 mod cursor_settings;
 mod display_pane;
+mod document_color;
 mod drawing;
 mod edit;
 mod enclosure;
@@ -195,6 +196,7 @@ struct Drawer {
     layer_masks: layer_masks::Panel,
     layer_groups: layer_groups::Panel,
     paper_background: paper_background::Panel,
+    document_color: document_color::Panel,
     transfer_down: transfer_down::Panel,
     layer_defaults: layer_defaults::Panel,
     selection_filter: selection_filter::Panel,
@@ -344,6 +346,7 @@ impl Drawer {
             layer_masks: Default::default(),
             layer_groups: Default::default(),
             paper_background: Default::default(),
+            document_color: Default::default(),
             transfer_down: Default::default(),
             layer_defaults: Default::default(),
             selection_filter: Default::default(),
@@ -407,11 +410,19 @@ impl Drawer {
     }
 
     fn create_canvas(&mut self, spec: CanvasSpec) -> Result<(), CreateError> {
+        self.create_canvas_color(spec, drawer_core::color_storage::Config::legacy())
+    }
+    fn create_canvas_color(
+        &mut self,
+        spec: CanvasSpec,
+        color: drawer_core::color_storage::Config,
+    ) -> Result<(), CreateError> {
         if self.tabs.len() >= 256 {
             return Err(CreateError::ViewLimit);
         }
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        let mut document = Document::create(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))?;
+        let mut document =
+            Document::create_with_color(spec, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used), color)?;
         if !self.workspaces.store.current.layer_defaults.is_default()
             && used.saturating_add(document.memory_bytes().saturating_mul(4))
                 > DEFAULT_DOCUMENT_BUDGET
@@ -447,6 +458,20 @@ impl Drawer {
             .resizable(false)
             .show(ctx, |ui| {
                 size_fields::fields(ui, &mut self.new_canvas.size, true, None);
+                ui.horizontal(|ui| {
+                    ui.label("RGBA channel precision");
+                    ui.selectable_value(
+                        &mut self.new_canvas.depth,
+                        drawer_core::color_precision::Depth::Sixteen,
+                        "16 bit",
+                    );
+                    ui.selectable_value(
+                        &mut self.new_canvas.depth,
+                        drawer_core::color_precision::Depth::Eight,
+                        "8 bit",
+                    );
+                });
+                ui.small("sRGB color · dithering off");
                 self.size_presets
                     .show(ui, &mut self.new_canvas.size, self.storage.as_ref());
                 crate::help::checkbox(
@@ -477,11 +502,15 @@ impl Drawer {
                 });
             });
         if create {
-            match self
-                .new_canvas
-                .spec()
-                .and_then(|spec| self.create_canvas(spec))
-            {
+            match self.new_canvas.spec().and_then(|spec| {
+                self.create_canvas_color(
+                    spec,
+                    drawer_core::color_storage::Config {
+                        depth: self.new_canvas.depth,
+                        ..Default::default()
+                    },
+                )
+            }) {
                 Ok(()) => {
                     self.show_new_canvas = false;
                     ctx.request_repaint();
@@ -758,6 +787,7 @@ impl Drawer {
         self.layer_masks_window(ui.ctx());
         self.layer_groups_window(ui.ctx());
         self.paper_background_window(ui.ctx());
+        self.document_color_window(ui.ctx());
         self.transfer_down_window(ui.ctx());
         self.layer_defaults_window(ui.ctx());
         self.layer_selection_window(ui.ctx());
@@ -1084,6 +1114,7 @@ impl eframe::App for Drawer {
                 let original = self.documents[0].snapshot();
                 self.begin_paste(ui.ctx(), || {
                     Ok(drawer_core::paste::ClipboardImage {
+                        color: None,
                         image: drawer_core::references::LocalImage::from_rgba(
                             2,
                             1,
@@ -1530,6 +1561,10 @@ impl eframe::App for Drawer {
                     eprintln!("Reference/draft layer roles: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = document_color::smoke(&root) {
+                    eprintln!("Document color precision: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = paper_background::smoke(&root) {
                     eprintln!("Paper background and transparency display: {e}");
                     fail_smoke();
@@ -1825,7 +1860,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");
@@ -1909,6 +1944,11 @@ fn main() -> eframe::Result {
         APP_NAME,
         options,
         Box::new(move |cc| {
+            #[cfg(windows)]
+            if smoke_output.is_some() {
+                drawer_platform::gpu_color::verify(cc.gl.as_deref().ok_or("GPU context missing")?)
+                    .map_err(std::io::Error::other)?;
+            }
             let mut app = Drawer::new(&cc.egui_ctx, smoke_output)
                 .with_storage(UserStorage::from_environment()?);
             #[cfg(windows)]
@@ -3469,6 +3509,7 @@ mod tests {
         let pixels = vec![[120, 30, 80, 128]; 8];
         let make = || {
             Ok(ClipboardImage {
+                color: None,
                 image: LocalImage {
                     width: 4,
                     height: 2,
@@ -3556,6 +3597,7 @@ mod tests {
         assert_eq!(app.documents[0].snapshot(), original);
         app.begin_paste(&ctx, || {
             Ok(ClipboardImage {
+                color: None,
                 image: LocalImage {
                     width: 8,
                     height: 6,
@@ -4174,6 +4216,7 @@ mod tests {
             .with_storage(UserStorage::at(storage.root().to_path_buf()).unwrap());
         let mut doc = movie_clip().document(1000000).unwrap();
         doc.layers.push(drawer_core::document::RasterLayer {
+            precise: None,
             locked: false,
             name: "Outside".into(),
             placement: Some(drawer_core::document::PlacedRaster {

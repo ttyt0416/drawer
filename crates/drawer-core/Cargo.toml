@@ -8,7 +8,7 @@ rust-version.workspace = true
 unicode-normalization = "=0.1.25"
 icu_casemap = "=1.5.1"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "bmp"] }
-moxcms = "=0.8.1"
+moxcms = { version = "=0.8.1", features = ["extended_range"] }
 tiff = "=0.11.3"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }

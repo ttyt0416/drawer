@@ -66,6 +66,18 @@ pub fn prepare(d: &Document, color: [u8; 3], visible: bool) -> Result<DocumentSt
         .ok_or("Missing paper layer")?;
     state.layers[n].pixels = vec![[color[0], color[1], color[2], 255]; count];
     state.layers[n].placement = None;
+    state.layers[n].precise =
+        (d.color.depth == crate::color_precision::Depth::Sixteen).then(|| {
+            vec![
+                [
+                    color[0] as u16 * 257,
+                    color[1] as u16 * 257,
+                    color[2] as u16 * 257,
+                    65535
+                ];
+                count
+            ]
+        });
     state.scene.paper_background = Some(id);
     // Paper color is a replacement of the complete stored rectangle. Visibility remains a layer property.
     let mut paper = state

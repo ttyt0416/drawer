@@ -287,3 +287,7 @@ mod tests {
 mod screen_sample;
 #[cfg(windows)]
 pub use screen_sample::{ScreenSample, verify_screen_boundary};
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod gpu_color;

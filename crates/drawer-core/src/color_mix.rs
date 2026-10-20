@@ -52,9 +52,11 @@ pub(crate) fn encoded(x: f64) -> f64 {
     }
 }
 pub(crate) fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
-    let c = rgb.map(|n| n as f64 / 255.0);
+    coordinates_float(space, rgb.map(|n| n as f64 / 255.))
+}
+pub(crate) fn coordinates_float(space: Space, c: [f64; 3]) -> [f64; 3] {
     match space {
-        Space::LabD65 => crate::lab_mix::coordinates(rgb),
+        Space::LabD65 => crate::lab_mix::coordinates_float(c),
         Space::Standard => c,
         Space::Perceptual => {
             let lms = matrix(
@@ -76,6 +78,32 @@ pub(crate) fn coordinates(space: Space, rgb: [u8; 3]) -> [f64; 3] {
             )
         }
     }
+}
+pub(crate) fn mix_float(
+    space: Space,
+    a: crate::color_precision::Sample,
+    b: crate::color_precision::Sample,
+    weight: f64,
+) -> Result<crate::color_precision::Sample, String> {
+    if !weight.is_finite() {
+        return Err("Nonfinite color mixing weight".into());
+    }
+    if weight <= 0. {
+        return Ok(a);
+    }
+    if weight >= 1. {
+        return Ok(b);
+    }
+    let aa = a.alpha() * (1. - weight);
+    let ba = b.alpha() * weight;
+    let alpha = aa + ba;
+    if alpha == 0. {
+        return Ok(Default::default());
+    }
+    let a = coordinates_float(space, a.rgb());
+    let b = coordinates_float(space, b.rgb());
+    let rgb = rgb_float(space, [0, 1, 2].map(|i| (a[i] * aa + b[i] * ba) / alpha));
+    crate::color_precision::Sample::new([rgb[0], rgb[1], rgb[2], alpha])
 }
 fn rgb(space: Space, c: [f64; 3]) -> [u8; 3] {
     rgb_float(space, c).map(|v| (v * 255.0).round() as u8)

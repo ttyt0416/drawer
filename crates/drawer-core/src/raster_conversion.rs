@@ -199,7 +199,7 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
         let Target::Raster(id) = prepared.selected else {
             return Err("Folder raster output mismatch".into());
         };
-        convert_expression(&mut state, id, value);
+        convert_expression(&mut state, id, value)?;
         return finish(
             d,
             state,
@@ -332,6 +332,27 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
             pixels.push(pixel);
         }
     }
+    let high_samples = if d.color != crate::color_storage::Config::legacy() {
+        let renderer = crate::float_render::Renderer::new(&capture)?;
+        let mut samples = Vec::with_capacity(pixels.len());
+        for y in 0..placement.height {
+            for x in 0..placement.width {
+                let point = [
+                    placement.offset[0] as f64 + x as f64 + 0.5,
+                    placement.offset[1] as f64 + y as f64 + 0.5,
+                ];
+                let sample = if group.is_some() {
+                    renderer.vector_run(&affected, point)?
+                } else {
+                    renderer.source_pixel(key, point)?
+                };
+                samples.push(renderer.convert_expression(sample, value)?);
+            }
+        }
+        Some(samples)
+    } else {
+        None
+    };
     drop(r);
     drop(capture);
     let selection = crate::layer_search::Selection {
@@ -368,11 +389,15 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
     state.scene.paper.roots = state.scene.paper.root_nodes(state.layers.len());
     state.scene.paper.roots.push(crate::paper::Node::Raster(n));
     state.layers.push(RasterLayer {
+        precise: None,
         locked: false,
         name,
         pixels,
         placement: Some(placement),
     });
+    if let Some(samples) = high_samples {
+        crate::color_storage::set_samples(&mut state.layers[n], &d.color, placement, samples)?;
+    }
     state.scene.layer_ids.append(state.layers.len())?;
     let id = state.scene.layer_ids.id(n);
     let new = Key::Layer(Target::Raster(id));
@@ -401,13 +426,29 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
     state.scene.render_order.entries = entries;
     finish(d,state,new,affected,vec!["Editable sources, masks and display effects become paintable raster pixels at their original compositing position. Vector clipping runs are converted together. One Undo restores the original sources.".into()],value==Expression::Color)
 }
-fn convert_expression(s: &mut DocumentState, id: u64, value: Expression) {
+fn convert_expression(s: &mut DocumentState, id: u64, value: Expression) -> Result<(), String> {
     if let Some(n) = (0..s.layers.len()).find(|n| s.scene.layer_ids.id(*n) == id) {
-        for pixel in &mut s.layers[n].pixels {
-            expression(pixel, value);
+        if s.color != crate::color_storage::Config::legacy() {
+            let space = crate::color_profile::WorkingSpace::new(&s.color.profile)?;
+            crate::color_storage::map_layer(&mut s.layers[n], &s.color, s.width, s.height, |p| {
+                if value == Expression::Color {
+                    Ok(p)
+                } else {
+                    space.from_srgb(space.to_srgb(p)?.expression(
+                        value,
+                        128. / 255.,
+                        128. / 255.,
+                    )?)
+                }
+            })?;
+        } else {
+            for pixel in &mut s.layers[n].pixels {
+                expression(pixel, value);
+            }
         }
         s.scene.catalog.rasters.entry(id).or_default().expression = value;
     }
+    Ok(())
 }
 fn raster(d: &Document, key: Key, id: u64, value: Expression) -> Result<Prepared, String> {
     let n = crate::layers::index(d, id).ok_or("Missing raster")?;
@@ -449,6 +490,19 @@ fn raster(d: &Document, key: Key, id: u64, value: Expression) -> Result<Prepared
     drop(r);
     let mut state = d.snapshot();
     state.layers[n].pixels = pixels;
+    if d.color != crate::color_storage::Config::legacy() {
+        let renderer = crate::float_render::Renderer::new(d)?;
+        let mut samples = Vec::with_capacity(state.layers[n].pixels.len());
+        for y in 0..extent.height {
+            for x in 0..extent.width {
+                let point = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
+                samples.push(
+                    renderer.convert_expression(renderer.intrinsic_raster(n, point)?, value)?,
+                );
+            }
+        }
+        crate::color_storage::set_samples(&mut state.layers[n], &d.color, extent, samples)?;
+    }
     state.layers[n].placement = Some(extent);
     state.scene.appearance.remove(Target::Raster(id));
     state.scene.layer_effects.remove(Target::Raster(id));
@@ -489,6 +543,52 @@ fn pixels(
     }
     let mut state = d.snapshot();
     let extent = d.layers[n].extent(d.width, d.height);
+    if d.color != crate::color_storage::Config::legacy() {
+        let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
+        let mut samples = Vec::with_capacity(d.layers[n].pixels.len());
+        for i in 0..d.layers[n].pixels.len() {
+            let original = d.layers[n].sample_at(i);
+            let point = [
+                extent.offset[0] as f64 + (i % extent.width as usize) as f64 + 0.5,
+                extent.offset[1] as f64 + (i / extent.width as usize) as f64 + 0.5,
+            ];
+            let weight = if selection {
+                d.scene.selection_coverage(point) as f64 / 255.
+            } else {
+                1.
+            };
+            let after = if original.alpha() == 0. || weight == 0. {
+                original
+            } else if let Some(c) = color {
+                let rgb = c[..3].iter().map(|v| *v as f64 / 255.).collect::<Vec<_>>();
+                let desired = crate::color_precision::Sample::new([
+                    rgb[0],
+                    rgb[1],
+                    rgb[2],
+                    original.alpha(),
+                ])?;
+                space.mix(
+                    original,
+                    desired,
+                    weight,
+                    crate::color_mix::Space::Standard,
+                    0.,
+                )?
+            } else {
+                let source = space.to_srgb(original)?;
+                let target = crate::color_precision::Sample::new([
+                    0.,
+                    0.,
+                    0.,
+                    source.alpha() * (1. - source.luminance()),
+                ])?;
+                space.from_srgb(source.mix(target, weight)?)?
+            };
+            samples.push(after);
+        }
+        crate::color_storage::set_samples(&mut state.layers[n], &d.color, extent, samples)?;
+        return finish(d,state,key,vec![key],vec!["Floating point RGB/alpha conversion; one Undo restores the original precision and content.".into()],false);
+    }
     for (i, pixel) in state.layers[n].pixels.iter_mut().enumerate() {
         if pixel[3] == 0 {
             *pixel = [0; 4];

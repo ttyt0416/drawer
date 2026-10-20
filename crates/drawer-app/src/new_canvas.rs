@@ -4,6 +4,7 @@ pub struct NewCanvas {
     pub size: drawer_core::canvas_size::Dimensions,
     pub transparent: bool,
     pub color: [u8; 3],
+    pub depth: drawer_core::color_precision::Depth,
     pub error: Option<String>,
 }
 impl Default for NewCanvas {
@@ -12,6 +13,7 @@ impl Default for NewCanvas {
             size: drawer_core::canvas_size::Dimensions::new(1200, 900, 300.0),
             transparent: false,
             color: [255; 3],
+            depth: Default::default(),
             error: None,
         }
     }

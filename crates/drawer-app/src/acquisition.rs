@@ -412,6 +412,7 @@ impl Drawer {
         if layer {
             let reserved = ready.original.len() + ready.image.pixels.len() * 4;
             let packet = drawer_core::paste::ClipboardImage {
+                color: None,
                 image: ready.image.clone(),
                 origin: None,
             };

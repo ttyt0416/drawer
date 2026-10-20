@@ -70,6 +70,8 @@ pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImag
         .try_reserve_exact(count)
         .map_err(|_| "Not enough clipboard memory")?;
     let mut selected = false;
+    let mut high =
+        (doc.color != crate::color_storage::Config::legacy()).then(|| Vec::with_capacity(count));
     for y in min[1]..max[1] {
         for x in min[0]..max[0] {
             let coverage = doc
@@ -82,6 +84,14 @@ pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImag
                 selected = true;
                 p[3] = ((p[3] as u32 * coverage as u32 + 127) / 255) as u8;
             }
+            if let Some(high) = &mut high {
+                let value = raster
+                    .sample(doc.width, doc.height, x, y)
+                    .coverage(coverage as f64 / 255.)?
+                    .rgba16();
+                high.push(value);
+                p = crate::color_precision::Sample::from16(value).rgba8();
+            }
             pixels.push(p);
         }
     }
@@ -89,6 +99,10 @@ pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImag
         return Err("The selection contains no layer pixels".into());
     }
     Ok(ClipboardImage {
+        color: high.map(|pixels| crate::paste::ClipboardColor {
+            profile: doc.color.profile.clone(),
+            pixels,
+        }),
         image: LocalImage {
             width: size[0],
             height: size[1],

@@ -261,7 +261,8 @@ pub fn prepare(
             ));
         }
     }
-    let raster = RasterLayer {
+    let mut raster = RasterLayer {
+        precise: None,
         locked: false,
         name: "Merged layers".into(),
         placement: Some(PlacedRaster {
@@ -271,6 +272,17 @@ pub fn prepare(
         }),
         pixels,
     };
+    if doc.color != crate::color_storage::Config::legacy() {
+        let renderer = crate::float_render::Renderer::new(&working)?;
+        let mut samples = Vec::with_capacity(count);
+        for y in min[1]..max[1] {
+            for x in min[0]..max[0] {
+                samples.push(renderer.nodes_sample(&nodes, [x, y])?);
+            }
+        }
+        let extent = raster.placement.unwrap();
+        crate::color_storage::set_samples(&mut raster, &doc.color, extent, samples)?;
+    }
     let mut after = doc.snapshot();
     after.scene.layer_ids.initialize(doc.layers.len())?;
     let first = *indices.first().unwrap();
@@ -354,22 +366,47 @@ pub fn prepare(
     let before_roots = working.scene.paper.root_nodes(working.layers.len());
     let after_roots = rendered.scene.paper.root_nodes(rendered.layers.len());
     let mut maximum_delta = 0;
+    let floating = doc.color != crate::color_storage::Config::legacy();
+    let before_float = floating
+        .then(|| crate::float_render::Renderer::new(&working))
+        .transpose()?;
+    let after_float = floating
+        .then(|| crate::float_render::Renderer::new(&rendered))
+        .transpose()?;
     for y in min[1]..max[1] {
         for x in min[0]..max[0] {
-            let a = working.scene.paper.composite_nodes_with(
-                &working,
-                &before_roots,
-                [x, y],
-                &mut |n, _| appearance.raster(&working, n, [x, y]),
-            );
-            let b = rendered.scene.paper.composite_nodes_with(
-                &rendered,
-                &after_roots,
-                [x, y],
-                &mut |n, _| after_appearance.raster(&rendered, n, [x, y]),
-            );
-            for i in 0..4 {
-                maximum_delta = maximum_delta.max(a[i].abs_diff(b[i]));
+            if let (Some(a), Some(b)) = (&before_float, &after_float) {
+                for (a, b) in a
+                    .nodes_sample(&before_roots, [x, y])?
+                    .rgba16()
+                    .into_iter()
+                    .zip(b.nodes_sample(&after_roots, [x, y])?.rgba16())
+                {
+                    let delta = a.abs_diff(b);
+                    if delta > 1 {
+                        return Err(
+                            "Merge exceeds one 16-bit channel step; include the lower backdrop"
+                                .into(),
+                        );
+                    }
+                    maximum_delta = maximum_delta.max(delta as u8);
+                }
+            } else {
+                let a = working.scene.paper.composite_nodes_with(
+                    &working,
+                    &before_roots,
+                    [x, y],
+                    &mut |n, _| appearance.raster(&working, n, [x, y]),
+                );
+                let b = rendered.scene.paper.composite_nodes_with(
+                    &rendered,
+                    &after_roots,
+                    [x, y],
+                    &mut |n, _| after_appearance.raster(&rendered, n, [x, y]),
+                );
+                for i in 0..4 {
+                    maximum_delta = maximum_delta.max(a[i].abs_diff(b[i]));
+                }
             }
         }
     }
@@ -419,11 +456,31 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     after.scene.layer_ids.next = id.checked_add(1).ok_or("Raster identity limit")?;
     after.scene.layer_ids.rasters = vec![id];
     after.layers = vec![RasterLayer {
+        precise: None,
         locked: false,
         name: "Flattened page".into(),
         placement: None,
         pixels,
     }];
+    if doc.color != crate::color_storage::Config::legacy() {
+        let renderer = crate::float_render::Renderer::new(&source)?;
+        let mut samples = Vec::with_capacity(count);
+        for y in 0..doc.height {
+            for x in 0..doc.width {
+                samples.push(renderer.pixel([x as f64 + 0.5, y as f64 + 0.5])?);
+            }
+        }
+        crate::color_storage::set_samples(
+            &mut after.layers[0],
+            &doc.color,
+            PlacedRaster {
+                width: doc.width,
+                height: doc.height,
+                offset: [0; 2],
+            },
+            samples,
+        )?;
+    }
     crate::layer_catalog::clear_rendered(doc, &mut after)?;
     after.animation = None;
     after.scene.paper = Default::default();

@@ -479,6 +479,12 @@ fn paint(
     alpha_lock: bool,
     sample: impl Fn(u32, u32) -> ([u8; 4], u8),
 ) -> Result<DocumentState, String> {
+    if doc.color != crate::color_storage::Config::legacy() {
+        return paint_float(doc, layer, erase, alpha_lock, |x, y| {
+            let (p, c) = sample(x, y);
+            (crate::color_precision::Sample::from8(p), c)
+        });
+    }
     crate::layer_properties::paintable(doc, layer)?;
     let alpha_lock = alpha_lock || crate::clipping::alpha_locked(doc, layer);
     let raster = doc
@@ -567,6 +573,109 @@ fn paint(
             Some(extent)
         };
     }
+    Ok(state)
+}
+pub(crate) fn paint_float(
+    doc: &Document,
+    layer: usize,
+    erase: bool,
+    alpha_lock: bool,
+    sample: impl Fn(u32, u32) -> (crate::color_precision::Sample, u8),
+) -> Result<DocumentState, String> {
+    crate::layer_properties::paintable(doc, layer)?;
+    let raster = doc
+        .layers
+        .get(layer)
+        .ok_or("Select a raster paint target")?;
+    if !doc.color.valid_layers(&doc.layers)
+        || !raster.valid(doc.width, doc.height)
+        || !doc.scene.valid()
+    {
+        return Err("Invalid floating fill source".into());
+    }
+    let alpha_lock = alpha_lock || crate::clipping::alpha_locked(doc, layer);
+    if alpha_lock && erase {
+        return Ok(doc.snapshot());
+    }
+    let count = doc.width as usize * doc.height as usize;
+    if count > 4 * 1024 * 1024 || doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+        return Err("Floating fill work/Undo limit".into());
+    }
+    let mut min = [doc.width as i64, doc.height as i64];
+    let mut max = [0i64; 2];
+    for y in 0..doc.height {
+        for x in 0..doc.width {
+            if sample(x, y).1 > 0
+                && (!alpha_lock
+                    || raster
+                        .sample(doc.width, doc.height, x as i64, y as i64)
+                        .alpha()
+                        > 0.)
+            {
+                min = [min[0].min(x as i64), min[1].min(y as i64)];
+                max = [max[0].max(x as i64 + 1), max[1].max(y as i64 + 1)];
+            }
+        }
+    }
+    if min[0] >= max[0] || min[1] >= max[1] {
+        return Ok(doc.snapshot());
+    }
+    let old = raster.extent(doc.width, doc.height);
+    let offset = [old.offset[0].min(min[0]), old.offset[1].min(min[1])];
+    let end = [
+        (old.offset[0] + old.width as i64).max(max[0]),
+        (old.offset[1] + old.height as i64).max(max[1]),
+    ];
+    let extent = PlacedRaster {
+        width: (end[0] - offset[0]) as u32,
+        height: (end[1] - offset[1]) as u32,
+        offset,
+    };
+    let count = extent.width as usize * extent.height as usize;
+    if !extent.valid()
+        || count > 4 * 1024 * 1024
+        || count
+            .saturating_mul(44)
+            .saturating_add(doc.memory_bytes().saturating_mul(2))
+            > DEFAULT_DOCUMENT_BUDGET / 4
+    {
+        return Err("Floating fill storage/Undo limit".into());
+    }
+    let space = crate::color_profile::WorkingSpace::new(&doc.color.profile)?;
+    let mut samples = Vec::with_capacity(count);
+    for y in offset[1]..end[1] {
+        for x in offset[0]..end[0] {
+            let before = raster.sample(doc.width, doc.height, x, y);
+            let after = if x >= min[0] && y >= min[1] && x < max[0] && y < max[1] {
+                let (ink, c) = sample(x as u32, y as u32);
+                let factor = c as f64 / 255.;
+                if c == 0 || alpha_lock && before.alpha() == 0. {
+                    before
+                } else if erase {
+                    before.coverage(1. - factor)?
+                } else if alpha_lock {
+                    space.atop(before, ink, crate::layer_blend::Mode::Normal, factor)?
+                } else {
+                    space.compose(before, ink, crate::layer_blend::Mode::Normal, factor)?
+                }
+            } else {
+                before
+            };
+            samples.push(after);
+        }
+    }
+    let mut state = doc.snapshot();
+    crate::color_storage::set_samples(&mut state.layers[layer], &doc.color, extent, samples)?;
+    state.layers[layer].placement = if extent == old {
+        raster.placement
+    } else {
+        Some(extent)
+    };
+    if state.layers[layer].same_color(raster) && extent == old {
+        return Ok(doc.snapshot());
+    }
+    crate::layer_properties::validate_edit(doc, &state)?;
+    crate::clipping::validate_state(doc, &state)?;
     Ok(state)
 }
 fn blend(a: [u8; 4], b: [u8; 4], coverage: u8, erase: bool, alpha_lock: bool) -> [u8; 4] {

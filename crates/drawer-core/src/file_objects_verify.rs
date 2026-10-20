@@ -406,6 +406,7 @@ fn clipboard(root: &std::path::Path) -> Result<(), String> {
     let mut d = crate::layer_roles_verify::page()?;
     let before = d.snapshot();
     let packet = crate::paste::ClipboardImage {
+        color: None,
         image: crate::references::LocalImage {
             width: 2,
             height: 1,

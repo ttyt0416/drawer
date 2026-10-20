@@ -130,6 +130,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let doc = &mut app.documents[0];
     doc.layers[0].pixels = vec![[255, 0, 0, 128]; 9];
     doc.layers.push(drawer_core::document::RasterLayer {
+        precise: None,
         locked: false,
         name: "Blue overlay".into(),
         pixels: vec![[0, 0, 255, 255]; 9],

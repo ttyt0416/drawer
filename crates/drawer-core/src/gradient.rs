@@ -111,7 +111,7 @@ impl Settings {
                 .as_ref()
                 .is_none_or(crate::gradient_ramp::Ramp::valid)
     }
-    pub fn color(&self, p: Point, anchors: Option<[Point; 2]>) -> [u8; 4] {
+    pub(crate) fn parameter(&self, p: Point, anchors: Option<[Point; 2]>) -> Option<f64> {
         let [a, b] = anchors.unwrap_or([self.start, self.end]);
         let delta = [b[0] - a[0], b[1] - a[1]];
         let length = delta[0].hypot(delta[1]);
@@ -141,11 +141,17 @@ impl Settings {
             Repeat::Reverse => 1.0 - (t.rem_euclid(2.0) - 1.0).abs(),
             Repeat::NotDraw => {
                 if !(0.0..=1.0).contains(&t) {
-                    return [0; 4];
+                    return None;
                 } else {
                     t
                 }
             }
+        };
+        Some(t)
+    }
+    pub fn color(&self, p: Point, anchors: Option<[Point; 2]>) -> [u8; 4] {
+        let Some(t) = self.parameter(p, anchors) else {
+            return [0; 4];
         };
         let sample = if let Some(ramp) = &self.ramp {
             ramp.sample(t)
@@ -378,6 +384,17 @@ pub fn prepare(
             .ok_or("Gradient ID exhausted")?;
         state.scene.gradients.layers.push(layer);
         state
+    } else if doc.color != crate::color_storage::Config::legacy() {
+        let renderer = crate::float_render::Renderer::new(doc)?;
+        crate::bucket::paint_float(doc, target, false, false, |x, y| {
+            let p = doc
+                .scene
+                .transform
+                .inverse()
+                .map([x as f64 + 0.5, y as f64 + 0.5]);
+            let sample = renderer.gradient(&layer, p).unwrap_or_default();
+            (sample, if sample.alpha() > 0. { 255 } else { 0 })
+        })?
     } else {
         bucket::paint_pixels(doc, target, false, |x, y| {
             layer.pixel(

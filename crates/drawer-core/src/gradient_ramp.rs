@@ -41,7 +41,7 @@ impl Brightness {
         Self::High,
         Self::Highest,
     ];
-    fn amount(self) -> f64 {
+    pub(crate) fn amount(self) -> f64 {
         Self::ALL.iter().position(|x| *x == self).unwrap() as f64 / 4.0
     }
 }

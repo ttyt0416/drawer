@@ -469,6 +469,7 @@ mod reference_tests {
         d.layers[0].pixels[1] = [0, 255, 0, 255];
         d.layers[0].pixels[2] = [0, 255, 0, 255];
         d.layers.push(crate::document::RasterLayer {
+            precise: None,
             locked: true,
             name: "Overlay".into(),
             pixels: vec![[0, 0, 255, 255]; 9],

@@ -869,3 +869,14 @@ Select Convert stored ink for a separate lossy conversion preview. Applying chan
 Use the Paper and transparency display command for a real output paper layer or local check colors. Preview output paper and Apply paper layer creates an ordinary raster below existing ink; replacing paper color replaces all stored paper pixels. The layer can be hidden, renamed, deleted and locked in Layers. Hiding it restores the original ink transparency in PNG. Paper edits use one Undo and are saved in the document.
 
 Apply display colors saves the two transparency check colors locally. They appear only behind the rendered image in canvases and separate views. They never enter exported pixels, document dirty state or Undo. Reset transparency colors restores the default gray pair; apply to save. Cancel/Escape applies neither setting. Paper and display buttons act separately.
+
+
+## document-color | 문서 정밀도와 RGB 프로파일 | 16bit 8bit ICC 색역 디더링 프로파일 변환
+
+New canvas에서 16 bit가 기본이며 8 bit도 선택할 수 있습니다. Document color 명령에서 채널 정밀도, 고정 디더 시드와 로컬 RGB ICC 파일을 변경합니다. 디더링은 기본 꺼짐입니다. 프로파일 없는 RGB는 sRGB로 해석합니다. 과거 문서의 호환 계산은 이 명령의 Preview/Apply로 전환합니다.
+
+Preview color conversion은 원본을 바꾸지 않고 전후 화면과 정밀도 때문에 달라지는 저장 채널 수/최대 차이를 표시합니다. Apply color conversion은 픽셀·정밀도·프로파일을 한 번에 적용하며 한 번의 Undo로 복원합니다. 16→8은 채널 정보가 줄어듭니다. Assign profile은 픽셀 숫자를 유지하지만 색의 의미와 외관이 달라질 수 있습니다.
+
+벡터/소재/애니메이션이나 표시 효과 색을 함께 변환하려면 현재 프레임의 전체 래스터화 옵션을 명시적으로 선택하고 미리보기를 확인합니다. 숨김/문서 밖 내용과 편집 구조가 없어지며 한 Undo가 모두 복원합니다. 이 옵션을 선택하지 않으면 해당 변환은 원본을 보존하며 거절합니다. Cancel/Escape와 낡은 문서/프레임 미리보기는 무변경입니다.
+
+PNG8 출력은 문서 RGB와 ICC를 저장하며 원본 16bit 정밀도를 유지합니다. PSD와 외부 클립보드는 sRGB RGB8 출력입니다. 내부 복사/붙여넣기는 16bit 채널과 프로파일을 보존합니다. 소프트프루프와 별도 보기의 프로파일은 표시 전용이며 저장 픽셀과 Undo를 바꾸지 않습니다. CMYK는 지원되는 명시적 입출력 변환을 이용하며 RGBA 문서 프로파일로 지정하지 않습니다.

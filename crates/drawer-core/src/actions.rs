@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 104] = [
+pub const EXTRA_COMMANDS: [&str; 105] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -90,6 +90,7 @@ pub const EXTRA_COMMANDS: [&str; 104] = [
     "transfer-down",
     "layer-groups",
     "paper-background",
+    "document-color",
     "material-layer-edit",
     "layer-defaults",
     "import-image-layer",
@@ -413,6 +414,7 @@ impl Settings {
             "manage-layers" => "Manage local layers",
             "adjustment-layer" => "Nondestructive brightness, contrast, hue and saturation layers",
             "layer-search" => "Search, filter and select local layers",
+            "document-color" => "Document channel precision and RGB ICC conversion preview",
             "paper-background" => "Output paper layer and display-only transparency colors",
             "layer-groups" => "Linked layer movement, transforms, ink filters and solo visibility",
             "transfer-down" => "Transfer selected content down and retain the upper layer",

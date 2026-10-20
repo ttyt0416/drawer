@@ -54,7 +54,7 @@ pub fn layers_supported(d: &Document) -> bool {
             .iter()
             .all(|f| !f.paper.hidden && f.paper.blend == crate::brush_composite::Mode::Normal)
 }
-pub const LOSS: &str = "PSD stores rendered pixels. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Layer blend settings are baked in rendered-image export; editable blend-mode metadata is not preserved. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
+pub const LOSS: &str = "PSD stores rendered RGB8 sRGB pixels; 16-bit document precision is reduced only in this output. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Layer blend settings are baked in rendered-image export; editable blend-mode metadata is not preserved. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
 pub fn export(
     d: &Document,
     path: &Path,
@@ -115,10 +115,30 @@ pub fn export(
     if extra > budget / 2 {
         return Err(error("Draft output snapshot exceeds export memory"));
     }
-    let (_, _, merged) = Renderer::for_export(d)
-        .map_err(error)?
-        .output(d.dpi, budget.saturating_sub(extra) / 4)
-        .map_err(error)?;
+    let render = Renderer::for_export(d).map_err(error)?;
+    let merged = if d.color != crate::color_storage::Config::legacy() {
+        let count = d.width as usize * d.height as usize;
+        if count.saturating_mul(4) > budget.saturating_sub(extra) / 4 {
+            return Err(error("PSD RGB8 output budget"));
+        }
+        let mut pixels = Vec::with_capacity(count);
+        for y in 0..d.height {
+            for x in 0..d.width {
+                pixels.push(
+                    render
+                        .display_sample([x as f64 + 0.5, y as f64 + 0.5])
+                        .map_err(error)?
+                        .rgba8(),
+                );
+            }
+        }
+        pixels
+    } else {
+        render
+            .output(d.dpi, budget.saturating_sub(extra) / 4)
+            .map_err(error)?
+            .2
+    };
     let layers = match choice {
         Choice::RenderedLayers => {
             if !layers_supported(d) {
@@ -129,17 +149,30 @@ pub fn export(
             let mut remaining = budget / 4;
             let mut layers = Vec::new();
             for node in d.scene.paper.root_nodes(d.layers.len()).into_iter().rev() {
-                let layer = d
+                let mut layer = d
                     .scene
                     .paper
                     .render_node(d, node, remaining)
                     .map_err(error)?;
+                if d.color != crate::color_storage::Config::legacy() {
+                    let transform = crate::color_profile::Transform::new(
+                        &d.color.profile,
+                        &crate::color_profile::RgbProfile::Srgb,
+                    )
+                    .map_err(error)?;
+                    layer.pixels = (0..layer.pixels.len())
+                        .map(|n| transform.map(layer.sample_at(n)).map(|s| s.rgba8()))
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(error)?;
+                    layer.precise = None;
+                }
                 remaining = remaining.saturating_sub(layer.pixels.len() * 4);
                 layers.push(layer);
             }
             layers
         }
         Choice::RenderedImage => vec![RasterLayer {
+            precise: None,
             locked: false,
             name: "Rendered Drawer image".into(),
             pixels: merged.clone(),
@@ -361,6 +394,7 @@ mod tests {
             ..Default::default()
         };
         d.layers.push(RasterLayer {
+            precise: None,
             locked: true,
             name: "Top blue".into(),
             pixels: vec![[30, 90, 220, 70]; 45],

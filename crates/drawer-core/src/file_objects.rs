@@ -166,7 +166,11 @@ pub fn read(path: &Path, owner: Option<&Path>) -> Result<(PathBuf, Image), Strin
         pixels.try_reserve_exact(count).map_err(|e| e.to_string())?;
         for y in 0..d.height {
             for x in 0..d.width {
-                pixels.push(renderer.pixel([x as f64 + 0.5, y as f64 + 0.5]));
+                pixels.push(
+                    renderer
+                        .display_sample([x as f64 + 0.5, y as f64 + 0.5])?
+                        .rgba8(),
+                );
             }
         }
         Image {
@@ -698,6 +702,13 @@ pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String
     if let Some(e) = renderer.error() {
         return Err(e.into());
     }
+    let float_renderer = (d.color != crate::color_storage::Config::legacy())
+        .then(|| crate::float_render::Renderer::new(&raw))
+        .transpose()?;
+    let display_transform = crate::color_profile::Transform::new(
+        &d.color.profile,
+        &crate::color_profile::RgbProfile::Srgb,
+    )?;
     let mut pixels = Vec::new();
     pixels
         .try_reserve_exact(size[0] as usize * size[1] as usize)
@@ -768,6 +779,13 @@ pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String
                     rgba
                 }
                 _ => return Err("Choose a canvas content layer".into()),
+            };
+            let rgba = if let Some(renderer) = &float_renderer {
+                display_transform
+                    .map(renderer.source_pixel(key, point)?)?
+                    .rgba8()
+            } else {
+                rgba
             };
             pixels.push(rgba);
         }

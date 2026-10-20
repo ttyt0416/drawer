@@ -124,7 +124,7 @@ fn composite(base: [u8; 4], ink: [u8; 4], alpha: f64, bw: f64, iw: f64) -> [u8; 
     result[3] = (alpha * 255.0).round() as u8;
     result
 }
-fn random([x, y]: [i64; 2], seed: u32) -> f64 {
+pub(crate) fn random([x, y]: [i64; 2], seed: u32) -> f64 {
     let mut hash = (x as u64).wrapping_mul(0x9e3779b185ebca87)
         ^ (y as u64).wrapping_mul(0xc2b2ae3d27d4eb4f)
         ^ (seed as u64).wrapping_mul(0x165667b19e3779f9);
@@ -259,6 +259,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let mut d = document()?;
     d.layers[0].pixels.fill([50, 100, 200, 255]);
     d.layers.push(crate::document::RasterLayer {
+        precise: None,
         locked: false,
         name: "Eraser child".into(),
         pixels: vec![[0, 0, 0, 128]; 512],
