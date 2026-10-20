@@ -153,6 +153,7 @@ try {
     if ($smokeResult -notmatch 'vector_creation=true') { throw '벡터 직선·곡선 생성 검증 실패' }
     if ($smokeResult -notmatch 'vector_edit=true') { throw '벡터 제어점·폭·색·필압 편집 검증 실패' }
     if ($smokeResult -notmatch 'vector_erase=true') { throw '벡터 선택·삭제·지우기 모드/참조/전체 레이어 검증 실패' }
+    if ($smokeResult -notmatch 'vector_nodes=true') { throw '벡터 제어점 추가·삭제·각진/부드러운 접선 검증 실패' }
     if ($smokeResult -notmatch 'shape_creation=true') { throw '도형·곡선·래스터/벡터·입력 취소 검증 실패' }
     if ($smokeResult -notmatch 'gradient_ramps=true') { throw '그라데이션 색상 지점·혼색·밝기·프리셋 검증 실패' }
     if ($smokeResult -notmatch 'gradient_tools=true') { throw '그라데이션·자유형 영역·편집 레이어 검증 실패' }

@@ -22,6 +22,7 @@ pub(super) struct Gesture {
     previous: Selection,
     selection: Selection,
     preview: Option<Document>,
+    planned: Option<Box<drawer_core::sizing::DocumentState>>,
 }
 pub(super) struct Hover {
     canvas_layer: egui::LayerId,
@@ -82,6 +83,9 @@ impl Gesture {
                 ..Default::default()
             },
             Tool::Select => Patch::default(),
+            Tool::AddNode | Tool::DeleteNode | Tool::CornerNode | Tool::SmoothNode => {
+                Patch::default()
+            }
         }
     }
 }
@@ -169,6 +173,22 @@ impl Drawing {
         }
         if matches!(e.phase, Phase::Move | Phase::Up) {
             s.last = egui::pos2(e.position[0] as f32, e.position[1] as f32);
+            if s.planned.is_some() {
+                if e.phase == Phase::Up {
+                    self.ownership.clear();
+                    if s.start.distance(s.last) > s.settings.radius as f32 {
+                        self.vector_selection = s.previous;
+                        return;
+                    }
+                    if let Err(error) = doc.commit_state(*s.planned.take().unwrap()) {
+                        self.error = Some(error);
+                        self.vector_selection = s.previous;
+                    }
+                    return;
+                }
+                self.vector_capture = Some(s);
+                return;
+            }
             let result = core::prepare(doc, s.layer, &s.selection, s.patch());
             match result {
                 Ok(state) => {
@@ -324,7 +344,27 @@ impl Drawing {
             self.events[index].1 = true;
             let previous = self.vector_selection.clone();
             let mut selection = previous.clone();
-            if tool == Tool::Select {
+            let mut planned = None;
+            let mut preview = None;
+            if let Some(op) = tool.node_operation() {
+                match drawer_core::vector_nodes::prepare(doc, layer, *hit, op)
+                    .and_then(|state| bucket::preview(doc, state.clone()).map(|p| (state, p)))
+                {
+                    Ok((state, p)) => {
+                        selection = Selection {
+                            controls: state.scene.lines.selection.points.clone(),
+                            paths: state.scene.lines.selection.paths.clone(),
+                        };
+                        planned = Some(Box::new(state));
+                        preview = Some(p);
+                    }
+                    Err(error) => {
+                        self.error = Some(error);
+                        self.ownership.clear();
+                        continue;
+                    }
+                }
+            } else if tool == Tool::Select {
                 let mut paths = if ui.input(|i| i.modifiers.shift) {
                     previous.path_ids().into_iter().collect::<Vec<_>>()
                 } else {
@@ -373,7 +413,8 @@ impl Drawing {
                 last: pos,
                 previous,
                 selection: selection.clone(),
-                preview: None,
+                preview,
+                planned,
             };
             self.vector_selection = selection;
             self.vector_capture = Some(Box::new(s));
@@ -423,22 +464,64 @@ impl Drawing {
                     );
                 }
             }
-            for n in 0..path.control_count() {
-                if let Some(p) = path.control_point(n) {
+            let controls = if effective(ui.ctx(), self.vector_settings)
+                .node_operation()
+                .is_some()
+            {
+                drawer_core::vector_nodes::controls(path)
+            } else {
+                (0..path.control_count())
+                    .filter_map(|n| path.control_point(n))
+                    .collect()
+            };
+            for (n, p) in controls.into_iter().enumerate() {
+                {
                     let p = project(doc.scene.transform.map(p));
                     let selected = self.vector_selection.controls.contains(&Control {
                         path: path.id,
                         point: n as u16,
                     });
-                    painter.circle_filled(
-                        p,
-                        if selected { 4. } else { 2.5 },
-                        if selected {
-                            egui::Color32::YELLOW
-                        } else {
-                            egui::Color32::LIGHT_BLUE
-                        },
-                    );
+                    let color = if selected {
+                        egui::Color32::YELLOW
+                    } else {
+                        egui::Color32::LIGHT_BLUE
+                    };
+                    let nodes = path.definition.as_ref().and_then(|d| d.nodes.as_ref());
+                    if (nodes.is_some()
+                        || effective(ui.ctx(), self.vector_settings)
+                            .node_operation()
+                            .is_some())
+                        && !nodes.is_some_and(|d| d.smooth.get(n) == Some(&true))
+                    {
+                        painter.rect_filled(
+                            egui::Rect::from_center_size(p, egui::vec2(6., 6.)),
+                            0.,
+                            color,
+                        );
+                    } else {
+                        painter.circle_filled(p, if selected { 4. } else { 2.5 }, color);
+                    }
+                    if selected
+                        && let Some(def) = &path.definition
+                        && let Some(nodes) = &def.nodes
+                        && n < def.controls.len()
+                    {
+                        for handle in [nodes.incoming[n], nodes.outgoing[n]] {
+                            let h = project(doc.scene.transform.map(def.creation.inverse().map([
+                                def.controls[n][0] + handle[0],
+                                def.controls[n][1] + handle[1],
+                            ])));
+                            painter.line_segment(
+                                [p, h],
+                                egui::Stroke::new(1., egui::Color32::LIGHT_BLUE),
+                            );
+                            painter.circle_stroke(
+                                h,
+                                2.5,
+                                egui::Stroke::new(1., egui::Color32::LIGHT_BLUE),
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -477,6 +560,9 @@ impl Drawing {
                 }
                 Tool::Color => format!("RGBA: {:?}", s.color),
                 Tool::Select => format!("{} whole strokes", s.selection.path_ids().len()),
+                tool => tool.node_operation().map_or_else(String::new, |op| {
+                    format!("{} · release to apply", op.label())
+                }),
             };
             painter.text(
                 s.last + egui::vec2(12., -18.),
@@ -556,6 +642,9 @@ impl Drawer {
         let n = self.active.ok_or("Open a page first")?;
         if let Some(tool) = tool {
             self.workspaces.store.current.vector_edit.tool = tool;
+            if tool.node_operation().is_some() {
+                self.status=Some("Node tools use the stored outline points; preview before release. Undo restores the original curve definition.".into());
+            }
         }
         self.drawing.mode = crate::precision::Mode::VectorEdit;
         self.drawing.connect_line = false;
@@ -686,6 +775,10 @@ impl Drawer {
             let r=ui.add_enabled(fresh && values.is_some(),egui::Button::new("Prepare numeric preview"));self.vector_edit.preview=Some(r.rect);preview=r.clicked();
             if let Some(images)=&e.images { ui.horizontal(|ui| {for (label,image) in ["Before","After"].into_iter().zip(images) {ui.vertical(|ui| {ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});} }); }
             let r=ui.add_enabled(fresh && e.prepared.is_some(),egui::Button::new("Apply numeric edit"));self.vector_edit.apply=Some(r.rect);apply=r.clicked();
+            ui.collapsing("Node tools",|ui| {
+                ui.horizontal_wrapped(|ui|{for (tool,label) in [(Tool::AddNode,"Add node"),(Tool::DeleteNode,"Delete node"),(Tool::CornerNode,"Corner"),(Tool::SmoothNode,"Smooth")] {ui.radio_value(&mut self.workspaces.store.current.vector_edit.tool,tool,label);}});
+                ui.small("Existing shape definitions use their stored outline points as nodes. Add inside a segment, delete a point, or switch its tangents. Preview on press; release applies one Undo. Escape cancels.");
+            });
         });
         if reload {
             e = Box::new(Draft::new(
@@ -1206,11 +1299,184 @@ fn smoke_edges(root: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+pub(crate) fn node_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::vector_nodes_verify::verify(root)?;
+    for (tool, command, point, count) in [
+        (Tool::AddNode, "vector-node-add-tool", [10., 10.], 4),
+        (Tool::DeleteNode, "vector-node-delete-tool", [16., 4.], 2),
+        (Tool::CornerNode, "vector-node-corner-tool", [16., 4.], 3),
+        (Tool::SmoothNode, "vector-node-smooth-tool", [16., 4.], 3),
+    ] {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 32,
+            height: 32,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        app.documents[0].commit_state(drawer_core::vector_nodes_verify::fixture()?.snapshot())?;
+        app.documents[0].view.zoom = 3.;
+        let layer = app.documents[0].scene.lines.layers[0].id;
+        let path = app.documents[0].scene.lines.layers[0].paths[0].id;
+        if tool == Tool::CornerNode {
+            let hit = core::Hit {
+                path,
+                control: Some(1),
+                parameter: None,
+                point: [16., 4.],
+                distance: 0.,
+            };
+            let state = drawer_core::vector_nodes::prepare(
+                &app.documents[0],
+                layer,
+                hit,
+                drawer_core::vector_nodes::Operation::Smooth,
+            )?;
+            app.documents[0].commit_state(state)?;
+        }
+        app.panels.targets.insert(
+            app.documents[0].id,
+            drawer_core::thumbnail::Target::Vector(layer),
+        );
+        let mut time = 0.;
+        let step = |app: &mut Drawer, time: &mut f64, events| {
+            *time += 0.1;
+            crate::input_replay::frame(&ctx, app, *time, events);
+        };
+        step(&mut app, &mut time, vec![]);
+        step(&mut app, &mut time, vec![]);
+        app.execute_command(&ctx, command);
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let down = crate::precision::pointer(&ctx, &app, point, Phase::Down);
+        app.drawing.virtual_events(vec![down], false);
+        step(&mut app, &mut time, vec![]);
+        let p = app
+            .drawing
+            .vector_edit_preview(app.documents[0].id)
+            .ok_or_else(|| format!("Node preview missing {tool:?}: {:?}", app.status))?;
+        if p.scene.lines.layers[0].paths[0].control_count() != count
+            || app.documents[0].snapshot() != before
+            || app.documents[0].history_counts() != history
+        {
+            return Err(format!("Node preview/source isolation {tool:?}"));
+        }
+        let mut up = down;
+        up.phase = Phase::Up;
+        app.drawing.virtual_events(vec![up], false);
+        step(&mut app, &mut time, vec![]);
+        let p = &app.documents[0].scene.lines.layers[0].paths[0];
+        if p.control_count() != count
+            || app.documents[0].history_counts().0 != history.0 + 1
+            || p.width != before.scene.lines.layers[0].paths[0].width
+            || p.color != before.scene.lines.layers[0].paths[0].color
+            || app.documents[0].scene.lines.layers[0].paths[1]
+                != before.scene.lines.layers[0].paths[1]
+        {
+            return Err(format!(
+                "Node mouse commit/style/unselected path {tool:?}: {:?}",
+                app.status
+            ));
+        }
+        if matches!(tool, Tool::CornerNode | Tool::SmoothNode)
+            && p.definition
+                .as_ref()
+                .unwrap()
+                .nodes
+                .as_ref()
+                .unwrap()
+                .smooth[1]
+                != (tool == Tool::SmoothNode)
+        {
+            return Err("Node mode marker mismatch".into());
+        }
+        let file = root.join(format!("vector-node-input-{tool:?}.drawer"));
+        drawer_core::files::save(&mut app.documents[0], &file).map_err(|e| e.to_string())?;
+        if drawer_core::files::open(&file, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .snapshot()
+            != app.documents[0].snapshot()
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+        {
+            return Err(format!("Node mouse native/Undo {tool:?}"));
+        }
+        if tool != Tool::AddNode {
+            continue;
+        }
+        for cancel in 0..5 {
+            let before = app.documents[0].snapshot();
+            let history = app.documents[0].history_counts();
+            let selection = app.drawing.vector_selection.clone();
+            app.drawing.virtual_events(vec![down], false);
+            step(&mut app, &mut time, vec![]);
+            let events = match cancel {
+                0 => vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }],
+                1 => vec![egui::Event::WindowFocused(false)],
+                2 => {
+                    let mut e = down;
+                    e.phase = Phase::Cancel;
+                    app.drawing.virtual_events(vec![e], false);
+                    vec![]
+                }
+                3 => {
+                    let mut e = up;
+                    e.position[0] += 30.;
+                    app.drawing.virtual_events(vec![e], false);
+                    vec![]
+                }
+                _ => {
+                    app.documents[0].view.angle = 30.;
+                    vec![]
+                }
+            };
+            step(&mut app, &mut time, events);
+            if app.drawing.pending()
+                || app.documents[0].snapshot() != before
+                || app.documents[0].history_counts() != history
+                || app.drawing.vector_selection != selection
+            {
+                return Err(format!("Node cancel {cancel} changed source/selection"));
+            }
+            app.documents[0].view.angle = 0.;
+            step(
+                &mut app,
+                &mut time,
+                vec![
+                    egui::Event::WindowFocused(true),
+                    egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn vector_mouse_pressure_points_color_numbers_cancellation_and_temporary_tool() {
         let root = crate::tests::TestDirectory::new();
         super::smoke(&root.0).unwrap();
+    }
+    #[test]
+    fn vector_nodes_mouse_add_delete_corner_smooth_preview_cancel_and_undo() {
+        let root = crate::tests::TestDirectory::new();
+        super::node_smoke(&root.0).unwrap();
     }
 }

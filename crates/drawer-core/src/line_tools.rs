@@ -183,6 +183,9 @@ impl Data {
                             && p.definition
                                 .as_ref()
                                 .is_none_or(crate::shapes::Definition::valid)
+                            && p.definition
+                                .as_ref()
+                                .is_none_or(|d| d.nodes.is_none() || d.settings.closed == p.closed)
                             && (0.0..=512.0).contains(&p.width)
                             && p.pressure.valid()
                     })

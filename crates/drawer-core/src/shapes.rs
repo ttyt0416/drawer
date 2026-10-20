@@ -149,6 +149,8 @@ impl Settings {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodes: Option<crate::vector_nodes::Data>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub snapped_controls: bool,
     pub settings: Settings,
@@ -160,6 +162,12 @@ fn is_false(v: &bool) -> bool {
 }
 impl Definition {
     pub fn geometry(&self) -> Result<Geometry, String> {
+        if let Some(nodes) = &self.nodes {
+            return Ok(Geometry {
+                points: nodes.sample(&self.controls, self.settings.closed)?.points,
+                closed: self.settings.closed,
+            });
+        }
         let mut s = self.settings;
         if self.snapped_controls {
             s.snap = false;
@@ -169,11 +177,19 @@ impl Definition {
     pub fn valid(&self) -> bool {
         self.settings.valid()
             && self.creation.valid()
-            && (2..=128).contains(&self.controls.len())
+            && (2..=if self.nodes.is_some() { 4096 } else { 128 }).contains(&self.controls.len())
+            && self.nodes.as_ref().is_none_or(|n| {
+                n.valid(&self.controls) && (!self.settings.closed || self.controls.len() >= 3)
+            })
             && self.controls.iter().copied().all(point_valid)
     }
     pub fn bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.controls.len() * 16
+        std::mem::size_of::<Self>()
+            + self.controls.len() * 16
+            + self
+                .nodes
+                .as_ref()
+                .map_or(0, crate::vector_nodes::Data::bytes)
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -454,6 +470,7 @@ fn prepare_inner(
         fill: s.paint.fill().then_some(s.fill),
         stroke: s.paint.line(),
         definition: Some(Definition {
+            nodes: None,
             settings: s,
             snapped_controls: resolved,
             controls: controls.to_vec(),

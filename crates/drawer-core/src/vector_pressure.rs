@@ -141,6 +141,51 @@ impl Profile {
         }
         Ok(())
     }
+    pub fn edit_node_controls(
+        &mut self,
+        parameters: &[f64],
+        edits: &[(usize, f64)],
+        closing_period: Option<f64>,
+    ) -> Result<(), String> {
+        if !(2..=4096).contains(&parameters.len())
+            || parameters[0] != 0.
+            || !positions_valid(parameters, parameters.len())
+            || edits
+                .iter()
+                .any(|(n, v)| *n >= parameters.len() || !v.is_finite() || !(0. ..=2.).contains(v))
+            || closing_period.is_some_and(|p| !p.is_finite() || p <= 1.)
+        {
+            return Err("Invalid node pressure anchors".into());
+        }
+        let mut positions = parameters.to_vec();
+        let extra = *positions.last().unwrap() < 1.;
+        if extra {
+            positions.push(1.);
+        }
+        let mut controls = positions
+            .iter()
+            .map(|t| self.control_at(*t))
+            .collect::<Vec<_>>();
+        for (n, value) in edits {
+            controls[*n] = (*value * 100.).round() / 100.;
+        }
+        if extra && let Some(period) = closing_period {
+            let n = parameters.len() - 1;
+            let f = (1. - parameters[n]) / (period - parameters[n]);
+            controls[n + 1] = controls[n] * (1. - f) + controls[0] * f;
+        }
+        let uniform = positions
+            .iter()
+            .enumerate()
+            .all(|(n, t)| (*t - n as f64 / (positions.len() - 1) as f64).abs() < 1e-12);
+        self.controls = controls;
+        self.control_positions = if uniform { vec![] } else { positions };
+        if self.controls.iter().all(|v| *v == 1.) {
+            self.controls.clear();
+            self.control_positions.clear();
+        }
+        Ok(())
+    }
     pub fn maximum(&self) -> f64 {
         let a = if !self.device_enabled || self.device.is_empty() {
             1.
@@ -275,6 +320,13 @@ pub(crate) fn taper_hit(p: Point, a: Point, b: Point, wa: f64, wb: f64) -> bool 
 fn fragment_pressure(path: &Path, parameters: &[f64]) -> Result<Profile, String> {
     if path.pressure.is_default() {
         return Ok(Profile::default());
+    }
+    if parameters.len() == path.points.len()
+        && parameters.iter().enumerate().all(|(n, t)| {
+            (*t - n as f64 / path.points.len().saturating_sub(1).max(1) as f64).abs() < 1e-12
+        })
+    {
+        return Ok(path.pressure.clone());
     }
     if parameters.len() < 2
         || parameters.len() > 4096

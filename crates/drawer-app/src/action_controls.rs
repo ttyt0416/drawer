@@ -352,6 +352,18 @@ impl Drawer {
                 }
                 "vector-delete-strokes" => self.delete_vector_strokes()?,
                 "vector-eraser-tool" => self.begin_vector_eraser(),
+                "vector-node-add-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::AddNode))?
+                }
+                "vector-node-delete-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::DeleteNode))?
+                }
+                "vector-node-corner-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::CornerNode))?
+                }
+                "vector-node-smooth-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::SmoothNode))?
+                }
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

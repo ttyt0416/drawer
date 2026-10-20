@@ -584,3 +584,7 @@ crates/drawer-core/src/vector_erase.rs
 crates/drawer-core/src/vector_erase_verify.rs
 crates/drawer-app/src/vector_erase_ui.rs
 docs/process/vector-erase.md
+
+crates/drawer-core/src/vector_nodes.rs
+crates/drawer-core/src/vector_nodes_verify.rs
+docs/process/vector-nodes.md

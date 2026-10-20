@@ -650,6 +650,10 @@ impl Drawer {
                                 ("Select vector strokes", "vector-stroke-tool"),
                                 ("Delete selected strokes", "vector-delete-strokes"),
                                 ("Vector eraser…", "vector-eraser-tool"),
+                                ("Add vector node", "vector-node-add-tool"),
+                                ("Delete vector node", "vector-node-delete-tool"),
+                                ("Corner vector node", "vector-node-corner-tool"),
+                                ("Smooth vector node", "vector-node-smooth-tool"),
                                 ("Duplicate selected layer", "duplicate-layer"),
                                 ("Delete selected layer", "delete-layer"),
                             ] {

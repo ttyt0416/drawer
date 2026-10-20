@@ -8,7 +8,7 @@ use crate::{
     vector_selection::{Control, Kind, State},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tool {
     #[default]
@@ -16,6 +16,22 @@ pub enum Tool {
     Pressure,
     Color,
     Select,
+    AddNode,
+    DeleteNode,
+    CornerNode,
+    SmoothNode,
+}
+impl Tool {
+    pub fn node_operation(self) -> Option<crate::vector_nodes::Operation> {
+        use crate::vector_nodes::Operation as Op;
+        match self {
+            Self::AddNode => Some(Op::Add),
+            Self::DeleteNode => Some(Op::Delete),
+            Self::CornerNode => Some(Op::Corner),
+            Self::SmoothNode => Some(Op::Smooth),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Modifier {
@@ -85,6 +101,7 @@ pub struct Patch {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Hit {
+    pub parameter: Option<f64>,
     pub path: u64,
     pub control: Option<u16>,
     pub point: Point,
@@ -128,6 +145,9 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
     let Ok(layer) = layer(d, id) else {
         return vec![];
     };
+    if let Some(op) = tool.node_operation() {
+        return crate::vector_nodes::hits(d, id, point, radius, op);
+    }
     let mut hits = vec![];
     for path in layer.paths.iter().rev() {
         let mut found = false;
@@ -137,6 +157,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
                 let distance = (p[0] - point[0]).hypot(p[1] - point[1]);
                 if distance <= radius {
                     hits.push(Hit {
+                        parameter: None,
                         path: path.id,
                         control: Some(n as u16),
                         point: p,
@@ -169,6 +190,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
                 })
             {
                 hits.push(Hit {
+                    parameter: None,
                     path: path.id,
                     control: None,
                     point: best.1,
@@ -226,13 +248,16 @@ pub struct Values {
 pub fn values(d: &Document, id: u64, s: &Selection) -> Result<Values, String> {
     let paths = selected(d, id, s)?;
     let first = paths[0];
+    let parameters = paths
+        .iter()
+        .map(|p| p.control_parameters().map(|parameters| (p.id, parameters)))
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
     let pressures = s
         .controls
         .iter()
         .map(|c| {
             let p = paths.iter().find(|p| p.id == c.path).unwrap();
-            p.pressure
-                .control_at(c.point as f64 / p.control_count().saturating_sub(1).max(1) as f64)
+            p.pressure.control_at(parameters[&p.id][c.point as usize])
         })
         .collect::<Vec<_>>();
     Ok(Values {
@@ -304,7 +329,16 @@ pub fn prepare(
             .copied()
             .collect::<Vec<_>>();
         if let Some(delta) = movement {
-            if let Some(def) = &mut path.definition {
+            if path.definition.as_ref().is_some_and(|d| d.nodes.is_some()) {
+                crate::vector_nodes::move_controls(
+                    path,
+                    &controls
+                        .iter()
+                        .map(|c| c.point as usize)
+                        .collect::<Vec<_>>(),
+                    delta,
+                )?;
+            } else if let Some(def) = &mut path.definition {
                 let shift = def.creation.vector(delta);
                 for c in &controls {
                     let p = &mut def.controls[c.point as usize];
@@ -331,13 +365,25 @@ pub fn prepare(
         if patch.pressure.is_some() || patch.pressure_delta.is_some() {
             let count = path.control_count();
             let original = path.pressure.clone();
+            let parameters = path.control_parameters()?;
+            let mut edits = vec![];
             for c in &controls {
-                let old =
-                    original.control_at(c.point as f64 / count.saturating_sub(1).max(1) as f64);
+                let old = original.control_at(parameters[c.point as usize]);
                 let value = patch.pressure.unwrap_or_else(|| {
                     (old + patch.pressure_delta.unwrap_or_default()).clamp(0., 2.)
                 });
-                path.pressure.set_control(c.point as usize, count, value)?;
+                edits.push((c.point as usize, value));
+            }
+            if path.definition.as_ref().is_some_and(|d| d.nodes.is_some()) {
+                let period = path
+                    .closed
+                    .then_some(path.points.len() as f64 / (path.points.len() - 1) as f64);
+                path.pressure
+                    .edit_node_controls(&parameters, &edits, period)?;
+            } else {
+                for (n, value) in edits {
+                    path.pressure.set_control(n, count, value)?;
+                }
             }
         }
         if let Some(width) = patch.width {

@@ -90,6 +90,26 @@ impl Path {
             self.points.get(n).copied()
         }
     }
+    pub fn control_parameters(&self) -> Result<Vec<f64>, String> {
+        if let Some(def) = &self.definition
+            && let Some(nodes) = &def.nodes
+        {
+            let sample = nodes.sample(&def.controls, self.closed)?;
+            if sample.points.len() != self.points.len() {
+                return Err("Cached node geometry changed".into());
+            }
+            let count = self.points.len().saturating_sub(1).max(1) as f64;
+            return Ok(sample
+                .node_indices
+                .into_iter()
+                .map(|n| n as f64 / count)
+                .collect());
+        }
+        let count = self.control_count();
+        Ok((0..count)
+            .map(|n| n as f64 / count.saturating_sub(1).max(1) as f64)
+            .collect())
+    }
 }
 fn combine<T: Ord + Copy>(old: &[T], new: Vec<T>, op: Combine) -> Vec<T> {
     let a: BTreeSet<_> = old.iter().copied().collect();

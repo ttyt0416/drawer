@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 119] = [
+pub const EXTRA_COMMANDS: [&str; 123] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -80,6 +80,10 @@ pub const EXTRA_COMMANDS: [&str; 119] = [
     "vector-stroke-tool",
     "vector-delete-strokes",
     "vector-eraser-tool",
+    "vector-node-add-tool",
+    "vector-node-delete-tool",
+    "vector-node-corner-tool",
+    "vector-node-smooth-tool",
     "align-objects",
     "manage-layers",
     "layer-properties",
@@ -426,6 +430,14 @@ impl Settings {
             "vector-line-tool" => "Draw an editable vector line with clicked control points",
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-stroke-tool" => "Select whole vector strokes on the canvas",
+            "vector-node-add-tool" => "Add a cubic node inside a vector segment",
+            "vector-node-delete-tool" => {
+                "Delete a vector node while retaining minimum path controls"
+            }
+            "vector-node-corner-tool" => "Switch a vector node to independent corner tangents",
+            "vector-node-smooth-tool" => {
+                "Switch a vector node to a shared smooth tangent direction"
+            }
             "vector-delete-strokes" => "Delete selected whole vector strokes as one Undo",
             "vector-eraser-tool" => "Erase touched spans, intersections or whole vector strokes",
             "vector-pressure-tool" => "Edit vector point pressure with a horizontal drag",
