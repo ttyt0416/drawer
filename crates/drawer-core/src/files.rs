@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 60;
+const VERSION: u32 = 61;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -180,6 +180,11 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 61 && document.scene.paper_background.is_some() {
+            return Err(invalid(
+                "Paper background identity requires document version 61",
+            ));
+        }
         if version < 60 && crate::expression_color::requires_v60(&document.scene) {
             return Err(invalid("Expression thresholds require document version 60"));
         }
@@ -238,7 +243,8 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     {
         return Err(invalid("Invalid animation source identities"));
     }
-    if !crate::layer_groups::valid_live(&document)
+    if !crate::paper_background::valid_live(&document)
+        || !crate::layer_groups::valid_live(&document)
         || !crate::render_order::valid_live(&document)
         || !crate::file_objects::valid_live(&document)
     {
@@ -312,7 +318,8 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     {
         return Err(invalid("Invalid animation source identities"));
     }
-    if !crate::layer_groups::valid_live(document)
+    if !crate::paper_background::valid_live(document)
+        || !crate::layer_groups::valid_live(document)
         || !crate::render_order::valid_live(document)
         || !crate::file_objects::valid_live(document)
     {

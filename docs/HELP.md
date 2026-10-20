@@ -861,3 +861,11 @@ Auto-select moved layer는 이동한 층 또는 새 복사본을 자동 선택�
 Layer display effects offers Color, Gray and Mono. Gray uses encoded linear-sRGB luminance and preserves alpha. In Mono, brightness >= the brightness threshold is white and alpha >= the alpha threshold is opaque; original zero alpha stays transparent. Thresholds range from0 to255, default128. Preview first. Apply live effects preserves the source ink; expression color is independent of Enable display effects and affects rendered exports.
 
 Select Convert stored ink for a separate lossy conversion preview. Applying changes stored raster samples or vector stroke/fill colors and clears live expression conversion; one Undo restores both ink and settings. Vector live thresholds act after coverage, while stored vector color conversion keeps editable antialiased geometry. Bake into raster pixels instead bakes the complete displayed raster recipe. Existing documents retain their older expression calculation until the new editor is previewed/applied. Cancel/Escape changes nothing.
+
+
+<a id="paper-background"></a>
+### Paper and transparency display
+
+Use the Paper and transparency display command for a real output paper layer or local check colors. Preview output paper and Apply paper layer creates an ordinary raster below existing ink; replacing paper color replaces all stored paper pixels. The layer can be hidden, renamed, deleted and locked in Layers. Hiding it restores the original ink transparency in PNG. Paper edits use one Undo and are saved in the document.
+
+Apply display colors saves the two transparency check colors locally. They appear only behind the rendered image in canvases and separate views. They never enter exported pixels, document dirty state or Undo. Reset transparency colors restores the default gray pair; apply to save. Cancel/Escape applies neither setting. Paper and display buttons act separately.

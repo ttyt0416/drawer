@@ -193,6 +193,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paper_background: Option<u64>,
     #[serde(default, skip_serializing_if = "crate::layer_groups::Data::is_default")]
     pub layer_groups: crate::layer_groups::Data,
     #[serde(default, skip_serializing_if = "crate::layer_comps::Data::is_default")]
@@ -273,7 +275,7 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
-        self.layer_groups.valid() && self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
+        self.paper_background.is_none_or(|id| id > 0) && self.layer_groups.valid() && self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
             && !self.clipping.rasters.iter().any(|(id,base)|self.render_order.deferred(*id)||matches!(base,crate::layer_properties::Target::Raster(id)if self.render_order.deferred(*id)))
             && self.file_objects.valid(missing)
             && self.file_objects.entries.iter().all(|l| {

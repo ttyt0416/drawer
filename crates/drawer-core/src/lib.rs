@@ -283,3 +283,6 @@ pub mod layer_move_verify;
 
 pub mod expression_color;
 pub mod expression_color_verify;
+
+pub mod paper_background;
+pub mod paper_background_verify;

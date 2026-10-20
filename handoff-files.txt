@@ -530,3 +530,8 @@ docs/process/linked-layers.md
 crates/drawer-core/src/expression_color.rs
 crates/drawer-core/src/expression_color_verify.rs
 docs/process/expression-color.md
+
+crates/drawer-core/src/paper_background.rs
+crates/drawer-core/src/paper_background_verify.rs
+crates/drawer-app/src/paper_background.rs
+docs/process/paper-background.md

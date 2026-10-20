@@ -310,6 +310,8 @@ fn selection_outline_default() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(default = "crate::paper_background::checker_default")]
+    pub transparency_colors: [[u8; 3]; 2],
     #[serde(default)]
     pub layer_move: crate::layer_move::Settings,
     #[serde(default)]
@@ -402,6 +404,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             version: 1,
+            transparency_colors: crate::paper_background::checker_default(),
             layer_move: Default::default(),
             layer_mask_overlay: false,
             layer_search: Default::default(),
@@ -617,6 +620,7 @@ impl Snapshot {
             next.selection_outline = incoming.selection_outline;
             next.layer_mask_overlay = incoming.layer_mask_overlay;
             next.layer_move = incoming.layer_move;
+            next.transparency_colors = incoming.transparency_colors;
             next.layer_colors = incoming.layer_colors;
             next.layer_search = incoming.layer_search.clone();
             next.layer_defaults = incoming.layer_defaults.clone();

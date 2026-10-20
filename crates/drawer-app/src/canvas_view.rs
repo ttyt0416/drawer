@@ -22,6 +22,7 @@ pub struct CanvasView {
     pub(super) preview_sample: Option<([u8; 4], [u8; 4])>,
     image: Option<(ImageKey, egui::TextureHandle)>,
     checker: egui::TextureHandle,
+    pub(super) checker_colors: [[u8; 3]; 2],
     pub move_delta: Option<[f64; 2]>,
     pub filter: drawer_core::interpolation::Filter,
     screen_image: Option<(ScreenKey, egui::TextureHandle)>,
@@ -161,6 +162,7 @@ impl CanvasView {
             cursor_rect: None,
             #[cfg(test)]
             navigator_outline: false,
+            checker_colors: drawer_core::paper_background::checker_default(),
             checker: ctx.load_texture(
                 "transparency-grid",
                 egui::ColorImage::new([2, 2], vec![gray(196), gray(224), gray(224), gray(196)]),
@@ -174,6 +176,20 @@ impl CanvasView {
             #[cfg(test)]
             navigator_rect: None,
         }
+    }
+    pub(super) fn set_checker(&mut self, colors: [[u8; 3]; 2]) {
+        if self.checker_colors == colors {
+            return;
+        }
+        self.checker_colors = colors;
+        let c = colors.map(|c| egui::Color32::from_rgb(c[0], c[1], c[2]));
+        self.checker.set(
+            egui::ColorImage::new([2, 2], vec![c[0], c[1], c[1], c[0]]),
+            egui::TextureOptions {
+                wrap_mode: egui::TextureWrapMode::Repeat,
+                ..egui::TextureOptions::NEAREST
+            },
+        );
     }
     pub(super) fn set_proof(&mut self, settings: &drawer_core::soft_proof::Settings) {
         if self.proof_settings.as_ref() == Some(settings) {

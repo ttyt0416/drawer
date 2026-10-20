@@ -445,6 +445,7 @@ impl Drawer {
                 .entry(tab.id)
                 .or_insert_with(|| canvas_view::CanvasView::new(ctx));
             canvas.set_proof(&proof);
+            canvas.set_checker(self.workspaces.store.current.transparency_colors);
             canvas.filter = self.interpolation.view;
             canvas.simple = true;
             canvas.compact_controls = true;

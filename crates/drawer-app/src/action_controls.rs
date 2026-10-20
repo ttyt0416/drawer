@@ -292,6 +292,7 @@ impl Drawer {
                 "layer-search" => self.layer_search.open = true,
                 "layer-roles" => self.begin_layer_roles()?,
                 "layer-groups" => self.begin_layer_groups()?,
+                "paper-background" => self.begin_paper_background()?,
                 "transfer-down" => self.begin_transfer_down()?,
                 "layer-masks" => self.begin_layer_masks()?,
                 "layer-comps" => self.begin_layer_comps()?,
