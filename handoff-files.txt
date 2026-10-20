@@ -511,3 +511,8 @@ crates/drawer-core/src/layer_masks.rs
 crates/drawer-core/src/layer_masks_verify.rs
 crates/drawer-app/src/layer_masks.rs
 docs/process/layer-masks.md
+
+crates/drawer-core/src/transfer_down.rs
+crates/drawer-core/src/transfer_down_verify.rs
+crates/drawer-app/src/transfer_down.rs
+docs/process/transfer-down.md

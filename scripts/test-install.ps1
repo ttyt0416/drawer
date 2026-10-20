@@ -133,6 +133,7 @@ try {
     if ($smokeResult -notmatch 'adjustment_layers=true') { throw '비파괴 보정 레이어 검증 실패' }
     if ($smokeResult -notmatch 'layer_folders=true') { throw '레이어 폴더·회색조 마스크 검증 실패' }
     if ($smokeResult -notmatch 'layer_merge=true') { throw '레이어 병합·전체 합치기 검증 실패' }
+    if ($smokeResult -notmatch 'transfer_down=true') { throw 'Content transfer verification failed' }
     if ($smokeResult -notmatch 'layer_masks=true') { throw 'Layer mask verification failed' }
     if ($smokeResult -notmatch 'layer_comps=true') { throw 'Layer comps verification failed' }
     if ($smokeResult -notmatch 'extended_blend=true') { throw 'Extended layer blend verification failed' }

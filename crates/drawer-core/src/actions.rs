@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 101] = [
+pub const EXTRA_COMMANDS: [&str; 102] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -87,6 +87,7 @@ pub const EXTRA_COMMANDS: [&str; 101] = [
     "raster-conversion",
     "layer-comps",
     "layer-masks",
+    "transfer-down",
     "material-layer-edit",
     "layer-defaults",
     "import-image-layer",
@@ -410,6 +411,7 @@ impl Settings {
             "manage-layers" => "Manage local layers",
             "adjustment-layer" => "Nondestructive brightness, contrast, hue and saturation layers",
             "layer-search" => "Search, filter and select local layers",
+            "transfer-down" => "Transfer selected content down and retain the upper layer",
             "layer-masks" => "Invert, copy, create, link and apply layer masks",
             "layer-comps" => "Save and switch layer visibility, opacity and blend comps",
             "raster-conversion" => {

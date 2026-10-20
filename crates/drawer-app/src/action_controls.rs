@@ -291,6 +291,7 @@ impl Drawer {
                 "adjustment-layer" => self.begin_adjustment()?,
                 "layer-search" => self.layer_search.open = true,
                 "layer-roles" => self.begin_layer_roles()?,
+                "transfer-down" => self.begin_transfer_down()?,
                 "layer-masks" => self.begin_layer_masks()?,
                 "layer-comps" => self.begin_layer_comps()?,
                 "raster-conversion" => self.begin_raster_conversion()?,
