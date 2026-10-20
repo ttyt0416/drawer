@@ -307,9 +307,10 @@ impl Drawer {
                 "layer-masks" => self.begin_layer_masks()?,
                 "layer-comps" => self.begin_layer_comps()?,
                 "raster-conversion" => self.begin_raster_conversion()?,
-                "linked-file-layer" => self.begin_file_objects()?,
+                "linked-file-layer" | "refresh-file-layers" => self.begin_file_objects()?,
                 "material-layer-new" => self.begin_material_layer(false)?,
                 "material-layer-edit" => self.begin_material_layer(true)?,
+                "material-transform" => self.begin_material_transform()?,
                 "layer-appearance" => self.begin_appearance()?,
                 "layer-defaults" => self.begin_layer_defaults()?,
                 "layer-properties" | "layer-clipping" | "layer-blend" => {

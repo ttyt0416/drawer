@@ -91,6 +91,17 @@ impl ImageSource {
         if bytes.len() > limit {
             return Err(invalid("Image grew beyond the import memory limit"));
         }
+        Self::from_encoded(path, bytes, budget, cancel)
+    }
+    pub(crate) fn from_encoded(
+        path: PathBuf,
+        bytes: Vec<u8>,
+        budget: usize,
+        cancel: &AtomicBool,
+    ) -> io::Result<Self> {
+        if bytes.len() > MAX_ENCODED_BYTES.min(budget / 2) {
+            return Err(invalid("Encoded image exceeds the import memory limit"));
+        }
         checked(cancel)?;
         let format = image::guess_format(&bytes).map_err(|e| invalid(e.to_string()))?;
         let mut pages = Vec::new();

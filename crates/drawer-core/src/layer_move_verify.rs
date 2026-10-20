@@ -50,6 +50,7 @@ pub fn fixture() -> Result<Document, String> {
             },
             transform: Affine([1., 0., 0., 1., 1., 1.]),
             repeat: [true; 2],
+            mapping: Default::default(),
         })));
     }
     d.scene.objects.push(PageObject::Line {

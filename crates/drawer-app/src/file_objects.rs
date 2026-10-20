@@ -1,16 +1,21 @@
 use super::*;
 use drawer_core::{
-    file_objects as core, layer_catalog as catalog, layer_search::Key, sizing::DocumentState,
+    file_objects as core, file_sources as sources, layer_catalog as catalog, layer_search::Key,
+    sizing::DocumentState,
 };
 #[derive(Default)]
 pub(super) struct Panel {
     draft: Option<Box<Draft>>,
     new: Option<egui::Rect>,
     refresh: Option<egui::Rect>,
+    refresh_all: Option<egui::Rect>,
+    inspect: Option<egui::Rect>,
+    acknowledge: Option<egui::Rect>,
     convert: Option<egui::Rect>,
     apply: Option<egui::Rect>,
 }
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
+    source_smoke(root)?;
     drawer_core::file_objects_verify::verify(root)?;
     let path = drawer_core::file_objects_verify::source(
         root,
@@ -236,6 +241,12 @@ struct Draft {
     key: Option<Key>,
     path: String,
     overwrite: bool,
+    selection: sources::Selection,
+    metadata: Option<sources::Metadata>,
+    source_stamps: Vec<sources::Stamp>,
+    notes: Vec<String>,
+    review_all: bool,
+    acknowledged: bool,
     stamp: Option<(u64, std::time::SystemTime)>,
     prepared: Option<Box<Prepared>>,
     image: Option<egui::TextureHandle>,
@@ -262,6 +273,8 @@ impl Prepared {
 enum Action {
     New,
     Refresh,
+    RefreshAll,
+    Inspect,
     Convert,
     Clipboard,
     Restore,
@@ -269,6 +282,182 @@ enum Action {
 fn stamp(path: &std::path::Path) -> Option<(u64, std::time::SystemTime)> {
     let m = std::fs::metadata(path).ok()?;
     Some((m.len(), m.modified().ok()?))
+}
+fn source_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::file_sources_verify::verify(root)?;
+    let path = drawer_core::file_sources_verify::source(root)?;
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 8,
+        height: 8,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    let mut time = 0.;
+    let step = |app: &mut Drawer, time: &mut f64, events| {
+        *time += 0.1;
+        super::input_replay::frame(&ctx, app, *time, events);
+    };
+    let click = |app: &mut Drawer, time: &mut f64, r: egui::Rect| {
+        for pressed in [true, false] {
+            step(
+                app,
+                time,
+                vec![
+                    egui::Event::PointerMoved(r.center()),
+                    egui::Event::PointerButton {
+                        pos: r.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+    };
+    for _ in 0..2 {
+        step(&mut app, &mut time, vec![]);
+    }
+    app.execute_command(&ctx, "linked-file-layer");
+    app.file_objects
+        .draft
+        .as_mut()
+        .ok_or("Source editor missing")?
+        .path = path.to_string_lossy().into_owned();
+    for _ in 0..2 {
+        step(&mut app, &mut time, vec![]);
+    }
+    let r = app.file_objects.inspect.ok_or("Source inspect missing")?;
+    click(&mut app, &mut time, r);
+    if app
+        .file_objects
+        .draft
+        .as_ref()
+        .unwrap()
+        .metadata
+        .as_ref()
+        .is_none_or(|m| m.frames != 2 || !m.timeline || m.comps.len() != 1)
+    {
+        return Err(format!("Source choice inventory failed: {:?}", app.status));
+    }
+    let selection = sources::Selection {
+        content: sources::Content::Layer(Key::Layer(
+            drawer_core::layer_properties::Target::Raster(1),
+        )),
+        comp: Some(1),
+        frame: 1,
+    };
+    app.file_objects.draft.as_mut().unwrap().selection = selection.clone();
+    let before = app.documents[0].snapshot();
+    let r = app.file_objects.new.unwrap();
+    click(&mut app, &mut time, r);
+    if app.file_objects.draft.as_ref().unwrap().prepared.is_none()
+        || app.documents[0].snapshot() != before
+    {
+        return Err(format!("Selected source preview failed: {:?}", app.status));
+    }
+    for _ in 0..2 {
+        step(&mut app, &mut time, vec![]);
+    }
+    let r = app.file_objects.apply.unwrap();
+    click(&mut app, &mut time, r);
+    if app.file_objects.draft.is_some()
+        || app.documents[0]
+            .scene
+            .file_objects
+            .entries
+            .first()
+            .is_none_or(|l| l.selection != selection)
+    {
+        return Err(format!("Selected source apply failed: {:?}", app.status));
+    }
+    let missing = drawer_core::file_objects_verify::source(
+        root,
+        "ui-missing-refresh.drawer",
+        [40, 80, 120, 255],
+    )?;
+    let (state, _, _) = sources::create(
+        &app.documents[0],
+        &missing,
+        "Keep missing cache",
+        Default::default(),
+    )?;
+    app.documents[0].commit_state(state)?;
+    std::fs::remove_file(&missing).map_err(|e| e.to_string())?;
+    let mut external =
+        drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET).map_err(|e| e.to_string())?;
+    external.layers[0].pixels.fill([70, 90, 110, 255]);
+    drawer_core::files::save(&mut external, &path).map_err(|e| e.to_string())?;
+    let before = app.documents[0].snapshot();
+    let count = app.documents[0].history_counts();
+    app.execute_command(&ctx, "refresh-file-layers");
+    for _ in 0..2 {
+        step(&mut app, &mut time, vec![]);
+    }
+    let r = app.file_objects.refresh_all.ok_or("Refresh all missing")?;
+    click(&mut app, &mut time, r);
+    let e = app
+        .file_objects
+        .draft
+        .as_ref()
+        .ok_or("Refresh all editor closed")?;
+    if e.prepared.is_none()
+        || !e.review_all
+        || !e.notes.iter().any(|s| s.contains("1 failures"))
+        || app.documents[0].snapshot() != before
+    {
+        return Err(format!("Partial refresh UI missing: {:?}", app.status));
+    }
+    if app.apply_file_object().is_ok() {
+        return Err("Refresh batch bypassed confirmation".into());
+    }
+    for _ in 0..2 {
+        step(&mut app, &mut time, vec![]);
+    }
+    let r = app
+        .file_objects
+        .acknowledge
+        .ok_or("Batch confirmation missing")?;
+    click(&mut app, &mut time, r);
+    let r = app.file_objects.apply.unwrap();
+    click(&mut app, &mut time, r);
+    if app.file_objects.draft.is_some() || app.documents[0].history_counts().0 != count.0 + 1 {
+        return Err(format!("Refresh batch apply failed: {:?}", app.status));
+    }
+    let after = app.documents[0].snapshot();
+    if !app.documents[0].undo()
+        || app.documents[0].snapshot() != before
+        || !app.documents[0].redo()
+        || app.documents[0].snapshot() != after
+    {
+        return Err("Refresh batch Undo/Redo failed".into());
+    }
+    app.begin_file_objects()?;
+    app.preview_file_object(&ctx, Action::RefreshAll, None)?;
+    app.file_objects.draft.as_mut().unwrap().acknowledged = true;
+    external.layers[0].pixels.fill([130, 150, 170, 255]);
+    drawer_core::files::save(&mut external, &path).map_err(|e| e.to_string())?;
+    if app.apply_file_object().is_ok() || app.documents[0].snapshot() != after {
+        return Err("Changed source applied after review".into());
+    }
+    step(
+        &mut app,
+        &mut time,
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        }],
+    );
+    if app.file_objects.draft.is_some() || app.documents[0].snapshot() != after {
+        return Err("Source batch Escape changed document".into());
+    }
+    Ok(())
 }
 impl Drawer {
     pub(super) fn begin_file_objects(&mut self) -> Result<(), String> {
@@ -292,6 +481,14 @@ impl Drawer {
             key,
             path,
             overwrite: false,
+            selection: key
+                .and_then(|k| d.scene.file_objects.get(k))
+                .map_or_else(Default::default, |l| l.selection.clone()),
+            metadata: None,
+            source_stamps: vec![],
+            notes: vec![],
+            review_all: false,
+            acknowledged: false,
             stamp: None,
             prepared: None,
             image: None,
@@ -309,47 +506,101 @@ impl Drawer {
             .draft
             .as_ref()
             .ok_or("File layer editor closed")?;
-        let d = &self.documents[self.active.ok_or("Open a page first")?];
+        let n = self.active.ok_or("Open a page first")?;
+        let d = &self.documents[n];
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen linked files".into());
         }
-        let owned_path = std::path::PathBuf::from(&e.path);
-        let path = owned_path.as_path();
-        if !matches!(action, Action::Restore) {
-            core::local_path(path)?;
+        let path = std::path::PathBuf::from(&e.path);
+        let key = e.key;
+        let selection = e.selection.clone();
+        if matches!(action, Action::Inspect) {
+            let metadata = sources::inspect(&path)?;
+            self.file_objects.draft.as_mut().unwrap().metadata = Some(metadata);
+            return Ok(());
         }
+        let e = self.file_objects.draft.as_mut().unwrap();
+        e.prepared = None;
+        e.image = None;
+        e.notes.clear();
+        e.source_stamps.clear();
+        e.review_all = matches!(action, Action::RefreshAll);
+        e.acknowledged = false;
+        if !matches!(action, Action::Restore | Action::RefreshAll) {
+            core::local_path(&path)?;
+        }
+        let mut source_stamps = vec![];
+        let mut notes = vec![];
         let mut prepared = match action {
+            Action::Inspect => unreachable!(),
             Action::Restore => Prepared::Change {
                 state: Box::new(core::restore_original(
                     d,
-                    e.key.ok_or("Select a linked layer")?,
+                    key.ok_or("Select a linked layer")?,
                 )?),
-                key: e.key.unwrap(),
+                key: key.unwrap(),
             },
             Action::New => {
-                let (state, id) = core::create(d, path, "Linked file")?;
+                let (state, id, stamps) = sources::create(d, &path, "Linked file", selection)?;
+                source_stamps = stamps;
                 Prepared::Change {
                     state: Box::new(state),
                     key: Key::Object(id),
                 }
             }
-            Action::Refresh => Prepared::Change {
-                state: Box::new(core::refresh(
-                    d,
-                    e.key.ok_or("Select a linked layer")?,
-                    Some(path),
-                )?),
-                key: e.key.unwrap(),
-            },
+            Action::Refresh | Action::RefreshAll => {
+                let result = if matches!(action, Action::RefreshAll) {
+                    sources::refresh_all(d)?
+                } else {
+                    sources::refresh(
+                        d,
+                        &[(
+                            key.ok_or("Select a linked layer")?,
+                            Some(path.clone()),
+                            selection,
+                        )],
+                    )?
+                };
+                notes.push(format!(
+                    "{} sources prepared · {} failures keep their last successful caches",
+                    result.succeeded.len(),
+                    result.failed.len()
+                ));
+                for (key, error) in &result.failed {
+                    notes.push(format!("Kept {key:?}: {error}"));
+                }
+                let names = catalog::rows(d)?;
+                for key in &result.succeeded {
+                    let name = names
+                        .iter()
+                        .find(|r| r.key == *key)
+                        .map_or("Linked source", |r| r.name.as_str());
+                    let path = d
+                        .scene
+                        .file_objects
+                        .get(*key)
+                        .map_or_else(String::new, |l| l.path.display().to_string());
+                    notes.push(format!("Update {name}: {path}"));
+                }
+                let Some(selected) = result.succeeded.first().copied() else {
+                    self.file_objects.draft.as_mut().unwrap().notes = notes;
+                    return Ok(());
+                };
+                source_stamps = result.stamps;
+                Prepared::Change {
+                    state: Box::new(result.state),
+                    key: selected,
+                }
+            }
             Action::Convert => Prepared::Convert(Box::new(core::convert(
                 d,
-                e.key.ok_or("Select a layer")?,
-                path,
+                key.ok_or("Select a layer")?,
+                &path,
             )?)),
             Action::Clipboard => Prepared::Convert(Box::new(core::from_clipboard(
                 d,
                 packet.ok_or("Clipboard object is empty")?,
-                path,
+                &path,
             )?)),
         };
         if matches!(action, Action::New | Action::Clipboard) {
@@ -380,7 +631,9 @@ impl Drawer {
         let page = drawer_core::layer_merge::preview(prepared.state(), d.current_frame)?;
         let image = super::layer_merge::image(ctx, &page, "linked-file-preview");
         let e = self.file_objects.draft.as_mut().unwrap();
-        e.stamp = stamp(path);
+        e.stamp = stamp(&path);
+        e.source_stamps = source_stamps;
+        e.notes = notes;
         e.prepared = Some(Box::new(prepared));
         e.image = Some(image);
         Ok(())
@@ -395,6 +648,14 @@ impl Drawer {
         let d = &self.documents[n];
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen linked files".into());
+        }
+        if e.review_all && !e.acknowledged {
+            return Err(
+                "Review all successful updates and failures before applying the batch".into(),
+            );
+        }
+        for source in &e.source_stamps {
+            source.validate()?;
         }
         let prepared = e.prepared.as_mut().ok_or("Preview a file action first")?;
         core::validate(d, prepared.state())?;
@@ -464,21 +725,30 @@ impl Drawer {
         let fresh = (d.revision, d.current_frame) == (e.revision, e.frame);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut action, mut apply, mut cancel, mut source) = (None, false, false, None);
-        egui::Window::new("Local linked file layer").open(&mut open).default_width(540.).default_pos(egui::pos2(35.,20.)).collapsible(false).show(ctx,|ui|{
+        egui::Window::new("Local linked file layer").open(&mut open).fixed_size(egui::vec2(600.,630.)).default_pos(egui::pos2(35.,10.)).collapsible(false).resizable(false).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen linked files.");return;}
             let linked=e.key.and_then(|k|d.scene.file_objects.get(k));
-            if let Some(l)=linked{ui.label(format!("Last successful source: {}",l.path.display()));ui.label(if l.path.is_file(){"Source is available. Refresh is always explicit."}else{"Source is missing. The page keeps its last successful cache."});}
-            ui.label("Absolute local source path; choose a new .drawer path for conversion");if ui.text_edit_singleline(&mut e.path).changed(){e.prepared=None;e.image=None;e.overwrite=false;}
+            ui.label("Absolute local source path / conversion destination");
+            if ui.text_edit_singleline(&mut e.path).changed(){e.prepared=None;e.image=None;e.metadata=None;e.overwrite=false;e.notes.clear();e.acknowledged=false;}
+            let r=ui.button("Inspect source choices");self.file_objects.inspect=Some(r.rect);if r.clicked(){action=Some(Action::Inspect);}
+            ui.allocate_ui(egui::vec2(580.,140.),|ui|{egui::ScrollArea::vertical().id_salt("source-options").max_height(140.).show(ui,|ui|{
+                if let Some(l)=linked{ui.small(format!("Last successful source: {}",l.path.display()));}
+                if super::source_choices::controls(ui,&mut e.selection,e.metadata.as_ref()){e.prepared=None;e.image=None;e.notes.clear();e.acknowledged=false;}
+                ui.small("A native document has one timeline. Choose Timeline only or a track/cell in Content, then choose its frame. TIFF sources expose their pages.");
+            });});
             ui.horizontal(|ui|{let r=ui.button("Preview new link");self.file_objects.new=Some(r.rect);if r.clicked(){action=Some(Action::New);}let r=ui.add_enabled(linked.is_some(),egui::Button::new("Preview refresh / relink"));self.file_objects.refresh=Some(r.rect);if r.clicked(){action=Some(Action::Refresh);}});
+            let r=ui.add_enabled(!d.scene.file_objects.entries.is_empty(),egui::Button::new("Preview refresh all linked sources"));self.file_objects.refresh_all=Some(r.rect);if r.clicked(){action=Some(Action::RefreshAll);}
             ui.horizontal(|ui|{let r=ui.button("Preview selected layer to file");self.file_objects.convert=Some(r.rect);if r.clicked(){action=Some(Action::Convert);}
 if ui.button("Preview clipboard to file").clicked(){action=Some(Action::Clipboard);}});
             if matches!(e.prepared.as_deref(),Some(Prepared::Convert(_)))&&std::path::Path::new(&e.path).exists(){ui.checkbox(&mut e.overwrite,"Replace this existing source file when applying");}
-            if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(128.,128.)));}
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply reviewed file action"));self.file_objects.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.allocate_ui(egui::vec2(580.,52.),|ui|{egui::ScrollArea::vertical().id_salt("source-results").max_height(52.).show(ui,|ui|{for note in &e.notes{ui.small(note);}});});
+            ui.allocate_ui(egui::vec2(580.,100.),|ui|{if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));}});
+            let r=ui.add_enabled(e.review_all&&e.prepared.is_some(),egui::Checkbox::new(&mut e.acknowledged,"I reviewed the successful updates and failures in this batch"));self.file_objects.acknowledge=Some(r.rect);
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&(!e.review_all||e.acknowledged),egui::Button::new("Apply reviewed file action"));self.file_objects.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
             if ui.add_enabled(linked.is_some(),egui::Button::new("Restore original embedded layer")).clicked(){action=Some(Action::Restore);}
             ui.horizontal(|ui|{if ui.add_enabled(linked.is_some(),egui::Button::new("Open source document")).clicked(){source=Some(false);}
 if ui.add_enabled(linked.is_some(),egui::Button::new("Open source folder")).clicked(){source=Some(true);}});
-            ui.small("Normal page saves embed the last successful cache. Missing files, failed reads and cycles keep that cache. Refresh and relink are manual. Conversion saves the selected current-frame appearance in an editable local raster .drawer source, then links it at its current position. Undo restores the original layer and keeps the successfully saved source file. Edit file content in its separate document, save it, then return here to refresh.");
+            ui.small("Sources are local. Refresh is explicit and keeps failed caches. Successful reviewed updates form one Undo. Source changes after preview require a new preview. Conversion writes only its explicit destination.");
         });
         if open && !cancel {
             self.file_objects.draft = Some(e);

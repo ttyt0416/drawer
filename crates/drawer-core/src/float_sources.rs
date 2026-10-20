@@ -282,10 +282,9 @@ impl Renderer<'_> {
         m: &crate::material_layer::Layer,
         original: Point,
     ) -> Result<Sample, String> {
-        let p = m.transform.inverse().map(original);
-        if !m.area.contains(p) {
+        let Some(p) = m.local(original) else {
             return Ok(Sample::default());
-        }
+        };
         if let crate::material_layer::Source::Gradient(s) = &m.source {
             self.gradient_color(s, p, None)
         } else {

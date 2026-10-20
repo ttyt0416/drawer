@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 108] = [
+pub const EXTRA_COMMANDS: [&str; 110] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -87,6 +87,7 @@ pub const EXTRA_COMMANDS: [&str; 108] = [
     "layer-appearance",
     "material-layer-new",
     "linked-file-layer",
+    "refresh-file-layers",
     "raster-conversion",
     "layer-comps",
     "layer-masks",
@@ -95,6 +96,7 @@ pub const EXTRA_COMMANDS: [&str; 108] = [
     "paper-background",
     "document-color",
     "material-layer-edit",
+    "material-transform",
     "layer-defaults",
     "import-image-layer",
     "new-raster-layer",
@@ -426,8 +428,10 @@ impl Settings {
             "raster-conversion" => {
                 "Rasterize sources, convert brightness to opacity, or recolor selected content"
             }
+            "refresh-file-layers" => "Review updates for all local linked sources",
             "linked-file-layer" => "Local file layers: create, refresh, relink and convert content",
             "material-layer-new" => "Create an editable solid, gradient or local image material",
+            "material-transform" => "Transform an image material, linked source or editable vector",
             "material-layer-edit" => "Edit the selected material and preserve its source",
             "layer-roles" => "Reference and draft layer roles; rendered output policy",
             "layer-appearance" => "Layer display color, border and watercolor edge",

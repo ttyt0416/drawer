@@ -306,3 +306,15 @@ mod float_render_verify;
 
 pub mod layer_maintenance;
 pub mod layer_maintenance_verify;
+
+pub mod file_sources;
+
+pub mod file_sources_verify;
+
+pub mod material_mapping;
+
+pub mod material_mapping_verify;
+
+pub mod material_transform;
+
+pub mod material_transform_verify;

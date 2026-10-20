@@ -17,6 +17,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         },
         transform: Affine::default(),
         repeat: [false; 2],
+        mapping: Default::default(),
     };
     let original = d.snapshot();
     let counts = d.history_counts();

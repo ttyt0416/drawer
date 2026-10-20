@@ -245,6 +245,7 @@ fn wide_rgb_assets_native_reference_caches_and_psd_have_explicit_srgb_boundaries
         },
         transform: Affine::default(),
         repeat: [false; 2],
+        mapping: Default::default(),
     })));
     let expected = Transform::new(&RgbProfile::Srgb, &d.color.profile)
         .unwrap()

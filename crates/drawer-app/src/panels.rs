@@ -631,6 +631,8 @@ impl Drawer {
                                 ("Alpha protection / clipping / solo…", "layer-clipping"),
                                 ("Layer blend modes…", "layer-blend"),
                                 ("Merge layers / flatten…", "merge-layers"),
+                                ("Image tiling / source transform…", "material-transform"),
+                                ("Refresh linked sources…", "refresh-file-layers"),
                                 ("Copy visible to new layer…", "merge-visible-copy"),
                                 ("Delete empty layers…", "delete-empty-layers"),
                                 ("Delete hidden layers…", "delete-hidden-layers"),

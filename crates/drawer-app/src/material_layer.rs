@@ -237,6 +237,7 @@ impl Drawer {
                     },
                     transform: d.scene.transform.inverse(),
                     repeat: [false; 2],
+                    mapping: Default::default(),
                 },
             )
         };

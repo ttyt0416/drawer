@@ -891,10 +891,23 @@ Merge layers에서 Individual combine을 고르면 같은 부모의 연속된 �
 개별 결합은 차이 안내와 Prepare merge preview를 확인하고 검토 체크 후 Apply merge로 확정합니다. 다른 혼합·보정·클리핑·연결 파일 원본은 일반 병합/명시적 래스터화 대안을 안내합니다. 잠긴 아래층/상위 잠금·없는 대상은 변경 없이 거절합니다. 한 Undo가 두 원본층·마스크·속성을 복원하며 결과 픽셀과 마스크는 .drawer에 별도 보존됩니다. Preview/Cancel/Escape는 문서를 바꾸지 않습니다.
 
 
-## layer-maintenance | 보이는 결과 복제·빈/숨김층 정리
+## layer-maintenance | 보이는 결과 복제·빈/숨김층 정리 | 빈 층 숨긴 층 일괄 삭제 합성 복제 잠금
 
 Layers… → Copy visible to new layer는 현재 보이는 문서 영역을 새 일반100% 래스터로 복제합니다. 원본은 그대로 편집할 수 있고 계속 표시되므로 반투명 부분이 진해질 수 있습니다. 전후 미리보기를 확인하세요.
 
 Delete empty layers는 실제 알파0의 래스터/셀, 경로 없는 벡터, 빈 텍스트를 찾습니다. 보정·참조·효과·종이·연결 파일과 잠금은 남깁니다. 16bit의 작은 알파도 보존합니다. Delete hidden layers는 숨김을 상속한 자식까지 찾아 후보와 보존 이유, 저장 컴프에서 누락될 항목, 제거할 셀 노출 수를 먼저 보여줍니다. 앞 노출이 더 오래 유지될 수 있습니다. 마지막 래스터와 유지할 트랙의 필수 셀/노출은 남깁니다.
 
 Prepare → 후보/영향·이미지 검토 → 확인 체크 → Apply로 실행합니다. 취소/Escape는 변경하지 않고 한 번 Undo로 구조와 픽셀을 모두 복원합니다. Properties의 Image pixel lock은 픽셀만, Position lock은 위치만 제한합니다.
+
+
+## advanced-materials | 이미지 소재 반복·변형과 참조 전체 갱신 | 반복 반전 타일 원근 메시 피벗 선폭 마스크 레이어 컴프 타임라인 프레임 참조 갱신
+
+Layers… → Image tiling / source transform에서 소재·연결 이미지·벡터를 선택합니다. Repeat는 같은 방향, Reverse는 축별 홀수 타일 거울 반전, Flip은 번갈아180도 회전합니다. 가로·세로·양축 반복을 선택할 수 있습니다.
+
+Scale/Rotate·Scale·Rotate·Free Transform·Skew·Distort·Perspective·Mesh Transformation을 구별합니다. 피벗과 이동값을 문서 픽셀로 입력하고, 왜곡/원근의 모서리와 최대5×5 메시 점은 원본 영역의 (0,0)~(1,1)을 기준으로 입력합니다. 접히거나 교차한 변형은 적용하지 않습니다. 편집 가능한 벡터의 선폭 유지 옵션도 제공합니다. 비선형 벡터 도형은 편집 가능한 경로점으로 남습니다.
+
+연결 마스크는 변형을 따르고 고정 마스크는 페이지에 남습니다. 비선형 연결 마스크는 이미지 영역에서 재샘플링하므로 영역 밖의 상세 마스크가 잘릴 수 있습니다. 전후 이미지와 설명을 확인하고 체크한 뒤 Apply하세요. 한 Undo가 원본 픽셀/매개변수/마스크 전체를 복원합니다.
+
+Refresh linked sources / Linked file layer에서 Inspect source choices로 .drawer의 레이어·컴프·타임라인·프레임 또는 TIFF 페이지를 선택합니다. 없는 선택을 다른 항목으로 바꾸지 않으며 기존 캐시를 유지합니다. 파일 캐시는 sRGB8 표시 스냅샷이고 원본 문서의 편집 정밀도는 원본에 유지됩니다.
+
+Preview refresh all linked sources는 성공/실패 목록을 먼저 표시합니다. 실패한 캐시는 그대로 두고 확인한 성공 묶음만 한 번에 적용합니다. 원본 파일은 덮어쓰지 않습니다. 읽는 중/미리보기 뒤에 파일이 바뀌면 새 미리보기가 필요합니다. Cancel/Escape는 변경하지 않고 한 Undo로 갱신을 되돌릴 수 있습니다. 평소 문서 열기와 저장은 내장 캐시를 사용합니다.

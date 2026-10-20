@@ -560,3 +560,13 @@ crates/drawer-core/src/layer_maintenance.rs
 crates/drawer-core/src/layer_maintenance_verify.rs
 crates/drawer-app/src/layer_maintenance.rs
 docs/process/layer-maintenance.md
+
+crates/drawer-core/src/file_sources.rs
+crates/drawer-core/src/file_sources_verify.rs
+crates/drawer-core/src/material_mapping.rs
+crates/drawer-core/src/material_mapping_verify.rs
+crates/drawer-core/src/material_transform.rs
+crates/drawer-core/src/material_transform_verify.rs
+crates/drawer-app/src/source_choices.rs
+crates/drawer-app/src/material_transform.rs
+docs/process/advanced-materials.md

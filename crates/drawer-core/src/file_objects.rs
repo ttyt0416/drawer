@@ -14,6 +14,11 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Link {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::file_sources::Selection::is_default"
+    )]
+    pub selection: crate::file_sources::Selection,
     pub target: Key,
     pub path: PathBuf,
     pub cache: Layer,
@@ -30,7 +35,8 @@ impl Data {
     pub fn valid(&self, missing: bool) -> bool {
         self.entries.len() <= 256
             && self.entries.iter().all(|l| {
-                local_path(&l.path).is_ok()
+                l.selection.valid()
+                    && local_path(&l.path).is_ok()
                     && l.cache.valid(missing)
                     && matches!(l.cache.source, Source::Image(_))
                     && match l.target {
@@ -105,114 +111,24 @@ pub fn source_folder(path: &Path) -> Result<PathBuf, String> {
     }
     Ok(parent)
 }
-fn collect(
-    path: &Path,
-    owner: Option<&Path>,
-    stack: &mut Vec<PathBuf>,
-    total: &mut usize,
-) -> Result<(), String> {
-    local_path(path)?;
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
-    local_path(&path)?;
-    if owner.is_some_and(|p| p == path) || stack.contains(&path) {
-        return Err("Circular local file reference".into());
-    }
-    if stack.len() >= 8 || *total >= 64 {
-        return Err("Nested file references exceed depth 8 or 64 files".into());
-    }
-    *total += 1;
-    if path
-        .extension()
-        .is_some_and(|s| s.eq_ignore_ascii_case("drawer"))
-    {
-        let d =
-            crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET / 8).map_err(|e| e.to_string())?;
-        let references = d
-            .scene
-            .file_objects
-            .entries
-            .iter()
-            .filter(|l| crate::layer_catalog::target(&d, l.target).is_some())
-            .map(|l| l.path.clone())
-            .collect::<Vec<_>>();
-        drop(d);
-        stack.push(path);
-        for path in references {
-            collect(&path, owner, stack, total)?;
-        }
-        stack.pop();
-    }
-    Ok(())
-}
 pub fn read(path: &Path, owner: Option<&Path>) -> Result<(PathBuf, Image), String> {
-    let owner = owner.map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
-    collect(path, owner.as_deref(), &mut vec![], &mut 0)?;
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
-    let image = if path
-        .extension()
-        .is_some_and(|s| s.eq_ignore_ascii_case("drawer"))
-    {
-        let d =
-            crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET / 8).map_err(|e| e.to_string())?;
-        let count = d.width as usize * d.height as usize;
-        if count > 4 * 1024 * 1024 {
-            return Err("File object exceeds 4 million pixels".into());
-        }
-        let renderer = crate::render::Renderer::new(&d);
-        if let Some(e) = renderer.error() {
-            return Err(e.into());
-        }
-        let mut pixels = Vec::new();
-        pixels.try_reserve_exact(count).map_err(|e| e.to_string())?;
-        for y in 0..d.height {
-            for x in 0..d.width {
-                pixels.push(
-                    renderer
-                        .display_sample([x as f64 + 0.5, y as f64 + 0.5])?
-                        .rgba8(),
-                );
-            }
-        }
-        Image {
-            width: d.width,
-            height: d.height,
-            pixels: Arc::new(pixels),
-        }
-    } else {
-        let Source::Image(i) = crate::material_layer::load(&path)? else {
-            unreachable!()
-        };
-        i
-    };
-    Ok((path, image))
+    let snapshot = crate::file_sources::read(path, owner, &Default::default())?;
+    Ok((snapshot.path, snapshot.image))
 }
 pub fn refresh(d: &Document, key: Key, path: Option<&Path>) -> Result<DocumentState, String> {
-    let link = d
+    let selection = d
         .scene
         .file_objects
         .get(key)
-        .ok_or("Choose a linked file layer")?;
-    let target = crate::layer_catalog::target(d, key).ok_or("Missing linked layer")?;
-    if crate::layer_properties::inherited(d, target).locked {
-        return Err("Unlock the linked layer first".into());
+        .ok_or("Choose a linked file layer")?
+        .selection
+        .clone();
+    let prepared =
+        crate::file_sources::refresh(d, &[(key, path.map(Path::to_path_buf), selection)])?;
+    if let Some((_, error)) = prepared.failed.first() {
+        return Err(error.clone());
     }
-    let (path, image) = read(path.unwrap_or(&link.path), d.path.as_deref())?;
-    let mut state = d.snapshot();
-    let link = state
-        .scene
-        .file_objects
-        .entries
-        .iter_mut()
-        .find(|l| l.target == key)
-        .unwrap();
-    link.path = path;
-    link.cache.area = Rect {
-        min: [0.; 2],
-        max: [image.width as f64, image.height as f64],
-    };
-    link.cache.source = Source::Image(image);
-    validate(d, &state)?;
-    Ok(state)
+    Ok(prepared.state)
 }
 pub fn restore_original(d: &Document, key: Key) -> Result<DocumentState, String> {
     let t = crate::layer_catalog::target(d, key).ok_or("Missing linked layer")?;
@@ -422,25 +338,7 @@ pub(crate) fn render_extents(
     Ok(out)
 }
 pub fn create(d: &Document, path: &Path, name: &str) -> Result<(DocumentState, u64), String> {
-    let (path, image) = read(path, d.path.as_deref())?;
-    let layer = Layer {
-        area: Rect {
-            min: [0.; 2],
-            max: [image.width as f64, image.height as f64],
-        },
-        source: Source::Image(image),
-        transform: d.scene.transform.inverse(),
-        repeat: [false; 2],
-    };
-    let mut placeholder = layer.clone();
-    placeholder.source = Source::Solid([0; 4]);
-    let (mut state, id) = crate::material_layer::prepare(d, None, name, placeholder)?;
-    state.scene.file_objects.entries.push(Link {
-        target: Key::Object(id),
-        path,
-        cache: layer,
-    });
-    validate(d, &state)?;
+    let (state, id, _) = crate::file_sources::create(d, path, name, Default::default())?;
     Ok((state, id))
 }
 pub fn validate(d: &Document, s: &DocumentState) -> Result<(), String> {
@@ -449,10 +347,18 @@ pub fn validate(d: &Document, s: &DocumentState) -> Result<(), String> {
             && let Some(next) = s.scene.file_objects.get(old.target)
         {
             let flags = crate::layer_properties::inherited(d, t);
-            if old != next && (flags.locked || stored_flags(d, t).pixels_locked) {
+            let content_changed = old.path != next.path
+                || old.selection != next.selection
+                || old.cache.source != next.cache.source;
+            if old != next && (flags.locked || content_changed && stored_flags(d, t).pixels_locked)
+            {
                 return Err("The linked layer is locked".into());
             }
-            if flags.position_locked && old.cache.transform != next.cache.transform {
+            if flags.position_locked
+                && (old.cache.transform != next.cache.transform
+                    || old.cache.area != next.cache.area
+                    || old.cache.mapping.warp != next.cache.mapping.warp)
+            {
                 return Err("The linked layer position is locked".into());
             }
         }
@@ -613,6 +519,7 @@ fn cache(image: Image, origin: [f64; 2], transform: Affine) -> Layer {
         source: Source::Image(image),
         transform: Affine([1., 0., 0., 1., origin[0], origin[1]]).then(transform.inverse()),
         repeat: [false; 2],
+        mapping: Default::default(),
     }
 }
 pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String> {
@@ -805,6 +712,7 @@ pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String
     };
     let mut state = d.snapshot();
     state.scene.file_objects.entries.push(Link {
+        selection: Default::default(),
         target: key,
         path: path.clone(),
         cache: cache(image, origin, d.scene.transform),
@@ -860,6 +768,7 @@ pub fn from_clipboard(
     let (mut state, id) = crate::material_layer::prepare(d, None, "Linked clipboard", placeholder)?;
     let target = Key::Object(id);
     state.scene.file_objects.entries.push(Link {
+        selection: Default::default(),
         target,
         path: path.clone(),
         cache: layer,

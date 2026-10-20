@@ -34,10 +34,16 @@ pub struct Layer {
     /// Local coordinates to preserved original-page coordinates.
     pub transform: Affine,
     pub repeat: [bool; 2],
+    #[serde(
+        default,
+        skip_serializing_if = "crate::material_mapping::Mapping::is_default"
+    )]
+    pub mapping: crate::material_mapping::Mapping,
 }
 impl Layer {
     pub fn valid(&self, missing: bool) -> bool {
-        self.transform.valid()
+        self.mapping.valid(self.area)
+            && self.transform.valid()
             && self.area.valid()
             && [self.area.min, self.area.max]
                 .into_iter()
@@ -57,13 +63,17 @@ impl Layer {
             }
     }
     pub fn bounds(&self) -> Rect {
-        let points = [
-            self.area.min,
-            [self.area.max[0], self.area.min[1]],
-            self.area.max,
-            [self.area.min[0], self.area.max[1]],
-        ]
-        .map(|p| self.transform.map(p));
+        let points = self
+            .mapping
+            .warp
+            .points()
+            .into_iter()
+            .map(|p| {
+                self.transform.map(
+                    [0, 1].map(|n| self.area.min[n] + p[n] * (self.area.max[n] - self.area.min[n])),
+                )
+            })
+            .collect::<Vec<_>>();
         Rect {
             min: [0, 1].map(|n| points.iter().map(|p| p[n]).fold(f64::INFINITY, f64::min)),
             max: [0, 1].map(|n| {
@@ -75,32 +85,42 @@ impl Layer {
         }
     }
     pub fn bytes(&self) -> usize {
-        match &self.source {
-            Source::Image(i) => i.width as usize * i.height as usize * 4,
-            Source::Gradient(s) => serde_json::to_vec(s).map_or(0, |b| b.len()),
-            _ => 0,
-        }
+        self.mapping.bytes()
+            + match &self.source {
+                Source::Image(i) => i.width as usize * i.height as usize * 4,
+                Source::Gradient(s) => serde_json::to_vec(s).map_or(0, |b| b.len()),
+                _ => 0,
+            }
+    }
+    pub(crate) fn local(&self, original: Point) -> Option<Point> {
+        let p = self.transform.inverse().map(original);
+        let p = if matches!(self.mapping.warp, crate::material_mapping::Warp::None) {
+            p
+        } else {
+            let uv =
+                [0, 1].map(|n| (p[n] - self.area.min[n]) / (self.area.max[n] - self.area.min[n]));
+            let uv = self.mapping.warp.inverse(uv)?;
+            [0, 1].map(|n| self.area.min[n] + uv[n] * (self.area.max[n] - self.area.min[n]))
+        };
+        self.area.contains(p).then_some(p)
     }
     pub fn pixel(&self, original: Point) -> [u8; 4] {
-        let p = self.transform.inverse().map(original);
-        if !self.area.contains(p) {
+        let Some(p) = self.local(original) else {
             return [0; 4];
-        }
+        };
         match &self.source {
             Source::Solid(c) => *c,
             Source::Gradient(s) => s.color(p, None),
             Source::Image(i) => {
-                let mut q = [p[0].floor(), p[1].floor()];
-                for (n, size) in [i.width, i.height].into_iter().enumerate() {
-                    if self.repeat[n] {
-                        q[n] = q[n].rem_euclid(f64::from(size));
-                    }
-                    if q[n] < 0. || q[n] >= f64::from(size) {
-                        return [0; 4];
-                    }
-                }
+                let Some(q) = self
+                    .mapping
+                    .tiling
+                    .pixel(p, [i.width, i.height], self.repeat)
+                else {
+                    return [0; 4];
+                };
                 i.pixels
-                    .get(q[1] as usize * i.width as usize + q[0] as usize)
+                    .get(q[1] * i.width as usize + q[0])
                     .copied()
                     .unwrap_or([0; 4])
             }

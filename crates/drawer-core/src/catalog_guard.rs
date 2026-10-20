@@ -23,8 +23,14 @@ pub fn validate(d: &Document, after: &Scene) -> Result<(), String> {
             return Err("Page object layer is locked".into());
         }
         if let Some(new) = new {
-            if (p.pixels_locked || p.hidden) && old != new {
+            let same_material_source = matches!((old,new),(crate::scene::PageObject::Material(a),crate::scene::PageObject::Material(b)) if a.source==b.source);
+            if (p.hidden || p.pixels_locked && !same_material_source) && old != new {
                 return Err("Page object layer is hidden or its image is locked".into());
+            }
+            if p.position_locked
+                && matches!((old,new),(crate::scene::PageObject::Material(a),crate::scene::PageObject::Material(b)) if a.transform!=b.transform || a.area!=b.area || a.mapping.warp!=b.mapping.warp)
+            {
+                return Err("Material geometry is position locked".into());
             }
             let a = old.bounds();
             let b = new.bounds();

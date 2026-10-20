@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 62;
+const VERSION: u32 = 63;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -76,7 +76,23 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     if file.metadata()?.len() > budget as u64 + MAX_SCENE_BYTES as u64 + 1024 * 1024 {
         return Err(invalid("Document exceeds memory budget"));
     }
-    let mut reader = BufReader::new(file);
+    read_native_reader(path, BufReader::new(file), budget)
+}
+pub(crate) fn read_native_snapshot(
+    path: &Path,
+    bytes: &[u8],
+    budget: usize,
+) -> io::Result<Document> {
+    if bytes.len()
+        > budget
+            .saturating_add(MAX_SCENE_BYTES)
+            .saturating_add(1024 * 1024)
+    {
+        return Err(invalid("Document exceeds memory budget"));
+    }
+    read_native_reader(path, std::io::Cursor::new(bytes), budget)
+}
+fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::Result<Document> {
     let mut magic = [0; 8];
     reader.read_exact(&mut magic)?;
     let version = read_u32(&mut reader)?;
@@ -181,6 +197,14 @@ fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 63
+            && (crate::file_sources::requires_v63(&document.scene)
+                || crate::material_mapping::requires_v63(&document.scene))
+        {
+            return Err(invalid(
+                "Source selection and material deformation require document version 63",
+            ));
+        }
         if version < 61 && document.scene.paper_background.is_some() {
             return Err(invalid(
                 "Paper background identity requires document version 61",
