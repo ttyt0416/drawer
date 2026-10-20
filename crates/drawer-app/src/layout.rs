@@ -456,6 +456,7 @@ impl Drawer {
             canvas.filters = self.workspaces.store.current.input.filters;
             canvas.profiles = self.workspaces.store.current.input.profiles;
             canvas.selection_outline = self.workspaces.store.current.selection_outline;
+            canvas.mask_overlay = self.workspaces.store.current.layer_mask_overlay;
             canvas.ruler_aids = self.aids.preferences;
             canvas.label_preferences = self.workspaces.store.current.layer_colors;
             canvas.label_target = Some(

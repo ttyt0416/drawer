@@ -175,8 +175,10 @@ pub fn prepare(
     if !settings.include_hidden {
         nodes.retain(|n| !p::properties(doc, crate::clipping::node_key(doc, *n)).hidden);
     }
-    if nodes.len() < 2 {
-        return Err("Choose at least two visible sibling nodes (or include hidden layers)".into());
+    if nodes.len() < 2 && !matches!(nodes.as_slice(), [Node::Folder(_)]) {
+        return Err(
+            "Choose two visible siblings or one nonempty folder (or include hidden layers)".into(),
+        );
     }
     nodes.sort_by_key(|n| siblings.iter().position(|v| v == n).unwrap());
     let start = position(nodes[0])?;

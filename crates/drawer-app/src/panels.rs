@@ -474,6 +474,11 @@ impl Drawer {
         {
             self.status = Some(e);
         }
+        if ui.button("Layer mask operations").clicked()
+            && let Err(e) = self.begin_layer_masks()
+        {
+            self.status = Some(e);
+        }
         if ui.button("Layer comps").clicked()
             && let Err(e) = self.begin_layer_comps()
         {

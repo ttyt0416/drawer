@@ -3,6 +3,9 @@ use eframe::egui;
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    pub mask_overlay: bool,
+    pub mask_overlay_regions: usize,
+    mask_texture: crate::layer_masks::OverlayCache,
     pub label_target: Option<drawer_core::thumbnail::Target>,
     pub label_preferences: drawer_core::layer_properties::Display,
     pub label_edges: usize,
@@ -87,6 +90,9 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            mask_overlay: false,
+            mask_overlay_regions: 0,
+            mask_texture: None,
             label_target: None,
             label_preferences: Default::default(),
             label_edges: 0,
@@ -488,6 +494,20 @@ impl CanvasView {
         self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
+        self.mask_overlay_regions = 0;
+        if self.mask_overlay
+            && let Some(t) = self.label_target
+        {
+            self.mask_overlay_regions = crate::layer_masks::paint_overlay(
+                ui.ctx(),
+                &painter,
+                document,
+                drawer_core::layer_properties::from_thumbnail(document, t),
+                center,
+                ppp,
+                &mut self.mask_texture,
+            );
+        }
         if paint.drawing.quick_mask {
             crate::quick_mask::paint(&painter, document, size, center, ppp);
         }

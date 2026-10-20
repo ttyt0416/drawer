@@ -48,6 +48,7 @@ mod layer_comps;
 mod layer_defaults;
 mod layer_folders;
 mod layer_manager;
+mod layer_masks;
 mod layer_merge;
 mod layer_properties;
 mod layer_roles;
@@ -187,6 +188,7 @@ struct Drawer {
     file_objects: file_objects::Panel,
     raster_conversion: raster_conversion::Panel,
     layer_comps: layer_comps::Panel,
+    layer_masks: layer_masks::Panel,
     layer_defaults: layer_defaults::Panel,
     selection_filter: selection_filter::Panel,
     color_range: color_range::Panel,
@@ -332,6 +334,7 @@ impl Drawer {
             file_objects: Default::default(),
             raster_conversion: Default::default(),
             layer_comps: Default::default(),
+            layer_masks: Default::default(),
             layer_defaults: Default::default(),
             selection_filter: Default::default(),
             color_range: Default::default(),
@@ -573,6 +576,7 @@ impl Drawer {
         self.screen_mode_inputs(ui.ctx());
         self.canvas_view.simple = self.simple_view;
         self.canvas_view.selection_outline = self.workspaces.store.current.selection_outline;
+        self.canvas_view.mask_overlay = self.workspaces.store.current.layer_mask_overlay;
         self.canvas_view.ruler_aids = self.aids.preferences;
         self.canvas_view.label_preferences = self.workspaces.store.current.layer_colors;
         self.canvas_view.label_target = self.active.map(|n| {
@@ -739,6 +743,7 @@ impl Drawer {
         self.file_objects_window(ui.ctx());
         self.raster_conversion_window(ui.ctx());
         self.layer_comps_window(ui.ctx());
+        self.layer_masks_window(ui.ctx());
         self.layer_defaults_window(ui.ctx());
         self.layer_selection_window(ui.ctx());
         self.workspace_settings(ui.ctx());
@@ -1510,6 +1515,10 @@ impl eframe::App for Drawer {
                     eprintln!("Reference/draft layer roles: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = layer_masks::smoke(&root) {
+                    eprintln!("Layer masks: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = layer_comps::smoke(&root) {
                     eprintln!("Layer comps: {e}");
                     fail_smoke();
@@ -1785,7 +1794,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nlayer_defaults=true\nmaterial_layers=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

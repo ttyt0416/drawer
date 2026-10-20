@@ -264,3 +264,6 @@ pub mod render_order;
 
 pub mod layer_comps;
 pub mod layer_comps_verify;
+
+pub mod layer_masks;
+pub mod layer_masks_verify;

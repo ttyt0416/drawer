@@ -506,3 +506,8 @@ crates/drawer-core/src/layer_comps.rs
 crates/drawer-core/src/layer_comps_verify.rs
 crates/drawer-app/src/layer_comps.rs
 docs/process/layer-comps.md
+
+crates/drawer-core/src/layer_masks.rs
+crates/drawer-core/src/layer_masks_verify.rs
+crates/drawer-app/src/layer_masks.rs
+docs/process/layer-masks.md
