@@ -11,6 +11,7 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug)]
 pub enum Operation {
     Selected(Vec<Target>),
+    Individual(Vec<Target>),
     Down(Target),
     Flatten,
 }
@@ -51,6 +52,7 @@ pub fn preview(state: &DocumentState, frame: u32) -> Result<Document, String> {
 }
 fn check(doc: &Document) -> Result<(), String> {
     if !doc.scene.valid()
+        || !doc.color.valid_layers(&doc.layers)
         || !doc.scene.paper.valid_for(doc.layers.len())
         || doc.layers.is_empty()
         || doc.layers.len() > 256
@@ -127,12 +129,16 @@ pub fn prepare(
     if matches!(operation, Operation::Flatten) {
         return flatten(doc, settings);
     }
+    let individual = matches!(operation, Operation::Individual(_));
     let graph = &doc.scene.paper;
     let (requested, down) = match operation {
-        Operation::Selected(v) => (v, false),
+        Operation::Selected(v) | Operation::Individual(v) => (v, false),
         Operation::Down(t) => (vec![t], true),
         Operation::Flatten => unreachable!(),
     };
+    if individual {
+        crate::individual_merge::preflight(doc, &requested, settings)?;
+    }
     crate::render_order::allow_partial_merge(doc, &requested)?;
     if requested.is_empty()
         || requested.len() > 512
@@ -247,42 +253,57 @@ pub fn prepare(
     {
         return Err("Merge raster/comparison work limit".into());
     }
-    let mut pixels = Vec::new();
-    pixels
-        .try_reserve_exact(count)
-        .map_err(|_| "Merge allocation failed")?;
-    for y in min[1]..max[1] {
-        for x in min[0]..max[0] {
-            pixels.push(working.scene.paper.composite_nodes_with(
-                &working,
-                &nodes,
-                [x, y],
-                &mut |n, _| appearance.raster(&working, n, [x, y]),
-            ));
-        }
-    }
-    let mut raster = RasterLayer {
-        precise: None,
-        locked: false,
-        name: "Merged layers".into(),
-        placement: Some(PlacedRaster {
-            width: size[0] as u32,
-            height: size[1] as u32,
-            offset: min,
-        }),
-        pixels,
+    let extent = PlacedRaster {
+        width: size[0] as u32,
+        height: size[1] as u32,
+        offset: min,
     };
-    if doc.color != crate::color_storage::Config::legacy() {
-        let renderer = crate::float_render::Renderer::new(&working)?;
-        let mut samples = Vec::with_capacity(count);
+    let combined_mask = if individual {
+        Some(crate::individual_merge::mask(doc, &nodes)?)
+    } else {
+        None
+    };
+    let raster = if individual {
+        crate::individual_merge::pixels(doc, &nodes, extent)?
+    } else {
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(count)
+            .map_err(|_| "Merge allocation failed")?;
         for y in min[1]..max[1] {
             for x in min[0]..max[0] {
-                samples.push(renderer.nodes_sample(&nodes, [x, y])?);
+                pixels.push(working.scene.paper.composite_nodes_with(
+                    &working,
+                    &nodes,
+                    [x, y],
+                    &mut |n, _| appearance.raster(&working, n, [x, y]),
+                ));
             }
         }
-        let extent = raster.placement.unwrap();
-        crate::color_storage::set_samples(&mut raster, &doc.color, extent, samples)?;
-    }
+        let mut raster = RasterLayer {
+            precise: None,
+            locked: false,
+            name: "Merged layers".into(),
+            placement: Some(PlacedRaster {
+                width: size[0] as u32,
+                height: size[1] as u32,
+                offset: min,
+            }),
+            pixels,
+        };
+        if doc.color != crate::color_storage::Config::legacy() {
+            let renderer = crate::float_render::Renderer::new(&working)?;
+            let mut samples = Vec::with_capacity(count);
+            for y in min[1]..max[1] {
+                for x in min[0]..max[0] {
+                    samples.push(renderer.nodes_sample(&nodes, [x, y])?);
+                }
+            }
+            let extent = raster.placement.unwrap();
+            crate::color_storage::set_samples(&mut raster, &doc.color, extent, samples)?;
+        }
+        raster
+    };
     let mut after = doc.snapshot();
     after.scene.layer_ids.initialize(doc.layers.len())?;
     let first = *indices.first().unwrap();
@@ -361,6 +382,31 @@ pub fn prepare(
     after.scene.layer_ids.rasters[replacement] = id;
     after.layers = layers;
     crate::layer_roles::put_raster(&mut after, replacement, roles);
+    if let Some(mask) = combined_mask {
+        after
+            .scene
+            .layer_effects
+            .rasters
+            .entry(id)
+            .or_default()
+            .mask = Some(mask);
+        let rendered = preview(&after, doc.current_frame)?;
+        let before = crate::render::Renderer::new(doc);
+        let output = crate::render::Renderer::new(&rendered);
+        if let Some(e) = before.error().or_else(|| output.error()) {
+            return Err(e.into());
+        }
+        let mut delta = 0;
+        for y in min[1]..max[1] {
+            for x in min[0]..max[0] {
+                let point = [x as f64 + 0.5, y as f64 + 0.5];
+                for (a, b) in before.pixel(point).into_iter().zip(output.pixel(point)) {
+                    delta = delta.max(a.abs_diff(b));
+                }
+            }
+        }
+        return finish(doc,after,Target::Raster(id),members,vec!["Individual combine source-overs the two stored rasters without masks or display effects; the independent editable mask is max(lower, upper), with no mask/disabled mask treated as full strength.".into(),"This command can change appearance. Other live display recipes are discarded. Use ordinary Merge selected to bake the displayed result. One Undo restores both original layers, masks and properties.".into()],delta);
+    }
     let rendered = preview(&after, doc.current_frame)?;
     let after_appearance = crate::appearance::Caches::new(&rendered, None)?;
     let before_roots = working.scene.paper.root_nodes(working.layers.len());
@@ -378,14 +424,18 @@ pub fn prepare(
             if let (Some(a), Some(b)) = (&before_float, &after_float) {
                 for (a, b) in a
                     .nodes_sample(&before_roots, [x, y])?
-                    .rgba16()
+                    .store(doc.color.depth, Default::default(), [x, y])
                     .into_iter()
-                    .zip(b.nodes_sample(&after_roots, [x, y])?.rgba16())
+                    .zip(b.nodes_sample(&after_roots, [x, y])?.store(
+                        doc.color.depth,
+                        Default::default(),
+                        [x, y],
+                    ))
                 {
                     let delta = a.abs_diff(b);
                     if delta > 1 {
                         return Err(
-                            "Merge exceeds one 16-bit channel step; include the lower backdrop"
+                            "Merge exceeds one document channel step; include the lower backdrop"
                                 .into(),
                         );
                     }

@@ -225,6 +225,8 @@ pub mod layer_blend_verify;
 
 pub mod layer_effects;
 
+mod individual_merge;
+pub mod individual_merge_verify;
 pub mod layer_merge;
 
 pub mod layer_merge_verify;

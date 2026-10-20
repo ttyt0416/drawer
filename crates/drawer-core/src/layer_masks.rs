@@ -21,6 +21,7 @@ pub enum Command {
     Copy { source: Target, replace: bool },
     Selection { hide_inside: bool, policy: Policy },
     Apply,
+    Bake,
 }
 pub struct Prepared {
     pub state: DocumentState,
@@ -60,7 +61,7 @@ fn bounds(mask: &Mask) -> Option<([f64; 2], [f64; 2])> {
     }
     Some((min, max))
 }
-fn raster(
+pub(crate) fn raster(
     min: [f64; 2],
     max: [f64; 2],
     mut sample: impl FnMut([f64; 2]) -> u8,
@@ -171,6 +172,9 @@ fn intersect(old: &Mask, new: &Mask) -> Result<Mask, String> {
 pub fn prepare(d: &Document, target: Target, command: Command) -> Result<Prepared, String> {
     writable(d, target)?;
     if matches!(command, Command::Apply) {
+        return apply_alpha(d, target);
+    }
+    if matches!(command, Command::Bake) {
         let mask = get(d, target).ok_or("This layer has no mask")?;
         if !mask.enabled {
             return Err("Enable the mask before applying it to content".into());
@@ -184,7 +188,7 @@ pub fn prepare(d: &Document, target: Target, command: Command) -> Result<Prepare
         let selected = crate::layer_catalog::state_target(&prepared.state, prepared.selected)
             .ok_or("Raster result missing")?;
         let mut notes = prepared.notes;
-        notes.insert(0,"Apply mask rasterizes the current content, masks and display effects. Vector geometry/folder structure becomes raster content; one Undo restores it.".into());
+        notes.insert(0,"Bake masked content rasterizes the current content, masks and display effects. Vector geometry/folder structure becomes raster content; one Undo restores it.".into());
         return Ok(Prepared {
             state: prepared.state,
             selected,
@@ -244,7 +248,7 @@ pub fn prepare(d: &Document, target: Target, command: Command) -> Result<Prepare
             };
             Some(mask)
         }
-        Command::Apply => unreachable!(),
+        Command::Apply | Command::Bake => unreachable!(),
     };
     let state =
         crate::layer_folders::prepare(d, crate::layer_folders::Command::Mask { target, mask })?
@@ -254,4 +258,65 @@ pub fn prepare(d: &Document, target: Target, command: Command) -> Result<Prepare
         selected: target,
         notes,
     })
+}
+
+fn apply_alpha(d: &Document, target: Target) -> Result<Prepared, String> {
+    let Target::Raster(id) = target else {
+        return Err("Apply alpha mask needs a raster; use Bake masked content or ordinary merge for vector/folder sources".into());
+    };
+    let n = crate::layers::index(d, id).ok_or("Missing mask owner")?;
+    let mask = get(d, target).ok_or("This layer has no mask")?;
+    if !mask.enabled {
+        return Err("Enable the mask before applying it to alpha".into());
+    }
+    if crate::layer_effects::adjustment(d, target).is_some()
+        || d.scene
+            .file_objects
+            .get(crate::layer_search::Key::Layer(target))
+            .is_some()
+    {
+        return Err(
+            "Use ordinary merge or Bake masked content for corrections and linked file sources"
+                .into(),
+        );
+    }
+    let layer = &d.layers[n];
+    if !d.scene.valid() || !d.color.valid_layers(&d.layers) || !layer.valid(d.width, d.height) {
+        return Err("Invalid raster alpha/mask source".into());
+    }
+    let count = layer.pixels.len();
+    if count > 4 * 1024 * 1024
+        || d.memory_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8
+        || d.resident_bytes()
+            .saturating_add(d.memory_bytes().saturating_mul(2))
+            .saturating_add(count.saturating_mul(44))
+            > crate::document::DEFAULT_DOCUMENT_BUDGET
+    {
+        return Err("Mask alpha application exceeds memory/Undo limits".into());
+    }
+    let extent = layer.extent(d.width, d.height);
+    let mut samples = Vec::with_capacity(count);
+    for i in 0..count {
+        let point = [
+            extent.offset[0] as f64 + (i % extent.width as usize) as f64 + 0.5,
+            extent.offset[1] as f64 + (i / extent.width as usize) as f64 + 0.5,
+        ];
+        let original = d.scene.transform.inverse().map(point);
+        samples.push(layer.sample_at(i).coverage(mask.factor(original) as f64)?);
+    }
+    let mut state = d.snapshot();
+    crate::color_storage::set_samples(&mut state.layers[n], &d.color, extent, samples)?;
+    let effect = state
+        .scene
+        .layer_effects
+        .rasters
+        .get_mut(&id)
+        .ok_or("Missing mask effect")?;
+    effect.mask = None;
+    if effect.adjustment.is_none() {
+        state.scene.layer_effects.rasters.remove(&id);
+    }
+    p::validate_edit(d, &state)?;
+    crate::clipping::validate_state(d, &state)?;
+    Ok(Prepared{state,selected:target,notes:vec!["Apply alpha mask multiplies only the stored raster alpha by its mask and removes that mask. Layer identity, RGB, opacity, blend and other display recipes remain editable (zero-alpha RGB normalizes to zero).".into(),"Live effects are evaluated again from the changed alpha and can look different; Bake masked content or ordinary merge bakes the displayed recipe. One Undo restores the mask and original pixels.".into()]})
 }

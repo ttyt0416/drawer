@@ -20,6 +20,7 @@ enum Operation {
     Move,
     Copy,
     Apply,
+    Bake,
     Remove,
 }
 struct Draft {
@@ -53,6 +54,7 @@ impl Draft {
                 replace: self.replace,
             },
             Operation::Apply => Command::Apply,
+            Operation::Bake => Command::Bake,
             Operation::Remove => Command::Remove,
         }
     }
@@ -161,26 +163,30 @@ impl Drawer {
         let fresh = (d.revision, d.current_frame) == (e.revision, e.frame);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel) = (false, false, false);
-        egui::Window::new("Layer mask operations").open(&mut open).default_pos(egui::pos2(25.,20.)).default_width(510.).collapsible(false).show(ctx,|ui|{
+        egui::Window::new("Layer mask operations").open(&mut open).default_pos(egui::pos2(25.,20.)).min_width(530.).max_width(530.).collapsible(false).show(ctx,|ui|{
             let r=ui.checkbox(&mut self.workspaces.store.current.layer_mask_overlay,"Show stored mask area on canvas (red hides; view only)");self.layer_masks.overlay=Some(r.rect);
             if !fresh{ui.label("Page/frame changed; cancel and reopen mask controls.");return;}
-            let mut changed=false;let targets=props::targets(d).into_iter().filter(|t|matches!(t,Target::Raster(_)|Target::Vector(_)|Target::Folder(_))).collect::<Vec<_>>();
+            let mut changed=false;
+            ui.allocate_ui(egui::vec2(490.,230.),|ui|{egui::ScrollArea::vertical().id_salt("mask-options").max_height(230.).show(ui,|ui|{
+            let targets=props::targets(d).into_iter().filter(|t|matches!(t,Target::Raster(_)|Target::Vector(_)|Target::Folder(_))).collect::<Vec<_>>();
             egui::ComboBox::from_label("Mask owner").selected_text(super::layer_properties::label(d,e.target)).show_ui(ui,|ui|{for t in &targets{if ui.selectable_value(&mut e.target,*t,super::layer_properties::label(d,*t)).changed(){changed=true;let m=core::get(d,*t);e.enabled=m.is_none_or(|m|m.enabled);e.linked=m.is_none_or(|m|m.linked);}}});
-            ui.horizontal_wrapped(|ui|{for(op,label)in[(Operation::Outside,"Hide outside selection"),(Operation::Inside,"Hide inside selection"),(Operation::Invert,"Invert"),(Operation::Enable,"Enable/disable"),(Operation::Link,"Link movement"),(Operation::Move,"Move mask"),(Operation::Copy,"Copy mask"),(Operation::Apply,"Apply mask (rasterize)"),(Operation::Remove,"Remove")]{changed|=ui.radio_value(&mut e.operation,op,label).changed();}});
+            ui.horizontal_wrapped(|ui|{for(op,label)in[(Operation::Outside,"Hide outside selection"),(Operation::Inside,"Hide inside selection"),(Operation::Invert,"Invert"),(Operation::Enable,"Enable/disable"),(Operation::Link,"Link movement"),(Operation::Move,"Move mask"),(Operation::Copy,"Copy mask"),(Operation::Apply,"Apply mask to alpha"),(Operation::Bake,"Bake masked content"),(Operation::Remove,"Remove")]{changed|=ui.radio_value(&mut e.operation,op,label).changed();}});
             match e.operation{
                 Operation::Outside|Operation::Inside=>{ui.horizontal(|ui|{for(p,label)in[(Policy::Create,"Create only"),(Policy::Replace,"Replace"),(Policy::Intersect,"Intersect")]{changed|=ui.radio_value(&mut e.policy,p,label).changed();}});ui.small("Selection strengths become pass alpha (outside hides) or inverted pass alpha (inside hides). Existing masks require an explicit Replace or Intersect.");},
                 Operation::Enable=>{changed|=ui.checkbox(&mut e.enabled,"Mask enabled").changed();},
                 Operation::Link=>{changed|=ui.checkbox(&mut e.linked,"Move mask with layer").changed();},
                 Operation::Move=>{ui.horizontal(|ui|{for(k,label)in["Move mask X ","Move mask Y "].iter().enumerate(){changed|=ui.add(egui::DragValue::new(&mut e.delta[k]).range(-1_000_000. ..=1_000_000.).prefix(*label)).changed();}});},
                 Operation::Copy=>{egui::ComboBox::from_label("Copy source").selected_text(super::layer_properties::label(d,e.source)).show_ui(ui,|ui|{for t in &targets{if core::get(d,*t).is_some(){changed|=ui.selectable_value(&mut e.source,*t,super::layer_properties::label(d,*t)).changed();}}});changed|=ui.checkbox(&mut e.replace,"Replace an existing destination mask").changed();ui.small("Copy preserves original-page position, enabled, inversion and movement linkage; source stays independent.");},
-                Operation::Apply=>{ui.label("Applying makes current content, masks and display effects into raster pixels. Vector paths and folder structure become raster content. Preview before applying; one Undo restores editable data.");},
+                Operation::Apply=>{ui.label("Apply only multiplies stored raster alpha by this mask and removes it. RGB and other live effects/properties remain editable; live effects can render differently from the new alpha. Use ordinary merge or Bake masked content to bake the complete displayed recipe.");},
+                Operation::Bake=>{ui.label("Bake masked content rasterizes masks and display effects together. Vector paths and folder structure become raster content. This is separate from applying only a raster alpha mask; one Undo restores editable data.");},
                 _=>{}
             }
+            });});
             if changed{e.prepared=None;e.images=None;}
             if let Some(m)=core::get(d,e.target){ui.small(format!("Stored mask: enabled={} / linked={} / inverted={}",m.enabled,m.linked,m.inverted));}
             let r=ui.button("Preview mask operation");self.layer_masks.preview=Some(r.rect);preview=r.clicked();
-            if let Some(p)=&e.prepared{for note in &p.notes{ui.small(note);}}
-            if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After mask operation",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}
+            ui.allocate_ui(egui::vec2(490.,60.),|ui|{egui::ScrollArea::vertical().id_salt("mask-notes").max_height(60.).show(ui,|ui|{if let Some(p)=&e.prepared{for note in &p.notes{ui.small(note);}}});});
+            ui.allocate_ui(egui::vec2(300.,118.),|ui|{if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After mask operation",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}});
             ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply reviewed mask operation"));self.layer_masks.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
         });
         if open && !cancel {
@@ -400,8 +406,10 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     }
     app.layer_masks.draft.as_mut().unwrap().operation = Operation::Apply;
     step(&mut app, &mut time, vec![]);
+    step(&mut app, &mut time, vec![]);
     let r = app.layer_masks.preview.unwrap();
     click(&mut app, &mut time, r);
+    step(&mut app, &mut time, vec![]);
     step(&mut app, &mut time, vec![]);
     let r = app.layer_masks.apply.unwrap();
     click(&mut app, &mut time, r);
@@ -411,8 +419,11 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         || app.documents[0].snapshot() != original
     {
         return Err(format!(
-            "Apply mask UI rasterization/Undo: {:?}",
-            app.status
+            "Apply alpha mask UI/Undo: {:?}, mask={}, alpha={}, open={}",
+            app.status,
+            core::get(&app.documents[0], Target::Raster(1)).is_some(),
+            app.documents[0].layers[0].pixels[1][3],
+            app.layer_masks.draft.is_some()
         ));
     }
     app.execute_command(&ctx, "layer-masks");
@@ -441,6 +452,131 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mask_alpha_apply_and_full_bake_buttons_keep_distinct_pixel_and_effect_channels() {
+        use super::*;
+        for operation in [Operation::Apply, Operation::Bake] {
+            let ctx = egui::Context::default();
+            let mut app = Drawer::new(&ctx, None);
+            app.simple_view = true;
+            app.create_canvas(CanvasSpec {
+                width: 1,
+                height: 1,
+                dpi: 300.,
+                background: Background::Transparent,
+            })
+            .unwrap();
+            app.documents[0].layers[0].pixels[0] = [200, 100, 50, 128];
+            app.documents[0].scene.appearance.rasters.insert(
+                1,
+                drawer_core::appearance::Style {
+                    enabled: true,
+                    color: Some([10, 20, 30]),
+                    ..Default::default()
+                },
+            );
+            app.documents[0]
+                .scene
+                .layer_properties
+                .rasters
+                .entry(1)
+                .or_default()
+                .opacity = 50;
+            app.documents[0]
+                .scene
+                .layer_effects
+                .rasters
+                .entry(1)
+                .or_default()
+                .mask = Some(drawer_core::layer_effects::Mask {
+                space: Default::default(),
+                coverage: drawer_core::selection::Mask {
+                    runs: vec![drawer_core::selection::Run {
+                        x: 0,
+                        y: 0,
+                        length: 1,
+                        alpha: 128,
+                    }],
+                },
+                offset: [0.; 2],
+                enabled: true,
+                linked: true,
+                inverted: false,
+            });
+            let original = app.documents[0].snapshot();
+            let mut time = 0.;
+            app.begin_layer_masks().unwrap();
+            app.layer_masks.draft.as_mut().unwrap().operation = operation;
+            let frame = |app: &mut Drawer, time: &mut f64, events| {
+                *time += 0.1;
+                crate::input_replay::frame(&ctx, app, *time, events);
+            };
+            let click = |app: &mut Drawer, time: &mut f64, r: egui::Rect| {
+                for pressed in [true, false] {
+                    frame(
+                        app,
+                        time,
+                        vec![
+                            egui::Event::PointerMoved(r.center()),
+                            egui::Event::PointerButton {
+                                pos: r.center(),
+                                button: egui::PointerButton::Primary,
+                                pressed,
+                                modifiers: Default::default(),
+                            },
+                        ],
+                    );
+                }
+            };
+            for _ in 0..3 {
+                frame(&mut app, &mut time, vec![]);
+            }
+            let r = app.layer_masks.preview.unwrap();
+            click(&mut app, &mut time, r);
+            assert!(
+                app.layer_masks.draft.as_ref().unwrap().prepared.is_some(),
+                "{:?}",
+                app.status
+            );
+            assert_eq!(app.documents[0].snapshot(), original);
+            for _ in 0..2 {
+                frame(&mut app, &mut time, vec![]);
+            }
+            let r = app.layer_masks.apply.unwrap();
+            click(&mut app, &mut time, r);
+            assert!(app.layer_masks.draft.is_none(), "{:?}", app.status);
+            assert_eq!(app.documents[0].history_counts(), (1, 0));
+            assert_eq!(
+                app.documents[0].layers[0].pixels[0],
+                if operation == Operation::Apply {
+                    [200, 100, 50, 64]
+                } else {
+                    [10, 20, 30, 64]
+                }
+            );
+            assert_eq!(
+                app.documents[0]
+                    .scene
+                    .appearance
+                    .get(Target::Raster(1))
+                    .is_some(),
+                operation == Operation::Apply
+            );
+            assert_eq!(
+                props::properties(&app.documents[0], Target::Raster(1)).opacity,
+                50
+            );
+            assert!(app.documents[0].undo());
+            assert_eq!(app.documents[0].snapshot(), original);
+            app.begin_layer_masks().unwrap();
+            app.layer_masks.draft.as_mut().unwrap().operation = operation;
+            app.preview_layer_mask(&ctx).unwrap();
+            app.documents[0].current_frame += 1;
+            let changed = app.documents[0].snapshot();
+            assert!(app.apply_layer_mask().is_err());
+            assert_eq!(app.documents[0].snapshot(), changed);
+        }
+    }
     #[test]
     fn mask_ui_preview_apply_overlay_output_preferences_undo_stale_escape() {
         let root = crate::tests::TestDirectory::new();

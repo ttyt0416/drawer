@@ -376,7 +376,11 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Linked vector mask movement",
     )?;
     let original = d.snapshot();
-    let p = core::prepare(&d, vector, Command::Apply)?;
+    check(
+        core::prepare(&d, vector, Command::Apply).is_err(),
+        "Vector alpha apply must offer explicit bake",
+    )?;
+    let p = core::prepare(&d, vector, Command::Bake)?;
     d.commit_state(p.state)?;
     check(
         d.scene.lines.layers.is_empty() && d.undo() && d.snapshot() == original,
@@ -418,7 +422,11 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Linked folder mask movement",
     )?;
     let original = d.snapshot();
-    let p = core::prepare(&d, f, Command::Apply)?;
+    check(
+        core::prepare(&d, f, Command::Apply).is_err(),
+        "Folder alpha apply must offer explicit bake",
+    )?;
+    let p = core::prepare(&d, f, Command::Bake)?;
     d.commit_state(p.state)?;
     check(
         d.scene.layer_effects.get(f).is_none() && d.undo() && d.snapshot() == original,

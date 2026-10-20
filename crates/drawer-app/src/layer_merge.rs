@@ -96,6 +96,7 @@ impl Drawer {
         let operation = match e.kind {
             0 => Operation::Selected(e.selected.clone()),
             1 => Operation::Down(*e.selected.first().ok_or("Choose a merge-down target")?),
+            3 => Operation::Individual(e.selected.clone()),
             _ => Operation::Flatten,
         };
         let result = core::prepare(d, operation, e.settings)?;
@@ -166,15 +167,18 @@ impl Drawer {
         let mut changed = false;
         egui::Window::new("Merge layers and flatten page").open(&mut open).collapsible(false).resizable(false).default_width(570.).default_pos(egui::pos2(45.,20.)).show(ctx,|ui|{
    if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
-   ui.horizontal(|ui|{changed|=ui.radio_value(&mut e.kind,0,"Merge selected").changed();changed|=ui.radio_value(&mut e.kind,1,"Merge down").changed();changed|=ui.radio_value(&mut e.kind,2,"Flatten page").changed();});
-   if e.kind<2{egui::ScrollArea::vertical().id_salt("merge-targets").max_height(130.).show_rows(ui,22.,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,super::layer_properties::label(d,t)).changed(){changed=true;if selected{if e.kind==1{e.selected.clear();}e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});}
+   ui.allocate_ui(egui::vec2(550.,220.),|ui|{egui::ScrollArea::vertical().id_salt("merge-options").max_height(220.).show(ui,|ui|{
+   ui.horizontal_wrapped(|ui|{changed|=ui.radio_value(&mut e.kind,0,"Merge selected").changed();changed|=ui.radio_value(&mut e.kind,1,"Merge down").changed();changed|=ui.radio_value(&mut e.kind,2,"Flatten page").changed();changed|=ui.radio_value(&mut e.kind,3,"Individual combine").changed();});
+   if e.kind!=2{egui::ScrollArea::vertical().id_salt("merge-targets").max_height(100.).show_rows(ui,22.,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,super::layer_properties::label(d,t)).changed(){changed=true;if selected{if e.kind==1{e.selected.clear();}e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});}
    changed|=ui.checkbox(&mut e.settings.include_hidden,"Include hidden layers (show them in the merged result)").changed();
    if e.kind<2{changed|=ui.checkbox(&mut e.settings.lower_backdrop,"Include lower siblings as the blend backdrop").changed();ui.small("Selection must be consecutive siblings. Merge down uses the first selected target.");}
+   if e.kind==3{if e.settings.lower_backdrop{e.settings.lower_backdrop=false;changed=true;}ui.colored_label(egui::Color32::YELLOW,"Individual combine can change appearance: combine raw pixels without masks/effects, and keep max(lower mask, upper mask) separately. Requires two Normal rasters at 100%. Ordinary merge bakes the displayed result.");}
+   });});
    if changed{e.prepared=None;e.images=None;e.acknowledged=false;}
    let r=ui.button("Prepare merge preview");self.layer_merge.prepare=Some(r.rect);prepare=r.clicked();
-   if let Some(result)=&e.prepared{ui.separator();for note in &result.notes{ui.label(note);}ui.label(format!("{} layer/folder/cell targets affected · maximum channel rounding {}",result.affected.len(),result.maximum_delta));
-    if let Some(images)=&e.images{ui.horizontal(|ui|{ui.vertical(|ui|{ui.label("Current page");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(128.,128.)));});ui.vertical(|ui|{ui.label("After rasterization");ui.add(egui::Image::new(&images[1]).fit_to_exact_size(egui::vec2(128.,128.)));});});}
-    let r=ui.checkbox(&mut e.acknowledged,"I reviewed the affected content and rasterization changes");self.layer_merge.ack=Some(r.rect);
+   if let Some(result)=&e.prepared{ui.separator();egui::ScrollArea::vertical().id_salt("merge-notes").max_height(48.).show(ui,|ui|{for note in &result.notes{ui.small(note);}});ui.label(format!("{} targets affected · maximum {} {}",result.affected.len(),if e.kind==3{"displayed channel difference"}else{"channel rounding"},result.maximum_delta));
+    if let Some(images)=&e.images{ui.horizontal(|ui|{ui.vertical(|ui|{ui.label("Current page");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(96.,96.)));});ui.vertical(|ui|{ui.label("After rasterization");ui.add(egui::Image::new(&images[1]).fit_to_exact_size(egui::vec2(96.,96.)));});});}
+    let r=ui.checkbox(&mut e.acknowledged,"I reviewed the affected content and merge differences");self.layer_merge.ack=Some(r.rect);
    }
    ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply merge"));self.layer_merge.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
    ui.small("One Undo restores layer structure, visibility, masks and effects. Preview and cancellation leave the document untouched.");
@@ -192,7 +196,8 @@ impl Drawer {
 }
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     drawer_core::layer_merge_verify::verify(root)?;
-    for kind in 0..3 {
+    drawer_core::individual_merge_verify::verify(root)?;
+    for kind in 0..4 {
         let ctx = egui::Context::default();
         let mut app = Drawer::new(&ctx, None);
         app.simple_view = true;
@@ -207,6 +212,37 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         let mut l = app.documents[0].layers[0].clone();
         l.pixels.fill([255, 0, 0, 128]);
         app.documents[0].layers.push(l);
+        if kind == 3 {
+            for (id, alpha) in [(1, 0), (2, 128)] {
+                app.documents[0]
+                    .scene
+                    .layer_effects
+                    .rasters
+                    .entry(id)
+                    .or_default()
+                    .mask = Some(drawer_core::layer_effects::Mask {
+                    space: Default::default(),
+                    coverage: drawer_core::selection::Mask {
+                        runs: if alpha == 0 {
+                            vec![]
+                        } else {
+                            (0..8)
+                                .map(|y| drawer_core::selection::Run {
+                                    x: 0,
+                                    y,
+                                    length: 8,
+                                    alpha,
+                                })
+                                .collect()
+                        },
+                    },
+                    offset: [0.; 2],
+                    enabled: true,
+                    linked: true,
+                    inverted: false,
+                });
+            }
+        }
         let mut time = 0.;
         let step = |app: &mut Drawer, time: &mut f64, events| {
             *time += 0.1;

@@ -551,3 +551,7 @@ crates/drawer-app/src/document_color.rs
 crates/drawer-platform/src/gpu_color.rs
 crates/drawer-platform/src/gpu_color.frag
 docs/process/document-color.md
+
+crates/drawer-core/src/individual_merge.rs
+crates/drawer-core/src/individual_merge_verify.rs
+docs/process/individual-combine.md
