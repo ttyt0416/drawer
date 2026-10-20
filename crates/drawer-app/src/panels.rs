@@ -641,6 +641,8 @@ impl Drawer {
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),
+                                ("Draw vector line", "vector-line-tool"),
+                                ("Draw vector curve", "vector-curve-tool"),
                                 ("Duplicate selected layer", "duplicate-layer"),
                                 ("Delete selected layer", "delete-layer"),
                             ] {

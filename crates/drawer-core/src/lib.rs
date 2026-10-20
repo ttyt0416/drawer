@@ -318,3 +318,5 @@ pub mod material_mapping_verify;
 pub mod material_transform;
 
 pub mod material_transform_verify;
+
+pub mod vector_creation_verify;

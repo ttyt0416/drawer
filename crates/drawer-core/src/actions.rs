@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 110] = [
+pub const EXTRA_COMMANDS: [&str; 112] = [
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -71,6 +71,8 @@ pub const EXTRA_COMMANDS: [&str; 110] = [
     "selection-border",
     "gradient-tool",
     "shape-tool",
+    "vector-line-tool",
+    "vector-curve-tool",
     "align-objects",
     "manage-layers",
     "layer-properties",
@@ -414,6 +416,8 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "gradient-tool" => "Gradient and freeform gradient",
+            "vector-line-tool" => "Draw an editable vector line with clicked control points",
+            "vector-curve-tool" => "Draw an editable vector curve with clicked control points",
             "shape-tool" => "Draw shape",
             "align-objects" => "Align and distribute objects",
             "manage-layers" => "Manage local layers",

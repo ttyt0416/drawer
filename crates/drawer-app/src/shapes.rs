@@ -17,6 +17,27 @@ impl drawing::Drawing {
     }
 }
 impl Drawer {
+    pub(super) fn begin_vector_shape(&mut self, curved: bool) {
+        self.finish_stroke();
+        self.restore_locked_tool();
+        let s = &mut self.workspaces.store.current.shapes;
+        s.kind = if curved { Kind::Bezier } else { Kind::Polyline };
+        s.curve = if curved {
+            Curve::CubicBezier
+        } else {
+            Curve::StraightLine
+        };
+        s.input = Input::ByClick;
+        s.paint = Paint::CreateLine;
+        s.constraint = Constraint::Free;
+        s.closed = false;
+        s.corner = 0.;
+        s.center = false;
+        s.line = self.references.session.workspace.color;
+        self.workspaces.store.current.shapes_vector = true;
+        self.drawing.mode = super::precision::Mode::ShapeClick;
+        self.drawing.connect_line = false;
+    }
     pub(super) fn shapes_controls(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Shape creation",|ui|{
             let old=self.workspaces.store.current.shapes;let old_vector=self.workspaces.store.current.shapes_vector;
@@ -36,8 +57,128 @@ impl Drawer {
             ui.label("Click mode: add control points, Enter to finish, Backspace to remove, Escape to cancel. Drag mode: boxes use two corners; curves use the traced control path. Polygon/fill closes automatically. Raster output respects selection strength; editable vector output requires an unrestricted selection.");
             if old!=self.workspaces.store.current.shapes||old_vector!=self.workspaces.store.current.shapes_vector{self.finish_stroke();if self.drawing.mode.creation_shape(){self.drawing.mode=if self.workspaces.store.current.shapes.input==Input::ByClick{super::precision::Mode::ShapeClick}else{super::precision::Mode::ShapeDrag};}}
             if ui.button("Draw shape on canvas").clicked(){self.execute_command(ui.ctx(),"shape-tool");}
+            ui.horizontal(|ui|{if ui.button("Draw vector line").clicked(){self.execute_command(ui.ctx(),"vector-line-tool");}
+if ui.button("Draw vector curve").clicked(){self.execute_command(ui.ctx(),"vector-curve-tool");}});
         });
     }
+}
+pub(super) fn vector_creation_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::vector_creation_verify::verify(root)?;
+    use drawer_core::pointer_input::Phase;
+    for curved in [false, true] {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 48,
+            height: 40,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        let mut time = 0.;
+        let step = |app: &mut Drawer, time: &mut f64, events| {
+            *time += 0.1;
+            super::input_replay::frame(&ctx, app, *time, events);
+        };
+        for _ in 0..2 {
+            step(&mut app, &mut time, vec![]);
+        }
+        let command = if curved {
+            "vector-curve-tool"
+        } else {
+            "vector-line-tool"
+        };
+        app.execute_command(&ctx, command);
+        step(&mut app, &mut time, vec![]);
+        let settings = app.workspaces.store.current.shapes;
+        if !app.workspaces.store.current.shapes_vector
+            || settings.curve
+                != if curved {
+                    Curve::CubicBezier
+                } else {
+                    Curve::StraightLine
+                }
+        {
+            return Err("Vector creation command did not select its preset".into());
+        }
+        let controls = if curved {
+            vec![[8.5, 8.5], [16.5, 25.5], [24.5, 25.5], [32.5, 8.5]]
+        } else {
+            vec![[8.5, 8.5], [32.5, 25.5]]
+        };
+        let before = app.documents[0].snapshot();
+        let count = app.documents[0].history_counts();
+        for point in &controls {
+            for phase in [Phase::Down, Phase::Up] {
+                let e = super::precision::pointer(&ctx, &app, *point, phase);
+                app.drawing.virtual_events(vec![e], false);
+                step(&mut app, &mut time, vec![]);
+            }
+        }
+        if app.documents[0].snapshot() != before {
+            return Err("Clicked vector path committed before Enter".into());
+        }
+        step(
+            &mut app,
+            &mut time,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        if app.documents[0].scene.lines.layers.len() != 1
+            || app.documents[0].history_counts().0 != count.0 + 1
+        {
+            return Err(format!("Vector creation input failed: {:?}", app.status));
+        }
+        let p = &app.documents[0].scene.lines.layers[0].paths[0];
+        if p.definition
+            .as_ref()
+            .is_none_or(|p| p.controls != controls || p.settings.curve != settings.curve)
+        {
+            return Err("Vector creation discarded editable controls".into());
+        }
+        let after = app.documents[0].snapshot();
+        let file = root.join("vector-command.drawer");
+        drawer_core::files::save(&mut app.documents[0], &file).map_err(|e| e.to_string())?;
+        if drawer_core::files::open(&file, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .snapshot()
+            != after
+        {
+            return Err("Vector command native roundtrip".into());
+        }
+        if !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+            || !app.documents[0].redo()
+            || app.documents[0].snapshot() != after
+        {
+            return Err("Vector command Undo/Redo".into());
+        }
+        app.execute_command(&ctx, command);
+        let e = super::precision::pointer(&ctx, &app, [12.5, 10.5], Phase::Down);
+        app.drawing.virtual_events(vec![e], false);
+        step(&mut app, &mut time, vec![]);
+        step(
+            &mut app,
+            &mut time,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        if app.documents[0].snapshot() != after {
+            return Err("Vector creation Escape changed page".into());
+        }
+    }
+    Ok(())
 }
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     drawer_core::shapes_verify::verify(root)?;
@@ -219,6 +360,11 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vector_line_curve_commands_mouse_points_enter_native_undo_escape() {
+        let root = crate::tests::TestDirectory::new();
+        super::vector_creation_smoke(&root.0).unwrap();
+    }
     #[test]
     fn mouse_pen_click_drag_raster_vector_and_cancellation() {
         let root = crate::tests::TestDirectory::new();

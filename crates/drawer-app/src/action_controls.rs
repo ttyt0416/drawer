@@ -334,6 +334,9 @@ impl Drawer {
                 "alpha-selection-intersect" => {
                     self.alpha_selection_command(drawer_core::selection_edit::Combine::Intersect)?
                 }
+                "vector-line-tool" | "vector-curve-tool" => {
+                    self.begin_vector_shape(command == "vector-curve-tool")
+                }
                 "shape-tool" => {
                     self.restore_locked_tool();
                     self.drawing.mode = if self.workspaces.store.current.shapes.input

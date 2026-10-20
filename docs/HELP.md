@@ -911,3 +911,10 @@ Scale/Rotate·Scale·Rotate·Free Transform·Skew·Distort·Perspective·Mesh Tr
 Refresh linked sources / Linked file layer에서 Inspect source choices로 .drawer의 레이어·컴프·타임라인·프레임 또는 TIFF 페이지를 선택합니다. 없는 선택을 다른 항목으로 바꾸지 않으며 기존 캐시를 유지합니다. 파일 캐시는 sRGB8 표시 스냅샷이고 원본 문서의 편집 정밀도는 원본에 유지됩니다.
 
 Preview refresh all linked sources는 성공/실패 목록을 먼저 표시합니다. 실패한 캐시는 그대로 두고 확인한 성공 묶음만 한 번에 적용합니다. 원본 파일은 덮어쓰지 않습니다. 읽는 중/미리보기 뒤에 파일이 바뀌면 새 미리보기가 필요합니다. Cancel/Escape는 변경하지 않고 한 Undo로 갱신을 되돌릴 수 있습니다. 평소 문서 열기와 저장은 내장 캐시를 사용합니다.
+
+
+## vector-creation | 벡터 직선·곡선 작성 | 선화 벡터 직선 곡선 제어점 베지어 폴리라인 닫힌 경로
+
+Layers… 또는 Shape creation의 Draw vector line / Draw vector curve로 시작합니다. 캔버스에서 클릭해 점을 더하고 Enter로 확정합니다. Backspace로 마지막 점을 지우고 Escape로 취소합니다. 시작이나 미완성 클릭만으로 문서는 바뀌지 않습니다.
+
+현재 선택한 벡터층에 추가하거나 새 벡터층과 경로를 함께 만들며 한 Undo로 되돌립니다. Shape creation에서 곡선 종류·폭·색·닫힘·클릭/드래그를 조절할 수 있습니다. 원래 제어점과 스타일은 저장되며 문서 밖 좌표도 보존합니다. 같은 점만 있는 퇴화 도형은 적용하지 않고 길이가 있는 아주 짧은 선은 유지합니다.

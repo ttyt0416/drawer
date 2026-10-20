@@ -570,3 +570,6 @@ crates/drawer-core/src/material_transform_verify.rs
 crates/drawer-app/src/source_choices.rs
 crates/drawer-app/src/material_transform.rs
 docs/process/advanced-materials.md
+
+crates/drawer-core/src/vector_creation_verify.rs
+docs/process/vector-creation.md
