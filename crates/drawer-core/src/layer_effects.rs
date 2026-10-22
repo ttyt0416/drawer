@@ -56,6 +56,8 @@ fn legacy_color_model() -> ColorModel {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Adjustment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<crate::local_color::Correction>,
     #[serde(default, skip_serializing_if = "no_inversion")]
     pub invert: bool,
     #[serde(default = "legacy_color_model")]
@@ -68,6 +70,7 @@ pub struct Adjustment {
 impl Default for Adjustment {
     fn default() -> Self {
         Self {
+            local: None,
             invert: false,
             brightness: 0.,
             contrast: 0.,
@@ -80,15 +83,19 @@ impl Default for Adjustment {
 impl Adjustment {
     pub fn identity(self) -> bool {
         !self.invert
+            && self
+                .local
+                .is_none_or(crate::local_color::Correction::identity)
             && self.brightness == 0.
             && self.contrast == 0.
             && self.hue == 0.
             && self.saturation == 0.
     }
     pub fn valid(self) -> bool {
-        [self.brightness, self.contrast, self.saturation]
-            .iter()
-            .all(|n| (-1. ..=1.).contains(n))
+        self.local.is_none_or(crate::local_color::Correction::valid)
+            && [self.brightness, self.contrast, self.saturation]
+                .iter()
+                .all(|n| (-1. ..=1.).contains(n))
             && (-180. ..=180.).contains(&self.hue)
     }
     pub fn pixel(self, mut p: [u8; 4]) -> [u8; 4] {
@@ -120,6 +127,12 @@ impl Adjustment {
                 ColorModel::Hsv => crate::color_selector::from_hsv(values, p[3]),
             }
             .unwrap_or(p);
+        }
+        if let Some(local) = self.local {
+            let rgb = local.rgb(std::array::from_fn(|i| p[i] as f64 / 255.));
+            for i in 0..3 {
+                p[i] = (rgb[i] * 255.).round() as u8;
+            }
         }
         if self.invert {
             for c in &mut p[..3] {
@@ -186,9 +199,11 @@ impl Data {
             .chain(self.folders.values())
             .chain(self.vectors.values())
             .map(|e| {
-                128 + e.mask.as_ref().map_or(0, |m| {
-                    m.coverage.runs.len() * std::mem::size_of::<crate::selection::Run>()
-                })
+                std::mem::size_of::<Effect>()
+                    + 128
+                    + e.mask.as_ref().map_or(0, |m| {
+                        m.coverage.runs.len() * std::mem::size_of::<crate::selection::Run>()
+                    })
             })
             .sum()
     }

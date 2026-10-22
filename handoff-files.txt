@@ -692,3 +692,9 @@ crates/drawer-core/src/batch_filters_verify.rs
 crates/drawer-app/src/batch_filters.rs
 crates/drawer-app/src/batch_filters_verify.rs
 docs/process/batch-filters.md
+
+crates/drawer-core/src/local_color.rs
+crates/drawer-core/src/local_color_verify.rs
+crates/drawer-app/src/local_color.rs
+crates/drawer-app/src/local_color_verify.rs
+docs/process/local-color.md

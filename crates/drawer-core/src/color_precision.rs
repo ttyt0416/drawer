@@ -327,6 +327,9 @@ impl Sample {
             }
             .map(|v| v + m);
         }
+        if let Some(local) = value.local {
+            rgb = local.rgb(rgb);
+        }
         if value.invert {
             rgb = rgb.map(|v| 1. - v);
         }

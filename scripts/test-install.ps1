@@ -165,6 +165,7 @@ try {
     if ($smokeResult -notmatch 'additional_color=true') { throw '레벨·색균형·계조·이진화·반전 검증 실패' }
     if ($smokeResult -notmatch 'mesh_puppet=true') { throw '메시·퍼펫 핀 변형 검증 실패' }
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
+    if ($smokeResult -notmatch 'local_color=true') { throw '로컬 색 분포·광원/그림자 보정층 검증 실패' }
     if ($smokeResult -notmatch 'batch_filters=true') { throw '복수 레이어 필터·전체 확정/취소 검증 실패' }
     if ($smokeResult -notmatch 'warp_filters=true') { throw '왜곡 필터·투명 표본·미리보기·취소 검증 실패' }
     if ($smokeResult -notmatch 'surface_effects=true') { throw '공간 효과·순서·마스크·미리보기·취소 검증 실패' }

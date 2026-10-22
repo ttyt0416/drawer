@@ -92,7 +92,9 @@ impl Drawer {
     }
     pub(super) fn begin_batch_filters(&mut self) -> Result<(), String> {
         self.finish_stroke();
-        if self.surface_effects.draft.is_some()
+        if self.local_color.draft.is_some()
+            || self.local_color.working()
+            || self.surface_effects.draft.is_some()
             || self.surface_effects.working()
             || self.spatial_blur.draft.is_some()
             || self.spatial_blur.working()

@@ -70,6 +70,9 @@ impl Drawer {
     }
     pub(super) fn begin_invert_adjustment(&mut self) -> Result<(), String> {
         self.finish_stroke();
+        if self.local_color.draft.is_some() || self.local_color.working() {
+            return Err("Apply or cancel the local color correction first".into());
+        }
         self.begin_adjustment()?;
         let e = self.adjustments.draft.as_mut().unwrap();
         e.edit = false;
@@ -182,6 +185,7 @@ impl Drawer {
    if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
    ui.horizontal(|ui|{changed|=ui.radio_value(&mut e.edit,false,"New correction layer").changed();ui.add_enabled_ui(!existing.is_empty(),|ui|{if ui.radio_value(&mut e.edit,true,"Edit correction layer").changed(){changed=true;if let Some(id)=e.target{e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(id)).unwrap_or_default();}}});});
    if e.edit{egui::ComboBox::from_label("Correction layer").selected_text(e.target.map_or("Select layer".into(),|id|super::layer_properties::label(d,Target::Raster(id)))).show_ui(ui,|ui|{for id in &existing{if ui.selectable_value(&mut e.target,Some(*id),super::layer_properties::label(d,Target::Raster(*id))).changed(){changed=true;e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(*id)).unwrap();}}});}else{ui.horizontal(|ui|{ui.label("Layer name");changed|=ui.text_edit_singleline(&mut e.name).changed();});egui::ComboBox::from_label("Parent folder").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{changed|=ui.selectable_value(&mut e.parent,None,"Root").changed();for(n,f)in d.scene.paper.folders.iter().enumerate().filter(|(n,_)|d.scene.paper.folder_active(*n)){changed|=ui.selectable_value(&mut e.parent,Some(n),&f.name).changed();}});}
+   if let Some(local)=&mut e.value.local {changed|=crate::local_color::controls(ui,local);}
    changed|=ui.checkbox(&mut e.value.invert,"Invert in document RGB (after other corrections)").changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.brightness,-1. ..=1.).text("Brightness").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.contrast,-1. ..=1.).text("Contrast").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();

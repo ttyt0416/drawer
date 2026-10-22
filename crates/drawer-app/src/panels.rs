@@ -164,6 +164,7 @@ impl Drawer {
             || self.surface_effects.draft.is_some()
             || self.spatial_blur.draft.is_some()
             || self.batch_filters.draft.is_some()
+            || self.local_color.draft.is_some()
             || self.detail_filter.draft.is_some()
             || self.color_corrections.draft.is_some()
             || self.adjustments.draft.is_some()
@@ -656,6 +657,8 @@ impl Drawer {
                                         ("Delete hidden layers…", "delete-hidden-layers"),
                                         ("Folders / grayscale masks…", "layer-folders"),
                                         ("Color correction layers…", "adjustment-layer"),
+                                        ("Local reference colors…", "local-reference-color"),
+                                        ("Local light / shadow colors…", "local-light-shadow"),
                                         ("Levels…", "color-levels"),
                                         ("Color balance…", "color-balance"),
                                         ("Posterize…", "color-posterize"),

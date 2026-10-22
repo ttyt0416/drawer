@@ -106,8 +106,12 @@ impl Drawer {
     }
     pub(super) fn begin_detail_filter(&mut self, operation: Operation) -> Result<(), String> {
         self.finish_stroke();
-        if self.batch_filters.draft.is_some() || self.batch_filters.working() {
-            return Err("Apply or cancel the multiple-layer filter first".into());
+        if self.local_color.draft.is_some()
+            || self.local_color.working()
+            || self.batch_filters.draft.is_some()
+            || self.batch_filters.working()
+        {
+            return Err("Apply or cancel the other correction/filter first".into());
         }
         if self.surface_effects.draft.is_some() || self.surface_effects.working() {
             return Err("Apply or cancel surface effects first".into());

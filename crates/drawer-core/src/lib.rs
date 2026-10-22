@@ -348,6 +348,8 @@ pub mod detail_filter;
 pub mod detail_filter_verify;
 pub mod gaussian;
 pub mod gaussian_verify;
+pub mod local_color;
+pub mod local_color_verify;
 pub mod pixel_effects;
 pub mod pixel_effects_verify;
 pub mod spatial_blur;

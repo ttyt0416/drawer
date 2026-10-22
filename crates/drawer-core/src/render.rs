@@ -551,6 +551,7 @@ impl<'a> Renderer<'a> {
     pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
         if document.color != crate::color_storage::Config::legacy()
             || !document.scene.surface_effects.rasters.is_empty()
+            || crate::local_color::active(&document.scene)
         {
             let mut renderer = Self::legacy_build(document, stroke, false);
             renderer.float_plan =

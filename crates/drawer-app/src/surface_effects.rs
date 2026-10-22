@@ -123,7 +123,11 @@ impl Drawer {
     }
     pub(super) fn begin_surface_effects(&mut self, add: Option<usize>) -> Result<(), String> {
         self.finish_stroke();
-        if self.batch_filters.draft.is_some() || self.batch_filters.working() {
+        if self.local_color.draft.is_some()
+            || self.local_color.working()
+            || self.batch_filters.draft.is_some()
+            || self.batch_filters.working()
+        {
             return Err("Apply or cancel the multiple-layer filter first".into());
         }
         if self.spatial_blur.draft.is_some()
