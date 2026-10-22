@@ -320,7 +320,7 @@ pub fn filter(
                         &d.color,
                         d.width,
                         d.height,
-                        |value| space.from_srgb(space.to_srgb(value)?.adjusted(filter)?),
+                        |value| space.adjusted(value, filter),
                     )?;
                 } else {
                     for p in &mut state.layers[n].pixels {

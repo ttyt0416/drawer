@@ -357,3 +357,6 @@ pub mod deform_verify;
 
 pub mod mesh_deform;
 pub mod mesh_deform_verify;
+
+pub mod color_corrections;
+pub mod color_corrections_verify;

@@ -6,7 +6,13 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 151] = [
+pub const EXTRA_COMMANDS: [&str; 157] = [
+    "color-levels",
+    "color-balance",
+    "color-posterize",
+    "color-threshold",
+    "invert-pixels",
+    "invert-correction-layer",
     "mesh-puppet",
     "raster-deformation",
     "gaussian-blur",

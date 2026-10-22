@@ -136,6 +136,7 @@ impl Drawer {
             changed|=ui.radio_value(&mut e.convert,false,"Assign profile; keep pixel numbers").changed();
             changed|=ui.add_enabled(e.convert,egui::Checkbox::new(&mut e.rasterize_sources,"Rasterize all editable sources at the current frame for profile conversion")).changed();
             if e.rasterize_sources&&e.convert{ui.colored_label(egui::Color32::YELLOW,"This replaces the visible page with one raster. Hidden/off-canvas content, vectors, folders and animation are removed; one Undo restores the complete original.");}
+            if self.active.is_some_and(|n|drawer_core::layer_effects::requires_v69(&self.documents[n].scene)){ui.small("Live RGB inversion uses the current document RGB space. Assign keeps its parameters; Convert requires current-frame rasterization to preserve the visible correction.");}
             if !e.convert{ui.colored_label(egui::Color32::YELLOW,"Assigning an ICC profile changes what the same numbers mean; appearance can change. Precision conversion still quantizes to the chosen bit depth.");}
             ui.small("Unprofiled RGB is interpreted as sRGB. CMYK is handled through explicit import/export conversion, never as an RGBA document profile. View-only soft proof is a separate command.");
             });});

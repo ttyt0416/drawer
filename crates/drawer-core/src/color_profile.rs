@@ -167,6 +167,31 @@ impl WorkingSpace {
     pub fn from_srgb(&self, value: Sample) -> Result<Sample, String> {
         self.from_srgb.map(value)
     }
+    pub fn adjusted(
+        &self,
+        value: Sample,
+        correction: crate::layer_effects::Adjustment,
+    ) -> Result<Sample, String> {
+        if !correction.valid() {
+            return Err("Invalid document RGB adjustment".into());
+        }
+        if correction.identity() || value.alpha() == 0. {
+            return Ok(value);
+        }
+        let ordinary = crate::layer_effects::Adjustment {
+            invert: false,
+            ..correction
+        };
+        let mut result = if ordinary.identity() {
+            value
+        } else {
+            self.from_srgb(self.to_srgb(value)?.adjusted(ordinary)?)?
+        };
+        if correction.invert {
+            result = result.with_rgb(result.rgb().map(|v| 1. - v))?;
+        }
+        Ok(result)
+    }
     pub fn compose(
         &self,
         back: Sample,

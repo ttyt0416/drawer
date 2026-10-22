@@ -47,12 +47,17 @@ pub enum ColorModel {
     Hsl,
     Hsv,
 }
+fn no_inversion(value: &bool) -> bool {
+    !*value
+}
 fn legacy_color_model() -> ColorModel {
     ColorModel::Hsv
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Adjustment {
+    #[serde(default, skip_serializing_if = "no_inversion")]
+    pub invert: bool,
     #[serde(default = "legacy_color_model")]
     pub color_model: ColorModel,
     pub brightness: f64,
@@ -63,6 +68,7 @@ pub struct Adjustment {
 impl Default for Adjustment {
     fn default() -> Self {
         Self {
+            invert: false,
             brightness: 0.,
             contrast: 0.,
             hue: 0.,
@@ -73,7 +79,11 @@ impl Default for Adjustment {
 }
 impl Adjustment {
     pub fn identity(self) -> bool {
-        self.brightness == 0. && self.contrast == 0. && self.hue == 0. && self.saturation == 0.
+        !self.invert
+            && self.brightness == 0.
+            && self.contrast == 0.
+            && self.hue == 0.
+            && self.saturation == 0.
     }
     pub fn valid(self) -> bool {
         [self.brightness, self.contrast, self.saturation]
@@ -110,6 +120,11 @@ impl Adjustment {
                 ColorModel::Hsv => crate::color_selector::from_hsv(values, p[3]),
             }
             .unwrap_or(p);
+        }
+        if self.invert {
+            for c in &mut p[..3] {
+                *c = 255 - *c;
+            }
         }
         p
     }
@@ -246,4 +261,13 @@ pub fn shift(
         mask.shift(shift)?;
     }
     Ok(())
+}
+
+pub fn requires_v69(scene: &crate::scene::Scene) -> bool {
+    scene
+        .layer_effects
+        .rasters
+        .values()
+        .filter_map(|e| e.adjustment)
+        .any(|v| v.invert)
 }

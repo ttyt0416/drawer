@@ -324,6 +324,22 @@ impl Drawer {
                 }
                 "layer-folders" => self.begin_layer_folders()?,
                 "adjustment-layer" => self.begin_adjustment()?,
+                "invert-correction-layer" => self.begin_invert_adjustment()?,
+                "color-levels" => self.begin_color_corrections(
+                    drawer_core::color_corrections::Operation::defaults()[0],
+                )?,
+                "color-balance" => self.begin_color_corrections(
+                    drawer_core::color_corrections::Operation::Balance([0.; 3]),
+                )?,
+                "color-posterize" => self.begin_color_corrections(
+                    drawer_core::color_corrections::Operation::Posterize(8),
+                )?,
+                "color-threshold" => self.begin_color_corrections(
+                    drawer_core::color_corrections::Operation::Threshold(0.5),
+                )?,
+                "invert-pixels" => {
+                    self.begin_color_corrections(drawer_core::color_corrections::Operation::Invert)?
+                }
                 "layer-search" => self.layer_search.open = true,
                 "layer-roles" => self.begin_layer_roles()?,
                 "layer-groups" => self.begin_layer_groups()?,

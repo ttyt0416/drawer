@@ -217,7 +217,12 @@ pub(crate) fn edit_pixel8(
     d.commit_state(state)
 }
 fn requires_rasterization(d: &Document) -> bool {
-    !d.scene.lines.layers.is_empty()
+    d.scene
+        .layer_effects
+        .rasters
+        .values()
+        .any(|e| e.adjustment.is_some())
+        || !d.scene.lines.layers.is_empty()
         || !d.scene.objects.is_empty()
         || !d.scene.gradients.layers.is_empty()
         || d.animation.is_some()

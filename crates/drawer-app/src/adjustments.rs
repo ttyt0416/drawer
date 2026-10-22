@@ -6,11 +6,11 @@ use drawer_core::{
 };
 #[derive(Default)]
 pub(super) struct Panel {
-    draft: Option<Box<Draft>>,
+    pub(super) draft: Option<Box<Draft>>,
     preview: Option<egui::Rect>,
     apply: Option<egui::Rect>,
 }
-struct Draft {
+pub(super) struct Draft {
     id: u64,
     revision: u64,
     frame: u32,
@@ -68,7 +68,23 @@ impl Drawer {
         }));
         Ok(())
     }
-    fn preview_adjustment(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn begin_invert_adjustment(&mut self) -> Result<(), String> {
+        self.finish_stroke();
+        self.begin_adjustment()?;
+        let e = self.adjustments.draft.as_mut().unwrap();
+        e.edit = false;
+        e.name = "RGB inversion".into();
+        e.value = Adjustment {
+            invert: true,
+            ..Default::default()
+        };
+        Ok(())
+    }
+    pub(super) fn preview_adjustment(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = self.adjustments.draft.as_mut() {
+            e.prepared = None;
+            e.images = None;
+        }
         let e = self
             .adjustments
             .draft
@@ -114,7 +130,7 @@ impl Drawer {
         e.images = Some(images);
         Ok(())
     }
-    fn apply_adjustment(&mut self) -> Result<(), String> {
+    pub(super) fn apply_adjustment(&mut self) -> Result<(), String> {
         let e = self
             .adjustments
             .draft
@@ -166,6 +182,7 @@ impl Drawer {
    if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
    ui.horizontal(|ui|{changed|=ui.radio_value(&mut e.edit,false,"New correction layer").changed();ui.add_enabled_ui(!existing.is_empty(),|ui|{if ui.radio_value(&mut e.edit,true,"Edit correction layer").changed(){changed=true;if let Some(id)=e.target{e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(id)).unwrap_or_default();}}});});
    if e.edit{egui::ComboBox::from_label("Correction layer").selected_text(e.target.map_or("Select layer".into(),|id|super::layer_properties::label(d,Target::Raster(id)))).show_ui(ui,|ui|{for id in &existing{if ui.selectable_value(&mut e.target,Some(*id),super::layer_properties::label(d,Target::Raster(*id))).changed(){changed=true;e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(*id)).unwrap();}}});}else{ui.horizontal(|ui|{ui.label("Layer name");changed|=ui.text_edit_singleline(&mut e.name).changed();});egui::ComboBox::from_label("Parent folder").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{changed|=ui.selectable_value(&mut e.parent,None,"Root").changed();for(n,f)in d.scene.paper.folders.iter().enumerate().filter(|(n,_)|d.scene.paper.folder_active(*n)){changed|=ui.selectable_value(&mut e.parent,Some(n),&f.name).changed();}});}
+   changed|=ui.checkbox(&mut e.value.invert,"Invert in document RGB (after other corrections)").changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.brightness,-1. ..=1.).text("Brightness").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.contrast,-1. ..=1.).text("Contrast").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.hue,-180. ..=180.).text("Hue degrees")).changed();
@@ -312,6 +329,16 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     );
     if app.adjustments.draft.is_some() || app.documents[0].snapshot() != saved {
         return Err("Correction Escape changed source".into());
+    }
+    app.execute_command(&ctx, "adjustment-layer");
+    app.preview_adjustment(&ctx)?;
+    app.adjustments.draft.as_mut().unwrap().value.brightness = f64::NAN;
+    if app.preview_adjustment(&ctx).is_ok()
+        || app.adjustments.draft.as_ref().unwrap().prepared.is_some()
+        || app.apply_adjustment().is_ok()
+        || app.documents[0].snapshot() != saved
+    {
+        return Err("Invalid correction retained prior preview".into());
     }
     app.execute_command(&ctx, "adjustment-layer");
     app.documents.clear();

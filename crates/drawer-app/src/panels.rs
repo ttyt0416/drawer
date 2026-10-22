@@ -161,6 +161,8 @@ impl Drawer {
             || self.affine_transform.draft.is_some()
             || self.tone_mapping.draft.is_some()
             || self.gaussian.draft.is_some()
+            || self.color_corrections.draft.is_some()
+            || self.adjustments.draft.is_some()
             || self.deform.draft.is_some()
             || self.mesh_deform.draft.is_some()
             || self.pending_close.is_some()
@@ -645,6 +647,12 @@ impl Drawer {
                                 ("Delete hidden layers…", "delete-hidden-layers"),
                                 ("Folders / grayscale masks…", "layer-folders"),
                                 ("Color correction layers…", "adjustment-layer"),
+                                ("Levels…", "color-levels"),
+                                ("Color balance…", "color-balance"),
+                                ("Posterize…", "color-posterize"),
+                                ("Threshold…", "color-threshold"),
+                                ("Invert layer pixels…", "invert-pixels"),
+                                ("Inversion correction layer…", "invert-correction-layer"),
                                 ("Import local image layer…", "import-image-layer"),
                                 ("New raster", "new-raster-layer"),
                                 ("New vector", "new-vector-layer"),

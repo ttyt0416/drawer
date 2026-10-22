@@ -311,10 +311,7 @@ impl<'a> Renderer<'a> {
         if self.paper(node).hidden || adjustment.identity() {
             return Ok(Some(back));
         }
-        let corrected = self
-            .plan()
-            .space
-            .from_srgb(self.plan().space.to_srgb(back)?.adjusted(adjustment)?)?;
+        let corrected = self.plan().space.adjusted(back, adjustment)?;
         let rgb = corrected.rgb();
         let corrected = Sample::new([rgb[0], rgb[1], rgb[2], 1.])?;
         Ok(Some(self.plan().space.atop(

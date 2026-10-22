@@ -327,6 +327,9 @@ impl Sample {
             }
             .map(|v| v + m);
         }
+        if value.invert {
+            rgb = rgb.map(|v| 1. - v);
+        }
         self.with_rgb(rgb)
     }
 }

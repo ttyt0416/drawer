@@ -643,3 +643,8 @@ crates/drawer-app/src/mesh_deform.rs
 crates/drawer-core/src/mesh_deform.rs
 crates/drawer-core/src/mesh_deform_verify.rs
 docs/process/mesh-puppet.md
+
+crates/drawer-app/src/color_corrections.rs
+crates/drawer-core/src/color_corrections.rs
+crates/drawer-core/src/color_corrections_verify.rs
+docs/process/additional-color.md
