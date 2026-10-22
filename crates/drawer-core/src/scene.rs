@@ -193,6 +193,9 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    /// Settings of the last baked spatial blur; this is not a live effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_spatial_blur: Option<crate::spatial_blur::Settings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paper_background: Option<u64>,
     #[serde(default, skip_serializing_if = "crate::layer_groups::Data::is_default")]
@@ -275,6 +278,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.last_spatial_blur.is_some_and(|s| !s.valid()) {
+            return false;
+        }
         self.paper_background.is_none_or(|id| id > 0) && self.layer_groups.valid() && self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
             && !self.clipping.rasters.iter().any(|(id,base)|self.render_order.deferred(*id)||matches!(base,crate::layer_properties::Target::Raster(id)if self.render_order.deferred(*id)))
             && self.file_objects.valid(missing)
@@ -378,7 +384,9 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.layer_groups.bytes()
+        usize::from(self.last_spatial_blur.is_some())
+            * std::mem::size_of::<crate::spatial_blur::Settings>()
+            + self.layer_groups.bytes()
             + self.layer_comps.bytes()
             + self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()
             + self.file_objects.bytes()

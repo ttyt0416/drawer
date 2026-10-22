@@ -161,6 +161,7 @@ impl Drawer {
             || self.affine_transform.draft.is_some()
             || self.tone_mapping.draft.is_some()
             || self.gaussian.draft.is_some()
+            || self.spatial_blur.draft.is_some()
             || self.color_corrections.draft.is_some()
             || self.adjustments.draft.is_some()
             || self.deform.draft.is_some()
@@ -670,6 +671,10 @@ impl Drawer {
                                 ("Mesh and puppet deformation…", "mesh-puppet"),
                                 ("Free / perspective / liquify…", "raster-deformation"),
                                 ("Gaussian blur…", "gaussian-blur"),
+                                ("Motion blur…", "motion-blur"),
+                                ("Radial blur…", "radial-blur"),
+                                ("Spin blur…", "spin-blur"),
+                                ("Lens blur…", "lens-blur"),
                                 ("Remove short vector strokes/spans…", "vector-remove-short"),
                                 ("Change vector tip…", "vector-tip-tools"),
                                 (

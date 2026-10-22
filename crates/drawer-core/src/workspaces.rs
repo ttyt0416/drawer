@@ -310,6 +310,11 @@ fn selection_outline_default() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::spatial_blur::Presets::is_default"
+    )]
+    pub spatial_blur: crate::spatial_blur::Presets,
     #[serde(default)]
     pub vector_overlay: crate::vector_tip::Overlay,
     #[serde(default)]
@@ -410,6 +415,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             version: 1,
+            spatial_blur: Default::default(),
             transparency_colors: crate::paper_background::checker_default(),
             layer_move: Default::default(),
             layer_mask_overlay: false,
@@ -510,6 +516,9 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
+        if !self.spatial_blur.valid() {
+            return false;
+        }
         if !self.vector_erase.valid()
             || !self.vector_edit.valid()
             || !self.layer_defaults.valid()
@@ -620,6 +629,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.spatial_blur = incoming.spatial_blur.clone();
             next.selection_edit = incoming.selection_edit;
             next.magnetic_lasso = incoming.magnetic_lasso;
             next.auto_shape = incoming.auto_shape;

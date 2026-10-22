@@ -235,7 +235,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
     check(
-        u32::from_le_bytes(bytes[8..12].try_into().unwrap()) == 69,
+        u32::from_le_bytes(bytes[8..12].try_into().unwrap()) >= 69,
         "Inversion document version",
     )?;
     bytes[8..12].copy_from_slice(&68u32.to_le_bytes());

@@ -648,3 +648,9 @@ crates/drawer-app/src/color_corrections.rs
 crates/drawer-core/src/color_corrections.rs
 crates/drawer-core/src/color_corrections_verify.rs
 docs/process/additional-color.md
+
+crates/drawer-core/src/spatial_blur.rs
+crates/drawer-core/src/spatial_blur_verify.rs
+crates/drawer-app/src/spatial_blur.rs
+crates/drawer-app/src/spatial_blur_verify.rs
+docs/process/spatial-blur.md

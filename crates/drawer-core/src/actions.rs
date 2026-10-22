@@ -6,7 +6,11 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 157] = [
+pub const EXTRA_COMMANDS: [&str; 161] = [
+    "motion-blur",
+    "radial-blur",
+    "spin-blur",
+    "lens-blur",
     "color-levels",
     "color-balance",
     "color-posterize",

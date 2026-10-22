@@ -395,6 +395,14 @@ impl Drawer {
                 "tone-curves" => self.begin_tone_mapping(false)?,
                 "gradient-map" => self.begin_tone_mapping(true)?,
                 "gaussian-blur" => self.begin_gaussian()?,
+                "motion-blur" => {
+                    self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Motion)?
+                }
+                "radial-blur" => {
+                    self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Radial)?
+                }
+                "spin-blur" => self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Spin)?,
+                "lens-blur" => self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Lens)?,
                 "raster-deformation" => self.begin_deform(ctx)?,
                 "mesh-puppet" => self.begin_mesh_deform(ctx)?,
                 "vector-remove-short" => self.begin_vector_cleanup(false)?,

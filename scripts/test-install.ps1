@@ -165,6 +165,7 @@ try {
     if ($smokeResult -notmatch 'additional_color=true') { throw '레벨·색균형·계조·이진화·반전 검증 실패' }
     if ($smokeResult -notmatch 'mesh_puppet=true') { throw '메시·퍼펫 핀 변형 검증 실패' }
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
+    if ($smokeResult -notmatch 'spatial_blur=true') { throw '공간 블러·조리개·비동기 취소·설정 저장 검증 실패' }
     if ($smokeResult -notmatch 'gaussian_blur=true') { throw '가우시안 블러·투명 경계·반경0·저장/취소 검증 실패' }
     if ($smokeResult -notmatch 'svg_io=true') { throw '로컬 SVG 가져오기·내보내기·복사 검증 실패' }
     if ($smokeResult -notmatch 'shape_creation=true') { throw '도형·곡선·래스터/벡터·입력 취소 검증 실패' }
