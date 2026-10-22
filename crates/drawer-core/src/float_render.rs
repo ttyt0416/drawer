@@ -3,6 +3,8 @@
 mod display;
 #[path = "float_sources.rs"]
 mod sources;
+#[path = "float_surfaces.rs"]
+mod surfaces;
 use crate::{
     color_precision::{Depth, Dither, Pixels, Sample},
     color_profile::WorkingSpace,
@@ -18,6 +20,7 @@ pub(crate) struct Plan<'a> {
     geometry: Box<crate::render::Renderer<'a>>,
     order: Vec<crate::render_order::Entry>,
     caches: std::collections::BTreeMap<Target, display::Cache>,
+    surfaces: std::collections::BTreeMap<u64, crate::surface_effects::Image>,
 }
 enum PlanRef<'a> {
     Owned(Box<Plan<'a>>),
@@ -25,6 +28,7 @@ enum PlanRef<'a> {
 }
 #[derive(Default)]
 pub(crate) struct Sampling<'a> {
+    pub pre_effects: bool,
     pub references: Option<&'a crate::eyedropper::References>,
     pub fill: Option<(usize, crate::bucket::Settings)>,
     pub graph: Option<&'a crate::paper::Graph>,
@@ -48,6 +52,13 @@ impl<'a> Renderer<'a> {
         d: &'a Document,
         stroke: Option<&'a crate::painting::Stroke>,
     ) -> Result<Self, String> {
+        Self::with_effect_progress(d, stroke, &mut |_, _| Ok(()))
+    }
+    pub fn with_effect_progress(
+        d: &'a Document,
+        stroke: Option<&'a crate::painting::Stroke>,
+        tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+    ) -> Result<Self, String> {
         if !d.scene.valid()
             || !d.scene.paper.valid_for(d.layers.len())
             || !d.color.valid_layers(&d.layers)
@@ -67,10 +78,21 @@ impl<'a> Renderer<'a> {
                 space: WorkingSpace::new(&d.color.profile)?,
                 roots: d.scene.paper.root_nodes(d.layers.len()),
                 caches: Default::default(),
+                surfaces: Default::default(),
             })),
         };
         renderer.build_display_caches()?;
+        renderer.build_surface_caches(tick)?;
         Ok(renderer)
+    }
+    pub fn effect_check(
+        d: &'a Document,
+        tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+    ) -> Result<(), String> {
+        Self::with_effect_progress(d, None, tick).map(|_| ())
+    }
+    pub fn display_sample(&self, point: Point) -> Result<Sample, String> {
+        self.plan().space.to_srgb(self.pixel(point)?)
     }
     fn plan(&self) -> &Plan<'a> {
         match &self.plan {
@@ -240,6 +262,7 @@ impl<'a> Renderer<'a> {
         if depth > 16 {
             return Err("Float folder nesting limit".into());
         }
+        let d = self.document;
         let paper = self.paper(node);
         if let Node::Folder(n) = node
             && self.graph().folders[n].through
@@ -273,6 +296,14 @@ impl<'a> Renderer<'a> {
             return self
                 .shade(paper, Sample::from8(cache), original)?
                 .coverage(self.weight(node, original));
+        }
+        if !self.sampling.pre_effects
+            && let Node::Raster(n) = node
+            && let Some(cache) = self.plan().surfaces.get(&d.scene.layer_ids.id(n))
+        {
+            return cache
+                .sample(point)
+                .coverage(p::properties(d, self.target(node)).opacity as f64 / 100.);
         }
         let raw = match node {
             Node::Raster(n) => {
@@ -443,13 +474,48 @@ impl<'a> Renderer<'a> {
                 if d.scene.clipping.binding(self.target(top)) == Some(key) {
                     group = if let Some(corrected) = self.correction(top, group, original)? {
                         corrected
+                    } else if !self.sampling.pre_effects
+                        && let Node::Raster(n) = top
+                        && self.plan().surfaces.contains_key(&d.scene.layer_ids.id(n))
+                    {
+                        let base_alpha = self.pre_effect_alpha(node, point, original, depth)?;
+                        let value = self.source(top, point, original, depth)?;
+                        let rgb = value.rgb();
+                        let ink = Sample::new([
+                            rgb[0],
+                            rgb[1],
+                            rgb[2],
+                            if base_alpha > 0. {
+                                (value.alpha() / base_alpha).min(1.)
+                            } else {
+                                0.
+                            },
+                        ])?;
+                        let combined = self.clipped(group, ink, top, original)?;
+                        // Preserve the clipping run's alpha in its source, while allowing
+                        // genuinely expanded effect coverage to appear outside the base.
+                        if value.alpha() > combined.alpha() {
+                            let halo = value.coverage(
+                                (value.alpha() - combined.alpha())
+                                    / ((1. - combined.alpha()) * value.alpha()).max(1e-12),
+                            )?;
+                            self.plan()
+                                .space
+                                .compose(halo, combined, Default::default(), 1.)?
+                        } else {
+                            combined
+                        }
                     } else {
-                        self.clipped(
-                            group,
-                            self.source(top, point, original, depth)?,
-                            top,
-                            original,
-                        )?
+                        let mut value = self.source(top, point, original, depth)?;
+                        if !self.sampling.pre_effects && !self.plan().surfaces.is_empty() {
+                            let base_alpha = self.pre_effect_alpha(node, point, original, depth)?;
+                            value = value.coverage(if group.alpha() > 0. {
+                                base_alpha / group.alpha()
+                            } else {
+                                0.
+                            })?;
+                        }
+                        self.clipped(group, value, top, original)?
                     };
                 }
                 next += 1;

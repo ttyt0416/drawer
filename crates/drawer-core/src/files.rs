@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 73;
+const VERSION: u32 = 74;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -197,6 +197,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 74 && !document.scene.surface_effects.is_default() {
+            return Err(invalid("Surface effects require native version 74"));
+        }
         if version < 73
             && document.scene.last_detail_filter.is_some_and(|s| {
                 matches!(
@@ -328,6 +331,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         || !crate::layer_groups::valid_live(&document)
         || !crate::render_order::valid_live(&document)
         || !crate::file_objects::valid_live(&document)
+        || !crate::surface_effects::valid_live(&document)
     {
         return Err(invalid("Invalid file-layer source identity"));
     }
@@ -411,6 +415,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         || !crate::layer_groups::valid_live(document)
         || !crate::render_order::valid_live(document)
         || !crate::file_objects::valid_live(document)
+        || !crate::surface_effects::valid_live(document)
     {
         return Err(invalid("Invalid file-layer source identity"));
     }

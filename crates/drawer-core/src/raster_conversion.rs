@@ -332,7 +332,9 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
             pixels.push(pixel);
         }
     }
-    let high_samples = if d.color != crate::color_storage::Config::legacy() {
+    let high_samples = if d.color != crate::color_storage::Config::legacy()
+        || !d.scene.surface_effects.rasters.is_empty()
+    {
         let renderer = crate::float_render::Renderer::new(&capture)?;
         let mut samples = Vec::with_capacity(pixels.len());
         for y in 0..placement.height {
@@ -451,6 +453,11 @@ fn convert_expression(s: &mut DocumentState, id: u64, value: Expression) -> Resu
     Ok(())
 }
 fn raster(d: &Document, key: Key, id: u64, value: Expression) -> Result<Prepared, String> {
+    if d.scene.surface_effects.rasters.contains_key(&id)
+        && d.scene.clipping.binding(Target::Raster(id)).is_some()
+    {
+        return Err("Use Edit surface effects → separate raster result to preserve the complete clipping run".into());
+    }
     let n = crate::layers::index(d, id).ok_or("Missing raster")?;
     if crate::layer_effects::adjustment(d, Target::Raster(id)).is_some() {
         return Err("Merge a correction with its backdrop instead of rasterizing it alone".into());
@@ -490,20 +497,22 @@ fn raster(d: &Document, key: Key, id: u64, value: Expression) -> Result<Prepared
     drop(r);
     let mut state = d.snapshot();
     state.layers[n].pixels = pixels;
-    if d.color != crate::color_storage::Config::legacy() {
+    if d.color != crate::color_storage::Config::legacy()
+        || !d.scene.surface_effects.rasters.is_empty()
+    {
         let renderer = crate::float_render::Renderer::new(d)?;
         let mut samples = Vec::with_capacity(state.layers[n].pixels.len());
         for y in 0..extent.height {
             for x in 0..extent.width {
                 let point = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
-                samples.push(
-                    renderer.convert_expression(renderer.intrinsic_raster(n, point)?, value)?,
-                );
+                samples
+                    .push(renderer.convert_expression(renderer.surface_sample(n, point)?, value)?);
             }
         }
         crate::color_storage::set_samples(&mut state.layers[n], &d.color, extent, samples)?;
     }
     state.layers[n].placement = Some(extent);
+    state.scene.surface_effects.remove(id);
     state.scene.appearance.remove(Target::Raster(id));
     state.scene.layer_effects.remove(Target::Raster(id));
     state.scene.file_objects.entries.retain(|l| l.target != key);
@@ -543,7 +552,9 @@ fn pixels(
     }
     let mut state = d.snapshot();
     let extent = d.layers[n].extent(d.width, d.height);
-    if d.color != crate::color_storage::Config::legacy() {
+    if d.color != crate::color_storage::Config::legacy()
+        || !d.scene.surface_effects.rasters.is_empty()
+    {
         let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
         let mut samples = Vec::with_capacity(d.layers[n].pixels.len());
         for i in 0..d.layers[n].pixels.len() {

@@ -317,6 +317,18 @@ pub(crate) fn render_extents(
                 if !layer.valid(d.width, d.height) {
                     return Err("Invalid raster".into());
                 }
+                let base = a.rasters[n]
+                    .as_ref()
+                    .map_or_else(|| layer.extent(d.width, d.height), |c| c.extent);
+                if let Some(stack) = d
+                    .scene
+                    .surface_effects
+                    .rasters
+                    .get(&d.scene.layer_ids.id(n))
+                {
+                    out.push(crate::surface_effects::extent(base, stack)?);
+                    return Ok(());
+                }
                 out.push(
                     a.rasters[n]
                         .as_ref()
@@ -525,6 +537,11 @@ fn cache(image: Image, origin: [f64; 2], transform: Affine) -> Layer {
 pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String> {
     use crate::layer_properties::{self as p, Target};
     let path = destination(d, path)?;
+    if let Key::Layer(crate::layer_properties::Target::Raster(id)) = key
+        && d.scene.surface_effects.rasters.contains_key(&id)
+    {
+        return Err("Confirm surface effects as a separate raster result before converting to a linked file".into());
+    }
     let t = crate::layer_catalog::target(d, key).ok_or("Select a canvas layer")?;
     let flags = p::inherited(d, t);
     if flags.locked
@@ -609,9 +626,10 @@ pub fn convert(d: &Document, key: Key, path: &Path) -> Result<Conversion, String
     if let Some(e) = renderer.error() {
         return Err(e.into());
     }
-    let float_renderer = (d.color != crate::color_storage::Config::legacy())
-        .then(|| crate::float_render::Renderer::new(&raw))
-        .transpose()?;
+    let float_renderer = (d.color != crate::color_storage::Config::legacy()
+        || !d.scene.surface_effects.rasters.is_empty())
+    .then(|| crate::float_render::Renderer::new(&raw))
+    .transpose()?;
     let display_transform = crate::color_profile::Transform::new(
         &d.color.profile,
         &crate::color_profile::RgbProfile::Srgb,

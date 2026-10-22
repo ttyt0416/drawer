@@ -8,6 +8,9 @@ pub(super) struct Cache {
     pixels: Vec<[f32; 4]>,
 }
 impl Cache {
+    pub(super) fn bytes(&self) -> usize {
+        self.pixels.len() * 16
+    }
     fn sample(&self, p: [i64; 2]) -> Sample {
         let x = p[0] - self.extent.offset[0];
         let y = p[1] - self.extent.offset[1];

@@ -35,7 +35,7 @@ impl Mask {
             / 255.;
         if self.inverted { 1. - a } else { a }
     }
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.space.valid()
             && self.coverage.valid()
             && self.offset.iter().all(|n| n.is_finite() && n.abs() <= 1e9)

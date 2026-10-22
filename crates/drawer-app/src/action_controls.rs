@@ -451,6 +451,11 @@ impl Drawer {
                 "radial-blur" => {
                     self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Radial)?
                 }
+                "drop-shadow" => self.begin_surface_effects(Some(0))?,
+                "glow-effect" => self.begin_surface_effects(Some(1))?,
+                "emboss-effect" => self.begin_surface_effects(Some(2))?,
+                "crystallize-effect" => self.begin_surface_effects(Some(3))?,
+                "edit-surface-effects" => self.begin_surface_effects(None)?,
                 "spin-blur" => self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Spin)?,
                 "lens-blur" => self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Lens)?,
                 "raster-deformation" => self.begin_deform(ctx)?,

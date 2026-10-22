@@ -39,6 +39,14 @@ impl Renderer<'_> {
         match crate::layer_catalog::target(d, key) {
             Some(target @ (Target::Raster(_) | Target::Folder(_))) => {
                 let node = crate::clipping::node(d, target).ok_or("Missing raster source")?;
+                if let Target::Raster(id) = target
+                    && self.plan().surfaces.contains_key(&id)
+                {
+                    return self.surface_contribution(
+                        crate::layers::index(d, id).ok_or("Missing surface source")?,
+                        point.map(|v| v.floor() as i64),
+                    );
+                }
                 if let Some(base) = d.scene.clipping.binding(target) {
                     if !crate::clipping::active(d, target) {
                         return Ok(Sample::default());
@@ -427,6 +435,14 @@ impl Renderer<'_> {
         if let Target::Raster(id) = target {
             let n = crate::layers::index(d, id).ok_or("Missing ordered raster")?;
             let node = Node::Raster(n);
+            if self.plan().surfaces.contains_key(&id) {
+                return self.put(
+                    Sample::default(),
+                    self.surface_contribution(n, point.map(|v| v.floor() as i64))?,
+                    node,
+                    original,
+                );
+            }
             let source = self
                 .shade(
                     self.paper(node),

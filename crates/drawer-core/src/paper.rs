@@ -540,7 +540,9 @@ impl Graph {
         if count > budget / 4 {
             return Err("Merged raster exceeds the memory budget".into());
         }
-        if doc.color != crate::color_storage::Config::legacy() {
+        if doc.color != crate::color_storage::Config::legacy()
+            || !doc.scene.surface_effects.rasters.is_empty()
+        {
             if count.saturating_mul(
                 if doc.color.depth == crate::color_precision::Depth::Sixteen {
                     12
@@ -703,6 +705,11 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             .rasters
             .get(&doc.scene.layer_ids.id(n))
             .is_none_or(|e| e.mask.is_none())
+        && !doc
+            .scene
+            .surface_effects
+            .rasters
+            .contains_key(&doc.scene.layer_ids.id(n))
         && !graph.layers.contains_key(&n)
         && !doc
             .scene
@@ -743,6 +750,9 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
             after.scene.catalog.set(key, info);
             after.scene.paper.layers.remove(&n);
             let target = crate::layer_properties::raster(doc, n);
+            if let crate::layer_properties::Target::Raster(id) = target {
+                after.scene.surface_effects.remove(id);
+            }
             after.scene.layer_effects.remove(target);
             let mut properties = crate::layer_properties::properties(doc, target);
             properties.opacity = 100;
@@ -792,6 +802,9 @@ pub fn bake(doc: &mut Document, node: Node) -> Result<bool, String> {
                 .collect();
             for target in &members {
                 after.scene.clipping.remove_owner(*target);
+                if let crate::layer_properties::Target::Raster(id) = *target {
+                    after.scene.surface_effects.remove(id);
+                }
                 after.scene.layer_effects.remove(*target);
                 after.scene.appearance.remove(*target);
                 after

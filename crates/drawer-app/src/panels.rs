@@ -161,6 +161,7 @@ impl Drawer {
             || self.affine_transform.draft.is_some()
             || self.tone_mapping.draft.is_some()
             || self.gaussian.draft.is_some()
+            || self.surface_effects.draft.is_some()
             || self.spatial_blur.draft.is_some()
             || self.detail_filter.draft.is_some()
             || self.color_corrections.draft.is_some()
@@ -677,6 +678,11 @@ impl Drawer {
                                         ("Mesh and puppet deformation…", "mesh-puppet"),
                                         ("Free / perspective / liquify…", "raster-deformation"),
                                         ("Gaussian blur…", "gaussian-blur"),
+                                        ("Drop shadow…", "drop-shadow"),
+                                        ("Glow…", "glow-effect"),
+                                        ("Emboss / raised surface…", "emboss-effect"),
+                                        ("Crystallize…", "crystallize-effect"),
+                                        ("Edit surface effects…", "edit-surface-effects"),
                                         ("Chromatic aberration…", "chromatic-aberration"),
                                         ("Film effect…", "film-effect"),
                                         ("Pencil effect…", "pencil-effect"),

@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 171] = [
+pub const EXTRA_COMMANDS: [&str; 176] = [
     "chromatic-aberration",
     "film-effect",
     "pencil-effect",
@@ -28,6 +28,11 @@ pub const EXTRA_COMMANDS: [&str; 171] = [
     "invert-pixels",
     "invert-correction-layer",
     "mesh-puppet",
+    "drop-shadow",
+    "glow-effect",
+    "emboss-effect",
+    "crystallize-effect",
+    "edit-surface-effects",
     "raster-deformation",
     "gaussian-blur",
     "tone-curves",

@@ -672,3 +672,11 @@ crates/drawer-core/src/stylized_effects_verify.rs
 crates/drawer-app/src/stylized_effects.rs
 crates/drawer-app/src/stylized_effects_verify.rs
 docs/process/stylized-effects.md
+
+crates/drawer-core/src/surface_effects.rs
+crates/drawer-core/src/surface_kernels.rs
+crates/drawer-core/src/float_surfaces.rs
+crates/drawer-core/src/surface_effects_verify.rs
+crates/drawer-app/src/surface_effects.rs
+crates/drawer-app/src/surface_effects_verify.rs
+docs/process/surface-effects.md

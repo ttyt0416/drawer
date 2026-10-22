@@ -217,6 +217,9 @@ pub(crate) fn edit_pixel8(
     d.commit_state(state)
 }
 fn requires_rasterization(d: &Document) -> bool {
+    if !d.scene.surface_effects.rasters.is_empty() {
+        return true;
+    }
     d.scene
         .layer_effects
         .rasters

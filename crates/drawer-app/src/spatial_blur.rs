@@ -85,6 +85,9 @@ impl Drawer {
     }
     pub(super) fn begin_spatial_blur(&mut self, mode: Mode) -> Result<(), String> {
         self.finish_stroke();
+        if self.surface_effects.draft.is_some() || self.surface_effects.working() {
+            return Err("Apply or cancel surface effects first".into());
+        }
         if self.detail_filter.draft.is_some() || self.detail_filter.working() {
             return Err("Apply or cancel the detail filter first".into());
         }

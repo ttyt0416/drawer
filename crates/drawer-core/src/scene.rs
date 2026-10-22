@@ -193,6 +193,11 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::surface_effects::Data::is_default"
+    )]
+    pub surface_effects: Box<crate::surface_effects::Data>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_detail_filter: Option<crate::detail_filter::Settings>,
     /// Settings of the last baked spatial blur; this is not a live effect.
@@ -300,6 +305,7 @@ impl Scene {
                     })
             })
             && self.appearance.valid()
+            && self.surface_effects.valid()
             && self
                 .lines
                 .layers
@@ -398,6 +404,7 @@ impl Scene {
             + self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()
             + self.file_objects.bytes()
             + self.appearance.bytes()
+            + self.surface_effects.bytes()
             + self.catalog.bytes()
             + self.clipping.bytes()
             + self.layer_effects.bytes()

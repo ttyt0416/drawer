@@ -291,7 +291,9 @@ pub fn prepare(
             }),
             pixels,
         };
-        if doc.color != crate::color_storage::Config::legacy() {
+        if doc.color != crate::color_storage::Config::legacy()
+            || !doc.scene.surface_effects.rasters.is_empty()
+        {
             let renderer = crate::float_render::Renderer::new(&working)?;
             let mut samples = Vec::with_capacity(count);
             for y in min[1]..max[1] {
@@ -345,6 +347,9 @@ pub fn prepare(
     for t in &members {
         after.scene.layer_properties.set(*t, Default::default());
         after.scene.clipping.remove_owner(*t);
+        if let Target::Raster(id) = *t {
+            after.scene.surface_effects.remove(id);
+        }
         after.scene.layer_effects.remove(*t);
         after.scene.appearance.remove(*t);
         after
@@ -412,7 +417,8 @@ pub fn prepare(
     let before_roots = working.scene.paper.root_nodes(working.layers.len());
     let after_roots = rendered.scene.paper.root_nodes(rendered.layers.len());
     let mut maximum_delta = 0;
-    let floating = doc.color != crate::color_storage::Config::legacy();
+    let floating = doc.color != crate::color_storage::Config::legacy()
+        || !doc.scene.surface_effects.rasters.is_empty();
     let before_float = floating
         .then(|| crate::float_render::Renderer::new(&working))
         .transpose()?;
@@ -512,7 +518,9 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
         placement: None,
         pixels,
     }];
-    if doc.color != crate::color_storage::Config::legacy() {
+    if doc.color != crate::color_storage::Config::legacy()
+        || !doc.scene.surface_effects.rasters.is_empty()
+    {
         let renderer = crate::float_render::Renderer::new(&source)?;
         let mut samples = Vec::with_capacity(count);
         for y in 0..doc.height {
@@ -537,6 +545,7 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     after.scene.clipping = Default::default();
     after.scene.layer_properties = Default::default();
     after.scene.layer_effects = Default::default();
+    after.scene.surface_effects = Default::default();
     after.scene.lines = Default::default();
     after.scene.gradients = Default::default();
     after.scene.render_order = Default::default();

@@ -137,6 +137,7 @@ impl<'a> Renderer<'a> {
                 self.stroke,
                 plan,
                 crate::float_render::Sampling {
+                    pre_effects: false,
                     references: self.references,
                     fill: self.fill,
                     graph: self.fill_graph.as_ref(),
@@ -548,7 +549,9 @@ impl<'a> Renderer<'a> {
         r
     }
     pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
-        if document.color != crate::color_storage::Config::legacy() {
+        if document.color != crate::color_storage::Config::legacy()
+            || !document.scene.surface_effects.rasters.is_empty()
+        {
             let mut renderer = Self::legacy_build(document, stroke, false);
             renderer.float_plan =
                 crate::float_render::Renderer::prepare_plan(document, stroke).map(Some);
