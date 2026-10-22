@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 66;
+const VERSION: u32 = 67;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -197,6 +197,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 67 && crate::vector_tip::requires_v67(&document.scene) {
+            return Err(invalid("Vector tip styles require document version 67"));
+        }
         if version < 66 && crate::vector_nodes::requires_v66(&document.scene) {
             return Err(invalid("Cubic nodes require document version 66"));
         }

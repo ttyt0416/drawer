@@ -213,6 +213,11 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if command == "vector-path-overlay" {
+            self.workspaces.store.current.vector_overlay.enabled =
+                !self.workspaces.store.current.vector_overlay.enabled;
+            return;
+        }
         if command == "selection-outline" {
             self.toggle_selection_outline();
             return;
@@ -348,6 +353,7 @@ impl Drawer {
                 }
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
+                "vector-tip-tools" => self.begin_vector_tips()?,
                 "vector-push-tool" => {
                     self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Push))?
                 }

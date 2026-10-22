@@ -12,6 +12,8 @@ pub(crate) mod selection_edit;
 pub(crate) mod vector_edit;
 #[path = "vector_erase_ui.rs"]
 pub(crate) mod vector_erase;
+#[path = "vector_paths.rs"]
+pub(crate) mod vector_paths;
 use super::*;
 use drawer_core::{
     painting::{Stroke, Style},
@@ -108,6 +110,7 @@ pub(super) struct Drawing {
     pub erase_settings: drawer_core::vector_erase::Settings,
     vector_capture: Option<Box<vector_edit::Gesture>>,
     pub vector_settings: drawer_core::vector_edit::Settings,
+    pub vector_overlay: drawer_core::vector_tip::Overlay,
     pub vector_layer: Option<u64>,
     pub vector_selection: drawer_core::vector_edit::Selection,
     pub vector_document: Option<u64>,
@@ -1806,6 +1809,7 @@ impl Drawer {
         }
         self.drawing.auto_settings = self.workspaces.store.current.auto_shape;
         self.drawing.vector_settings = self.workspaces.store.current.vector_edit;
+        self.drawing.vector_overlay = self.workspaces.store.current.vector_overlay;
         self.drawing.erase_settings = self.workspaces.store.current.vector_erase;
         let vector_layer =
             self.active

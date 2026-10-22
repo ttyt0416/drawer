@@ -592,3 +592,8 @@ docs/process/vector-nodes.md
 crates/drawer-core/src/vector_refine.rs
 crates/drawer-core/src/vector_refine_verify.rs
 docs/process/vector-refinement.md
+
+crates/drawer-core/src/vector_tip.rs
+crates/drawer-core/src/vector_tip_verify.rs
+crates/drawer-app/src/vector_paths.rs
+docs/process/vector-tips-and-paths.md

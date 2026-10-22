@@ -195,6 +195,7 @@ pub(crate) fn prepare(
                                         let pressure =
                                             part.fragment_pressure_at(&fragment.parameters)?;
                                         next.push(Path {
+                                            tip: part.tip,
                                             pressure,
                                             fill: None,
                                             stroke: true,

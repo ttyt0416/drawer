@@ -648,6 +648,8 @@ impl Drawer {
                                 ("Recolor vector strokes", "vector-color-tool"),
                                 ("Vector numeric editor…", "vector-edit-tools"),
                                 ("Refine vector strokes…", "vector-refine-tools"),
+                                ("Change vector tip…", "vector-tip-tools"),
+                                ("Show/hide vector paths", "vector-path-overlay"),
                                 ("Push vector span", "vector-push-tool"),
                                 ("Redraw vector span", "vector-redraw-tool"),
                                 ("Select vector strokes", "vector-stroke-tool"),

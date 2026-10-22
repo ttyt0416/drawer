@@ -6,7 +6,9 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 126] = [
+pub const EXTRA_COMMANDS: [&str; 128] = [
+    "vector-tip-tools",
+    "vector-path-overlay",
     "vector-refine-tools",
     "vector-push-tool",
     "vector-redraw-tool",
@@ -433,6 +435,8 @@ impl Settings {
             "vector-line-tool" => "Draw an editable vector line with clicked control points",
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
+            "vector-tip-tools" => "Change vector brush tips while preserving paths and pressure",
+            "vector-path-overlay" => "Show or hide vector path overlays without changing the page",
             "vector-push-tool" => "Locally push vector outlines with endpoint constraints",
             "vector-redraw-tool" => "Redraw a selected vector span while preserving the rest",
             "vector-stroke-tool" => "Select whole vector strokes on the canvas",

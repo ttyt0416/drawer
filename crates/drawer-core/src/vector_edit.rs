@@ -189,6 +189,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
             }
             let scale = crate::line_tools::maximum_scale(d.scene.transform);
             if best.0 <= radius
+                || path.stroke_hit(d.scene.transform.inverse().map(point))
                 || path.pressure_segments().any(|(a, b, wa, wb)| {
                     crate::vector_pressure::taper_hit(
                         point,

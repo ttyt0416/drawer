@@ -157,13 +157,24 @@ fn intervals(a: Point, b: Point, point: Point, r0: f64, r1: f64) -> Vec<(f64, f6
         .collect()
 }
 struct EllipseFrame {
+    polygon: Option<[Point; 4]>,
     cos: f64,
     sin: f64,
     major: f64,
     minor: f64,
 }
 impl EllipseFrame {
-    fn transformed(t: Affine) -> Option<Self> {
+    fn transformed(t: Affine, tip: crate::vector_tip::Preset) -> Option<Self> {
+        if let Some(vertices) = tip.polygon() {
+            return Some(Self {
+                polygon: Some(vertices.map(|v| t.vector(v))),
+                cos: 1.,
+                sin: 0.,
+                major: 1.,
+                minor: 1.,
+            });
+        }
+        let t = tip.frame().then(t);
         let [a, b, c, d, _, _] = t.0;
         let xx = a * a + c * c;
         let yy = b * b + d * d;
@@ -175,6 +186,7 @@ impl EllipseFrame {
         let (sin, cos) = angle.sin_cos();
         let major = ((xx + yy + (xx - yy).hypot(2. * xy)) / 2.).sqrt();
         Some(Self {
+            polygon: None,
             cos,
             sin,
             major,
@@ -185,6 +197,16 @@ impl EllipseFrame {
         *work += 1;
         if *work > 64 * 1024 * 1024 {
             return f64::INFINITY;
+        }
+        if let Some(vertices) = self.polygon {
+            let vertices = vertices.map(|v| [v[0] * radius, v[1] * radius]);
+            if crate::shapes::contains(&vertices, q) {
+                return 0.;
+            }
+            *work += 4;
+            return (0..4)
+                .map(|i| crate::line_tools::distance(q, vertices[i], vertices[(i + 1) % 4]).0)
+                .fold(f64::INFINITY, f64::min);
         }
         let a = self.major * radius;
         let b = self.minor * radius;
@@ -330,8 +352,8 @@ pub(crate) fn cut(
     if mode == Mode::None || !path.stroke || path.color[3] == 0 || path.maximum_width() <= 0. {
         return Ok(None);
     }
-    let scale = crate::line_tools::maximum_scale(transform);
-    let ellipse = EllipseFrame::transformed(transform);
+    let scale = crate::line_tools::maximum_scale(path.tip.frame().then(transform));
+    let ellipse = EllipseFrame::transformed(transform, path.tip);
     let mut touched = vec![];
     for (t0, t1, a, b, wa, wb) in path.parameter_segments() {
         *work += 1;
@@ -615,6 +637,7 @@ pub fn prepare(
                     let pressure = path.fragment_pressure_at(&part.parameters)?;
                     let id = state.scene.lines.id()?;
                     paths.push(Path {
+                        tip: path.tip,
                         pressure,
                         points: part.points,
                         id,

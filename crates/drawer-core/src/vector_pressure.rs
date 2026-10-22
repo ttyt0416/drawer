@@ -280,13 +280,13 @@ impl Path {
         if !self.stroke || self.width <= 0. {
             return false;
         }
-        if self.pressure.is_default() {
+        if self.pressure.is_default() && self.tip.is_round() {
             return self
                 .segments()
                 .any(|(a, b)| crate::line_tools::distance(p, a, b).0 <= self.width / 2.);
         }
         self.pressure_segments()
-            .any(|(a, b, wa, wb)| taper_hit(p, a, b, wa, wb))
+            .any(|(a, b, wa, wb)| self.tip.hit(p, a, b, wa, wb))
     }
     /// Preserve the sampled profile when an older intersection eraser emits a
     /// polyline fragment. The search follows source order across closed wraps.

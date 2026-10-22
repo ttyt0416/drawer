@@ -706,6 +706,7 @@ impl Draft {
     }
 }
 struct RefineOptions {
+    tip: drawer_core::vector_tip::Preset,
     kind: u8,
     value: f64,
     width: drawer_core::vector_refine::Width,
@@ -716,6 +717,7 @@ struct RefineOptions {
 impl Default for RefineOptions {
     fn default() -> Self {
         Self {
+            tip: Default::default(),
             kind: 0,
             value: 2.,
             width: Default::default(),
@@ -734,11 +736,19 @@ impl RefineOptions {
             2 => Op::Convert(self.curve),
             3 => Op::Width(self.width, self.value, self.minimum),
             4 => Op::Opacity(self.alpha),
+            6 => Op::Tip(self.tip),
             _ => Op::Split,
         }
     }
 }
 impl Drawer {
+    pub(crate) fn begin_vector_tips(&mut self) -> Result<(), String> {
+        self.begin_vector_edit(None)?;
+        if let Some(e) = &mut self.vector_edit.draft {
+            e.refine.kind = 6;
+        }
+        Ok(())
+    }
     pub(crate) fn begin_vector_edit(&mut self, tool: Option<Tool>) -> Result<(), String> {
         self.finish_stroke();
         self.restore_locked_tool();
@@ -864,7 +874,7 @@ impl Drawer {
         let (mut preview, mut apply, mut reload, mut changed) = (false, false, false, false);
         let mut refine_preview = false;
         let fresh = e.fresh(d) && e.layer == self.drawing.vector_layer;
-        egui::Window::new("Vector points, width, color and pressure").open(&mut open).collapsible(false).default_width(340.).default_pos(egui::pos2(645.,55.)).show(ctx, |ui| {
+        egui::Window::new("Vector points, width, color and pressure").open(&mut open).collapsible(false).default_width(340.).default_height(600.).vscroll(true).default_pos(egui::pos2(645.,55.)).show(ctx, |ui| {
             let settings = &mut self.workspaces.store.current.vector_edit;
             ui.horizontal(|ui| { for (tool,label) in [(Tool::Point,"Point"),(Tool::Pressure,"Pressure"),(Tool::Color,"Color"),(Tool::Select,"Stroke")] { ui.radio_value(&mut settings.tool,tool,label); } });
             ui.add(egui::DragValue::new(&mut settings.sensitivity).speed(0.001).range(0.001..=1.).prefix("Pressure / screen point: "));
@@ -895,14 +905,14 @@ impl Drawer {
                 ui.horizontal_wrapped(|ui|{for (tool,label) in [(Tool::AddNode,"Add node"),(Tool::DeleteNode,"Delete node"),(Tool::CornerNode,"Corner"),(Tool::SmoothNode,"Smooth")] {ui.radio_value(&mut self.workspaces.store.current.vector_edit.tool,tool,label);}});
                 ui.small("Existing shape definitions use their stored outline points as nodes. Add inside a segment, delete a point, or switch its tangents. Preview on press; release applies one Undo. Escape cancels.");
             });
-            ui.collapsing("Join, simplify, push and redraw",|ui| {
+            egui::CollapsingHeader::new("Tip shape and stroke refinements").id_salt(if e.refine.kind==6 {"vector-tip-refinements"}else{"vector-other-refinements"}).default_open(e.refine.kind==6).show(ui,|ui| {
                 let settings=&mut self.workspaces.store.current.vector_edit;
                 ui.horizontal(|ui|{ui.radio_value(&mut settings.tool,Tool::Push,"Local push");ui.radio_value(&mut settings.tool,Tool::Redraw,"Redraw span");});
                 ui.add(egui::DragValue::new(&mut settings.push_radius).range(0.1..=1e6).prefix("Push radius (document pixels): "));
                 egui::ComboBox::from_id_salt("refine-ends").selected_text(format!("{:?}",settings.ends)).show_ui(ui,|ui|{for (ends,label) in [(drawer_core::vector_refine::Ends::Both,"Fix both ends"),(drawer_core::vector_refine::Ends::Either,"Fix nearest end"),(drawer_core::vector_refine::Ends::Free,"Free both ends")] {ui.selectable_value(&mut settings.ends,ends,label);}});
                 egui::ComboBox::from_id_salt("refine-redraw-curve").selected_text(settings.curve.label()).show_ui(ui,|ui|{for c in drawer_core::shapes::Curve::ALL {ui.selectable_value(&mut settings.curve,c,if c==drawer_core::shapes::Curve::StraightLine {"Polyline"}else{c.label()});}});
                 ui.small("Push a stroke near the cursor. Redraw from one control to another, or Shift-select two boundary controls first. Interior boundaries stay attached; the unselected outline stays unchanged. Hold the temporary point modifier to move controls.");
-                const LABELS:[&str;6]=["Join endpoints","Simplify outline","Convert curve","Adjust line width","Adjust opacity","Split at selected point"];
+                const LABELS:[&str;7]=["Join endpoints","Simplify outline","Convert curve","Adjust line width","Adjust opacity","Split at selected point","Change tip preset"];
                 egui::ComboBox::from_id_salt("refine-op").selected_text(LABELS[e.refine.kind as usize]).show_ui(ui,|ui|{for (i,label) in LABELS.iter().enumerate(){changed|=ui.selectable_value(&mut e.refine.kind,i as u8,*label).changed();}});
                 if matches!(e.refine.kind,0|1|3) {changed|=ui.add(egui::DragValue::new(&mut e.refine.value).speed(0.1).range(0. ..=if e.refine.kind==3 {512.}else{1e6}).prefix(if e.refine.kind==0 {"Maximum join distance: "}else if e.refine.kind==1 {"Maximum error: "}else{"Amount / factor: "})).changed();}
                 if e.refine.kind==2 {egui::ComboBox::from_id_salt("refine-curve").selected_text(e.refine.curve.label()).show_ui(ui,|ui|{for c in drawer_core::shapes::Curve::ALL {changed|=ui.selectable_value(&mut e.refine.curve,c,if c==drawer_core::shapes::Curve::StraightLine {"Polyline"}else{c.label()}).changed();}});}
@@ -913,9 +923,21 @@ impl Drawer {
                     ui.small("Device pressure and editable multipliers remain independent, including zero pressure.");
                 }
                 if e.refine.kind==4 {changed|=ui.add(egui::DragValue::new(&mut e.refine.alpha).range(0..=255).prefix("Alpha: ")).changed();}
+                if e.refine.kind==6 {
+                    egui::ComboBox::from_id_salt("vector-tip-preset").selected_text(e.refine.tip.label()).show_ui(ui,|ui|{for tip in drawer_core::vector_tip::Preset::ALL {changed|=ui.selectable_value(&mut e.refine.tip,tip,tip.label()).changed();}});
+                    ui.small("Embedded local tips keep paths, controls and pressure unchanged. No external preset file is needed to reopen the page.");
+                }
                 if changed {e.prepared=None;e.images=None;}
                 refine_preview=ui.add_enabled(fresh && values.is_some(),egui::Button::new("Prepare refinement preview")).clicked();
                 ui.small("Join two open strokes with matching styles; use document-pixel distance/error. Refinements store outline points; Undo restores the previous curve definition. Apply using the shared preview above.");
+            });
+            ui.collapsing("Vector path display",|ui|{
+                let settings=&mut self.workspaces.store.current.vector_overlay;
+                ui.checkbox(&mut settings.enabled,"Show vector paths while drawing");
+                use drawer_core::vector_tip::{Scope,Points};
+                ui.horizontal(|ui|{ui.radio_value(&mut settings.scope,Scope::Selected,"Selected vector layer");ui.radio_value(&mut settings.scope,Scope::All,"All vector layers");});
+                ui.horizontal(|ui|{ui.radio_value(&mut settings.points,Points::Ends,"Endpoints");ui.radio_value(&mut settings.points,Points::All,"All controls");ui.radio_value(&mut settings.points,Points::None,"No points");});
+                ui.small("Hidden layers are omitted; locked paths may be shown. These workspace preferences do not change artwork, selection, Undo or exports. Editing-tool handles are separate guides.");
             });
         });
         if reload {
@@ -1781,8 +1803,114 @@ pub(crate) fn refine_smoke(root: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn tip_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::vector_tip_verify::verify(root)?;
+    super::vector_paths::verify()?;
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 32,
+        height: 32,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    app.documents[0].commit_state(drawer_core::vector_tip_verify::fixture()?.snapshot())?;
+    let d = &app.documents[0];
+    let layer = d.scene.lines.layers[0].id;
+    let id = d.scene.lines.layers[0].paths[0].id;
+    app.panels
+        .targets
+        .insert(d.id, drawer_core::thumbnail::Target::Vector(layer));
+    let before = d.snapshot();
+    let count = d.history_counts();
+    for _ in 0..2 {
+        app.execute_command(&ctx, "vector-path-overlay");
+    }
+    if app.workspaces.store.current.vector_overlay.enabled
+        || app.documents[0].snapshot() != before
+        || app.documents[0].history_counts() != count
+    {
+        return Err("Overlay toggle changed page or Undo".into());
+    }
+    for tip in drawer_core::vector_tip::Preset::ALL {
+        app.execute_command(&ctx, "vector-tip-tools");
+        let e = app
+            .vector_edit
+            .draft
+            .as_mut()
+            .ok_or("Vector tip dialog missing")?;
+        if e.refine.kind != 6 {
+            return Err("Vector tip command did not choose style edit".into());
+        }
+        e.selection = Selection {
+            paths: vec![id],
+            ..Default::default()
+        };
+        e.refine.tip = tip;
+        app.preview_vector_edit(&ctx, true)?;
+        if app.documents[0].snapshot() != before
+            || app
+                .vector_edit
+                .draft
+                .as_ref()
+                .is_none_or(|e| e.images.is_none())
+        {
+            return Err("Tip before/after preview/source isolation".into());
+        }
+        app.apply_vector_numbers()?;
+        if app.documents[0].scene.lines.layers[0].paths[0].tip != tip
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+        {
+            return Err("Tip dialog apply/Undo".into());
+        }
+    }
+    app.vector_edit.draft = None;
+    for time in [0.1, 0.2] {
+        crate::input_replay::frame(&ctx, &mut app, time, vec![]);
+    }
+    let down = crate::precision::pointer(&ctx, &app, [8., 16.], Phase::Down);
+    app.drawing.virtual_events(vec![down], false);
+    crate::input_replay::frame(&ctx, &mut app, 0.3, vec![]);
+    if !app.drawing.pending() {
+        return Err("Overlay active gesture fixture did not capture".into());
+    }
+    let history = app.documents[0].history_counts();
+    app.execute_command(&ctx, "vector-path-overlay");
+    if !app.drawing.pending()
+        || app.documents[0].snapshot() != before
+        || app.documents[0].history_counts() != history
+    {
+        return Err("Overlay toggle finished or changed the active gesture".into());
+    }
+    app.finish_stroke();
+    app.workspaces.store.current.vector_overlay = drawer_core::vector_tip::Overlay {
+        enabled: true,
+        scope: drawer_core::vector_tip::Scope::All,
+        points: drawer_core::vector_tip::Points::All,
+    };
+    let file = root.join("vector-overlay-workspace.json");
+    app.workspaces
+        .store
+        .current
+        .export(&file)
+        .map_err(|e| e.to_string())?;
+    let read = drawer_core::workspaces::Snapshot::read(&file).map_err(|e| e.to_string())?;
+    if read.vector_overlay != app.workspaces.store.current.vector_overlay {
+        return Err("Vector overlay workspace roundtrip".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vector_tips_preview_apply_undo_and_overlay_workspace() {
+        let root = crate::tests::TestDirectory::new();
+        super::tip_smoke(&root.0).unwrap();
+    }
     #[test]
     fn vector_refinement_mouse_preview_cancel_save_numeric_and_undo() {
         let root = crate::tests::TestDirectory::new();

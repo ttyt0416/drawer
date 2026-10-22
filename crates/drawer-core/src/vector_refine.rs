@@ -32,6 +32,7 @@ pub enum Operation {
     Convert(Curve),
     Width(Width, f64, bool),
     Opacity(u8),
+    Tip(crate::vector_tip::Preset),
     Split,
 }
 fn distance(a: Point, b: Point) -> f64 {
@@ -233,7 +234,10 @@ pub fn prepare(
     s: &Selection,
     op: Operation,
 ) -> Result<DocumentState, String> {
-    let geometry = !matches!(op, Operation::Width(..) | Operation::Opacity(_));
+    let geometry = !matches!(
+        op,
+        Operation::Width(..) | Operation::Opacity(_) | Operation::Tip(_)
+    );
     let mut state = start(d, layer, s, geometry)?;
     let ids = s.path_ids();
     let layer_index = state
@@ -263,10 +267,11 @@ pub fn prepare(
                 || a.width != b.width
                 || a.color != b.color
                 || a.stroke != b.stroke
+                || a.tip != b.tip
                 || a.pressure.device_enabled != b.pressure.device_enabled
             {
                 return Err(
-                    "Join requires open strokes with matching width, RGBA and device-pressure mode"
+                    "Join requires open strokes with matching width, RGBA, tip and device-pressure mode"
                         .into(),
                 );
             }
@@ -405,6 +410,7 @@ pub fn prepare(
                 p.width = width.clamp(minimum, 512.);
             }
             Operation::Opacity(alpha) => p.color[3] = alpha,
+            Operation::Tip(tip) => p.tip = tip,
             Operation::Join(_) | Operation::Split => unreachable!(),
         }
     }

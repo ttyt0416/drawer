@@ -597,6 +597,17 @@ impl CanvasView {
         self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
         let painter = ui.painter_at(rect);
+        super::drawing::vector_paths::paint(
+            ui,
+            document,
+            rect,
+            if paint.drawing.vector_document == Some(original_id) {
+                paint.drawing.vector_layer
+            } else {
+                None
+            },
+            paint.drawing.vector_overlay,
+        );
         paint
             .drawing
             .vector_edit_overlay(ui, document, original_id, paint.view, rect);

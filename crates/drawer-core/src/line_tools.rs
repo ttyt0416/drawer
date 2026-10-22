@@ -16,6 +16,8 @@ pub enum Target {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Path {
+    #[serde(default, skip_serializing_if = "crate::vector_tip::Preset::is_round")]
+    pub tip: crate::vector_tip::Preset,
     #[serde(
         default,
         skip_serializing_if = "crate::vector_pressure::Profile::is_default"
@@ -268,6 +270,7 @@ impl Data {
             return Err("Vector target is hidden or locked".into());
         }
         l.paths.push(Path {
+            tip: Default::default(),
             pressure: Default::default(),
             fill: None,
             stroke: true,
@@ -659,6 +662,7 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
                             let id = after.lines.id()?;
                             let pressure = path.fragment_pressure_at(&part.parameters)?;
                             paths.push(Path {
+                                tip: path.tip,
                                 pressure,
                                 fill: None,
                                 stroke: true,

@@ -311,6 +311,8 @@ fn selection_outline_default() -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
     #[serde(default)]
+    pub vector_overlay: crate::vector_tip::Overlay,
+    #[serde(default)]
     pub vector_erase: crate::vector_erase::Settings,
     #[serde(default)]
     pub vector_edit: crate::vector_edit::Settings,
@@ -448,6 +450,7 @@ impl Default for Snapshot {
             auto_shape: Default::default(),
             shapes_vector: false,
             vector_edit: Default::default(),
+            vector_overlay: Default::default(),
             vector_erase: Default::default(),
             layer_pick: Default::default(),
             color_modes: Default::default(),
@@ -634,6 +637,7 @@ impl Snapshot {
             next.layer_defaults = incoming.layer_defaults.clone();
             next.shapes_vector = incoming.shapes_vector;
             next.vector_edit = incoming.vector_edit;
+            next.vector_overlay = incoming.vector_overlay;
             next.vector_erase = incoming.vector_erase;
             next.layer_pick = incoming.layer_pick;
             next.color_modes = incoming.color_modes;
