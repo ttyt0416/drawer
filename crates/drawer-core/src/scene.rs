@@ -195,6 +195,8 @@ pub struct WorldMesh {
 pub struct Scene {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_batch_filter: Option<Box<crate::batch_filters::Record>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_color_deepen: Option<Box<crate::color_deepen::Record>>,
     #[serde(
         default,
         skip_serializing_if = "crate::surface_effects::Data::is_default"
@@ -287,6 +289,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.last_color_deepen.as_ref().is_some_and(|r| !r.valid()) {
+            return false;
+        }
         if self.last_batch_filter.as_ref().is_some_and(|r| !r.valid()) {
             return false;
         }
@@ -411,6 +416,7 @@ impl Scene {
             + self.appearance.bytes()
             + self.surface_effects.bytes()
             + self.last_batch_filter.as_ref().map_or(0, |r| r.bytes())
+            + usize::from(self.last_color_deepen.is_some()) * 128
             + self.catalog.bytes()
             + self.clipping.bytes()
             + self.layer_effects.bytes()

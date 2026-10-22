@@ -451,6 +451,7 @@ impl Drawer {
                 "radial-blur" => {
                     self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Radial)?
                 }
+                "color-deepen" => self.begin_color_deepen()?,
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "batch-filters" => self.begin_batch_filters()?,

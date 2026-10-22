@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 77;
+const VERSION: u32 = 78;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -197,6 +197,16 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 78
+            && (document.scene.last_color_deepen.is_some()
+                || document.scene.layer_effects.rasters.values().any(|e| {
+                    e.adjustment.is_some_and(|a| {
+                        matches!(a.local, Some(crate::local_color::Correction::Deepen(_)))
+                    })
+                }))
+        {
+            return Err(invalid("Color-deepen settings require native version78"));
+        }
         if version < 77 && crate::local_color::active(&document.scene) {
             return Err(invalid("Local color correction requires native version77"));
         }

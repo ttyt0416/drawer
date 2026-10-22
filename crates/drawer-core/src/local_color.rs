@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Correction {
+    Deepen(crate::color_deepen::Settings),
     Distribution {
         matrix: [[f64; 3]; 3],
         bias: [f64; 3],
@@ -25,13 +26,15 @@ impl Correction {
             strength: 1.,
         }
     }
-    pub fn strength(&mut self) -> &mut f64 {
+    pub fn strength(&mut self) -> Option<&mut f64> {
         match self {
-            Self::Distribution { strength, .. } | Self::Lighting { strength, .. } => strength,
+            Self::Distribution { strength, .. } | Self::Lighting { strength, .. } => Some(strength),
+            Self::Deepen(_) => None,
         }
     }
     pub fn valid(self) -> bool {
         match self {
+            Self::Deepen(s) => s.valid(),
             Self::Distribution {
                 matrix,
                 bias,
@@ -59,6 +62,7 @@ impl Correction {
     }
     pub fn identity(self) -> bool {
         match self {
+            Self::Deepen(s) => s.identity(),
             Self::Distribution { strength, .. } => strength == 0.,
             Self::Lighting {
                 light,
@@ -68,6 +72,11 @@ impl Correction {
         }
     }
     pub fn rgb(self, rgb: [f64; 3]) -> [f64; 3] {
+        if let Self::Deepen(s) = self {
+            return Sample::new([rgb[0], rgb[1], rgb[2], 1.])
+                .and_then(|p| p.adjusted(s.base_adjustment()))
+                .map_or(rgb, |p| p.rgb());
+        }
         if self.identity() {
             return rgb;
         }
@@ -93,6 +102,7 @@ impl Correction {
                     strength,
                 )
             }
+            Self::Deepen(_) => unreachable!("Handled above"),
         };
         std::array::from_fn(|i| {
             (rgb[i] + strength * (mapped[i].clamp(0., 1.) - rgb[i])).clamp(0., 1.)
@@ -262,6 +272,7 @@ pub fn prepare(d: &Document, value: Correction) -> Result<DocumentState, String>
         crate::adjustments::Destination::New {
             name: match value {
                 Correction::Distribution { .. } => "Local color distribution",
+                Correction::Deepen(_) => "Color deepen",
                 Correction::Lighting { .. } => "Local light and shadow",
             }
             .into(),

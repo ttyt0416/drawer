@@ -20,6 +20,8 @@ pub(super) struct Panel {
     preview: Option<egui::Rect>,
     apply: Option<egui::Rect>,
     input: Option<egui::TextureHandle>,
+    pixel_mode: Option<egui::Rect>,
+    layer_mode: Option<egui::Rect>,
 }
 impl Panel {
     pub(super) fn working(&self) -> bool {
@@ -40,16 +42,24 @@ enum Config {
         strength: f64,
     },
     Lighting(Correction),
+    Deepen {
+        settings: drawer_core::color_deepen::Settings,
+        layer: u64,
+        correction_layer: bool,
+        selection: bool,
+    },
 }
 pub(super) struct Draft {
     source: Source,
     config: Config,
     prepared: Option<(Config, DocumentState)>,
     images: Option<[egui::TextureHandle; 2]>,
+    note: Option<String>,
 }
 struct ResultPreview {
     state: DocumentState,
     images: [egui::ColorImage; 3],
+    note: Option<String>,
 }
 struct Job {
     source: Source,
@@ -74,6 +84,14 @@ fn source(app: &Drawer) -> Result<Source, String> {
 pub(super) fn controls(ui: &mut egui::Ui, value: &mut Correction) -> bool {
     let old = *value;
     match value {
+        Correction::Deepen(s) => {
+            ui.add(egui::Slider::new(&mut s.brightness, -1. ..=1.).text("Brightness"));
+            ui.add(
+                egui::Slider::new(&mut s.saturation, 0. ..=1.)
+                    .text("Color deepen / HSL saturation"),
+            );
+            ui.add(egui::Slider::new(&mut s.contrast, 0. ..=1.).text("Midtone contrast"));
+        }
         Correction::Distribution { strength, .. } => {
             ui.add(egui::Slider::new(strength, 0. ..=1.).text("Reference strength"));
             ui.small("Frozen color statistics are stored in this layer. A reference file is not required to reopen it.");
@@ -151,7 +169,26 @@ impl Drawer {
             },
             prepared: None,
             images: None,
+            note: None,
         }));
+        Ok(())
+    }
+    pub(super) fn begin_color_deepen(&mut self) -> Result<(), String> {
+        self.begin_local_color(false)?;
+        let d = &self.documents[self.active.unwrap()];
+        let index = match self.panels.targets.get(&d.id) {
+            Some(drawer_core::thumbnail::Target::Raster(n)) => *n,
+            _ => 0,
+        };
+        let layer = d.scene.layer_ids.id(index.min(d.layers.len() - 1));
+        let last = d.scene.last_color_deepen.as_deref();
+        self.local_color.draft.as_mut().unwrap().config = Config::Deepen {
+            settings: last.map_or_else(Default::default, |r| r.settings),
+            layer,
+            correction_layer: last
+                .is_some_and(|r| r.destination == drawer_core::color_deepen::Destination::Layer),
+            selection: last.is_some_and(|r| r.selection),
+        };
         Ok(())
     }
     fn preview_local_color(&mut self, ctx: &egui::Context) -> Result<(), String> {
@@ -159,6 +196,7 @@ impl Drawer {
         if let Some(e) = &mut self.local_color.draft {
             e.prepared = None;
             e.images = None;
+            e.note = None;
         }
         if self.local_color.working() {
             return Err("Wait for the previous preview to stop".into());
@@ -246,6 +284,68 @@ impl Drawer {
                         (value, egui::ColorImage::new(size, pixels))
                     }
                     Config::Lighting(value) => (value, crate::surface_effects::thumbnail(&d, &wc)?),
+                    Config::Deepen {
+                        settings,
+                        layer,
+                        correction_layer,
+                        selection,
+                    } => {
+                        let destination = if correction_layer {
+                            drawer_core::color_deepen::Destination::Layer
+                        } else {
+                            drawer_core::color_deepen::Destination::Pixels(layer)
+                        };
+                        let result = drawer_core::color_deepen::prepare(
+                            &d,
+                            destination,
+                            settings,
+                            selection,
+                            |done, total| {
+                                check()?;
+                                wp.store(done * 100 / total.max(1), Ordering::Relaxed);
+                                Ok(())
+                            },
+                        )?;
+                        let size = [
+                            result.warning.width as usize,
+                            result.warning.height as usize,
+                        ];
+                        let warning = egui::ColorImage::new(
+                            size,
+                            result
+                                .warning
+                                .pixels
+                                .into_iter()
+                                .map(|p| {
+                                    egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3])
+                                })
+                                .collect(),
+                        );
+                        let after =
+                            drawer_core::layer_merge::preview(&result.state, current.frame)?;
+                        let images = [
+                            warning,
+                            crate::surface_effects::thumbnail(&d, &wc)?,
+                            crate::surface_effects::thumbnail(&after, &wc)?,
+                        ];
+                        check()?;
+                        let note = Some(format!(
+                            "{} / {} {} color samples reach channel/HSL limits before selection blending. Red marks preview samples. {}",
+                            result.clipped,
+                            result.checked,
+                            if result.sampled { "preview" } else { "source" },
+                            if correction_layer {
+                                "Raster backdrop; original pixels remain editable."
+                            } else {
+                                "Selected raw raster before display masks/effects; alpha is unchanged."
+                            }
+                        ));
+                        return Ok(ResultPreview {
+                            state: result.state,
+                            images,
+                            note,
+                        });
+                    }
                 };
                 check()?;
                 let state = core::prepare(&d, value)?;
@@ -256,7 +356,11 @@ impl Drawer {
                     crate::surface_effects::thumbnail(&after, &wc)?,
                 ];
                 check()?;
-                Ok(ResultPreview { state, images })
+                Ok(ResultPreview {
+                    state,
+                    images,
+                    note: None,
+                })
             };
             let _ = sender.send(work());
             context.request_repaint();
@@ -316,10 +420,12 @@ impl Drawer {
                     ctx.load_texture("local-color-preview", i, egui::TextureOptions::NEAREST)
                 }));
                 e.prepared = Some((job.config.clone(), result.state));
+                e.note = result.note;
             }
             Err(error) => {
                 e.prepared = None;
                 e.images = None;
+                e.note = None;
                 self.status = Some(error);
             }
         }
@@ -372,9 +478,15 @@ impl Drawer {
         let working = self.local_color.working();
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel) = (false, false, false);
-        egui::Window::new("Local reference / light and shadow correction").default_width(530.).default_pos(egui::pos2(30.,20.)).collapsible(false).open(&mut open).show(ctx,|ui|{
+        let deepen = matches!(&e.config, Config::Deepen { .. });
+        let title = if deepen {
+            "Color deepen — pixels or correction layer"
+        } else {
+            "Local reference / light and shadow correction"
+        };
+        egui::Window::new(title).default_width(530.).default_pos(egui::pos2(30.,20.)).collapsible(false).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed; cancel and reopen.");}
-            ui.small("Creates a root correction layer above the raster stack. Page objects and animation cels are separate. Original pixels and alpha are preserved.");
+            if !deepen{ui.small("Creates a root correction layer above the raster stack. Page objects and animation cels are separate. Original pixels and alpha are preserved.");}
             match &mut e.config {
                 Config::Reference{path,page,strength}=>{
                     ui.label("Local reference file (PNG, JPEG, BMP or TIFF)");ui.text_edit_singleline(path);
@@ -384,14 +496,25 @@ impl Drawer {
                     ui.small("Uses alpha-weighted RGB mean and covariance. Different dimensions are supported; transparent colors are excluded. No model or network is used.");
                 },
                 Config::Lighting(value)=>{controls(ui,value);},
+                Config::Deepen{settings,layer,correction_layer,selection}=>{
+                    ui.horizontal(|ui|{let r=ui.radio_value(correction_layer,false,"Change raster pixels");self.local_color.pixel_mode=Some(r.rect);let r=ui.radio_value(correction_layer,true,"New correction layer");self.local_color.layer_mode=Some(r.rect);});
+                    if !*correction_layer {egui::ComboBox::from_label("Raster target").selected_text(crate::layer_properties::label(&self.documents[self.active.unwrap()],drawer_core::layer_properties::Target::Raster(*layer))).show_ui(ui,|ui|{let d=&self.documents[self.active.unwrap()];for(n,l)in d.layers.iter().enumerate(){ui.selectable_value(layer,d.scene.layer_ids.id(n),&l.name);}});}
+                    ui.add(egui::Slider::new(&mut settings.brightness,-1. ..=1.).text("Brightness"));
+                    ui.add(egui::Slider::new(&mut settings.saturation,0. ..=1.).text("Color deepen / HSL saturation"));
+                    ui.add(egui::Slider::new(&mut settings.contrast,0. ..=1.).text("Midtone contrast"));
+                    ui.checkbox(selection,"Limit to current area selection");
+                    ui.small("Pixel mode changes the chosen raw raster. Correction-layer mode preserves sources and affects the raster backdrop, with a frozen selection mask. Page objects/animation cels are separate.");
+                    ui.small("Independent HSL saturation and contrast about 50% gray; this does not reproduce any private product algorithm.");
+                },
             }
-            if e.config!=old{e.prepared=None;e.images=None;self.local_color.input=None;}
+            if e.config!=old{e.prepared=None;e.images=None;e.note=None;self.local_color.input=None;}
+            if let Some(note)=&e.note{ui.small(note);}
             let r=ui.add_enabled(fresh&&!working,egui::Button::new("Preview local correction"));self.local_color.preview=Some(r.rect);preview=r.clicked();
             let r=ui.add_enabled(fresh&&!working&&e.prepared.is_some(),egui::Button::new("Apply correction as one Undo"));self.local_color.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel correction").clicked();
             if working{ui.label(format!("Calculating {}%",self.local_color.job.as_ref().unwrap().progress.load(Ordering::Relaxed)));}
-            ui.horizontal(|ui|{if let Some(input)=&self.local_color.input{ui.vertical(|ui|{ui.label("Input reference");ui.add(egui::Image::new(input).fit_to_exact_size(egui::vec2(96.,96.)));});}
+            ui.horizontal(|ui|{if let Some(input)=&self.local_color.input{ui.vertical(|ui|{ui.label(if deepen{"Clipping warning"}else{"Input reference"});ui.add(egui::Image::new(input).fit_to_exact_size(egui::vec2(96.,96.)));});}
             if let Some(images)=&e.images{for(label,image)in[("Current",&images[0]),("Result",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}}});
-            ui.small("Edit saved strength/light/shadow colors using Color correction layers. A fully transparent reference/backdrop is rejected. Cancel discards the complete draft.");
+            if deepen{ui.small("Color correction layers can edit a saved correction. Pixel changes and layer creation each use one Undo. Cancel discards the complete draft.");}else{ui.small("Edit saved strength/light/shadow colors using Color correction layers. A fully transparent reference/backdrop is rejected. Cancel discards the complete draft.");}
         });
         if e.config != old {
             self.cancel_local_color();
@@ -409,4 +532,10 @@ impl Drawer {
             self.status = Some(err);
         }
     }
+}
+
+#[path = "color_deepen_verify.rs"]
+mod deepen_verify;
+pub(super) fn deepen_smoke(root: &Path) -> Result<(), String> {
+    deepen_verify::smoke(root)
 }

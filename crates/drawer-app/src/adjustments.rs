@@ -18,7 +18,7 @@ pub(super) struct Draft {
     target: Option<u64>,
     parent: Option<usize>,
     name: String,
-    value: Adjustment,
+    pub(super) value: Adjustment,
     prepared: Option<core::Prepared>,
     images: Option<[egui::TextureHandle; 2]>,
 }
@@ -187,11 +187,13 @@ impl Drawer {
    if e.edit{egui::ComboBox::from_label("Correction layer").selected_text(e.target.map_or("Select layer".into(),|id|super::layer_properties::label(d,Target::Raster(id)))).show_ui(ui,|ui|{for id in &existing{if ui.selectable_value(&mut e.target,Some(*id),super::layer_properties::label(d,Target::Raster(*id))).changed(){changed=true;e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(*id)).unwrap();}}});}else{ui.horizontal(|ui|{ui.label("Layer name");changed|=ui.text_edit_singleline(&mut e.name).changed();});egui::ComboBox::from_label("Parent folder").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{changed|=ui.selectable_value(&mut e.parent,None,"Root").changed();for(n,f)in d.scene.paper.folders.iter().enumerate().filter(|(n,_)|d.scene.paper.folder_active(*n)){changed|=ui.selectable_value(&mut e.parent,Some(n),&f.name).changed();}});}
    if let Some(local)=&mut e.value.local {changed|=crate::local_color::controls(ui,local);}
    changed|=ui.checkbox(&mut e.value.invert,"Invert in document RGB (after other corrections)").changed();
+   if !matches!(e.value.local,Some(drawer_core::local_color::Correction::Deepen(_))) {
    changed|=ui.add(egui::Slider::new(&mut e.value.brightness,-1. ..=1.).text("Brightness").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.contrast,-1. ..=1.).text("Contrast").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.hue,-180. ..=180.).text("Hue degrees")).changed();
    changed|=ui.add(egui::Slider::new(&mut e.value.saturation,-1. ..=1.).text("Saturation").custom_formatter(|n,_|format!("{:.0}%",n*100.))).changed();
    ui.horizontal(|ui|{ui.label("Saturation model");changed|=ui.radio_value(&mut e.value.color_model,ColorModel::Hsl,"HSL").changed();changed|=ui.radio_value(&mut e.value.color_model,ColorModel::Hsv,"HSV").changed();if ui.button("Reset correction").clicked(){e.value=Default::default();changed=true;}});
+   } else if ui.button("Reset color deepen").clicked(){e.value=Adjustment{local:Some(drawer_core::local_color::Correction::Deepen(drawer_core::color_deepen::Settings{brightness:0.,saturation:0.,contrast:0.})),..Default::default()};changed=true;}
    ui.small("HSL preserves lightness while reducing saturation. HSV preserves value. Corrections affect the earlier raster backdrop in their folder; normal folders isolate their children.");
    if changed{e.prepared=None;e.images=None;}
    let r=ui.button("Preview correction");self.adjustments.preview=Some(r.rect);preview=r.clicked();

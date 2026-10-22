@@ -702,3 +702,8 @@ docs/process/local-color.md
 crates/drawer-app/src/transform_review.rs
 crates/drawer-app/src/transform_review_verify.rs
 docs/process/transform-review.md
+
+crates/drawer-core/src/color_deepen.rs
+crates/drawer-core/src/color_deepen_verify.rs
+crates/drawer-app/src/color_deepen_verify.rs
+docs/process/color-deepen.md

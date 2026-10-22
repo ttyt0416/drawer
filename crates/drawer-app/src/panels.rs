@@ -658,6 +658,7 @@ impl Drawer {
                                         ("Delete hidden layers…", "delete-hidden-layers"),
                                         ("Folders / grayscale masks…", "layer-folders"),
                                         ("Color correction layers…", "adjustment-layer"),
+                                        ("Color deepen: pixels / layer…", "color-deepen"),
                                         ("Local reference colors…", "local-reference-color"),
                                         ("Local light / shadow colors…", "local-light-shadow"),
                                         ("Levels…", "color-levels"),

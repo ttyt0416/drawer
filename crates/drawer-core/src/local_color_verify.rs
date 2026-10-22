@@ -194,7 +194,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "16bit low alpha is unchanged",
     )?;
     for mut value in [flat, half, Correction::lighting()] {
-        *value.strength() = 0.;
+        *value.strength().unwrap() = 0.;
         let counts = d.history_counts();
         let dirty = d.dirty;
         d.commit_state(core::prepare(&d, value)?)?;
