@@ -376,6 +376,8 @@ impl Drawer {
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
                 "raster-trace" => self.begin_vector_cleanup(true)?,
                 "scale-rotate" => self.begin_affine_transform()?,
+                "tone-curves" => self.begin_tone_mapping(false)?,
+                "gradient-map" => self.begin_tone_mapping(true)?,
                 "vector-remove-short" => self.begin_vector_cleanup(false)?,
                 "vector-scope-tools" => self.begin_vector_scope()?,
                 "vector-copy-strokes" => self.copy_vector_scope(ctx, false, false)?,

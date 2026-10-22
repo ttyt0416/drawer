@@ -1011,3 +1011,12 @@ Layers… → Scale and rotate…에서 기준점·X/Y 배율·회전각·이동
 Transform selected pixels를 켜면 현재 래스터의 선택 강도만 잘라 변형하고 남은 원본과 합칩니다. Hard edges/Smooth edges를 고릅니다. 부드러운 경계는 premultiplied alpha로 보간해 검은 테두리를 막고8/16비트 정밀도를 유지합니다. 선택 밖의 색 자료를 보존하며 선택 영역도 함께 옮깁니다. 레이어의 마스크는 고정됩니다. 레이어/개체 전체 변형은 연결된 층·마스크·질감·자를 따라 옮기며 벡터 선폭은 면적 배율의 제곱근으로 조절합니다. 소재의 원본 이미지·반복/타일 방식은 유지합니다.
 
 현재 표현으로 직접 변형할 수 없는 텍스트·톤·3D/애니메이션은 Convert unsupported…를 직접 켜면 미리보기에서 래스터 변환 후 처리합니다. 적용 때 칠할 수 있는 픽셀이 되며 Undo로 원래 편집 개체를 복구합니다. 이 옵션은 기본으로 꺼져 있습니다. 지원되지 않는 연결 구성원은 전체 작업을 거절하므로 먼저 별도 래스터 변환을 선택합니다. 페이지·프레임·대상이 바뀌면 다시 열고, 실패한 미리보기로 이전 계획을 적용할 수 없습니다. 변형 픽셀은4M·축 길이32768 및 작업공간/Undo 한도를 지킵니다.
+
+
+## tone-mapping | RGB·채널 톤 커브와 그라데이션 맵 | 보정 톤곡선 커브 RGB 마스터 채널 명도 그라데이션 맵 알파 색상
+
+Layers… → RGB and channel tone curves…에서 RGB master 또는 R/G/B를 고릅니다. 흰 점을 드래그하거나 In/Out(0–1)을 입력하고 Add control point/Remove로 점을 편집합니다. Reset channel은 항등곡선, Invert channel은 반전입니다. Smooth curve는 이웃값을 넘지 않는 부드러운 보간이며 끄면 직선입니다. 마스터 뒤에 개별 채널을 적용합니다. 입력이 겹치거나 너무 가까운 점·비수는 적용하지 않습니다.
+
+Luminance gradient map…은 sRGB 명도를 RGB 색 지점으로 바꿉니다. 색/위치를 정하고 혼색 공간을 고릅니다. Add color stop/Remove/Sort stops를 사용합니다. 같은 위치의 지점은 마지막 색을 택하는 선명한 경계입니다. 픽셀 알파와 투명 픽셀의 숨은 RGB는 바뀌지 않습니다.
+
+Only within the area selection을 켜면 선택 강도로 섞습니다. Prepare tone mapping preview로 전후를 확인하고 Apply tone mapping as one Undo로 현재 래스터 픽셀에 확정합니다.8/16비트 정밀도·원래 문서 프로필과 알파·선택 밖 픽셀·기하를 유지합니다. 항등곡선/빈 선택은 이력을 만들지 않습니다. Escape/닫기는 버리고 페이지·프레임·수정본·대상이 바뀌면 다시 엽니다. 실패한 준비 뒤 이전 계획을 적용할 수 없습니다. 결과 픽셀은 자체 문서에 저장되며 미확정 레시피는 임시 상태입니다.

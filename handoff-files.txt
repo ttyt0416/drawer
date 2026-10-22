@@ -623,3 +623,8 @@ crates/drawer-app/src/affine_transform.rs
 crates/drawer-core/src/affine_transform.rs
 crates/drawer-core/src/affine_transform_verify.rs
 docs/process/pivot-scale-rotation.md
+
+crates/drawer-app/src/tone_mapping.rs
+crates/drawer-core/src/tone_mapping.rs
+crates/drawer-core/src/tone_mapping_verify.rs
+docs/process/tone-curves-and-gradient-maps.md

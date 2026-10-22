@@ -159,6 +159,7 @@ impl Drawer {
         self.path_transition.is_some()
             || self.vector_cleanup.draft.is_some()
             || self.affine_transform.draft.is_some()
+            || self.tone_mapping.draft.is_some()
             || self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()
@@ -653,6 +654,8 @@ impl Drawer {
                                 ("Refine vector strokes…", "vector-refine-tools"),
                                 ("Trace raster to vectors…", "raster-trace"),
                                 ("Scale and rotate…", "scale-rotate"),
+                                ("RGB and channel tone curves…", "tone-curves"),
+                                ("Luminance gradient map…", "gradient-map"),
                                 ("Remove short vector strokes/spans…", "vector-remove-short"),
                                 ("Change vector tip…", "vector-tip-tools"),
                                 (
