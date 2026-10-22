@@ -654,3 +654,9 @@ crates/drawer-core/src/spatial_blur_verify.rs
 crates/drawer-app/src/spatial_blur.rs
 crates/drawer-app/src/spatial_blur_verify.rs
 docs/process/spatial-blur.md
+
+crates/drawer-core/src/detail_filter.rs
+crates/drawer-core/src/detail_filter_verify.rs
+crates/drawer-app/src/detail_filter.rs
+crates/drawer-app/src/detail_filter_verify.rs
+docs/process/detail-filters.md

@@ -21,6 +21,11 @@ pub(super) struct Panel {
     apply: Option<egui::Rect>,
     cancel: Option<egui::Rect>,
 }
+impl Panel {
+    pub(super) fn working(&self) -> bool {
+        self.job.is_some()
+    }
+}
 #[derive(Clone, Copy, PartialEq)]
 struct Source {
     id: u64,
@@ -80,6 +85,9 @@ impl Drawer {
     }
     pub(super) fn begin_spatial_blur(&mut self, mode: Mode) -> Result<(), String> {
         self.finish_stroke();
+        if self.detail_filter.draft.is_some() || self.detail_filter.working() {
+            return Err("Apply or cancel the detail filter first".into());
+        }
         if self.spatial_blur.job.is_some() {
             self.cancel_spatial_job();
             return Err("Previous blur is stopping; reopen shortly".into());

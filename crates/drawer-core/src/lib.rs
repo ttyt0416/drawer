@@ -342,6 +342,8 @@ pub mod vector_tip_verify;
 
 pub mod affine_transform;
 pub mod affine_transform_verify;
+pub mod detail_filter;
+pub mod detail_filter_verify;
 pub mod gaussian;
 pub mod gaussian_verify;
 pub mod spatial_blur;

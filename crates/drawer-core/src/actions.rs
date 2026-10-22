@@ -6,7 +6,10 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 161] = [
+pub const EXTRA_COMMANDS: [&str; 164] = [
+    "sharpen",
+    "unsharp-mask",
+    "reduce-noise",
     "motion-blur",
     "radial-blur",
     "spin-blur",

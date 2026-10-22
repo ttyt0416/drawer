@@ -193,6 +193,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_detail_filter: Option<crate::detail_filter::Settings>,
     /// Settings of the last baked spatial blur; this is not a live effect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_spatial_blur: Option<crate::spatial_blur::Settings>,
@@ -278,6 +280,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.last_detail_filter.is_some_and(|s| !s.valid()) {
+            return false;
+        }
         if self.last_spatial_blur.is_some_and(|s| !s.valid()) {
             return false;
         }
@@ -384,8 +389,10 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        usize::from(self.last_spatial_blur.is_some())
-            * std::mem::size_of::<crate::spatial_blur::Settings>()
+        usize::from(self.last_detail_filter.is_some())
+            * std::mem::size_of::<crate::detail_filter::Settings>()
+            + usize::from(self.last_spatial_blur.is_some())
+                * std::mem::size_of::<crate::spatial_blur::Settings>()
             + self.layer_groups.bytes()
             + self.layer_comps.bytes()
             + self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()

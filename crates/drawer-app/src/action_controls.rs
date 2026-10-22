@@ -395,6 +395,15 @@ impl Drawer {
                 "tone-curves" => self.begin_tone_mapping(false)?,
                 "gradient-map" => self.begin_tone_mapping(true)?,
                 "gaussian-blur" => self.begin_gaussian()?,
+                "sharpen" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::defaults()[0])?
+                }
+                "unsharp-mask" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::defaults()[1])?
+                }
+                "reduce-noise" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::defaults()[2])?
+                }
                 "motion-blur" => {
                     self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Motion)?
                 }
