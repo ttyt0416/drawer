@@ -24,6 +24,7 @@ impl DustTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Operation {
+    Warp(crate::warp_filters::Operation),
     Style(crate::stylized_effects::Operation),
     Mosaic {
         cell: u16,
@@ -48,10 +49,14 @@ impl Operation {
         Self::defaults()
             .into_iter()
             .chain(crate::stylized_effects::Operation::defaults().map(Self::Style))
+            .chain(crate::warp_filters::Operation::defaults().map(Self::Warp))
             .collect()
     }
     pub fn same_kind(self, other: Self) -> bool {
         match (self, other) {
+            (Self::Warp(a), Self::Warp(b)) => {
+                std::mem::discriminant(&a) == std::mem::discriminant(&b)
+            }
             (Self::Style(a), Self::Style(b)) => {
                 std::mem::discriminant(&a) == std::mem::discriminant(&b)
             }
@@ -90,6 +95,7 @@ impl Operation {
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Warp(op) => op.label(),
             Self::Style(op) => op.label(),
             Self::Mosaic { .. } => "Mosaic",
             Self::Noise { .. } => "Generate noise",
@@ -99,6 +105,7 @@ impl Operation {
     }
     pub fn valid(self) -> bool {
         match self {
+            Self::Warp(op) => op.valid(),
             Self::Style(op) => op.valid(),
             Self::Mosaic { cell, origin } => {
                 (1..=256).contains(&cell) && origin.iter().all(|v| v.unsigned_abs() <= 1_000_000)
@@ -114,6 +121,7 @@ impl Operation {
     }
     pub fn identity(self) -> bool {
         match self {
+            Self::Warp(op) => op.identity(),
             Self::Style(op) => op.identity(),
             Self::Mosaic { cell, .. } => cell == 1,
             Self::Noise { amount, .. } => amount == 0.,
@@ -395,6 +403,7 @@ pub fn prepare(
     };
     let output = extent.width as usize * extent.height as usize;
     let (work, scratch) = match op {
+        Operation::Warp(_) => (output.saturating_mul(8), 0),
         Operation::Style(op) => (output.saturating_mul(op.cost()), 0),
         Operation::Mosaic { cell, .. } => {
             let cols = old.width as usize / cell as usize + 2;
@@ -461,6 +470,7 @@ pub fn prepare(
             before
         } else {
             match op {
+                Operation::Warp(op) => crate::warp_filters::sample(d, layer, xy, op)?,
                 Operation::Style(op) => crate::stylized_effects::sample(d, layer, xy, before, op)?,
                 Operation::Mosaic { origin, .. } => {
                     let p = blocks.as_ref().unwrap().sample(xy, origin);

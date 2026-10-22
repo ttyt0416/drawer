@@ -451,6 +451,34 @@ impl Drawer {
                 "radial-blur" => {
                     self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Radial)?
                 }
+                "fisheye-filter" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Warp(
+                            drawer_core::warp_filters::Operation::defaults()[0],
+                        ),
+                    ))?
+                }
+                "panorama-filter" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Warp(
+                            drawer_core::warp_filters::Operation::defaults()[1],
+                        ),
+                    ))?
+                }
+                "wave-filter" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Warp(
+                            drawer_core::warp_filters::Operation::defaults()[2],
+                        ),
+                    ))?
+                }
+                "swirl-filter" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Warp(
+                            drawer_core::warp_filters::Operation::defaults()[3],
+                        ),
+                    ))?
+                }
                 "drop-shadow" => self.begin_surface_effects(Some(0))?,
                 "glow-effect" => self.begin_surface_effects(Some(1))?,
                 "emboss-effect" => self.begin_surface_effects(Some(2))?,

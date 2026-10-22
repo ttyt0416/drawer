@@ -14,6 +14,11 @@ mod style_verify;
 pub(super) fn style_smoke(root: &std::path::Path) -> Result<(), String> {
     style_verify::smoke(root)
 }
+#[path = "warp_filters_verify.rs"]
+mod warp_verify;
+pub(super) fn warp_smoke(root: &std::path::Path) -> Result<(), String> {
+    warp_verify::smoke(root)
+}
 #[path = "detail_filter_verify.rs"]
 mod verify;
 pub(super) fn pixel_smoke(root: &std::path::Path) -> Result<(), String> {
