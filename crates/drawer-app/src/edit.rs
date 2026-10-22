@@ -86,11 +86,11 @@ pub(super) fn discard_layer(ctx: &egui::Context, layer: egui::LayerId) {
     }
 }
 #[derive(Clone, Copy)]
-struct Clipboard {
-    write: fn(&str) -> Result<(), String>,
-    read: fn() -> Result<String, String>,
+pub(crate) struct Clipboard {
+    pub(crate) write: fn(&str) -> Result<(), String>,
+    pub(crate) read: fn() -> Result<String, String>,
 }
-fn clipboard(ctx: &egui::Context) -> Clipboard {
+pub(crate) fn clipboard(ctx: &egui::Context) -> Clipboard {
     ctx.data(|d| d.get_temp(egui::Id::new("drawer-text-clipboard")))
         .unwrap_or(Clipboard {
             write: |s| {

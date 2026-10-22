@@ -341,6 +341,14 @@ pub fn prepare(d: &Document, key: Key, s: &Settings) -> Result<Prepared, String>
             .ok_or("Missing vector layer")?;
         let mut work = 0usize;
         for path in &mut layer.paths {
+            if s.mode.nonlinear() && path.svg.is_some() {
+                return Err(
+                    "Rasterize SVG gradient/clipping outlines before nonlinear deformation".into(),
+                );
+            }
+            if let Some(svg) = &mut path.svg {
+                svg.transform(original);
+            }
             work += path.points.len();
             if work > 32768 {
                 return Err("Vector transform exceeds 32768 points".into());

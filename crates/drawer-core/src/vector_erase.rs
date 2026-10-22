@@ -342,10 +342,7 @@ pub(crate) fn cut(
     refs: &[Reference],
     work: &mut usize,
 ) -> Result<Option<Vec<Part>>, String> {
-    if mode == Mode::Whole
-        && path.closed
-        && path.fill.is_some_and(|c| c[3] > 0)
-        && crate::shapes::contains(&path.points, transform.inverse().map(point))
+    if mode == Mode::Whole && path.closed && path.fill_pixel(transform.inverse().map(point))[3] > 0
     {
         return Ok(Some(vec![]));
     }
@@ -637,6 +634,7 @@ pub fn prepare(
                     let pressure = path.fragment_pressure_at(&part.parameters)?;
                     let id = state.scene.lines.id()?;
                     paths.push(Path {
+                        svg: path.svg.clone(),
                         tip: path.tip,
                         pressure,
                         points: part.points,

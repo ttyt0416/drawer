@@ -508,6 +508,9 @@ pub(crate) fn shift(
                 .flat_map(|l| &mut l.paths)
                 .find(|p| p.id == id)
                 .ok_or("Missing vector alignment target")?;
+            if let Some(svg) = &mut p.svg {
+                svg.transform(creation.inverse());
+            }
             for point in &mut p.points {
                 move_point(point);
             }

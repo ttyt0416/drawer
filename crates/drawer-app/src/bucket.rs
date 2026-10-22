@@ -13,7 +13,7 @@ pub(super) struct Gesture {
     preview: Document,
     config: ([u8; 4], bool, bool),
 }
-pub(super) fn preview(
+pub(crate) fn preview(
     doc: &Document,
     state: drawer_core::sizing::DocumentState,
 ) -> Result<Document, String> {

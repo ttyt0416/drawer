@@ -16,6 +16,8 @@ pub enum Target {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Path {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub svg: Option<Box<crate::svg_style::Style>>,
     #[serde(default, skip_serializing_if = "crate::vector_tip::Preset::is_round")]
     pub tip: crate::vector_tip::Preset,
     #[serde(
@@ -42,6 +44,34 @@ fn is_true(v: &bool) -> bool {
     *v
 }
 impl Path {
+    pub fn fill_hit(&self, p: Point) -> bool {
+        self.closed
+            && self.fill.is_some()
+            && self
+                .svg
+                .as_ref()
+                .is_none_or(|s| s.clip.as_ref().is_none_or(|c| c.hit(p)))
+            && crate::svg_style::contains(
+                &self.points,
+                p,
+                self.svg
+                    .as_ref()
+                    .map_or(crate::svg_style::Rule::EvenOdd, |s| s.rule),
+            )
+    }
+    pub fn fill_pixel(&self, p: Point) -> [u8; 4] {
+        if !self.fill_hit(p) {
+            return [0; 4];
+        }
+        let base = self.fill.unwrap();
+        if let Some(g) = self.svg.as_ref().and_then(|s| s.gradient.as_ref()) {
+            let mut color = g.color(p);
+            color[3] = ((u16::from(color[3]) * u16::from(base[3]) + 127) / 255) as u8;
+            color
+        } else {
+            base
+        }
+    }
     pub fn segments(&self) -> impl Iterator<Item = (Point, Point)> + '_ {
         self.points.windows(2).map(|p| (p[0], p[1])).chain(
             self.closed
@@ -61,22 +91,13 @@ impl Path {
         crate::scene::Rect { min, max }
     }
     pub fn visible_hit(&self, p: Point) -> bool {
-        self.fill.is_some_and(|c| c[3] > 0)
-            && self.closed
-            && crate::shapes::contains(&self.points, p)
-            || self.stroke && self.color[3] > 0 && self.stroke_hit(p)
+        self.fill_pixel(p)[3] > 0 || self.stroke && self.color[3] > 0 && self.stroke_hit(p)
     }
     pub fn hit(&self, p: Point) -> bool {
-        self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
-            || self.stroke && self.stroke_hit(p)
+        self.fill_hit(p) || self.stroke && self.stroke_hit(p)
     }
     pub fn pixel(&self, p: Point) -> [u8; 4] {
-        let fill = if self.fill.is_some() && self.closed && crate::shapes::contains(&self.points, p)
-        {
-            self.fill.unwrap_or([0; 4])
-        } else {
-            [0; 4]
-        };
+        let fill = self.fill_pixel(p);
         if self.stroke && self.stroke_hit(p) {
             crate::render::over(fill, self.color)
         } else {
@@ -190,6 +211,7 @@ impl Data {
                                 .is_none_or(|d| d.nodes.is_none() || d.settings.closed == p.closed)
                             && (0.0..=512.0).contains(&p.width)
                             && p.pressure.valid()
+                            && p.svg.as_ref().is_none_or(|s| s.valid())
                     })
             })
             && paths <= 128
@@ -218,6 +240,7 @@ impl Data {
                                 std::mem::size_of::<Path>()
                                     + p.points.len() * 16
                                     + p.pressure.bytes()
+                                    + p.svg.as_ref().map_or(0, |s| s.bytes())
                                     + p.definition
                                         .as_ref()
                                         .map_or(0, crate::shapes::Definition::bytes)
@@ -270,6 +293,7 @@ impl Data {
             return Err("Vector target is hidden or locked".into());
         }
         l.paths.push(Path {
+            svg: None,
             tip: Default::default(),
             pressure: Default::default(),
             fill: None,
@@ -662,6 +686,7 @@ pub fn erase(doc: &mut Document, point: Point, radius: f64) -> Result<bool, Stri
                             let id = after.lines.id()?;
                             let pressure = path.fragment_pressure_at(&part.parameters)?;
                             paths.push(Path {
+                                svg: path.svg.clone(),
                                 tip: path.tip,
                                 pressure,
                                 fill: None,

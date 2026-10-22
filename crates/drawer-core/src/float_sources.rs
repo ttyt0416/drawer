@@ -358,11 +358,7 @@ impl Renderer<'_> {
                     )?;
                     continue;
                 }
-                let fill = if path.closed && crate::shapes::contains(&path.points, original) {
-                    path.fill.unwrap_or([0; 4])
-                } else {
-                    [0; 4]
-                };
+                let fill = path.fill_pixel(original);
                 let mut sample = Sample::from8(fill);
                 if path.stroke && path.stroke_hit(original) {
                     sample = self.plan().space.compose(

@@ -65,6 +65,8 @@ impl Drawer {
     }
     pub(super) fn local_file_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Local file actions",|ui| {
+            for (label,command) in [("Import SVG…","svg-import"),("Export SVG…","svg-export"),("Copy SVG text","svg-copy")] {if ui.add_enabled(self.active.is_some(),egui::Button::new(label)).clicked(){self.execute_command(ui.ctx(),command);ui.close();}}
+            ui.separator();
             if ui.add_enabled(self.active.is_some_and(|n|self.documents[n].path.is_some()),egui::Button::new("Revert to saved document…")).clicked() {self.revert_pending=self.active.map(|n|self.documents[n].id);ui.close();}
             ui.separator();ui.label("To associate .drawer files, choose Drawer.exe in Windows Settings → Apps → Default apps. Windows controls whether an association is allowed.");
             if crate::help::button(ui,"Open Windows default-app settings","files").clicked() {self.file_association_from(|| {

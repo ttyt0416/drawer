@@ -277,7 +277,13 @@ impl Path {
         })
     }
     pub fn stroke_hit(&self, p: Point) -> bool {
-        if !self.stroke || self.width <= 0. {
+        if !self.stroke
+            || self.width <= 0.
+            || self
+                .svg
+                .as_ref()
+                .is_some_and(|s| s.clip.as_ref().is_some_and(|c| !c.hit(p)))
+        {
             return false;
         }
         if self.pressure.is_default() && self.tip.is_round() {

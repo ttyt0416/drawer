@@ -6,7 +6,10 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 128] = [
+pub const EXTRA_COMMANDS: [&str; 131] = [
+    "svg-import",
+    "svg-export",
+    "svg-copy",
     "vector-tip-tools",
     "vector-path-overlay",
     "vector-refine-tools",
@@ -436,6 +439,9 @@ impl Settings {
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
             "vector-tip-tools" => "Change vector brush tips while preserving paths and pressure",
+            "svg-import" => "Import local SVG paths, paints and image snapshots",
+            "svg-export" => "Export SVG paths with local conversion notices and embedded images",
+            "svg-copy" => "Copy SVG text using the same conversion policy as SVG export",
             "vector-path-overlay" => "Show or hide vector path overlays without changing the page",
             "vector-push-tool" => "Locally push vector outlines with endpoint constraints",
             "vector-redraw-tool" => "Redraw a selected vector span while preserving the rest",

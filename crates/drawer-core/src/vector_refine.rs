@@ -268,6 +268,7 @@ pub fn prepare(
                 || a.color != b.color
                 || a.stroke != b.stroke
                 || a.tip != b.tip
+                || a.svg != b.svg
                 || a.pressure.device_enabled != b.pressure.device_enabled
             {
                 return Err(
@@ -409,7 +410,15 @@ pub fn prepare(
                 }
                 p.width = width.clamp(minimum, 512.);
             }
-            Operation::Opacity(alpha) => p.color[3] = alpha,
+            Operation::Opacity(alpha) => {
+                p.color[3] = alpha;
+                if !p.stroke
+                    && p.svg.is_some()
+                    && let Some(fill) = &mut p.fill
+                {
+                    fill[3] = alpha;
+                }
+            }
             Operation::Tip(tip) => p.tip = tip,
             Operation::Join(_) | Operation::Split => unreachable!(),
         }

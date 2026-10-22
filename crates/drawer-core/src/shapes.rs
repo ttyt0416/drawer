@@ -461,6 +461,7 @@ fn prepare_inner(
         return Err("Shape page coordinate limit".into());
     }
     let path = Path {
+        svg: None,
         tip: Default::default(),
         pressure: Default::default(),
         id: 1,

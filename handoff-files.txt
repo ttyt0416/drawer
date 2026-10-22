@@ -597,3 +597,10 @@ crates/drawer-core/src/vector_tip.rs
 crates/drawer-core/src/vector_tip_verify.rs
 crates/drawer-app/src/vector_paths.rs
 docs/process/vector-tips-and-paths.md
+
+crates/drawer-core/src/svg_style.rs
+crates/drawer-core/src/svg_import.rs
+crates/drawer-core/src/svg_export.rs
+crates/drawer-core/src/svg_verify.rs
+crates/drawer-app/src/svg.rs
+docs/process/svg-interop.md

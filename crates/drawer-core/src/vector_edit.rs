@@ -402,6 +402,13 @@ pub fn prepare(
         }
         if let Some(color) = patch.color {
             path.color = color;
+            if !path.stroke
+                && path.fill.is_some()
+                && let Some(svg) = &mut path.svg
+            {
+                path.fill = Some(color);
+                svg.gradient = None;
+            }
         }
     }
     let point_edit = patch.movement.is_some()

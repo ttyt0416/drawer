@@ -179,6 +179,9 @@ pub fn translate_layer(
                 .unwrap()
                 .paths
             {
+                if let Some(svg) = &mut path.svg {
+                    svg.transform(original_move.inverse());
+                }
                 for p in &mut path.points {
                     p[0] += d[0];
                     p[1] += d[1];

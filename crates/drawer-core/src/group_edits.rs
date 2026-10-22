@@ -174,6 +174,9 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
                         .unwrap()
                         .paths
                     {
+                        if let Some(svg) = &mut path.svg {
+                            svg.transform(original);
+                        }
                         for p in &mut path.points {
                             *p = original.map(*p);
                         }

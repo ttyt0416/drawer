@@ -354,6 +354,9 @@ impl Drawer {
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
                 "vector-tip-tools" => self.begin_vector_tips()?,
+                "svg-import" => self.begin_svg()?,
+                "svg-export" => self.begin_svg_export()?,
+                "svg-copy" => self.copy_svg(ctx)?,
                 "vector-push-tool" => {
                     self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Push))?
                 }
