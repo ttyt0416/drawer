@@ -613,3 +613,8 @@ crates/drawer-app/src/vector_scope.rs
 docs/process/vector-scopes-and-transfer.md
 crates/drawer-app/src/path_draft.rs
 docs/process/click-path-history.md
+
+crates/drawer-app/src/vector_cleanup.rs
+crates/drawer-core/src/vector_cleanup.rs
+crates/drawer-core/src/vector_cleanup_verify.rs
+docs/process/raster-trace-and-vector-cleanup.md

@@ -374,6 +374,8 @@ impl Drawer {
                 }
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
+                "raster-trace" => self.begin_vector_cleanup(true)?,
+                "vector-remove-short" => self.begin_vector_cleanup(false)?,
                 "vector-scope-tools" => self.begin_vector_scope()?,
                 "vector-copy-strokes" => self.copy_vector_scope(ctx, false, false)?,
                 "vector-cut-strokes" => self.copy_vector_scope(ctx, false, true)?,

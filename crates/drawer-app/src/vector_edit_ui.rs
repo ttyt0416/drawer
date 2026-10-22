@@ -1007,7 +1007,7 @@ impl Drawer {
                 }
                 if changed {e.prepared=None;e.images=None;}
                 refine_preview=ui.add_enabled(fresh && values.is_some(),egui::Button::new("Prepare refinement preview")).clicked();
-                ui.small("Join two open strokes with matching styles; use document-pixel distance/error. Refinements store outline points; Undo restores the previous curve definition. Apply using the shared preview above.");
+                ui.small("Join two open strokes with the same tip and device-pressure mode. Different colors/widths keep the original editable segments, selected together with a linear-width connector in the first stroke's color. Equal styles combine into one outline. Distances/errors use document pixels. Apply the shared preview above; Undo restores all sources.");
             });
             ui.collapsing("Vector path display",|ui|{
                 let settings=&mut self.workspaces.store.current.vector_overlay;

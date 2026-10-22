@@ -76,6 +76,10 @@ struct Draft {
     images: Option<[egui::TextureHandle; 2]>,
 }
 impl Drawer {
+    pub(super) fn vector_cleanup_scope(&mut self) -> Result<Vec<Picked>, String> {
+        self.vector_scope_observe()?;
+        Ok(self.vector_scope.session.as_ref().unwrap().scope.clone())
+    }
     fn vector_scope_observe(&mut self) -> Result<(), String> {
         let n = self.active.ok_or("Open a page first")?;
         let d = &self.documents[n];

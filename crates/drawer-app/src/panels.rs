@@ -157,6 +157,7 @@ impl Panels {
 impl Drawer {
     pub(super) fn tool_shortcuts_blocked(&self, ctx: &egui::Context) -> bool {
         self.path_transition.is_some()
+            || self.vector_cleanup.draft.is_some()
             || self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()
@@ -649,6 +650,8 @@ impl Drawer {
                                 ("Recolor vector strokes", "vector-color-tool"),
                                 ("Vector numeric editor…", "vector-edit-tools"),
                                 ("Refine vector strokes…", "vector-refine-tools"),
+                                ("Trace raster to vectors…", "raster-trace"),
+                                ("Remove short vector strokes/spans…", "vector-remove-short"),
                                 ("Change vector tip…", "vector-tip-tools"),
                                 (
                                     "Vector selection, pivot and transfer…",

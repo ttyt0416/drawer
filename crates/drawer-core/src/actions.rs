@@ -6,7 +6,9 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 143] = [
+pub const EXTRA_COMMANDS: [&str; 145] = [
+    "raster-trace",
+    "vector-remove-short",
     "vector-scope-tools",
     "vector-copy-strokes",
     "vector-cut-strokes",
@@ -450,6 +452,12 @@ impl Settings {
             "vector-line-tool" => "Draw an editable vector line with clicked control points",
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
+            "raster-trace" => {
+                "Trace raster pixels into a new local vector layer while preserving the source"
+            }
+            "vector-remove-short" => {
+                "Preview removal of short selected spans or strokes across eligible vector layers"
+            }
             "vector-tip-tools" => "Change vector brush tips while preserving paths and pressure",
             "vector-scope-tools" => {
                 "Transform selected vector points or strokes around a pivot and duplicate them"

@@ -264,16 +264,13 @@ pub fn prepare(
                 || b.closed
                 || a.fill.is_some()
                 || b.fill.is_some()
-                || a.width != b.width
-                || a.color != b.color
                 || a.stroke != b.stroke
                 || a.tip != b.tip
                 || a.svg != b.svg
                 || a.pressure.device_enabled != b.pressure.device_enabled
             {
                 return Err(
-                    "Join requires open strokes with matching width, RGBA, tip and device-pressure mode"
-                        .into(),
+                    "Join requires open strokes with matching tip and device-pressure mode".into(),
                 );
             }
             let mut best = (f64::INFINITY, false, false);
@@ -300,6 +297,32 @@ pub fn prepare(
             } else {
                 b.clone()
             };
+            if a.width != b.width || a.color != b.color {
+                // Keep each source segment, its editable curve and pressure exactly.
+                // An independent tapered connector avoids flattening either style.
+                let mut selected = vec![a.id, b.id];
+                if best.0 > 0. {
+                    let id = state.scene.lines.id()?;
+                    let mut bridge = a.clone();
+                    bridge.id = id;
+                    bridge.definition = None;
+                    bridge.svg = None;
+                    bridge.points = vec![*a.points.last().unwrap(), b.points[0]];
+                    let wa = a.width_at(1.);
+                    let wb = b.width_at(0.);
+                    bridge.width = wa.max(wb).clamp(1e-12, 512.);
+                    bridge.pressure = crate::vector_pressure::Profile {
+                        device_enabled: false,
+                        controls: vec![wa / bridge.width, wb / bridge.width],
+                        ..Default::default()
+                    };
+                    let paths = &mut state.scene.lines.layers[layer_index].paths;
+                    let index = paths.iter().position(|p| p.id == a.id).unwrap() + 1;
+                    paths.insert(index, bridge);
+                    selected.push(id);
+                }
+                return finish(d, state, layer, selected);
+            }
             let joined = join(&a, &b);
             let paths = &mut state.scene.lines.layers[layer_index].paths;
             paths.retain(|p| p.id != b.id);
