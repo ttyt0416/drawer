@@ -660,3 +660,9 @@ crates/drawer-core/src/detail_filter_verify.rs
 crates/drawer-app/src/detail_filter.rs
 crates/drawer-app/src/detail_filter_verify.rs
 docs/process/detail-filters.md
+
+crates/drawer-core/src/pixel_effects.rs
+crates/drawer-core/src/pixel_effects_verify.rs
+crates/drawer-app/src/pixel_effects.rs
+crates/drawer-app/src/pixel_effects_verify.rs
+docs/process/pixel-effects.md

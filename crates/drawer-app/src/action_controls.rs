@@ -395,6 +395,26 @@ impl Drawer {
                 "tone-curves" => self.begin_tone_mapping(false)?,
                 "gradient-map" => self.begin_tone_mapping(true)?,
                 "gaussian-blur" => self.begin_gaussian()?,
+                "mosaic" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::defaults()[0],
+                    ))?
+                }
+                "generate-noise" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::defaults()[1],
+                    ))?
+                }
+                "remove-specks" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::defaults()[2],
+                    ))?
+                }
+                "adjust-line-width" => {
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::defaults()[3],
+                    ))?
+                }
                 "sharpen" => {
                     self.begin_detail_filter(drawer_core::detail_filter::Operation::defaults()[0])?
                 }

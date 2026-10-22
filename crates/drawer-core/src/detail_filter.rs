@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Operation {
+    Pixels(crate::pixel_effects::Operation),
     Sharpen {
         strength: f64,
     },
@@ -23,6 +24,20 @@ pub enum Operation {
     },
 }
 impl Operation {
+    pub fn same_kind(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Pixels(a), Self::Pixels(b)) => {
+                std::mem::discriminant(&a) == std::mem::discriminant(&b)
+            }
+            (a, b) => std::mem::discriminant(&a) == std::mem::discriminant(&b),
+        }
+    }
+    pub fn all() -> Vec<Self> {
+        Self::defaults()
+            .into_iter()
+            .chain(crate::pixel_effects::Operation::defaults().map(Self::Pixels))
+            .collect()
+    }
     pub fn defaults() -> [Self; 3] {
         [
             Self::Sharpen { strength: 0.5 },
@@ -40,6 +55,7 @@ impl Operation {
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Pixels(op) => op.label(),
             Self::Sharpen { .. } => "Sharpen",
             Self::Unsharp { .. } => "Unsharp mask",
             Self::Denoise { .. } => "Reduce noise",
@@ -48,6 +64,7 @@ impl Operation {
     pub fn valid(self) -> bool {
         let range = |v: f64, hi: f64| v.is_finite() && (0. ..=hi).contains(&v);
         match self {
+            Self::Pixels(op) => op.valid(),
             Self::Sharpen { strength } => range(strength, 5.),
             Self::Unsharp {
                 radius,
@@ -65,6 +82,7 @@ impl Operation {
     }
     fn identity(self) -> bool {
         match self {
+            Self::Pixels(op) => op.identity(),
             Self::Sharpen { strength } => strength == 0.,
             Self::Unsharp { radius, amount, .. } => radius == 0 || amount == 0.,
             Self::Denoise {
@@ -241,6 +259,9 @@ pub fn prepare_with_budget(
     budget: usize,
     mut tick: impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<DocumentState, String> {
+    if let Operation::Pixels(op) = s.operation {
+        return crate::pixel_effects::prepare(d, layer, op, s.selection, budget, tick);
+    }
     tick(0, 1)?;
     crate::layer_properties::paintable(d, layer)?;
     if !s.valid() {
@@ -315,6 +336,7 @@ pub fn prepare_with_budget(
         }
         let rgb = before.rgb();
         let mapped = match s.operation {
+            Operation::Pixels(_) => unreachable!("Pixel operations use their own planner"),
             Operation::Sharpen { strength } => {
                 let mut lap = [0.; 3];
                 for offset in [[-1, 0], [1, 0], [0, -1], [0, 1]] {

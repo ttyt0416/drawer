@@ -6,7 +6,11 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 164] = [
+pub const EXTRA_COMMANDS: [&str; 168] = [
+    "mosaic",
+    "generate-noise",
+    "remove-specks",
+    "adjust-line-width",
     "sharpen",
     "unsharp-mask",
     "reduce-noise",

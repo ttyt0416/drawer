@@ -7,8 +7,13 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc,
 };
+#[path = "pixel_effects_verify.rs"]
+mod pixel_verify;
 #[path = "detail_filter_verify.rs"]
 mod verify;
+pub(super) fn pixel_smoke(root: &std::path::Path) -> Result<(), String> {
+    pixel_verify::smoke(root)
+}
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::smoke(root)
 }
@@ -33,12 +38,16 @@ struct Source {
     frame: u32,
     layer: usize,
 }
+struct PreviewResult {
+    state: DocumentState,
+    candidates: Option<egui::ColorImage>,
+}
 struct Job {
     source: Source,
     settings: Settings,
     cancel: Arc<AtomicBool>,
     progress: Arc<AtomicUsize>,
-    receiver: mpsc::Receiver<Result<DocumentState, String>>,
+    receiver: mpsc::Receiver<Result<PreviewResult, String>>,
 }
 impl Drop for Job {
     fn drop(&mut self) {
@@ -46,10 +55,12 @@ impl Drop for Job {
     }
 }
 pub(super) struct Draft {
+    pixel_controls: crate::pixel_effects::Controls,
     source: Source,
     settings: Settings,
     prepared: Option<(Settings, DocumentState)>,
     images: Option<[egui::TextureHandle; 2]>,
+    candidates: Option<egui::TextureHandle>,
 }
 fn source(app: &Drawer) -> Result<Source, String> {
     let d = &app.documents[app.active.ok_or("Open a page first")?];
@@ -96,6 +107,7 @@ impl Drawer {
         let d = &self.documents[self.active.unwrap()];
         drawer_core::layer_properties::paintable(d, source.layer)?;
         self.detail_filter.draft = Some(Box::new(Draft {
+            pixel_controls: Default::default(),
             source,
             settings: Settings {
                 operation,
@@ -103,6 +115,7 @@ impl Drawer {
             },
             prepared: None,
             images: None,
+            candidates: None,
         }));
         Ok(())
     }
@@ -110,6 +123,7 @@ impl Drawer {
         if let Some(e) = &mut self.detail_filter.draft {
             e.prepared = None;
             e.images = None;
+            e.candidates = None;
         }
         if self.detail_filter.job.is_some() {
             return Err("Wait for the previous filter to stop".into());
@@ -120,7 +134,7 @@ impl Drawer {
             .draft
             .as_ref()
             .ok_or("Filter window closed")?;
-        if e.source != current || !e.settings.valid() {
+        if e.source != current || !e.settings.valid() || !e.pixel_controls.valid {
             return Err("Source changed or invalid settings; reopen filter".into());
         }
         let d = &self.documents[self.active.unwrap()];
@@ -149,14 +163,34 @@ impl Drawer {
                     return Err("Filter cancelled".into());
                 }
                 let d = drawer_core::layer_merge::preview(&state, current.frame)?;
-                core::prepare_with_budget(&d, current.layer, settings, budget, |done, total| {
-                    if worker_cancel.load(Ordering::Relaxed) {
-                        return Err("Filter cancelled".into());
-                    }
-                    worker_progress
-                        .store(done.saturating_mul(100) / total.max(1), Ordering::Relaxed);
-                    Ok(())
-                })
+                let state = core::prepare_with_budget(
+                    &d,
+                    current.layer,
+                    settings,
+                    budget,
+                    |done, total| {
+                        if worker_cancel.load(Ordering::Relaxed) {
+                            return Err("Filter cancelled".into());
+                        }
+                        worker_progress
+                            .store(done.saturating_mul(100) / total.max(1), Ordering::Relaxed);
+                        Ok(())
+                    },
+                )?;
+                let candidates = if matches!(
+                    settings.operation,
+                    Operation::Pixels(drawer_core::pixel_effects::Operation::Dust { .. })
+                ) {
+                    Some(crate::pixel_effects::candidate_image(
+                        &d,
+                        &state,
+                        current.layer,
+                        &worker_cancel,
+                    )?)
+                } else {
+                    None
+                };
+                Ok(PreviewResult { state, candidates })
             };
             let _ = sender.send(work());
             context.request_repaint();
@@ -194,10 +228,15 @@ impl Drawer {
         if current != Some(job.source) || e.source != job.source || e.settings != job.settings {
             e.prepared = None;
             e.images = None;
+            e.candidates = None;
             self.status = Some("Source/settings changed; prepare a new filter".into());
             return;
         }
-        let result = result.and_then(|state| {
+        let result = result.and_then(|result| {
+            let state = result.state;
+            e.candidates = result.candidates.map(|image| {
+                ctx.load_texture("speck-candidates", image, egui::TextureOptions::NEAREST)
+            });
             let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
             if used.saturating_add(state.memory_bytes().saturating_mul(4)) > DEFAULT_DOCUMENT_BUDGET
             {
@@ -218,6 +257,7 @@ impl Drawer {
         if let Err(error) = result {
             e.prepared = None;
             e.images = None;
+            e.candidates = None;
             self.status = Some(error);
         }
     }
@@ -231,7 +271,10 @@ impl Drawer {
             .draft
             .as_mut()
             .ok_or("Filter window closed")?;
-        if current != e.source || e.prepared.as_ref().is_none_or(|(s, _)| *s != e.settings) {
+        if current != e.source
+            || !e.pixel_controls.valid
+            || e.prepared.as_ref().is_none_or(|(s, _)| *s != e.settings)
+        {
             return Err("Prepare a fresh filter preview first".into());
         }
         let (_, state) = e.prepared.take().unwrap();
@@ -249,24 +292,25 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel, mut changed) = (false, false, false, false);
         let working = self.detail_filter.job.is_some();
-        egui::Window::new("Sharpen / unsharp mask / reduce noise").default_width(430.).default_pos(egui::pos2(35.,55.)).open(&mut open).show(ctx,|ui|{
+        egui::Window::new("Detail and pixel effects").default_width(430.).default_pos(egui::pos2(35.,55.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Source changed; close and reopen.");}
             let old=e.settings;
-            egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::defaults(){if ui.selectable_label(std::mem::discriminant(&op)==std::mem::discriminant(&e.settings.operation),op.label()).clicked(){e.settings.operation=op;}}});
+            egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::all(){if ui.selectable_label(op.same_kind(e.settings.operation),op.label()).clicked(){e.settings.operation=op;e.pixel_controls=Default::default();}}});
             match &mut e.settings.operation{
+                Operation::Pixels(op)=>crate::pixel_effects::controls(ui,op,&mut e.pixel_controls),
                 Operation::Sharpen{strength}=>{ui.add(egui::Slider::new(strength,0. ..=5.).text("Strength"));},
                 Operation::Unsharp{radius,amount,threshold}=>{ui.add(egui::Slider::new(radius,0..=32).text("Radius (pixels)"));ui.add(egui::Slider::new(amount,0. ..=5.).text("Amount"));ui.add(egui::Slider::new(threshold,0. ..=1.).text("Threshold"));},
                 Operation::Denoise{luminance,chroma,detail}=>{ui.add(egui::Slider::new(luminance,0. ..=1.).text("Luminance noise reduction"));ui.add(egui::Slider::new(chroma,0. ..=1.).text("Color noise reduction"));ui.add(egui::Slider::new(detail,0. ..=1.).text("Line continuity tolerance"));}
             }
             ui.checkbox(&mut e.settings.selection,"Only within the area selection");
-            if ui.button("Restore last applied settings").clicked()&&let Some(s)=self.active.and_then(|n|self.documents[n].scene.last_detail_filter){e.settings=s;}
-            changed=e.settings!=old;if changed{e.prepared=None;e.images=None;}
-            let r=ui.add_enabled(fresh&&!working,egui::Button::new("Prepare filter preview"));self.detail_filter.preview=Some(r.rect);preview=r.clicked();
+            if ui.button("Restore last applied settings").clicked()&&let Some(s)=self.active.and_then(|n|self.documents[n].scene.last_detail_filter){e.settings=s;e.pixel_controls=Default::default();}
+            changed=e.settings!=old;if changed{e.prepared=None;e.images=None;e.candidates=None;}
+            let r=ui.add_enabled(fresh&&!working&&e.pixel_controls.valid,egui::Button::new("Prepare filter preview"));self.detail_filter.preview=Some(r.rect);preview=r.clicked();
             let progress=self.detail_filter.job.as_ref().map_or(0,|j|j.progress.load(Ordering::Relaxed));ui.label(if working{format!("Calculating {progress}% — cancel remains available")}else{"Preview leaves the original unchanged".into()});
             let r=ui.button("Cancel preview and close");self.detail_filter.cancel=Some(r.rect);cancel=r.clicked();
-            if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(110.,110.)));});}});}
-            let r=ui.add_enabled(fresh&&!working&&e.prepared.is_some(),egui::Button::new("Apply filter as one Undo"));self.detail_filter.apply=Some(r.rect);apply=r.clicked();
-            ui.small("Keeps original alpha, layer bounds,8/16-bit precision and profile. Noise reduction protects opposite matching neighbors to retain continuous lines. Apply or cancel before saving. Escape/close discards the preview.");
+            if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(110.,110.)));});}if let Some(image)=&e.candidates{ui.vertical(|ui|{ui.label("Red: changes");ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(110.,110.)));});}});}
+            let r=ui.add_enabled(fresh&&!working&&e.pixel_controls.valid&&e.prepared.is_some(),egui::Button::new("Apply filter as one Undo"));self.detail_filter.apply=Some(r.rect);apply=r.clicked();
+            ui.small("Keeps8/16-bit precision and the document profile. Apply or cancel before saving. Escape/close discards the preview.");
         });
         if changed || !fresh || !open || cancel {
             self.cancel_detail_job();
