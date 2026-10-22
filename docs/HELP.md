@@ -1020,3 +1020,12 @@ Layers… → RGB and channel tone curves…에서 RGB master 또는 R/G/B를 �
 Luminance gradient map…은 sRGB 명도를 RGB 색 지점으로 바꿉니다. 색/위치를 정하고 혼색 공간을 고릅니다. Add color stop/Remove/Sort stops를 사용합니다. 같은 위치의 지점은 마지막 색을 택하는 선명한 경계입니다. 픽셀 알파와 투명 픽셀의 숨은 RGB는 바뀌지 않습니다.
 
 Only within the area selection을 켜면 선택 강도로 섞습니다. Prepare tone mapping preview로 전후를 확인하고 Apply tone mapping as one Undo로 현재 래스터 픽셀에 확정합니다.8/16비트 정밀도·원래 문서 프로필과 알파·선택 밖 픽셀·기하를 유지합니다. 항등곡선/빈 선택은 이력을 만들지 않습니다. Escape/닫기는 버리고 페이지·프레임·수정본·대상이 바뀌면 다시 엽니다. 실패한 준비 뒤 이전 계획을 적용할 수 없습니다. 결과 픽셀은 자체 문서에 저장되며 미확정 레시피는 임시 상태입니다.
+
+
+## gaussian-blur | 가우시안 블러 | 필터 흐림 가우시안 반경 투명 경계 알파 premultiplied 선택 정밀도
+
+Layers… → Gaussian blur…에서 문서 픽셀 반경0–64를 고릅니다. Prepare Gaussian blur preview로 전후를 보고 Apply Gaussian blur as one Undo로 확정합니다. 매번 원본에서 계산하며0반경은 픽셀·정밀도·배치·dirty/Undo/Redo를 바꾸지 않습니다. Escape/닫기는 버리고 페이지·프레임·수정본·대상이 바뀌면 다시 엽니다. 실패한 준비 뒤 이전 계획을 적용할 수 없습니다.
+
+투명 RGB가 검은/색 테두리를 만들지 않도록 RGB×alpha와 alpha를 따로 흐린 뒤 색을 복원합니다. 실제8/16비트 알파와 문서 프로필·저장 정밀도를 사용합니다. 레이어는 반경만큼 가장자리 바깥 결과를 보존하며 캔버스 밖 픽셀도 남깁니다. 레이어의 투명도 잠금이 켜져 있으면 기존 알파와 경계를 유지하고 색만 흐립니다.
+
+Only within the area selection은 원본층 전체를 참조해 계산한 결과를 선택 강도로 섞고 선택 밖 픽셀을 보존합니다. 레이어 마스크·질감·선택 기하는 고정됩니다. 큰 이미지와 큰 반경의 조합은 출력4M픽셀·축 길이32768·처리량/메모리 한도에 걸릴 수 있으므로 반경이나 원본 크기를 줄입니다. 결과 픽셀/배치는 자체 문서에 저장되고 Undo로 원본 정밀도와 숨은 RGB까지 복구합니다.

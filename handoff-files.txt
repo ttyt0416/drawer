@@ -628,3 +628,8 @@ crates/drawer-app/src/tone_mapping.rs
 crates/drawer-core/src/tone_mapping.rs
 crates/drawer-core/src/tone_mapping_verify.rs
 docs/process/tone-curves-and-gradient-maps.md
+
+crates/drawer-app/src/gaussian.rs
+crates/drawer-core/src/gaussian.rs
+crates/drawer-core/src/gaussian_verify.rs
+docs/process/gaussian-blur.md
