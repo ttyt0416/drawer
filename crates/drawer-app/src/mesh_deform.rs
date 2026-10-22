@@ -13,18 +13,19 @@ pub(super) struct Panel {
 }
 pub(super) struct Draft {
     pub(super) id: u64,
-    revision: u64,
-    frame: u32,
-    layers: Vec<usize>,
-    selection: bool,
-    mesh: Mesh,
-    puppet: bool,
-    pins: Vec<Pin>,
-    selected: usize,
-    dragging: bool,
-    base: egui::TextureHandle,
-    images: Option<[egui::TextureHandle; 2]>,
-    prepared: Option<drawer_core::sizing::DocumentState>,
+    pub(super) revision: u64,
+    pub(super) frame: u32,
+    pub(super) layers: Vec<usize>,
+    pub(super) selection: bool,
+    pub(super) mesh: Mesh,
+    pub(super) puppet: bool,
+    pub(super) pins: Vec<Pin>,
+    pub(super) selected: usize,
+    pub(super) dragging: bool,
+    pub(super) base: egui::TextureHandle,
+    pub(super) images: Option<[egui::TextureHandle; 2]>,
+    pub(super) prepared: Option<drawer_core::sizing::DocumentState>,
+    pub(super) quality: crate::transform_review::Quality,
 }
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     drawer_core::mesh_deform_verify::verify(root)?;
@@ -45,6 +46,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let frame = |app: &mut Drawer, time: &mut f64, events| {
         *time += 0.1;
         crate::input_replay::frame(&ctx, app, *time, events);
+        app.wait_transform_preview(&ctx, time)
+            .expect("Transform preview timeout");
     };
     let pointer = |pos: egui::Pos2, pressed| {
         vec![
@@ -95,6 +98,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     if app.save_to(0, &pending).is_ok() || pending.exists() {
         return Err("Unconfirmed mesh silently saved".into());
     }
+    app.cancel_transform_save();
     for _ in 0..3 {
         frame(&mut app, &mut time, vec![]);
     }
@@ -125,6 +129,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     app.execute_command(&ctx, "mesh-puppet");
     app.mesh_deform.draft.as_mut().unwrap().puppet = true;
     app.preview_mesh_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.apply_mesh_deform()?;
     if app.documents[0].snapshot() != original
         || app.documents[0].history_counts() != counts
@@ -169,6 +174,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         e.pins[0].target = [0.5; 2];
     }
     app.preview_mesh_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     if app.documents[0].snapshot() != original {
         return Err("Unconfirmed puppet rotation changed source".into());
     }
@@ -199,6 +205,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     );
     app.execute_command(&ctx, "mesh-puppet");
     app.preview_mesh_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.mesh_deform.draft.as_mut().unwrap().mesh.points[4] = [2., 2.];
     if app.preview_mesh_deform(&ctx).is_ok()
         || app.mesh_deform.draft.as_ref().unwrap().prepared.is_some()
@@ -212,6 +219,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     app.mesh_deform.draft = None;
     app.execute_command(&ctx, "mesh-puppet");
     app.preview_mesh_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.documents[0].current_frame += 1;
     if app.apply_mesh_deform().is_ok() {
         return Err("Stale mesh frame applied".into());
@@ -227,7 +235,7 @@ impl Draft {
         self.prepared = None;
         self.images = None;
     }
-    fn geometry(&self, area: Rect) -> Result<Mesh, String> {
+    pub(super) fn geometry(&self, area: Rect) -> Result<Mesh, String> {
         if self.puppet {
             Mesh::puppet(self.mesh.columns, self.mesh.rows, &self.pins, area)
         } else {
@@ -252,6 +260,7 @@ impl Draft {
 impl Drawer {
     pub(super) fn begin_mesh_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
         self.finish_stroke();
+        self.transform_begin_guard(2)?;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let layer = match self.panels.targets.get(&d.id) {
             None => 0,
@@ -264,6 +273,7 @@ impl Drawer {
             revision: d.revision,
             frame: d.current_frame,
             layers,
+            quality: Default::default(),
             selection: false,
             mesh: Mesh::new(3, 3)?,
             puppet: false,
@@ -276,44 +286,24 @@ impl Drawer {
         }));
         Ok(())
     }
-    fn preview_mesh_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn preview_mesh_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = &mut self.mesh_deform.draft {
+            e.prepared = None;
+            e.images = None;
+        }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let e = self
             .mesh_deform
             .draft
-            .as_mut()
-            .ok_or("Mesh window closed")?;
-        e.invalidate();
-        if !e.fresh(d) {
-            return Err("Page/frame/revision changed; reopen mesh deformation".into());
+            .as_ref()
+            .ok_or("Transform window closed")?;
+        if !((d.id, d.revision, d.current_frame) == (e.id, e.revision, e.frame)) {
+            return Err("Page/frame/target changed; reopen the transform".into());
         }
-        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        if used
-            .saturating_add(d.memory_bytes().saturating_mul(5))
-            .saturating_add(64 * 1024 * 1024)
-            > DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Mesh preview workspace limit".into());
-        }
-        let area = deform::area(d, &e.layers, e.selection)?.unwrap_or(Rect {
-            min: [0.; 2],
-            max: [d.width as f64, d.height as f64],
-        });
-        let mesh = e.geometry(area)?;
-        let state = deform::prepare(d, &e.layers, e.selection, deform::Change::Mesh(&mesh))?;
-        if used.saturating_add(state.memory_bytes().saturating_mul(4)) > DEFAULT_DOCUMENT_BUDGET {
-            return Err("Mesh output workspace limit".into());
-        }
-        let after = drawer_core::layer_merge::preview(&state, d.current_frame)?;
-        e.images = Some([
-            e.base.clone(),
-            crate::layer_merge::image(ctx, &after, "mesh-result"),
-        ]);
-        e.prepared = Some(state);
-        self.status = None;
-        Ok(())
+        self.start_transform_preview(ctx, 2)
     }
-    fn apply_mesh_deform(&mut self) -> Result<(), String> {
+    pub(super) fn apply_mesh_deform(&mut self) -> Result<(), String> {
+        self.transform_apply_guard(2)?;
         let n = self.active.ok_or("Open a page first")?;
         let e = self
             .mesh_deform
@@ -333,6 +323,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn mesh_deform_window(&mut self, ctx: &egui::Context) {
+        let working = self.transform_working();
         let Some(mut e) = self.mesh_deform.draft.take() else {
             return;
         };
@@ -342,11 +333,14 @@ impl Drawer {
         let fresh = e.fresh(d);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply) = (false, false);
+        let mut cancel = false;
         let mut error = None;
         egui::Window::new("Mesh and puppet deformation").default_width(560.).default_pos(egui::pos2(25.,40.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed; close and reopen.");}
             ui.small("Apply or cancel this unconfirmed deformation before saving. Escape/close discards the cage and all pins.");
-            let mut changed=false;ui.horizontal(|ui|{changed|=ui.selectable_value(&mut e.puppet,false,"Mesh grid").changed();changed|=ui.selectable_value(&mut e.puppet,true,"Puppet pins").changed();});
+            let mut changed=false;
+            changed|=crate::transform_review::quality(ui,&mut e.quality);
+            if working {ui.label("Calculating transform — close or Escape to cancel");}ui.horizontal(|ui|{changed|=ui.selectable_value(&mut e.puppet,false,"Mesh grid").changed();changed|=ui.selectable_value(&mut e.puppet,true,"Puppet pins").changed();});
             ui.collapsing("Raster layers",|ui|{egui::ScrollArea::vertical().max_height(65.).show(ui,|ui|{for(n,l)in d.layers.iter().enumerate(){let mut on=e.layers.contains(&n);if ui.checkbox(&mut on,&l.name).changed(){if on{e.layers.push(n);}else{e.layers.retain(|k|*k!=n);}changed=true;}}});});
             changed|=ui.checkbox(&mut e.selection,"Only selected pixels").changed();
             ui.horizontal(|ui|{let mut c=e.mesh.columns;let mut r=e.mesh.rows;let resized=ui.add(egui::DragValue::new(&mut c).range(2..=5).prefix("Columns ")).changed()|ui.add(egui::DragValue::new(&mut r).range(2..=5).prefix("Rows ")).changed();if resized{e.mesh=Mesh::new(c,r).unwrap();e.pins.clear();e.selected=0;changed=true;}
@@ -391,10 +385,10 @@ let nearest=mesh.points.iter().enumerate().min_by(|(_,a),(_,b)|to_screen(**a).di
                 ui.vertical(|ui|{ui.label("Drag a grid point or pin");ui.small("White: grid / gold: pin. Coordinates are normalized editing bounds. A pin rotation uses document pixels, preserving aspect ratio.");if let Some(images)=&e.images{ui.label("Original");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(100.,75.)));}});
             });
             if let Err(err)=geometry{ui.colored_label(egui::Color32::YELLOW,err);}
-            let r=ui.add_enabled(fresh,egui::Button::new("Prepare mesh / puppet preview"));self.mesh_deform.preview=Some(r.rect);preview|=r.clicked();
+            let r=ui.add_enabled(fresh,egui::Button::new("Prepare mesh / puppet preview"));self.mesh_deform.preview=Some(r.rect);preview|=r.clicked();cancel=ui.button("Cancel transform").clicked();
             let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply mesh / puppet as one Undo"));self.mesh_deform.apply=Some(r.rect);apply=r.clicked();
         });
-        if open {
+        if open && !cancel {
             self.mesh_deform.draft = Some(e);
         }
         if preview && let Err(err) = self.preview_mesh_deform(ctx) {

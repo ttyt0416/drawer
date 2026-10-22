@@ -237,7 +237,9 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
-        self.deformation_save_guard(index)?;
+        if self.defer_transform_save(index, path) {
+            return Err("Unconfirmed deformation/transform: choose Apply, Discard, or Keep editing in the save window".into());
+        }
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
@@ -290,7 +292,9 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn save_as(&mut self, index: usize) -> Result<bool, String> {
-        self.deformation_save_guard(index)?;
+        if self.defer_transform_save_dialog(index) {
+            return Ok(false);
+        }
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
@@ -318,7 +322,6 @@ impl Drawer {
         })
     }
     pub(super) fn save_document(&mut self, index: usize) -> Result<bool, String> {
-        self.deformation_save_guard(index)?;
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;

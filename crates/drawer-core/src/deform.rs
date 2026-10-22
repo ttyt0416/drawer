@@ -40,7 +40,7 @@ impl Mode {
         }
     }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Dab {
     pub mode: Mode,
     pub center: Point,
@@ -258,6 +258,7 @@ impl Pass<'_> {
         quad: Option<Mapping<'_>>,
         dab: Option<Dab>,
         only_refer: bool,
+        tick: &mut impl FnMut() -> Result<(), String>,
     ) -> Result<RasterLayer, String> {
         let Self {
             d,
@@ -273,6 +274,9 @@ impl Pass<'_> {
         out.placement = Some(extent);
         for y in 0..extent.height {
             for x in 0..extent.width {
+                if x.is_multiple_of(128) {
+                    tick()?;
+                }
                 let pos = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
                 let point = pos.map(|v| v as f64 + 0.5);
                 let coverage = if selection {
@@ -353,6 +357,16 @@ pub fn prepare(
     selection: bool,
     change: Change<'_>,
 ) -> Result<DocumentState, String> {
+    prepare_with_progress(d, layers, selection, change, &mut || Ok(()))
+}
+pub fn prepare_with_progress(
+    d: &Document,
+    layers: &[usize],
+    selection: bool,
+    change: Change<'_>,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<DocumentState, String> {
+    tick()?;
     let layers = targets(d, layers)?;
     let (warp, dabs, only_refer) = match change {
         Change::Quad(w) => {
@@ -451,7 +465,7 @@ pub fn prepare(
                 extent,
                 selection,
             }
-            .render(Some(w), None, false)?;
+            .render(Some(w), None, false, tick)?;
         } else {
             for dab in dabs {
                 if dab.strength > 0. {
@@ -462,18 +476,24 @@ pub fn prepare(
                         extent,
                         selection,
                     }
-                    .render(None, Some(*dab), only_refer)?;
+                    .render(None, Some(*dab), only_refer, tick)?;
                 }
             }
         }
     }
     if let (Some(w), Some(grid)) = (warp, grid) {
-        let values = grid.sample(d, false, |p| {
-            w.inverse(area, p)
-                .map_or(0, |p| d.scene.selection_coverage(p))
-        });
+        let values = grid.sample_with_progress(
+            d,
+            false,
+            |p| {
+                w.inverse(area, p)
+                    .map_or(0, |p| d.scene.selection_coverage(p))
+            },
+            tick,
+        )?;
         state.scene = grid.scene(d, &values)?;
     }
+    tick()?;
     crate::layer_groups::finish(d, &state)?;
     Ok(state)
 }

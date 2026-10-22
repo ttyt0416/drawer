@@ -124,6 +124,7 @@ mod tool_modes;
 mod tool_properties;
 mod tool_slots;
 mod transfer_down;
+mod transform_review;
 mod transparency;
 mod ui_behavior;
 mod ui_scale;
@@ -218,6 +219,7 @@ struct Drawer {
     detail_filter: detail_filter::Panel,
     batch_filters: Box<batch_filters::Panel>,
     local_color: Box<local_color::Panel>,
+    transform_review: Box<transform_review::Panel>,
     color_corrections: color_corrections::Panel,
     deform: deform::Panel,
     mesh_deform: mesh_deform::Panel,
@@ -387,6 +389,7 @@ impl Drawer {
             detail_filter: Default::default(),
             batch_filters: Default::default(),
             local_color: Default::default(),
+            transform_review: Default::default(),
             color_corrections: Default::default(),
             deform: Default::default(),
             mesh_deform: Default::default(),
@@ -841,6 +844,7 @@ impl Drawer {
         self.vector_eraser_window(ui.ctx());
         self.svg_window(ui.ctx());
         self.vector_cleanup_window(ui.ctx());
+        self.poll_transform_preview(ui.ctx());
         self.affine_transform_window(ui.ctx());
         self.tone_mapping_window(ui.ctx());
         self.gaussian_window(ui.ctx());
@@ -861,6 +865,7 @@ impl Drawer {
         self.appearance_window(ui.ctx());
         self.material_layer_window(ui.ctx());
         self.material_transform_window(ui.ctx());
+        self.transform_save_window(ui.ctx());
         self.file_objects_window(ui.ctx());
         self.raster_conversion_window(ui.ctx());
         self.layer_comps_window(ui.ctx());
@@ -1781,6 +1786,10 @@ impl eframe::App for Drawer {
                     eprintln!("Premultiplied Gaussian blur: {e}");
                     fail_smoke();
                 }
+                if let Err(e) = transform_review::smoke(&root) {
+                    eprintln!("Transform preview/save decisions: {e}");
+                    fail_smoke();
+                }
                 if let Err(e) = local_color::smoke(&root) {
                     eprintln!("Local color correction: {e}");
                     fail_smoke();
@@ -2048,7 +2057,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\ntransform_review=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

@@ -92,6 +92,9 @@ impl Drawer {
     }
     pub(super) fn begin_batch_filters(&mut self) -> Result<(), String> {
         self.finish_stroke();
+        if self.transform_unconfirmed() {
+            return Err("Apply or cancel the transform first".into());
+        }
         if self.local_color.draft.is_some()
             || self.local_color.working()
             || self.surface_effects.draft.is_some()

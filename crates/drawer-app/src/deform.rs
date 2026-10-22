@@ -1,9 +1,5 @@
 use super::*;
-use drawer_core::{
-    deform as core,
-    material_mapping::{UNIT, Warp},
-    scene::Point,
-};
+use drawer_core::{deform as core, material_mapping::UNIT, scene::Point};
 #[derive(Default)]
 pub(super) struct Panel {
     pub draft: Option<Box<Draft>>,
@@ -12,24 +8,26 @@ pub(super) struct Panel {
     apply: Option<egui::Rect>,
 }
 pub(super) struct Draft {
-    id: u64,
-    revision: u64,
-    frame: u32,
-    layers: Vec<usize>,
-    selection: bool,
-    kind: u8,
-    quad: [Point; 4],
-    mode: core::Mode,
-    radius: f64,
-    strength: f64,
-    only_refer: bool,
-    dabs: Vec<core::Dab>,
-    strokes: Vec<usize>,
-    last: Option<Point>,
-    corner: Option<usize>,
-    base: egui::TextureHandle,
-    prepared: Option<drawer_core::sizing::DocumentState>,
-    images: Option<[egui::TextureHandle; 2]>,
+    pub(super) id: u64,
+    pub(super) revision: u64,
+    pub(super) frame: u32,
+    pub(super) layers: Vec<usize>,
+    pub(super) selection: bool,
+    pub(super) kind: u8,
+    pub(super) quad: [Point; 4],
+    pub(super) mode: core::Mode,
+    pub(super) radius: f64,
+    pub(super) strength: f64,
+    pub(super) only_refer: bool,
+    pub(super) dabs: Vec<core::Dab>,
+    pub(super) strokes: Vec<usize>,
+    pub(super) last: Option<Point>,
+    pub(super) corner: Option<usize>,
+    pub(super) base: egui::TextureHandle,
+    pub(super) prepared: Option<drawer_core::sizing::DocumentState>,
+    pub(super) images: Option<[egui::TextureHandle; 2]>,
+    pub(super) quality: crate::transform_review::Quality,
+    pub(super) depth: f64,
 }
 impl Draft {
     fn fresh(&self, d: &Document) -> bool {
@@ -55,25 +53,9 @@ impl Draft {
     }
 }
 impl Drawer {
-    pub(super) fn deformation_save_guard(&self, index: usize) -> Result<(), String> {
-        if self
-            .deform
-            .draft
-            .as_ref()
-            .is_some_and(|e| e.id == self.documents[index].id)
-            || self
-                .mesh_deform
-                .draft
-                .as_ref()
-                .is_some_and(|e| e.id == self.documents[index].id)
-        {
-            Err("Unconfirmed deformation: apply it, or cancel the deformation window, before saving.".into())
-        } else {
-            Ok(())
-        }
-    }
     pub(super) fn begin_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
         self.finish_stroke();
+        self.transform_begin_guard(1)?;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let layer = match self.panels.targets.get(&d.id) {
             None => 0,
@@ -91,6 +73,8 @@ impl Drawer {
             frame: d.current_frame,
             layers,
             selection: false,
+            quality: Default::default(),
+            depth: 0.,
             kind: 0,
             quad: UNIT,
             mode: core::Mode::Push,
@@ -107,52 +91,24 @@ impl Drawer {
         }));
         Ok(())
     }
-    fn preview_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn preview_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = &mut self.deform.draft {
+            e.prepared = None;
+            e.images = None;
+        }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let e = self
             .deform
             .draft
-            .as_mut()
-            .ok_or("Deformation window closed")?;
-        e.invalidate();
-        if !e.fresh(d) {
-            return Err("Page/frame/revision changed; reopen deformation".into());
+            .as_ref()
+            .ok_or("Transform window closed")?;
+        if !((d.id, d.revision, d.current_frame) == (e.id, e.revision, e.frame)) {
+            return Err("Page/frame/target changed; reopen the transform".into());
         }
-        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        if used
-            .saturating_add(d.memory_bytes().saturating_mul(5))
-            .saturating_add(64 * 1024 * 1024)
-            > DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Deformation preview workspace limit".into());
-        }
-        let warp = if e.kind == 0 {
-            Warp::Distort(e.quad)
-        } else {
-            Warp::Perspective(e.quad)
-        };
-        let change = if e.kind == 2 {
-            core::Change::Liquify {
-                dabs: &e.dabs,
-                only_refer: e.only_refer,
-            }
-        } else {
-            core::Change::Quad(&warp)
-        };
-        let state = core::prepare(d, &e.layers, e.selection, change)?;
-        if used.saturating_add(state.memory_bytes().saturating_mul(4)) > DEFAULT_DOCUMENT_BUDGET {
-            return Err("Deformation result workspace limit".into());
-        }
-        let after = drawer_core::layer_merge::preview(&state, d.current_frame)?;
-        e.images = Some([
-            crate::layer_merge::image(ctx, d, "deform-before"),
-            crate::layer_merge::image(ctx, &after, "deform-after"),
-        ]);
-        e.prepared = Some(state);
-        self.status = None;
-        Ok(())
+        self.start_transform_preview(ctx, 1)
     }
-    fn apply_deform(&mut self) -> Result<(), String> {
+    pub(super) fn apply_deform(&mut self) -> Result<(), String> {
+        self.transform_apply_guard(1)?;
         let n = self.active.ok_or("Open a page first")?;
         let e = self
             .deform
@@ -172,6 +128,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn deform_window(&mut self, ctx: &egui::Context) {
+        let working = self.transform_working();
         let Some(mut e) = self.deform.draft.take() else {
             return;
         };
@@ -181,11 +138,14 @@ impl Drawer {
         let fresh = e.fresh(d);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply) = (false, false);
+        let mut cancel = false;
         let mut error = None;
         egui::Window::new("Free / perspective / liquify").default_width(570.).default_pos(egui::pos2(20.,35.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed; close and reopen.");}
             ui.small("Unconfirmed deformation: apply or cancel before saving. Escape/close discards every draft operation.");
             let mut changed=false;
+            changed|=crate::transform_review::quality(ui,&mut e.quality);
+            if working {ui.label("Calculating transform — close or Escape to cancel");}
             ui.horizontal(|ui|{for(i,label)in["Four-corner free","Perspective","Liquify"].into_iter().enumerate(){changed|=ui.selectable_value(&mut e.kind,i as u8,label).changed();}});
             ui.collapsing("Raster layers (linked raster members are included)",|ui|{egui::ScrollArea::vertical().max_height(70.).show(ui,|ui|{for(n,l)in d.layers.iter().enumerate(){let mut on=e.layers.contains(&n);if ui.checkbox(&mut on,&l.name).changed(){if on{e.layers.push(n);}else{e.layers.retain(|v|*v!=n);}changed=true;}}});});
             changed|=ui.checkbox(&mut e.selection,"Only selected pixels").changed();
@@ -198,6 +158,7 @@ if ui.button("Clear strokes").clicked(){e.dabs.clear();e.strokes.clear();changed
                 ui.horizontal(|ui|{for(n,p)in e.quad.iter_mut().enumerate(){ui.vertical(|ui|{ui.label(format!("Corner {}",n+1));for v in p{changed|=ui.add(egui::DragValue::new(v).speed(0.01).range(-64. ..=64.)).changed();}});}if ui.button("Reset corners").clicked(){e.quad=UNIT;changed=true;}});
                 ui.small("Corners use normalized editing bounds (0–1). Drag a white corner below; reversed/folded quads are rejected.");
             }
+            if e.kind==1 {changed|=ui.add(egui::Slider::new(&mut e.depth,-0.9..=0.9).text("Perspective depth")).changed();ui.small("Depth projects the quadrilateral around its center. It is separate from scale/aspect and preview quality.");}
             if changed{e.invalidate();}
             let area=core::area(d,&e.layers,e.selection);
             ui.horizontal(|ui|{
@@ -213,10 +174,10 @@ if ui.button("Clear strokes").clicked(){e.dabs.clear();e.strokes.clear();changed
                 ui.vertical(|ui|{ui.label("Mouse / pen editing pad");ui.small("The pad maps the page to this rectangle. Drag to deform; a preview is prepared on release.");if let Some(images)=&e.images{ui.label("Original");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(100.,76.)));}});
             });
             if let Err(err)=area{ui.colored_label(egui::Color32::YELLOW,err);}
-            let r=ui.add_enabled(fresh,egui::Button::new("Prepare deformation preview"));self.deform.preview=Some(r.rect);preview|=r.clicked();
+            let r=ui.add_enabled(fresh,egui::Button::new("Prepare deformation preview"));self.deform.preview=Some(r.rect);preview|=r.clicked();cancel=ui.button("Cancel transform").clicked();
             let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply deformation as one Undo"));self.deform.apply=Some(r.rect);apply=r.clicked();
         });
-        if open {
+        if open && !cancel {
             self.deform.draft = Some(e);
         }
         if preview && let Err(err) = self.preview_deform(ctx) {
@@ -249,6 +210,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let frame = |app: &mut Drawer, time: &mut f64, events| {
         *time += 0.1;
         crate::input_replay::frame(&ctx, app, *time, events);
+        app.wait_transform_preview(&ctx, time)
+            .expect("Transform preview timeout");
     };
     let pointer = |pos: egui::Pos2, pressed| {
         vec![
@@ -305,6 +268,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     {
         return Err("Save did not explain pending deformation".into());
     }
+    app.cancel_transform_save();
     for _ in 0..3 {
         frame(&mut app, &mut time, vec![]);
     }
@@ -405,6 +369,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         return Err(format!("Quad corner mouse drag failed: {:?}", app.status));
     }
     app.preview_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.documents[0].current_frame += 1;
     if app.apply_deform().is_ok() {
         return Err("Stale deformation frame applied".into());
@@ -436,6 +401,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let counts = app.documents[0].history_counts();
     let dirty = app.documents[0].dirty;
     app.preview_deform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.apply_deform()?;
     if app.documents[0].snapshot() != original
         || app.documents[0].history_counts() != counts

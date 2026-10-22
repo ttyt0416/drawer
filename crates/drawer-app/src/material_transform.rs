@@ -6,24 +6,27 @@ use drawer_core::{
 };
 #[derive(Default)]
 pub(super) struct Panel {
-    draft: Option<Box<Draft>>,
+    pub(super) draft: Option<Box<Draft>>,
     preview: Option<egui::Rect>,
     acknowledge: Option<egui::Rect>,
     apply: Option<egui::Rect>,
 }
-struct Draft {
-    id: u64,
-    revision: u64,
-    frame: u32,
-    key: Key,
-    settings: Settings,
-    prepared: Option<core::Prepared>,
-    images: Option<[egui::TextureHandle; 2]>,
-    acknowledged: bool,
+pub(super) struct Draft {
+    pub(super) id: u64,
+    pub(super) revision: u64,
+    pub(super) frame: u32,
+    pub(super) key: Key,
+    pub(super) settings: Settings,
+    pub(super) prepared: Option<core::Prepared>,
+    pub(super) images: Option<[egui::TextureHandle; 2]>,
+    pub(super) acknowledged: bool,
+    pub(super) quality: crate::transform_review::Quality,
+    pub(super) aspect: bool,
 }
 impl Drawer {
     pub(super) fn begin_material_transform(&mut self) -> Result<(), String> {
         self.finish_stroke();
+        self.transform_begin_guard(3)?;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let key = drawer_core::layer_catalog::from_thumbnail(
             d,
@@ -41,6 +44,8 @@ impl Drawer {
             id: d.id,
             revision: d.revision,
             frame: d.current_frame,
+            quality: Default::default(),
+            aspect: true,
             key,
             settings: core::settings(d, key)?,
             prepared: None,
@@ -49,42 +54,24 @@ impl Drawer {
         }));
         Ok(())
     }
-    fn preview_material_transform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn preview_material_transform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = &mut self.material_transform.draft {
+            e.prepared = None;
+            e.images = None;
+        }
+        let d = &self.documents[self.active.ok_or("Open a page first")?];
         let e = self
             .material_transform
             .draft
             .as_ref()
-            .ok_or("Transform editor closed")?;
-        let d = &self.documents[self.active.ok_or("Open a page first")?];
-        if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
-            return Err("Page/frame changed; reopen the transform".into());
+            .ok_or("Transform window closed")?;
+        if !((d.id, d.revision, d.current_frame) == (e.id, e.revision, e.frame)) {
+            return Err("Page/frame/target changed; reopen the transform".into());
         }
-        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        if used
-            .saturating_add(d.memory_bytes().saturating_mul(4))
-            .saturating_add(128 * 1024 * 1024)
-            > DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Transform preview exceeds workspace memory".into());
-        }
-        let prepared = core::prepare(d, e.key, &e.settings)?;
-        if used.saturating_add(prepared.state.memory_bytes().saturating_mul(4))
-            > DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Transform result exceeds workspace memory".into());
-        }
-        let after = drawer_core::layer_merge::preview(&prepared.state, e.frame)?;
-        let images = [
-            super::layer_merge::image(ctx, d, "transform-before"),
-            super::layer_merge::image(ctx, &after, "transform-after"),
-        ];
-        let e = self.material_transform.draft.as_mut().unwrap();
-        e.prepared = Some(prepared);
-        e.images = Some(images);
-        e.acknowledged = false;
-        Ok(())
+        self.start_transform_preview(ctx, 3)
     }
-    fn apply_material_transform(&mut self) -> Result<(), String> {
+    pub(super) fn apply_material_transform(&mut self) -> Result<(), String> {
+        self.transform_apply_guard(3)?;
         let e = self
             .material_transform
             .draft
@@ -111,6 +98,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn material_transform_window(&mut self, ctx: &egui::Context) {
+        let working = self.transform_working();
         let Some(mut e) = self.material_transform.draft.take() else {
             return;
         };
@@ -124,6 +112,8 @@ impl Drawer {
         egui::Window::new("Image tiling and source transform").open(&mut open).fixed_size(egui::vec2(610.,595.)).default_pos(egui::pos2(40.,20.)).collapsible(false).resizable(false).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen the transform.");cancel=ui.button("Cancel").clicked();return;}
             let mut changed=false;let old_key=e.key;
+            changed|=crate::transform_review::quality(ui,&mut e.quality);
+            if working{ui.label("Calculating source transform — close or Escape to cancel");}
             let targets=core::targets(d).unwrap_or_default();let name=targets.iter().find(|v|v.0==e.key).map_or("Missing source",|v|v.1.as_str());
             egui::ComboBox::from_id_salt("material-transform-source").selected_text(name).show_ui(ui,|ui|{for (key,name) in &targets{ui.selectable_value(&mut e.key,*key,name);}});
             if old_key!=e.key{match core::settings(d,e.key){Ok(s)=>e.settings=s,Err(error)=>self.status=Some(error)}changed=true;}
@@ -132,7 +122,7 @@ impl Drawer {
                 let s=&mut e.settings;
                 ui.horizontal(|ui|{ui.label("Pivot X/Y (document pixels)");for v in &mut s.pivot{changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}});
                 ui.horizontal(|ui|{ui.label("Move X/Y");for v in &mut s.movement{changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}});
-                if matches!(s.mode,Mode::ScaleRotate|Mode::Scale){ui.horizontal(|ui|{ui.label("Scale X/Y");for v in &mut s.scale{changed|=ui.add(egui::DragValue::new(v).speed(0.01).range(0.01..=100.)).changed();}});}
+                if matches!(s.mode,Mode::ScaleRotate|Mode::Scale){changed|=crate::transform_review::scales(ui,&mut s.scale,&mut e.aspect,0.01..=100.).0;}
                 if matches!(s.mode,Mode::ScaleRotate|Mode::Rotate){changed|=ui.add(egui::DragValue::new(&mut s.angle).suffix("° rotation").range(-36000. ..=36000.)).changed();}
                 if s.mode==Mode::Skew{ui.horizontal(|ui|{ui.label("Horizontal / vertical skew");for v in &mut s.skew{changed|=ui.add(egui::DragValue::new(v).suffix("°").range(-85. ..=85.)).changed();}});}
                 if s.mode==Mode::Free{ui.small("Free affine columns: horizontal X/Y, vertical X/Y, translation X/Y. Pivot and Move are applied with this matrix.");for (n,values) in s.free.0.chunks_mut(2).enumerate(){ui.horizontal(|ui|{ui.label(["Horizontal","Vertical","Translation"][n]);for v in values{changed|=ui.add(egui::DragValue::new(v).speed(0.01).range(-1000. ..=1000.)).changed();}});}}
@@ -192,6 +182,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         let step = |app: &mut Drawer, time: &mut f64, events| {
             *time += 0.1;
             super::input_replay::frame(&ctx, app, *time, events);
+            app.wait_transform_preview(&ctx, time)
+                .expect("Transform preview timeout");
         };
         let click = |app: &mut Drawer, time: &mut f64, r: egui::Rect| {
             for pressed in [true, false] {
@@ -263,6 +255,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         }
         app.begin_material_transform()?;
         app.preview_material_transform(&ctx)?;
+        app.wait_transform_preview(&ctx, &mut time)?;
         app.material_transform.draft.as_mut().unwrap().acknowledged = true;
         app.documents[0].current_frame += 1;
         if app.apply_material_transform().is_ok() || app.documents[0].snapshot() != after {
@@ -270,6 +263,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         }
         app.begin_material_transform()?;
         app.preview_material_transform(&ctx)?;
+        app.wait_transform_preview(&ctx, &mut time)?;
         step(
             &mut app,
             &mut time,

@@ -47,7 +47,7 @@ impl Mode {
         matches!(self, Self::Distort | Self::Perspective | Self::Mesh)
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub mode: Mode,
     pub pivot: Point,

@@ -27,6 +27,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let frame = |app: &mut Drawer, time: &mut f64, events| {
         *time += 0.1;
         crate::input_replay::frame(&ctx, app, *time, events);
+        app.wait_transform_preview(&ctx, time)
+            .expect("Transform preview timeout");
     };
     let click = |app: &mut Drawer, time: &mut f64, r: egui::Rect| {
         for pressed in [true, false] {
@@ -133,6 +135,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         .settings
         .degrees = 45.;
     app.preview_affine_transform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     frame(
         &mut app,
         &mut time,
@@ -166,6 +169,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         .settings
         .degrees = 45.;
     app.preview_affine_transform(&ctx)?;
+    app.wait_transform_preview(&ctx, &mut time)?;
     app.documents[0].current_frame += 1;
     if app.apply_affine_transform().is_ok() {
         return Err("Stale transform frame applied".into());
@@ -199,16 +203,18 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 pub(super) struct Draft {
-    id: u64,
-    revision: u64,
-    frame: u32,
-    target: Key,
-    pixels: bool,
-    bake: bool,
-    settings: Transform,
-    filter: Filter,
-    prepared: Option<core::Prepared>,
-    images: Option<[egui::TextureHandle; 2]>,
+    pub(super) id: u64,
+    pub(super) revision: u64,
+    pub(super) frame: u32,
+    pub(super) target: Key,
+    pub(super) pixels: bool,
+    pub(super) bake: bool,
+    pub(super) settings: Transform,
+    pub(super) filter: Filter,
+    pub(super) prepared: Option<core::Prepared>,
+    pub(super) images: Option<[egui::TextureHandle; 2]>,
+    pub(super) quality: crate::transform_review::Quality,
+    pub(super) aspect: bool,
 }
 fn target(app: &Drawer, d: &Document) -> Option<Key> {
     catalog::from_thumbnail(
@@ -228,6 +234,7 @@ impl Draft {
 impl Drawer {
     pub(super) fn begin_affine_transform(&mut self) -> Result<(), String> {
         self.finish_stroke();
+        self.transform_begin_guard(0)?;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let key = target(self, d).ok_or("Choose a layer/object")?;
         let bounds = catalog::bounds(d, key).unwrap_or(drawer_core::scene::Rect {
@@ -239,6 +246,8 @@ impl Drawer {
             revision: d.revision,
             frame: d.current_frame,
             target: key,
+            quality: Default::default(),
+            aspect: true,
             pixels: false,
             bake: false,
             settings: Transform {
@@ -251,40 +260,26 @@ impl Drawer {
         }));
         Ok(())
     }
-    fn preview_affine_transform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn preview_affine_transform(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = &mut self.affine_transform.draft {
+            e.prepared = None;
+            e.images = None;
+        }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
-        let current = target(self, d);
         let e = self
             .affine_transform
             .draft
-            .as_mut()
+            .as_ref()
             .ok_or("Transform window closed")?;
-        e.prepared = None;
-        e.images = None;
-        if !e.fresh(d) || current != Some(e.target) {
+        if !((d.id, d.revision, d.current_frame) == (e.id, e.revision, e.frame)
+            && target(self, d) == Some(e.target))
+        {
             return Err("Page/frame/target changed; reopen the transform".into());
         }
-        let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
-        if used
-            .saturating_add(d.memory_bytes().saturating_mul(5))
-            .saturating_add(64 * 1024 * 1024)
-            > DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Transform preview exceeds workspace memory".into());
-        }
-        let p = core::prepare(d, e.target, e.pixels, e.settings, e.bake, e.filter)?;
-        if used.saturating_add(p.state.memory_bytes().saturating_mul(4)) > DEFAULT_DOCUMENT_BUDGET {
-            return Err("Transform result exceeds workspace memory".into());
-        }
-        let after = drawer_core::layer_merge::preview(&p.state, d.current_frame)?;
-        e.images = Some([
-            crate::layer_merge::image(ctx, d, "affine-before"),
-            crate::layer_merge::image(ctx, &after, "affine-after"),
-        ]);
-        e.prepared = Some(p);
-        Ok(())
+        self.start_transform_preview(ctx, 0)
     }
-    fn apply_affine_transform(&mut self) -> Result<(), String> {
+    pub(super) fn apply_affine_transform(&mut self) -> Result<(), String> {
+        self.transform_apply_guard(0)?;
         let n = self.active.ok_or("Open a page first")?;
         let current = target(self, &self.documents[n]);
         let e = self
@@ -307,6 +302,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn affine_transform_window(&mut self, ctx: &egui::Context) {
+        let working = self.transform_working();
         let Some(mut e) = self.affine_transform.draft.take() else {
             return;
         };
@@ -316,12 +312,15 @@ impl Drawer {
         let fresh = e.fresh(d) && target(self, d) == Some(e.target);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply) = (false, false);
+        let mut cancel = false;
         egui::Window::new("Scale and rotate").default_width(465.).default_pos(egui::pos2(35.,30.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame/target changed; close and reopen this window.");}
             let mut changed=false;
+            changed|=crate::transform_review::quality(ui,&mut e.quality);
+            if working {ui.label("Calculating transform — close or Escape to cancel");}
             egui::ScrollArea::vertical().id_salt("affine-controls").max_height(240.).show(ui,|ui|{
             changed|=ui.checkbox(&mut e.pixels,"Transform selected pixels in the current raster").changed();
-            ui.horizontal(|ui|{for(k,label)in["Scale X: ","Scale Y: "].iter().enumerate(){changed|=ui.add(egui::DragValue::new(&mut e.settings.scale[k]).speed(0.01).range(-1e4..=1e4).prefix(*label)).changed();}});
+            changed|=crate::transform_review::scales(ui,&mut e.settings.scale,&mut e.aspect,-1e4..=1e4).0;
             changed|=ui.add(egui::DragValue::new(&mut e.settings.degrees).range(-36000. ..=36000.).prefix("Degrees: ")).changed();
             ui.horizontal(|ui|{for(k,label)in["Pivot X: ","Pivot Y: "].iter().enumerate(){changed|=ui.add(egui::DragValue::new(&mut e.settings.pivot[k]).range(-1e6..=1e6).prefix(*label)).changed();}});
             ui.horizontal(|ui|{for(k,label)in["Move X: ","Move Y: "].iter().enumerate(){changed|=ui.add(egui::DragValue::new(&mut e.settings.translation[k]).range(-1e6..=1e6).prefix(*label)).changed();}});
@@ -331,12 +330,12 @@ impl Drawer {
             else{changed|=ui.checkbox(&mut e.bake,"Convert unsupported text/tone/3D/animation sources to a paintable raster on Apply").changed();ui.small("This conversion is optional and included in the preview. Undo restores the editable source. Linked layers transform together; incompatible linked members reject the operation.");}
             });
             if changed{e.prepared=None;e.images=None;}
-            let r=ui.add_enabled(fresh,egui::Button::new("Prepare transform preview"));self.affine_transform.preview=Some(r.rect);preview=r.clicked();
+            let r=ui.add_enabled(fresh,egui::Button::new("Prepare transform preview"));self.affine_transform.preview=Some(r.rect);preview=r.clicked();cancel=ui.button("Cancel transform").clicked();
             if let Some(p)=&e.prepared{egui::ScrollArea::vertical().id_salt("affine-notes").max_height(72.).show(ui,|ui|{for note in &p.notes{ui.small(note);}});}
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));});}});}
             let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply transform as one Undo"));self.affine_transform.apply=Some(r.rect);apply=r.clicked();ui.small("Escape or close discards the transform.");
         });
-        if open {
+        if open && !cancel {
             self.affine_transform.draft = Some(e);
         }
         if preview && let Err(e) = self.preview_affine_transform(ctx) {

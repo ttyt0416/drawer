@@ -157,6 +157,7 @@ impl Panels {
 impl Drawer {
     pub(super) fn tool_shortcuts_blocked(&self, ctx: &egui::Context) -> bool {
         self.path_transition.is_some()
+            || self.transform_save_pending()
             || self.vector_cleanup.draft.is_some()
             || self.affine_transform.draft.is_some()
             || self.tone_mapping.draft.is_some()

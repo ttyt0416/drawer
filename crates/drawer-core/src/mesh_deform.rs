@@ -1,6 +1,6 @@
 //! Validated triangular grids and vertex-anchored rigid pin blending.
 use crate::scene::{Point, Rect};
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Mesh {
     pub columns: u8,
     pub rows: u8,

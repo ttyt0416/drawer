@@ -9,6 +9,15 @@ use crate::{
     sizing::DocumentState,
 };
 pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<DocumentState, String> {
+    transform_with_progress(d, selected, matrix, &mut || Ok(()))
+}
+pub fn transform_with_progress(
+    d: &Document,
+    selected: &[Key],
+    matrix: Affine,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<DocumentState, String> {
+    tick()?;
     if !matrix.valid() {
         return Err("Invalid group transform".into());
     }
@@ -29,6 +38,7 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
     let similarity = (scale - b[0].hypot(b[1])).abs() < 1e-8 * scale.max(1.)
         && (a[0] * b[0] + a[1] * b[1]).abs() < 1e-8 * scale.max(1.).powi(2);
     for key in &members {
+        tick()?;
         if d.scene.file_objects.get(*key).is_some() {
             continue;
         }
@@ -69,6 +79,7 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
     state.scene.layer_ids.initialize(d.layers.len())?;
     let mut total = 0usize;
     for key in &members {
+        tick()?;
         let t = c::target(d, *key).ok_or("Missing transform member")?;
         if let Some(link) = state
             .scene
@@ -133,6 +144,9 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
                         .then(|| Vec::with_capacity(count));
                     for y in 0..e.height {
                         for x in 0..e.width {
+                            if x.is_multiple_of(128) {
+                                tick()?;
+                            }
                             let p = inverse.map([
                                 e.offset[0] as f64 + x as f64 + 0.5,
                                 e.offset[1] as f64 + y as f64 + 0.5,
@@ -262,6 +276,7 @@ pub fn transform(d: &Document, selected: &[Key], matrix: Affine) -> Result<Docum
             guide.space = guide.space.then(original);
         }
     }
+    tick()?;
     groups::finish(d, &state)?;
     Ok(state)
 }

@@ -51,6 +51,18 @@ pub fn prepare(
     bake: bool,
     filter: Filter,
 ) -> Result<Prepared, String> {
+    prepare_with_progress(d, key, pixels, t, bake, filter, &mut || Ok(()))
+}
+pub fn prepare_with_progress(
+    d: &Document,
+    key: Key,
+    pixels: bool,
+    t: Transform,
+    bake: bool,
+    filter: Filter,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Prepared, String> {
+    tick()?;
     t.matrix()?;
     let (s, c) = crate::texture::rotation(t.degrees);
     let mut matrix = Affine([
@@ -76,6 +88,7 @@ pub fn prepare(
             crate::layers::index(d, id).ok_or("Raster target changed")?,
             matrix,
             filter,
+            tick,
         );
     }
     let keys = crate::layer_groups::expanded(d, &[key], crate::layer_groups::Operation::Transform)?;
@@ -101,11 +114,12 @@ pub fn prepare(
         settings.preserve_width = false;
         return crate::material_transform::prepare(d, key, &settings);
     }
-    let attempted = crate::group_edits::transform(d, &[key], matrix);
+    let attempted = crate::group_edits::transform_with_progress(d, &[key], matrix, tick);
     if let Ok(state) = attempted {
         return Ok(Prepared {state,selected:key,notes:vec!["Layers use their stored pixels; linked transforms, masks, texture and rulers follow. Unsupported linked members reject the whole operation. Undo restores the original.".into()]});
     }
     let reason = attempted.err().unwrap();
+    tick()?;
     let unsupported = matches!(
         key,
         Key::Object(_) | Key::World(_) | Key::Track(_) | Key::Cell { .. }
@@ -117,7 +131,12 @@ pub fn prepare(
             crate::raster_conversion::Action::Rasterize(crate::layer_search::Expression::Color),
         )?;
         let working = crate::layer_merge::preview(&converted.state, d.current_frame)?;
-        let state = crate::group_edits::transform(&working, &[converted.selected], matrix)?;
+        let state = crate::group_edits::transform_with_progress(
+            &working,
+            &[converted.selected],
+            matrix,
+            tick,
+        )?;
         crate::layer_groups::finish(d, &state)?;
         let mut notes = converted.notes;
         notes.push("This source becomes a paintable raster on Apply. Undo restores the editable original and every property.".into());
@@ -135,7 +154,9 @@ fn selected(
     layer: usize,
     matrix: Affine,
     filter: Filter,
+    tick: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<Prepared, String> {
+    tick()?;
     p::paintable(d, layer)?;
     p::movable(d, p::raster(d, layer))?;
     if d.memory_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8 {
@@ -206,6 +227,9 @@ fn selected(
         .then(|| Vec::with_capacity(low.capacity()));
     for y in 0..extent.height {
         for x in 0..extent.width {
+            if x.is_multiple_of(128) {
+                tick()?;
+            }
             let pos = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
             let point = [pos[0] as f64 + 0.5, pos[1] as f64 + 0.5];
             let input = inverse.map(point).map(|v| v - 0.5);
@@ -239,7 +263,12 @@ fn selected(
     }
     let moved_selection = bounds(corners(selection).map(|p| matrix.map(p)));
     let grid = crate::selection_edit::Grid::with_bounds(d, &corners(moved_selection))?;
-    let values = grid.sample(d, false, |p| d.scene.selection_coverage(inverse.map(p)));
+    let values = grid.sample_with_progress(
+        d,
+        false,
+        |p| d.scene.selection_coverage(inverse.map(p)),
+        tick,
+    )?;
     let mut state = d.snapshot();
     state.layers[layer].pixels = low;
     state.layers[layer].precise = high;

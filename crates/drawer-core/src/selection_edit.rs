@@ -132,11 +132,25 @@ impl Grid {
         &self,
         doc: &Document,
         clip: bool,
-        mut coverage: impl FnMut(Point) -> u8,
+        coverage: impl FnMut(Point) -> u8,
     ) -> Vec<u8> {
+        self.sample_with_progress(doc, clip, coverage, &mut || Ok(()))
+            .expect("Infallible selection sampler")
+    }
+    pub(crate) fn sample_with_progress(
+        &self,
+        doc: &Document,
+        clip: bool,
+        mut coverage: impl FnMut(Point) -> u8,
+        tick: &mut impl FnMut() -> Result<(), String>,
+    ) -> Result<Vec<u8>, String> {
+        tick()?;
         let mut values = vec![0u8; self.size[0] * self.size[1]];
         for y in 0..self.size[1] {
             for x in 0..self.size[0] {
+                if x.is_multiple_of(128) {
+                    tick()?;
+                }
                 let mut sum = 0u32;
                 for sy in 0..4 {
                     for sx in 0..4 {
@@ -157,7 +171,8 @@ impl Grid {
                 values[y * self.size[0] + x] = ((sum + 8) / 16) as u8;
             }
         }
-        values
+        tick()?;
+        Ok(values)
     }
     pub(crate) fn base(&self, doc: &Document, add: bool) -> Vec<u8> {
         if add && doc.scene.selection.is_none() && doc.scene.selection_mask.is_none() {

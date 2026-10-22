@@ -698,3 +698,7 @@ crates/drawer-core/src/local_color_verify.rs
 crates/drawer-app/src/local_color.rs
 crates/drawer-app/src/local_color_verify.rs
 docs/process/local-color.md
+
+crates/drawer-app/src/transform_review.rs
+crates/drawer-app/src/transform_review_verify.rs
+docs/process/transform-review.md

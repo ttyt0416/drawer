@@ -318,3 +318,64 @@ mod tests {
         super::verify(&root.0).unwrap();
     }
 }
+
+#[cfg(test)]
+mod progress_tests {
+    #[test]
+    fn cancelling_group_selected_pixels_and_quad_keeps_all_original_data() {
+        let d = super::fixture().unwrap();
+        let original = d.snapshot();
+        let counts = d.history_counts();
+        for kind in 0..3 {
+            let mut calls = 0usize;
+            let mut tick = || {
+                calls += 1;
+                if calls >= 3 {
+                    Err("cancel".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = match kind {
+                0 => crate::group_edits::transform_with_progress(
+                    &d,
+                    &[crate::layer_search::Key::Layer(
+                        crate::layer_properties::raster(&d, 0),
+                    )],
+                    crate::scene::Affine([1.2, 0., 0., 0.8, 1., 1.]),
+                    &mut tick,
+                )
+                .map(|_| ()),
+                1 => crate::affine_transform::prepare_with_progress(
+                    &d,
+                    crate::layer_search::Key::Layer(crate::layer_properties::raster(&d, 0)),
+                    true,
+                    crate::vector_scope::Transform {
+                        scale: [1.2, 0.8],
+                        ..Default::default()
+                    },
+                    false,
+                    crate::interpolation::Filter::Bilinear,
+                    &mut tick,
+                )
+                .map(|_| ()),
+                _ => crate::deform::prepare_with_progress(
+                    &d,
+                    &[0],
+                    false,
+                    crate::deform::Change::Quad(&crate::material_mapping::Warp::Perspective([
+                        [0., 0.],
+                        [1.1, 0.1],
+                        [0.9, 1.],
+                        [0., 1.],
+                    ])),
+                    &mut tick,
+                )
+                .map(|_| ()),
+            };
+            assert!(result.is_err() && calls >= 3);
+            assert_eq!(d.snapshot(), original);
+            assert_eq!(d.history_counts(), counts);
+        }
+    }
+}
