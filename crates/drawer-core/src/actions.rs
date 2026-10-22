@@ -6,7 +6,17 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 133] = [
+pub const EXTRA_COMMANDS: [&str; 143] = [
+    "vector-scope-tools",
+    "vector-copy-strokes",
+    "vector-cut-strokes",
+    "vector-copy-spans",
+    "vector-cut-spans",
+    "vector-paste",
+    "vector-select-overlap",
+    "vector-select-contained",
+    "vector-selection-undo",
+    "vector-selection-redo",
     "vector-pressure-reset-selected",
     "vector-pressure-reset-layer",
     "svg-import",
@@ -441,6 +451,24 @@ impl Settings {
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
             "vector-tip-tools" => "Change vector brush tips while preserving paths and pressure",
+            "vector-scope-tools" => {
+                "Transform selected vector points or strokes around a pivot and duplicate them"
+            }
+            "vector-copy-strokes" => {
+                "Copy whole vector strokes containing selected points with a raster fallback"
+            }
+            "vector-cut-strokes" => "Cut whole selected vector strokes after clipboard success",
+            "vector-copy-spans" => "Copy spans between adjacent selected vector controls",
+            "vector-cut-spans" => "Cut selected vector spans after clipboard success",
+            "vector-paste" => "Paste editable vectors with fresh object identifiers",
+            "vector-select-overlap" => {
+                "Select centerlines overlapping the area, including boundary contact"
+            }
+            "vector-select-contained" => {
+                "Select centerlines entirely inside the area, including boundaries"
+            }
+            "vector-selection-undo" => "Undo session vector selection without changing artwork",
+            "vector-selection-redo" => "Redo session vector selection without changing artwork",
             "vector-pressure-reset-selected" => {
                 "Preview resetting selected vector points or strokes to pressure 1.00"
             }

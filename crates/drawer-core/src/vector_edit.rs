@@ -77,7 +77,8 @@ impl Settings {
             && (2. ..=32.).contains(&self.radius)
     }
 }
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Selection {
     pub controls: Vec<Control>,
     pub paths: Vec<u64>,
@@ -125,7 +126,7 @@ fn layer(d: &Document, id: u64) -> Result<&crate::line_tools::Layer, String> {
         .find(|l| l.id == id)
         .ok_or_else(|| "Choose a live editable vector layer".into())
 }
-fn writable(d: &Document, id: u64) -> Result<(), String> {
+pub(crate) fn writable(d: &Document, id: u64) -> Result<(), String> {
     layer(d, id)?;
     let t = Target::Vector(id);
     let f = p::inherited(d, t);
@@ -219,7 +220,11 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
     }
     hits
 }
-fn selected<'a>(d: &'a Document, id: u64, s: &Selection) -> Result<Vec<&'a Path>, String> {
+pub(crate) fn selected<'a>(
+    d: &'a Document,
+    id: u64,
+    s: &Selection,
+) -> Result<Vec<&'a Path>, String> {
     let l = layer(d, id)?;
     if s.controls.len() > 8192
         || s.paths.len() > 128

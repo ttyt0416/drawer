@@ -353,6 +353,16 @@ impl Drawer {
                 }
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
+                "vector-scope-tools" => self.begin_vector_scope()?,
+                "vector-copy-strokes" => self.copy_vector_scope(ctx, false, false)?,
+                "vector-cut-strokes" => self.copy_vector_scope(ctx, false, true)?,
+                "vector-copy-spans" => self.copy_vector_scope(ctx, true, false)?,
+                "vector-cut-spans" => self.copy_vector_scope(ctx, true, true)?,
+                "vector-paste" => self.paste_vector_scope(ctx)?,
+                "vector-select-overlap" => self.vector_area_command(false)?,
+                "vector-select-contained" => self.vector_area_command(true)?,
+                "vector-selection-undo" => self.vector_scope_history(false)?,
+                "vector-selection-redo" => self.vector_scope_history(true)?,
                 "vector-tip-tools" => self.begin_vector_tips()?,
                 "vector-pressure-reset-selected" => self.begin_pressure_reset(ctx, false)?,
                 "vector-pressure-reset-layer" => self.begin_pressure_reset(ctx, true)?,
@@ -432,6 +442,27 @@ impl Drawer {
                             .map_or(0, |i| (i + 1) % candidates.len());
                         self.panels.targets.insert(id, candidates[next]);
                     }
+                }
+                "copy-selection"
+                    if self.active.is_some_and(|n| {
+                        matches!(
+                            self.panels.targets.get(&self.documents[n].id),
+                            Some(drawer_core::thumbnail::Target::Vector(_))
+                        )
+                    }) =>
+                {
+                    self.copy_vector_scope(ctx, false, false)?
+                }
+                "paste-selection"
+                    if super::vector_scope::has_clipboard(ctx)
+                        && self.active.is_some_and(|n| {
+                            matches!(
+                                self.panels.targets.get(&self.documents[n].id),
+                                Some(drawer_core::thumbnail::Target::Vector(_))
+                            )
+                        }) =>
+                {
+                    self.paste_vector_scope(ctx)?
                 }
                 "copy-selection" => {
                     self.copy_selection_from(super::paste_dialog::write_clipboard)?

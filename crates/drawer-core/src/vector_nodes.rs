@@ -207,9 +207,19 @@ pub fn controls(path: &Path) -> Vec<Point> {
     }
 }
 pub fn move_controls(path: &mut Path, indices: &[usize], delta: Point) -> Result<(), String> {
+    transform_controls(path, indices, Affine([1., 0., 0., 1., delta[0], delta[1]]))
+}
+pub fn transform_controls(
+    path: &mut Path,
+    indices: &[usize],
+    matrix: Affine,
+) -> Result<(), String> {
+    if !matrix.valid() {
+        return Err("Invalid control transform".into());
+    }
     let old = path.clone();
     let mut def = definition(path)?;
-    let data = def.nodes.as_ref().unwrap();
+    let mut data = def.nodes.clone().unwrap();
     let sample = data.sample(&def.controls, path.closed)?;
     if sample.points.len() != old.points.len() {
         return Err("Cached node geometry changed".into());
@@ -225,10 +235,20 @@ pub fn move_controls(path: &mut Path, indices: &[usize], delta: Point) -> Result
         .iter()
         .map(|n| *n as f64 / count as f64)
         .collect::<Vec<_>>();
-    let shift = def.creation.vector(delta);
+    let translation = matrix.0[..4] == [1., 0., 0., 1.];
+    let local = if translation {
+        let shift = def.creation.vector([matrix.0[4], matrix.0[5]]);
+        Affine([1., 0., 0., 1., shift[0], shift[1]])
+    } else {
+        def.creation.inverse().then(matrix).then(def.creation)
+    };
     for n in indices {
         let p = def.controls.get_mut(*n).ok_or("Node selection changed")?;
-        *p = add(*p, shift);
+        *p = local.map(*p);
+        if !translation {
+            data.incoming[*n] = local.vector(data.incoming[*n]);
+            data.outgoing[*n] = local.vector(data.outgoing[*n]);
+        }
     }
     let sample = data.sample(&def.controls, path.closed)?;
     let pressure = old.fragment_pressure_at(&sources(&sample, &anchors, path.closed, period))?;
@@ -238,6 +258,7 @@ pub fn move_controls(path: &mut Path, indices: &[usize], delta: Point) -> Result
         .map(|p| def.creation.inverse().map(p))
         .collect();
     path.pressure = pressure;
+    def.nodes = Some(data);
     def.snapped_controls = true;
     def.settings.constraint = crate::shapes::Constraint::Free;
     path.definition = Some(def);

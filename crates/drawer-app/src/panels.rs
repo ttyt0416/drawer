@@ -650,6 +650,12 @@ impl Drawer {
                                 ("Refine vector strokes…", "vector-refine-tools"),
                                 ("Change vector tip…", "vector-tip-tools"),
                                 (
+                                    "Vector selection, pivot and transfer…",
+                                    "vector-scope-tools",
+                                ),
+                                ("Select overlapping vector strokes", "vector-select-overlap"),
+                                ("Select contained vector strokes", "vector-select-contained"),
+                                (
                                     "Reset selected vector pressure…",
                                     "vector-pressure-reset-selected",
                                 ),

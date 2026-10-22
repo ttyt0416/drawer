@@ -339,3 +339,7 @@ pub mod vector_refine_verify;
 pub mod vector_reset_verify;
 pub mod vector_tip;
 pub mod vector_tip_verify;
+
+pub mod vector_clipboard;
+pub mod vector_scope;
+pub mod vector_scope_verify;

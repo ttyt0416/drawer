@@ -807,9 +807,15 @@ impl Drawer {
             Some(drawer_core::thumbnail::Target::Vector(id)) => Some(*id),
             _ => None,
         };
+        let selection =
+            if self.drawing.vector_document == Some(d.id) && self.drawing.vector_layer == layer {
+                self.drawing.vector_selection.clone()
+            } else {
+                layer.map(|l| Selection::current(d, l)).unwrap_or_default()
+            };
         self.drawing.vector_document = Some(d.id);
         self.drawing.vector_layer = layer;
-        self.drawing.vector_selection = layer.map(|l| Selection::current(d, l)).unwrap_or_default();
+        self.drawing.vector_selection = selection;
         self.drawing.vector_settings = self.workspaces.store.current.vector_edit;
         if tool.is_none() {
             self.vector_edit.draft = Some(Box::new(Draft::new(

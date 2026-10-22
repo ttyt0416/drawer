@@ -606,3 +606,8 @@ crates/drawer-app/src/svg.rs
 docs/process/svg-interop.md
 crates/drawer-core/src/vector_reset_verify.rs
 docs/process/vector-pressure-reset.md
+crates/drawer-core/src/vector_scope.rs
+crates/drawer-core/src/vector_clipboard.rs
+crates/drawer-core/src/vector_scope_verify.rs
+crates/drawer-app/src/vector_scope.rs
+docs/process/vector-scopes-and-transfer.md

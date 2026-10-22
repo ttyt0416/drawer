@@ -157,6 +157,7 @@ try {
     if ($smokeResult -notmatch 'vector_refine=true') { throw '벡터 선 연결·단순화·밀기·다시 그리기 검증 실패' }
     if ($smokeResult -notmatch 'vector_tip=true') { throw '벡터 팁 변경·경로 표시 검증 실패' }
     if ($smokeResult -notmatch 'vector_pressure_reset=true') { throw '벡터 선택·전체 필압 초기화 검증 실패' }
+    if ($smokeResult -notmatch 'vector_scope=true') { throw '벡터 기준점·범위 복사·선택 이력 검증 실패' }
     if ($smokeResult -notmatch 'svg_io=true') { throw '로컬 SVG 가져오기·내보내기·복사 검증 실패' }
     if ($smokeResult -notmatch 'shape_creation=true') { throw '도형·곡선·래스터/벡터·입력 취소 검증 실패' }
     if ($smokeResult -notmatch 'gradient_ramps=true') { throw '그라데이션 색상 지점·혼색·밝기·프리셋 검증 실패' }
