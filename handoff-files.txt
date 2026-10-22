@@ -604,3 +604,5 @@ crates/drawer-core/src/svg_export.rs
 crates/drawer-core/src/svg_verify.rs
 crates/drawer-app/src/svg.rs
 docs/process/svg-interop.md
+crates/drawer-core/src/vector_reset_verify.rs
+docs/process/vector-pressure-reset.md

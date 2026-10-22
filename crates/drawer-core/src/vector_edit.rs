@@ -449,3 +449,96 @@ pub fn prepare(
     p::validate_edit(d, &state)?;
     Ok(state)
 }
+
+/// Reset editable multipliers, never the separately recorded device samples.
+/// Whole strokes discard all multiplier knots; point edits retain other knots.
+pub fn reset_pressure(
+    d: &Document,
+    id: u64,
+    selection: &Selection,
+    whole_layer: bool,
+) -> Result<DocumentState, String> {
+    writable(d, id)?;
+    if !whole_layer {
+        selected(d, id, selection)?;
+    } else if layer(d, id)?.paths.is_empty() {
+        return Err("The vector layer has no strokes".into());
+    }
+    let mut state = d.snapshot();
+    let target = state
+        .scene
+        .lines
+        .layers
+        .iter_mut()
+        .find(|l| l.id == id)
+        .unwrap();
+    for path in &mut target.paths {
+        if whole_layer || selection.paths.contains(&path.id) {
+            path.pressure.controls.clear();
+            path.pressure.control_positions.clear();
+            continue;
+        }
+        let edits = selection
+            .controls
+            .iter()
+            .filter(|c| c.path == path.id)
+            .collect::<Vec<_>>();
+        if edits.is_empty() {
+            continue;
+        }
+        let parameters = path.control_parameters()?;
+        let old = &path.pressure;
+        if edits
+            .iter()
+            .all(|c| old.control_at(parameters[c.point as usize]) == 1.)
+        {
+            continue;
+        }
+        // Keep every existing pressure knot and insert logical anchors before
+        // changing selected values. Resampling would erase off-node pressure.
+        let mut knots = (0..old.controls.len())
+            .map(|n| {
+                let t = if !old.control_positions.is_empty() {
+                    old.control_positions[n]
+                } else if old.controls.len() == 1 {
+                    0.
+                } else {
+                    n as f64 / (old.controls.len() - 1) as f64
+                };
+                (t, old.controls[n])
+            })
+            .collect::<Vec<_>>();
+        for &t in &parameters {
+            if !knots.iter().any(|(p, _)| (*p - t).abs() < 1e-12) {
+                knots.push((t, old.control_at(t)));
+            }
+        }
+        for c in edits {
+            let t = parameters[c.point as usize];
+            knots
+                .iter_mut()
+                .find(|(p, _)| (*p - t).abs() < 1e-12)
+                .unwrap()
+                .1 = 1.;
+        }
+        knots.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if knots.iter().all(|(_, v)| *v == 1.) {
+            path.pressure.controls.clear();
+            path.pressure.control_positions.clear();
+        } else {
+            path.pressure.controls = knots.iter().map(|(_, v)| *v).collect();
+            path.pressure.control_positions = knots.iter().map(|(t, _)| *t).collect();
+        }
+    }
+    if !state.scene.valid()
+        || serde_json::to_vec(&state.scene)
+            .map_err(|e| e.to_string())?
+            .len()
+            > 4 * 1024 * 1024
+        || state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+    {
+        return Err("Pressure reset exceeds geometry/Undo limits".into());
+    }
+    p::validate_edit(d, &state)?;
+    Ok(state)
+}

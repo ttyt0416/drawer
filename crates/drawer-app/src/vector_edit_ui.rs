@@ -650,6 +650,7 @@ pub(crate) struct Panel {
     apply: Option<egui::Rect>,
 }
 struct Draft {
+    reset: Option<bool>,
     refine: RefineOptions,
     id: u64,
     revision: u64,
@@ -671,6 +672,7 @@ impl Draft {
     fn new(d: &Document, layer: Option<u64>, selection: Selection) -> Self {
         let value = layer.and_then(|l| core::values(d, l, &selection).ok());
         Self {
+            reset: None,
             refine: Default::default(),
             id: d.id,
             revision: d.revision,
@@ -742,6 +744,45 @@ impl RefineOptions {
     }
 }
 impl Drawer {
+    pub(crate) fn begin_pressure_reset(
+        &mut self,
+        ctx: &egui::Context,
+        whole_layer: bool,
+    ) -> Result<(), String> {
+        self.finish_stroke();
+        let d = &self.documents[self.active.ok_or("Open a page first")?];
+        let target = match self.panels.targets.get(&d.id) {
+            Some(drawer_core::thumbnail::Target::Vector(id)) => Some(*id),
+            _ => None,
+        };
+        let selection =
+            if self.drawing.vector_document == Some(d.id) && self.drawing.vector_layer == target {
+                self.drawing.vector_selection.clone()
+            } else {
+                target
+                    .map(|id| Selection::current(d, id))
+                    .unwrap_or_default()
+            };
+        self.begin_vector_edit(None)?;
+        self.drawing.vector_selection = selection.clone();
+        self.vector_edit.draft.as_mut().unwrap().selection = selection;
+        self.preview_pressure_reset(ctx, whole_layer)
+    }
+    fn preview_pressure_reset(
+        &mut self,
+        ctx: &egui::Context,
+        whole_layer: bool,
+    ) -> Result<(), String> {
+        let e = self
+            .vector_edit
+            .draft
+            .as_mut()
+            .ok_or("Vector editor closed")?;
+        e.reset = Some(whole_layer);
+        e.prepared = None;
+        e.images = None;
+        self.preview_vector_edit(ctx, false)
+    }
     pub(crate) fn begin_vector_tips(&mut self) -> Result<(), String> {
         self.begin_vector_edit(None)?;
         if let Some(e) = &mut self.vector_edit.draft {
@@ -780,6 +821,11 @@ impl Drawer {
         Ok(())
     }
     fn preview_vector_numbers(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        if let Some(e) = &mut self.vector_edit.draft {
+            e.reset = None;
+            e.prepared = None;
+            e.images = None;
+        }
         self.preview_vector_edit(ctx, false)
     }
     fn preview_vector_edit(&mut self, ctx: &egui::Context, refinement: bool) -> Result<(), String> {
@@ -807,10 +853,25 @@ impl Drawer {
         {
             return Err("Page/frame changed; reload the current selection".into());
         }
-        if !refinement && !(e.set_width || e.set_color || e.set_pressure || e.set_movement) {
+        if refinement {
+            e.reset = None;
+            e.prepared = None;
+            e.images = None;
+        }
+        if !refinement
+            && e.reset.is_none()
+            && !(e.set_width || e.set_color || e.set_pressure || e.set_movement)
+        {
             return Err("Choose at least one property to change".into());
         }
-        let state = if refinement {
+        let state = if let Some(whole_layer) = e.reset {
+            core::reset_pressure(
+                d,
+                e.layer.ok_or("Choose an editable vector layer")?,
+                &e.selection,
+                whole_layer,
+            )?
+        } else if refinement {
             drawer_core::vector_refine::prepare(
                 d,
                 e.layer.ok_or("Choose an editable vector layer")?,
@@ -854,7 +915,11 @@ impl Drawer {
             .take()
             .ok_or("Prepare the vector preview first")?;
         self.documents[n].commit_state(state)?;
-        self.drawing.vector_selection = Selection::current(&self.documents[n], e.layer.unwrap());
+        self.drawing.vector_selection = if e.reset.is_some() {
+            e.selection.clone()
+        } else {
+            Selection::current(&self.documents[n], e.layer.unwrap())
+        };
         self.vector_edit.draft = Some(Box::new(Draft::new(
             &self.documents[n],
             e.layer,
@@ -873,6 +938,7 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut reload, mut changed) = (false, false, false, false);
         let mut refine_preview = false;
+        let mut reset_preview = None;
         let fresh = e.fresh(d) && e.layer == self.drawing.vector_layer;
         egui::Window::new("Vector points, width, color and pressure").open(&mut open).collapsible(false).default_width(340.).default_height(600.).vscroll(true).default_pos(egui::pos2(645.,55.)).show(ctx, |ui| {
             let settings = &mut self.workspaces.store.current.vector_edit;
@@ -900,7 +966,13 @@ impl Drawer {
             if changed { e.prepared=None;e.images=None; }
             let r=ui.add_enabled(fresh && values.is_some(),egui::Button::new("Prepare numeric preview"));self.vector_edit.preview=Some(r.rect);preview=r.clicked();
             if let Some(images)=&e.images { ui.horizontal(|ui| {for (label,image) in ["Before","After"].into_iter().zip(images) {ui.vertical(|ui| {ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});} }); }
-            let r=ui.add_enabled(fresh && e.prepared.is_some(),egui::Button::new("Apply numeric edit"));self.vector_edit.apply=Some(r.rect);apply=r.clicked();
+            let r=ui.add_enabled(fresh && e.prepared.is_some(),egui::Button::new(if e.reset.is_some() {"Apply pressure reset"} else {"Apply numeric edit"}));self.vector_edit.apply=Some(r.rect);apply=r.clicked();
+            ui.horizontal(|ui| {
+                if ui.add_enabled(fresh && values.is_some(),egui::Button::new("Reset selected pressure…")).clicked() { reset_preview=Some(false); }
+                if ui.add_enabled(fresh && e.layer.is_some(),egui::Button::new("Reset layer pressure…")).clicked() { reset_preview=Some(true); }
+            });
+            if let Some(all)=e.reset { ui.label(if all {"Preview: reset every stroke in this layer to 1.00"}else{"Preview: reset selected points / whole selected strokes to 1.00"}); }
+            ui.small("Pressure reset keeps device samples, geometry, style and selection. Close/Escape discards the preview; Apply records one Undo.");
             ui.collapsing("Node tools",|ui| {
                 ui.horizontal_wrapped(|ui|{for (tool,label) in [(Tool::AddNode,"Add node"),(Tool::DeleteNode,"Delete node"),(Tool::CornerNode,"Corner"),(Tool::SmoothNode,"Smooth")] {ui.radio_value(&mut self.workspaces.store.current.vector_edit.tool,tool,label);}});
                 ui.small("Existing shape definitions use their stored outline points as nodes. Add inside a segment, delete a point, or switch its tangents. Preview on press; release applies one Undo. Escape cancels.");
@@ -951,6 +1023,11 @@ impl Drawer {
             self.vector_edit.draft = Some(e);
         }
         if preview && let Err(error) = self.preview_vector_numbers(ctx) {
+            self.status = Some(error);
+        }
+        if let Some(all) = reset_preview
+            && let Err(error) = self.preview_pressure_reset(ctx, all)
+        {
             self.status = Some(error);
         }
         if refine_preview && let Err(error) = self.preview_vector_edit(ctx, true) {
@@ -1904,8 +1981,149 @@ pub(crate) fn tip_smoke(root: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn reset_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::vector_reset_verify::verify(root)?;
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 32,
+        height: 32,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    app.documents[0].commit_state(drawer_core::vector_reset_verify::fixture()?.snapshot())?;
+    let layer = app.documents[0].scene.lines.layers[0].id;
+    let path = app.documents[0].scene.lines.layers[0].paths[0].id;
+    app.panels.targets.insert(
+        app.documents[0].id,
+        drawer_core::thumbnail::Target::Vector(layer),
+    );
+    let mut time = 0.;
+    for all in [false, true] {
+        app.begin_vector_edit(Some(Tool::Pressure))?;
+        let selection = Selection {
+            controls: vec![Control { path, point: 1 }],
+            paths: vec![],
+        };
+        app.drawing.vector_selection = selection.clone();
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let command = if all {
+            "vector-pressure-reset-layer"
+        } else {
+            "vector-pressure-reset-selected"
+        };
+        app.execute_command(&ctx, command);
+        if app.vector_edit.draft.as_ref().is_none_or(|e| {
+            e.prepared.is_none() || e.reset != Some(all) || e.selection != selection
+        }) || app.documents[0].snapshot() != before
+            || app.documents[0].history_counts() != history
+        {
+            return Err(format!(
+                "Reset command preview/scope/source: {:?}",
+                app.status
+            ));
+        }
+        let expected = app
+            .vector_edit
+            .draft
+            .as_ref()
+            .unwrap()
+            .prepared
+            .clone()
+            .unwrap();
+        time += 0.1;
+        crate::input_replay::frame(&ctx, &mut app, time, vec![]);
+        app.apply_vector_numbers()?;
+        if app.documents[0].snapshot() != expected
+            || app.documents[0].history_counts().0 != history.0 + 1
+            || app.drawing.vector_selection != selection
+        {
+            return Err("Reset apply/selection/Undo count".into());
+        }
+        let file = root.join("app-pressure-reset.drawer");
+        drawer_core::files::save(&mut app.documents[0], &file).map_err(|e| e.to_string())?;
+        if drawer_core::files::open(&file, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .snapshot()
+            != expected
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+        {
+            return Err("Reset save/reopen/Undo".into());
+        }
+        app.execute_command(&ctx, command);
+        time += 0.1;
+        crate::input_replay::frame(
+            &ctx,
+            &mut app,
+            time,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        if app.vector_edit.draft.is_some() || app.documents[0].snapshot() != before {
+            return Err("Reset Escape changed the page".into());
+        }
+        time += 0.1;
+        crate::input_replay::frame(
+            &ctx,
+            &mut app,
+            time,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: false,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        app.execute_command(&ctx, command);
+        if app.preview_vector_numbers(&ctx).is_ok()
+            || app
+                .vector_edit
+                .draft
+                .as_ref()
+                .is_some_and(|e| e.prepared.is_some())
+        {
+            return Err("Failed numeric preview retained an old reset plan".into());
+        }
+        app.execute_command(&ctx, command);
+        app.documents[0].revision += 1;
+        let stale = app.documents[0].snapshot();
+        if app.apply_vector_numbers().is_ok() || app.documents[0].snapshot() != stale {
+            return Err("Stale pressure reset accepted".into());
+        }
+        app.vector_edit.draft = None;
+    }
+    app.documents[0].scene.lines.layers[0].locked = true;
+    let before = app.documents[0].snapshot();
+    app.execute_command(&ctx, "vector-pressure-reset-layer");
+    if app
+        .vector_edit
+        .draft
+        .as_ref()
+        .is_some_and(|e| e.prepared.is_some())
+        || app.documents[0].snapshot() != before
+    {
+        return Err("Locked pressure reset prepared".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vector_pressure_reset_preview_scopes_cancel_native_and_undo() {
+        let root = crate::tests::TestDirectory::new();
+        super::reset_smoke(&root.0).unwrap();
+    }
     #[test]
     fn vector_tips_preview_apply_undo_and_overlay_workspace() {
         let root = crate::tests::TestDirectory::new();

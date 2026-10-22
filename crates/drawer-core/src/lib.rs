@@ -336,5 +336,6 @@ pub mod vector_nodes;
 pub mod vector_nodes_verify;
 pub mod vector_refine;
 pub mod vector_refine_verify;
+pub mod vector_reset_verify;
 pub mod vector_tip;
 pub mod vector_tip_verify;

@@ -354,6 +354,8 @@ impl Drawer {
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
                 "vector-refine-tools" => self.begin_vector_edit(None)?,
                 "vector-tip-tools" => self.begin_vector_tips()?,
+                "vector-pressure-reset-selected" => self.begin_pressure_reset(ctx, false)?,
+                "vector-pressure-reset-layer" => self.begin_pressure_reset(ctx, true)?,
                 "svg-import" => self.begin_svg()?,
                 "svg-export" => self.begin_svg_export()?,
                 "svg-copy" => self.copy_svg(ctx)?,

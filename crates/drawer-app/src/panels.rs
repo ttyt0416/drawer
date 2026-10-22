@@ -649,6 +649,14 @@ impl Drawer {
                                 ("Vector numeric editor…", "vector-edit-tools"),
                                 ("Refine vector strokes…", "vector-refine-tools"),
                                 ("Change vector tip…", "vector-tip-tools"),
+                                (
+                                    "Reset selected vector pressure…",
+                                    "vector-pressure-reset-selected",
+                                ),
+                                (
+                                    "Reset vector layer pressure…",
+                                    "vector-pressure-reset-layer",
+                                ),
                                 ("Import SVG…", "svg-import"),
                                 ("Export SVG…", "svg-export"),
                                 ("Copy SVG text", "svg-copy"),

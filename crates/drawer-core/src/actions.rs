@@ -6,7 +6,9 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 131] = [
+pub const EXTRA_COMMANDS: [&str; 133] = [
+    "vector-pressure-reset-selected",
+    "vector-pressure-reset-layer",
     "svg-import",
     "svg-export",
     "svg-copy",
@@ -439,6 +441,12 @@ impl Settings {
             "vector-point-tool" => "Move selected vector control points on the canvas",
             "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
             "vector-tip-tools" => "Change vector brush tips while preserving paths and pressure",
+            "vector-pressure-reset-selected" => {
+                "Preview resetting selected vector points or strokes to pressure 1.00"
+            }
+            "vector-pressure-reset-layer" => {
+                "Preview resetting all editable pressure in the current vector layer"
+            }
             "svg-import" => "Import local SVG paths, paints and image snapshots",
             "svg-export" => "Export SVG paths with local conversion notices and embedded images",
             "svg-copy" => "Copy SVG text using the same conversion policy as SVG export",
