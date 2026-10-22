@@ -106,6 +106,9 @@ impl Drawer {
     }
     pub(super) fn begin_detail_filter(&mut self, operation: Operation) -> Result<(), String> {
         self.finish_stroke();
+        if self.batch_filters.draft.is_some() || self.batch_filters.working() {
+            return Err("Apply or cancel the multiple-layer filter first".into());
+        }
         if self.surface_effects.draft.is_some() || self.surface_effects.working() {
             return Err("Apply or cancel surface effects first".into());
         }
@@ -309,12 +312,7 @@ impl Drawer {
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Source changed; close and reopen.");}
             let old=e.settings;
             egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::all(){if ui.selectable_label(op.same_kind(e.settings.operation),op.label()).clicked(){e.settings.operation=op;e.pixel_controls=Default::default();}}});
-            match &mut e.settings.operation{
-                Operation::Pixels(op)=>crate::pixel_effects::controls(ui,op,&mut e.pixel_controls),
-                Operation::Sharpen{strength}=>{ui.add(egui::Slider::new(strength,0. ..=5.).text("Strength"));},
-                Operation::Unsharp{radius,amount,threshold}=>{ui.add(egui::Slider::new(radius,0..=32).text("Radius (pixels)"));ui.add(egui::Slider::new(amount,0. ..=5.).text("Amount"));ui.add(egui::Slider::new(threshold,0. ..=1.).text("Threshold"));},
-                Operation::Denoise{luminance,chroma,detail}=>{ui.add(egui::Slider::new(luminance,0. ..=1.).text("Luminance noise reduction"));ui.add(egui::Slider::new(chroma,0. ..=1.).text("Color noise reduction"));ui.add(egui::Slider::new(detail,0. ..=1.).text("Line continuity tolerance"));}
-            }
+            controls(ui,&mut e.settings.operation,&mut e.pixel_controls);
             ui.checkbox(&mut e.settings.selection,"Only within the area selection");
             if ui.button("Restore last applied settings").clicked()&&let Some(s)=self.active.and_then(|n|self.documents[n].scene.last_detail_filter){e.settings=s;e.pixel_controls=Default::default();}
             changed=e.settings!=old;if changed{e.prepared=None;e.images=None;e.candidates=None;}
@@ -336,6 +334,37 @@ impl Drawer {
         }
         if apply && let Err(error) = self.apply_detail_filter() {
             self.status = Some(error);
+        }
+    }
+}
+
+pub(super) fn controls(
+    ui: &mut egui::Ui,
+    operation: &mut Operation,
+    state: &mut crate::pixel_effects::Controls,
+) {
+    match operation {
+        Operation::Pixels(op) => crate::pixel_effects::controls(ui, op, state),
+        Operation::Sharpen { strength } => {
+            ui.add(egui::Slider::new(strength, 0. ..=5.).text("Strength"));
+        }
+        Operation::Unsharp {
+            radius,
+            amount,
+            threshold,
+        } => {
+            ui.add(egui::Slider::new(radius, 0..=32).text("Radius (pixels)"));
+            ui.add(egui::Slider::new(amount, 0. ..=5.).text("Amount"));
+            ui.add(egui::Slider::new(threshold, 0. ..=1.).text("Threshold"));
+        }
+        Operation::Denoise {
+            luminance,
+            chroma,
+            detail,
+        } => {
+            ui.add(egui::Slider::new(luminance, 0. ..=1.).text("Luminance noise reduction"));
+            ui.add(egui::Slider::new(chroma, 0. ..=1.).text("Color noise reduction"));
+            ui.add(egui::Slider::new(detail, 0. ..=1.).text("Line continuity tolerance"));
         }
     }
 }

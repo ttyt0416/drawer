@@ -451,6 +451,7 @@ impl Drawer {
                 "radial-blur" => {
                     self.begin_spatial_blur(drawer_core::spatial_blur::Mode::Radial)?
                 }
+                "batch-filters" => self.begin_batch_filters()?,
                 "fisheye-filter" => {
                     self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
                         drawer_core::pixel_effects::Operation::Warp(

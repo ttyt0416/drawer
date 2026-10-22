@@ -686,3 +686,9 @@ crates/drawer-core/src/warp_filters_verify.rs
 crates/drawer-app/src/warp_filters.rs
 crates/drawer-app/src/warp_filters_verify.rs
 docs/process/warp-filters.md
+
+crates/drawer-core/src/batch_filters.rs
+crates/drawer-core/src/batch_filters_verify.rs
+crates/drawer-app/src/batch_filters.rs
+crates/drawer-app/src/batch_filters_verify.rs
+docs/process/batch-filters.md

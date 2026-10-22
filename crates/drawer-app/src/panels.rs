@@ -163,6 +163,7 @@ impl Drawer {
             || self.gaussian.draft.is_some()
             || self.surface_effects.draft.is_some()
             || self.spatial_blur.draft.is_some()
+            || self.batch_filters.draft.is_some()
             || self.detail_filter.draft.is_some()
             || self.color_corrections.draft.is_some()
             || self.adjustments.draft.is_some()
@@ -678,6 +679,7 @@ impl Drawer {
                                         ("Mesh and puppet deformation…", "mesh-puppet"),
                                         ("Free / perspective / liquify…", "raster-deformation"),
                                         ("Gaussian blur…", "gaussian-blur"),
+                                        ("Multiple-layer filters…", "batch-filters"),
                                         ("Fisheye…", "fisheye-filter"),
                                         ("Panorama…", "panorama-filter"),
                                         ("Wave…", "wave-filter"),

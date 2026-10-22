@@ -10,6 +10,16 @@ pub fn prepare(
     radius: u8,
     selection: bool,
 ) -> Result<DocumentState, String> {
+    prepare_with_progress(d, layer, radius, selection, |_, _| Ok(()))
+}
+pub fn prepare_with_progress(
+    d: &Document,
+    layer: usize,
+    radius: u8,
+    selection: bool,
+    mut tick: impl FnMut(usize, usize) -> Result<(), String>,
+) -> Result<DocumentState, String> {
+    tick(0, 1)?;
     crate::layer_properties::paintable(d, layer)?;
     if radius > 64 || d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Gaussian radius0–64 and snapshot limit required".into());
@@ -21,7 +31,26 @@ pub fn prepare(
                 .selection_mask
                 .as_ref()
                 .is_some_and(|m| m.runs.is_empty())
-        || (0..source.pixels.len()).all(|i| source.sample_at(i).alpha() == 0.)
+    {
+        return Ok(d.snapshot());
+    }
+    let mut empty = true;
+    for i in 0..source.pixels.len() {
+        if i.is_multiple_of(128) {
+            tick(i, source.pixels.len())?;
+        }
+        if source.sample_at(i).alpha() > 0. {
+            empty = false;
+            break;
+        }
+    }
+    if radius == 0
+        || selection
+            && d.scene
+                .selection_mask
+                .as_ref()
+                .is_some_and(|m| m.runs.is_empty())
+        || empty
     {
         return Ok(d.snapshot());
     }
@@ -58,6 +87,12 @@ pub fn prepare(
     let mut rows = vec![[0f64; 4]; horizontal];
     for y in 0..old.height {
         for x in 0..extent.width {
+            if (y as usize * extent.width as usize + x as usize).is_multiple_of(128) {
+                tick(
+                    y as usize * extent.width as usize + x as usize,
+                    horizontal + count,
+                )?;
+            }
             let mut sum = [0.; 4];
             for (i, w) in kernel.iter().enumerate() {
                 let p = source.sample(
@@ -81,6 +116,12 @@ pub fn prepare(
     let mut changed = false;
     for y in 0..extent.height {
         for x in 0..extent.width {
+            if (y as usize * extent.width as usize + x as usize).is_multiple_of(128) {
+                tick(
+                    horizontal + y as usize * extent.width as usize + x as usize,
+                    horizontal + count,
+                )?;
+            }
             let point = [extent.offset[0] + x as i64, extent.offset[1] + y as i64];
             let old_index = source.pixel_index(d.width, d.height, point[0], point[1]);
             let before = source.sample(d.width, d.height, point[0], point[1]);
@@ -165,5 +206,6 @@ pub fn prepare(
         Some(extent)
     };
     crate::layer_groups::finish(d, &state)?;
+    tick(1, 1)?;
     Ok(state)
 }

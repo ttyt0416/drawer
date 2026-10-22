@@ -241,6 +241,7 @@ impl Drawer {
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
+        self.batch_filters_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::Save(
             self.documents[index].id,
             path.to_owned(),
@@ -292,6 +293,7 @@ impl Drawer {
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
+        self.batch_filters_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::SaveDialog(
             self.documents[index].id,
             true,
@@ -318,6 +320,7 @@ impl Drawer {
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
+        self.batch_filters_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::SaveDialog(
             self.documents[index].id,
             false,

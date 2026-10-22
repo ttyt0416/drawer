@@ -75,7 +75,7 @@ fn source(app: &Drawer) -> Result<Source, String> {
         layer,
     })
 }
-fn thumbnail(d: &Document, cancel: &AtomicBool) -> Result<egui::ColorImage, String> {
+pub(super) fn thumbnail(d: &Document, cancel: &AtomicBool) -> Result<egui::ColorImage, String> {
     let r = drawer_core::float_render::Renderer::with_effect_progress(d, None, &mut |_, _| {
         if cancel.load(Ordering::Relaxed) {
             Err("Effects cancelled".into())
@@ -123,6 +123,9 @@ impl Drawer {
     }
     pub(super) fn begin_surface_effects(&mut self, add: Option<usize>) -> Result<(), String> {
         self.finish_stroke();
+        if self.batch_filters.draft.is_some() || self.batch_filters.working() {
+            return Err("Apply or cancel the multiple-layer filter first".into());
+        }
         if self.spatial_blur.draft.is_some()
             || self.spatial_blur.working()
             || self.detail_filter.draft.is_some()
@@ -382,7 +385,7 @@ if ui.button("Remove output mask").clicked(){e.config.stack.output_mask=None;}})
         }
     }
 }
-fn controls(
+pub(super) fn controls(
     ui: &mut egui::Ui,
     op: &mut Operation,
     state: &mut crate::pixel_effects::Controls,

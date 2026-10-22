@@ -85,6 +85,9 @@ impl Drawer {
     }
     pub(super) fn begin_spatial_blur(&mut self, mode: Mode) -> Result<(), String> {
         self.finish_stroke();
+        if self.batch_filters.draft.is_some() || self.batch_filters.working() {
+            return Err("Apply or cancel the multiple-layer filter first".into());
+        }
         if self.surface_effects.draft.is_some() || self.surface_effects.working() {
             return Err("Apply or cancel surface effects first".into());
         }
@@ -268,18 +271,7 @@ impl Drawer {
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Source changed; close and reopen.");}
             let old=e.settings;
             egui::ComboBox::from_id_salt("spatial-mode").selected_text(e.settings.mode.label()).show_ui(ui,|ui|{for mode in Mode::ALL{if ui.selectable_label(mode==e.settings.mode,mode.label()).clicked(){let size=self.active.map(|n|[self.documents[n].width,self.documents[n].height]).unwrap_or([1;2]);e.settings=self.workspaces.store.current.spatial_blur.get(mode,size);}}});
-            match e.settings.mode{
-                Mode::Motion=>{ui.add(egui::Slider::new(&mut e.settings.length,0. ..=128.).text("Length (pixels)"));ui.add(egui::DragValue::new(&mut e.settings.angle).range(-36000. ..=36000.).prefix("Angle ° "));},
-                Mode::Radial|Mode::Spin=>{
-                    if e.settings.mode==Mode::Radial{ui.add(egui::Slider::new(&mut e.settings.radius,0. ..=64.).text("Radial length (pixels)"));}else{ui.add(egui::Slider::new(&mut e.settings.angle,-360. ..=360.).text("Spin angle °"));}
-                    ui.horizontal(|ui|{ui.label("Center X / Y");for v in &mut e.settings.center{ui.add(egui::DragValue::new(v).range(-1e6..=1e6));}});
-                },
-                Mode::Lens=>{
-                    ui.add(egui::Slider::new(&mut e.settings.radius,0. ..=64.).text("Aperture radius (pixels)"));ui.add(egui::Slider::new(&mut e.settings.sides,3..=8).text("Aperture sides"));
-                    ui.add(egui::Slider::new(&mut e.settings.roundness,0. ..=1.).text("Roundness"));ui.add(egui::DragValue::new(&mut e.settings.angle).range(-36000. ..=36000.).prefix("Rotation ° "));
-                    ui.add(egui::Slider::new(&mut e.settings.highlight,0. ..=4.).text("Highlight boost"));
-                }
-            }
+            controls(ui,&mut e.settings);
             ui.add(egui::Slider::new(&mut e.settings.amount,0. ..=1.).text("Blend amount"));ui.checkbox(&mut e.settings.selection,"Only within the area selection");
             if ui.button("Restore last applied settings").clicked()&&let Some(s)=self.active.and_then(|n|self.documents[n].scene.last_spatial_blur){e.settings=s;}
             changed=e.settings!=old;
@@ -303,6 +295,48 @@ impl Drawer {
         }
         if apply && let Err(error) = self.apply_spatial_blur() {
             self.status = Some(error);
+        }
+    }
+}
+
+pub(super) fn controls(ui: &mut egui::Ui, settings: &mut Settings) {
+    match settings.mode {
+        Mode::Motion => {
+            ui.add(egui::Slider::new(&mut settings.length, 0. ..=128.).text("Length (pixels)"));
+            ui.add(
+                egui::DragValue::new(&mut settings.angle)
+                    .range(-36000. ..=36000.)
+                    .prefix("Angle ° "),
+            );
+        }
+        Mode::Radial | Mode::Spin => {
+            if settings.mode == Mode::Radial {
+                ui.add(
+                    egui::Slider::new(&mut settings.radius, 0. ..=64.)
+                        .text("Radial length (pixels)"),
+                );
+            } else {
+                ui.add(egui::Slider::new(&mut settings.angle, -360. ..=360.).text("Spin angle °"));
+            }
+            ui.horizontal(|ui| {
+                ui.label("Center X / Y");
+                for v in &mut settings.center {
+                    ui.add(egui::DragValue::new(v).range(-1e6..=1e6));
+                }
+            });
+        }
+        Mode::Lens => {
+            ui.add(
+                egui::Slider::new(&mut settings.radius, 0. ..=64.).text("Aperture radius (pixels)"),
+            );
+            ui.add(egui::Slider::new(&mut settings.sides, 3..=8).text("Aperture sides"));
+            ui.add(egui::Slider::new(&mut settings.roundness, 0. ..=1.).text("Roundness"));
+            ui.add(
+                egui::DragValue::new(&mut settings.angle)
+                    .range(-36000. ..=36000.)
+                    .prefix("Rotation ° "),
+            );
+            ui.add(egui::Slider::new(&mut settings.highlight, 0. ..=4.).text("Highlight boost"));
         }
     }
 }

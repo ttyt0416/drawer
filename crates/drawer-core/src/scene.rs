@@ -193,6 +193,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_batch_filter: Option<Box<crate::batch_filters::Record>>,
     #[serde(
         default,
         skip_serializing_if = "crate::surface_effects::Data::is_default"
@@ -285,6 +287,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.last_batch_filter.as_ref().is_some_and(|r| !r.valid()) {
+            return false;
+        }
         if self.last_detail_filter.is_some_and(|s| !s.valid()) {
             return false;
         }
@@ -405,6 +410,7 @@ impl Scene {
             + self.file_objects.bytes()
             + self.appearance.bytes()
             + self.surface_effects.bytes()
+            + self.last_batch_filter.as_ref().map_or(0, |r| r.bytes())
             + self.catalog.bytes()
             + self.clipping.bytes()
             + self.layer_effects.bytes()
