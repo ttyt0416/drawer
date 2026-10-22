@@ -944,3 +944,11 @@ Layers…의 Add vector node / Delete vector node / Corner vector node / Smooth 
 처음 노드를 편집하면 기존 선의 저장된 윤곽 점을 독립 노드로 사용합니다. 원래 전역 곡선/도형 정의는 Undo로 복구할 수 있습니다. 삽입은 현재 베지어 구간의 형태를 유지하고 삭제는 앞뒤 점을 잇습니다. 열린 선은 최소2점, 닫힌 선은 최소3점을 남깁니다.
 
 Smooth는 접선 방향을 이어 부드러운 점으로 만들고 Corner는 인접 방향으로 각지게 만듭니다. 부드러운 점은 원, 각진 점은 사각형이며 선택한 점의 핸들 선도 표시합니다. 새 점의 위치·핸들·상태와 압력을 문서에 저장합니다. 기존 점 이동·필압·폭·색 편집 도구도 함께 사용할 수 있습니다.
+
+## vector-refine | 선 연결·단순화·밀기·다시 그리기 | 선 연결 단순화 오차 부분 밀기 구간 다시그리기 끝점 고정 선폭 불투명도 분할
+
+Layers… → Refine vector strokes…에서 선택을 불러온 뒤 Join endpoints / Simplify outline / Convert curve / Adjust line width / Adjust opacity / Split at selected point를 고릅니다. Prepare refinement preview로 확인하고 공통 Apply 버튼으로 확정합니다. 연결은 같은 스타일의 열린 두 획과 최대 거리, 단순화는 문서 픽셀 오차를 사용합니다. 오차0은 원본을 유지합니다. 폭의 가감·배율·고정값과 최소1문서픽셀 기본 선폭을 구분하며 필압은 별도로 유지합니다.
+
+Push vector span은 반경 안의 선을 끌어 밀고 Redraw vector span은 제어점에서 다른 제어점으로 드래그해 그 구간을 바꿉니다. Shift로 경계점 두 개를 먼저 골라도 됩니다. 도구 창에서 양끝 고정 / 가까운 한끝 고정 / 양끝 자유, Polyline / Spline / Quadratic Bezier / Cubic Bezier를 선택합니다. 선택 밖 구간과 연결되는 내부 경계는 고정됩니다. 다시그리기는 한 번에128입력점, 곡선 변환은128제어점까지입니다.
+
+기존 점 이동·추가·삭제·모서리 전환을 함께 사용할 수 있습니다. 분할은 열린 선의 내부 점을 고르며 닫힌 획에서는 선택점이 열린 이음매가 됩니다. 채움이 있는 선은 연결/분할에서 제외합니다. 윤곽 편집은 저장된 선분으로 전환되며 이전 곡선 정의는 Undo로 복원합니다. 놓기/Apply가 한 Undo이고 Escape·포커스 상실은 취소합니다. 필압·폭·알파·결과는 문서에 보존됩니다.

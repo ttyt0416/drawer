@@ -20,6 +20,8 @@ pub enum Tool {
     DeleteNode,
     CornerNode,
     SmoothNode,
+    Push,
+    Redraw,
 }
 impl Tool {
     pub fn node_operation(self) -> Option<crate::vector_nodes::Operation> {
@@ -44,6 +46,9 @@ pub enum Modifier {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
+    pub push_radius: f64,
+    pub ends: crate::vector_refine::Ends,
+    pub curve: crate::shapes::Curve,
     pub tool: Tool,
     pub sensitivity: f64,
     pub radius: f64,
@@ -52,6 +57,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            push_radius: 32.,
+            ends: Default::default(),
+            curve: crate::shapes::Curve::StraightLine,
             tool: Tool::Point,
             sensitivity: 0.01,
             radius: 10.,
@@ -61,7 +69,9 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(&self) -> bool {
-        self.sensitivity.is_finite()
+        self.push_radius.is_finite()
+            && (0.1..=1e6).contains(&self.push_radius)
+            && self.sensitivity.is_finite()
             && (0.001..=1.).contains(&self.sensitivity)
             && self.radius.is_finite()
             && (2. ..=32.).contains(&self.radius)
@@ -167,7 +177,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
                 }
             }
         }
-        if matches!(tool, Tool::Color | Tool::Select) && !found {
+        if matches!(tool, Tool::Color | Tool::Select | Tool::Push) && !found {
             let mut best = (f64::INFINITY, point);
             for (a, b) in path.segments() {
                 let a = d.scene.transform.map(a);
@@ -202,7 +212,7 @@ pub fn hits(d: &Document, id: u64, point: Point, radius: f64, tool: Tool) -> Vec
     // Preserve visual/topmost order at crossings; proximity orders candidates
     // only within a practically equal visual location.
     hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-    if matches!(tool, Tool::Color | Tool::Select) {
+    if matches!(tool, Tool::Color | Tool::Select | Tool::Push) {
         let mut seen = BTreeSet::new();
         hits.retain(|h| seen.insert(h.path));
     }

@@ -347,6 +347,13 @@ impl Drawer {
                     self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Color))?
                 }
                 "vector-edit-tools" => self.begin_vector_edit(None)?,
+                "vector-refine-tools" => self.begin_vector_edit(None)?,
+                "vector-push-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Push))?
+                }
+                "vector-redraw-tool" => {
+                    self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Redraw))?
+                }
                 "vector-stroke-tool" => {
                     self.begin_vector_edit(Some(drawer_core::vector_edit::Tool::Select))?
                 }

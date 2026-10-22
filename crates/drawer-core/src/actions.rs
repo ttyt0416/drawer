@@ -6,7 +6,10 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 123] = [
+pub const EXTRA_COMMANDS: [&str; 126] = [
+    "vector-refine-tools",
+    "vector-push-tool",
+    "vector-redraw-tool",
     "opacity-up",
     "opacity-down",
     "opacity-0",
@@ -429,6 +432,9 @@ impl Settings {
             "gradient-tool" => "Gradient and freeform gradient",
             "vector-line-tool" => "Draw an editable vector line with clicked control points",
             "vector-point-tool" => "Move selected vector control points on the canvas",
+            "vector-refine-tools" => "Join, simplify, split, convert and restyle vector strokes",
+            "vector-push-tool" => "Locally push vector outlines with endpoint constraints",
+            "vector-redraw-tool" => "Redraw a selected vector span while preserving the rest",
             "vector-stroke-tool" => "Select whole vector strokes on the canvas",
             "vector-node-add-tool" => "Add a cubic node inside a vector segment",
             "vector-node-delete-tool" => {

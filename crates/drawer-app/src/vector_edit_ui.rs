@@ -23,6 +23,7 @@ pub(super) struct Gesture {
     selection: Selection,
     preview: Option<Document>,
     planned: Option<Box<drawer_core::sizing::DocumentState>>,
+    trace: Vec<Point>,
 }
 pub(super) struct Hover {
     canvas_layer: egui::LayerId,
@@ -82,7 +83,7 @@ impl Gesture {
                 color: Some(self.color),
                 ..Default::default()
             },
-            Tool::Select => Patch::default(),
+            Tool::Select | Tool::Push | Tool::Redraw => Patch::default(),
             Tool::AddNode | Tool::DeleteNode | Tool::CornerNode | Tool::SmoothNode => {
                 Patch::default()
             }
@@ -189,7 +190,46 @@ impl Drawing {
                 self.vector_capture = Some(s);
                 return;
             }
-            let result = core::prepare(doc, s.layer, &s.selection, s.patch());
+            let result = match s.tool {
+                Tool::Push => {
+                    let a = s.projection.point(s.start);
+                    let b = s.projection.point(s.last);
+                    drawer_core::vector_refine::push(
+                        doc,
+                        s.layer,
+                        &s.selection,
+                        a,
+                        [b[0] - a[0], b[1] - a[1]],
+                        s.settings.push_radius,
+                        s.settings.ends,
+                    )
+                }
+                Tool::Redraw => {
+                    let point = s.projection.point(s.last);
+                    if s.trace.last() != Some(&point) {
+                        if s.trace.len() >= 128 {
+                            self.error = Some("Redraw trace limit128; use a shorter stroke".into());
+                            self.vector_selection = s.previous;
+                            self.ownership.clear();
+                            return;
+                        }
+                        s.trace.push(point);
+                    }
+                    if s.trace.len() < 2 {
+                        self.vector_capture = Some(s);
+                        return;
+                    }
+                    drawer_core::vector_refine::redraw(
+                        doc,
+                        s.layer,
+                        &s.selection,
+                        &s.trace,
+                        s.settings.ends,
+                        s.settings.curve,
+                    )
+                }
+                _ => core::prepare(doc, s.layer, &s.selection, s.patch()),
+            };
             match result {
                 Ok(state) => {
                     if e.phase == Phase::Up {
@@ -200,6 +240,9 @@ impl Drawing {
                             || s.start.distance(s.last) > 0.01;
                         if changed && let Err(error) = doc.commit_state(state) {
                             self.error = Some(error);
+                        }
+                        if matches!(s.tool, Tool::Push | Tool::Redraw) {
+                            self.vector_selection = Selection::current(doc, s.layer);
                         }
                         return;
                     }
@@ -214,6 +257,15 @@ impl Drawing {
                     }
                 }
                 Err(error) => {
+                    if s.tool == Tool::Redraw && error.starts_with("Drag to a different control") {
+                        if e.phase != Phase::Up {
+                            self.vector_capture = Some(s);
+                        } else {
+                            self.vector_selection = s.previous;
+                            self.ownership.clear();
+                        }
+                        return;
+                    }
                     self.error = Some(error);
                     self.vector_selection = s.previous;
                     self.ownership.clear();
@@ -377,7 +429,7 @@ impl Drawing {
                     paths,
                     controls: vec![],
                 };
-            } else if tool == Tool::Color {
+            } else if matches!(tool, Tool::Color | Tool::Push) {
                 if !selection.path_ids().contains(&hit.path) {
                     selection = Selection {
                         controls: vec![],
@@ -415,6 +467,7 @@ impl Drawing {
                 selection: selection.clone(),
                 preview,
                 planned,
+                trace: vec![projection.point(pos)],
             };
             self.vector_selection = selection;
             self.vector_capture = Some(Box::new(s));
@@ -443,6 +496,19 @@ impl Drawing {
             return;
         };
         let painter = ui.painter_at(rect);
+        if effective(ui.ctx(), self.vector_settings) == Tool::Push
+            && let Some(h) = self
+                .vector_hover
+                .as_ref()
+                .filter(|h| h.document == original_id && h.view == view)
+        {
+            painter.circle_stroke(
+                h.point,
+                (self.vector_settings.push_radius * doc.view.zoom
+                    / ui.ctx().pixels_per_point() as f64) as f32,
+                egui::Stroke::new(1., egui::Color32::LIGHT_BLUE),
+            );
+        }
         let project = |point| {
             let p = doc.view.document_to_screen(
                 point,
@@ -560,6 +626,8 @@ impl Drawing {
                 }
                 Tool::Color => format!("RGBA: {:?}", s.color),
                 Tool::Select => format!("{} whole strokes", s.selection.path_ids().len()),
+                Tool::Push => format!("Local push · {:?}", s.settings.ends),
+                Tool::Redraw => format!("Redraw span · {:?}", s.settings.ends),
                 tool => tool.node_operation().map_or_else(String::new, |op| {
                     format!("{} · release to apply", op.label())
                 }),
@@ -582,6 +650,7 @@ pub(crate) struct Panel {
     apply: Option<egui::Rect>,
 }
 struct Draft {
+    refine: RefineOptions,
     id: u64,
     revision: u64,
     frame: u32,
@@ -602,6 +671,7 @@ impl Draft {
     fn new(d: &Document, layer: Option<u64>, selection: Selection) -> Self {
         let value = layer.and_then(|l| core::values(d, l, &selection).ok());
         Self {
+            refine: Default::default(),
             id: d.id,
             revision: d.revision,
             frame: d.current_frame,
@@ -633,6 +703,39 @@ impl Draft {
     }
     fn fresh(&self, d: &Document) -> bool {
         (self.id, self.revision, self.frame) == (d.id, d.revision, d.current_frame)
+    }
+}
+struct RefineOptions {
+    kind: u8,
+    value: f64,
+    width: drawer_core::vector_refine::Width,
+    minimum: bool,
+    alpha: u8,
+    curve: drawer_core::shapes::Curve,
+}
+impl Default for RefineOptions {
+    fn default() -> Self {
+        Self {
+            kind: 0,
+            value: 2.,
+            width: Default::default(),
+            minimum: false,
+            alpha: 255,
+            curve: drawer_core::shapes::Curve::StraightLine,
+        }
+    }
+}
+impl RefineOptions {
+    fn operation(&self) -> drawer_core::vector_refine::Operation {
+        use drawer_core::vector_refine::Operation as Op;
+        match self.kind {
+            0 => Op::Join(self.value),
+            1 => Op::Simplify(self.value),
+            2 => Op::Convert(self.curve),
+            3 => Op::Width(self.width, self.value, self.minimum),
+            4 => Op::Opacity(self.alpha),
+            _ => Op::Split,
+        }
     }
 }
 impl Drawer {
@@ -667,6 +770,9 @@ impl Drawer {
         Ok(())
     }
     fn preview_vector_numbers(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        self.preview_vector_edit(ctx, false)
+    }
+    fn preview_vector_edit(&mut self, ctx: &egui::Context, refinement: bool) -> Result<(), String> {
         self.finish_stroke();
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let used: usize = self.documents.iter().map(Document::resident_bytes).sum();
@@ -691,15 +797,24 @@ impl Drawer {
         {
             return Err("Page/frame changed; reload the current selection".into());
         }
-        if !(e.set_width || e.set_color || e.set_pressure || e.set_movement) {
+        if !refinement && !(e.set_width || e.set_color || e.set_pressure || e.set_movement) {
             return Err("Choose at least one property to change".into());
         }
-        let state = core::prepare(
-            d,
-            e.layer.ok_or("Choose an editable vector layer")?,
-            &e.selection,
-            e.patch(),
-        )?;
+        let state = if refinement {
+            drawer_core::vector_refine::prepare(
+                d,
+                e.layer.ok_or("Choose an editable vector layer")?,
+                &e.selection,
+                e.refine.operation(),
+            )?
+        } else {
+            core::prepare(
+                d,
+                e.layer.ok_or("Choose an editable vector layer")?,
+                &e.selection,
+                e.patch(),
+            )?
+        };
         let after = bucket::preview(d, state.clone())?;
         e.images = Some([
             crate::layer_merge::image(ctx, d, "vector-edit-before"),
@@ -729,11 +844,11 @@ impl Drawer {
             .take()
             .ok_or("Prepare the vector preview first")?;
         self.documents[n].commit_state(state)?;
-        self.drawing.vector_selection = e.selection.clone();
+        self.drawing.vector_selection = Selection::current(&self.documents[n], e.layer.unwrap());
         self.vector_edit.draft = Some(Box::new(Draft::new(
             &self.documents[n],
             e.layer,
-            e.selection.clone(),
+            self.drawing.vector_selection.clone(),
         )));
         Ok(())
     }
@@ -747,6 +862,7 @@ impl Drawer {
         let d = &self.documents[n];
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut reload, mut changed) = (false, false, false, false);
+        let mut refine_preview = false;
         let fresh = e.fresh(d) && e.layer == self.drawing.vector_layer;
         egui::Window::new("Vector points, width, color and pressure").open(&mut open).collapsible(false).default_width(340.).default_pos(egui::pos2(645.,55.)).show(ctx, |ui| {
             let settings = &mut self.workspaces.store.current.vector_edit;
@@ -779,6 +895,28 @@ impl Drawer {
                 ui.horizontal_wrapped(|ui|{for (tool,label) in [(Tool::AddNode,"Add node"),(Tool::DeleteNode,"Delete node"),(Tool::CornerNode,"Corner"),(Tool::SmoothNode,"Smooth")] {ui.radio_value(&mut self.workspaces.store.current.vector_edit.tool,tool,label);}});
                 ui.small("Existing shape definitions use their stored outline points as nodes. Add inside a segment, delete a point, or switch its tangents. Preview on press; release applies one Undo. Escape cancels.");
             });
+            ui.collapsing("Join, simplify, push and redraw",|ui| {
+                let settings=&mut self.workspaces.store.current.vector_edit;
+                ui.horizontal(|ui|{ui.radio_value(&mut settings.tool,Tool::Push,"Local push");ui.radio_value(&mut settings.tool,Tool::Redraw,"Redraw span");});
+                ui.add(egui::DragValue::new(&mut settings.push_radius).range(0.1..=1e6).prefix("Push radius (document pixels): "));
+                egui::ComboBox::from_id_salt("refine-ends").selected_text(format!("{:?}",settings.ends)).show_ui(ui,|ui|{for (ends,label) in [(drawer_core::vector_refine::Ends::Both,"Fix both ends"),(drawer_core::vector_refine::Ends::Either,"Fix nearest end"),(drawer_core::vector_refine::Ends::Free,"Free both ends")] {ui.selectable_value(&mut settings.ends,ends,label);}});
+                egui::ComboBox::from_id_salt("refine-redraw-curve").selected_text(settings.curve.label()).show_ui(ui,|ui|{for c in drawer_core::shapes::Curve::ALL {ui.selectable_value(&mut settings.curve,c,if c==drawer_core::shapes::Curve::StraightLine {"Polyline"}else{c.label()});}});
+                ui.small("Push a stroke near the cursor. Redraw from one control to another, or Shift-select two boundary controls first. Interior boundaries stay attached; the unselected outline stays unchanged. Hold the temporary point modifier to move controls.");
+                const LABELS:[&str;6]=["Join endpoints","Simplify outline","Convert curve","Adjust line width","Adjust opacity","Split at selected point"];
+                egui::ComboBox::from_id_salt("refine-op").selected_text(LABELS[e.refine.kind as usize]).show_ui(ui,|ui|{for (i,label) in LABELS.iter().enumerate(){changed|=ui.selectable_value(&mut e.refine.kind,i as u8,*label).changed();}});
+                if matches!(e.refine.kind,0|1|3) {changed|=ui.add(egui::DragValue::new(&mut e.refine.value).speed(0.1).range(0. ..=if e.refine.kind==3 {512.}else{1e6}).prefix(if e.refine.kind==0 {"Maximum join distance: "}else if e.refine.kind==1 {"Maximum error: "}else{"Amount / factor: "})).changed();}
+                if e.refine.kind==2 {egui::ComboBox::from_id_salt("refine-curve").selected_text(e.refine.curve.label()).show_ui(ui,|ui|{for c in drawer_core::shapes::Curve::ALL {changed|=ui.selectable_value(&mut e.refine.curve,c,if c==drawer_core::shapes::Curve::StraightLine {"Polyline"}else{c.label()}).changed();}});}
+                if e.refine.kind==3 {
+                    use drawer_core::vector_refine::Width;
+                    egui::ComboBox::from_id_salt("refine-width").selected_text(format!("{:?}",e.refine.width)).show_ui(ui,|ui|{for (m,label) in [(Width::Thicken,"Thicken"),(Width::Narrow,"Narrow"),(Width::ScaleUp,"Scale up width"),(Width::ScaleDown,"Scale down width"),(Width::Fix,"Fix width")] {changed|=ui.selectable_value(&mut e.refine.width,m,label).changed();}});
+                    changed|=ui.checkbox(&mut e.refine.minimum,"At least 1 pixel (base width)").changed();
+                    ui.small("Device pressure and editable multipliers remain independent, including zero pressure.");
+                }
+                if e.refine.kind==4 {changed|=ui.add(egui::DragValue::new(&mut e.refine.alpha).range(0..=255).prefix("Alpha: ")).changed();}
+                if changed {e.prepared=None;e.images=None;}
+                refine_preview=ui.add_enabled(fresh && values.is_some(),egui::Button::new("Prepare refinement preview")).clicked();
+                ui.small("Join two open strokes with matching styles; use document-pixel distance/error. Refinements store outline points; Undo restores the previous curve definition. Apply using the shared preview above.");
+            });
         });
         if reload {
             e = Box::new(Draft::new(
@@ -791,6 +929,9 @@ impl Drawer {
             self.vector_edit.draft = Some(e);
         }
         if preview && let Err(error) = self.preview_vector_numbers(ctx) {
+            self.status = Some(error);
+        }
+        if refine_preview && let Err(error) = self.preview_vector_edit(ctx, true) {
             self.status = Some(error);
         }
         if apply && let Err(error) = self.apply_vector_numbers() {
@@ -1467,8 +1608,186 @@ pub(crate) fn node_smoke(root: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn refine_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::vector_refine_verify::verify(root)?;
+    for command in ["vector-push-tool", "vector-redraw-tool"] {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        app.create_canvas(CanvasSpec {
+            width: 32,
+            height: 32,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        app.documents[0].commit_state(drawer_core::vector_nodes_verify::fixture()?.snapshot())?;
+        app.documents[0].view.zoom = 4.;
+        let layer = app.documents[0].scene.lines.layers[0].id;
+        app.panels.targets.insert(
+            app.documents[0].id,
+            drawer_core::thumbnail::Target::Vector(layer),
+        );
+        let mut time = 0.;
+        let step = |app: &mut Drawer, time: &mut f64, events| {
+            *time += 0.1;
+            crate::input_replay::frame(&ctx, app, *time, events);
+        };
+        step(&mut app, &mut time, vec![]);
+        step(&mut app, &mut time, vec![]);
+        app.execute_command(&ctx, command);
+        let before = app.documents[0].snapshot();
+        let history = app.documents[0].history_counts();
+        let start = if command == "vector-push-tool" {
+            [16., 4.]
+        } else {
+            [4., 16.]
+        };
+        let end = if command == "vector-push-tool" {
+            [18., 7.]
+        } else {
+            [16., 4.]
+        };
+        let down = crate::precision::pointer(&ctx, &app, start, Phase::Down);
+        app.drawing.virtual_events(vec![down], false);
+        step(&mut app, &mut time, vec![]);
+        if !app.drawing.pending() {
+            return Err(format!(
+                "Refine capture missing: {command} {:?}",
+                app.status
+            ));
+        }
+        if command == "vector-redraw-tool" {
+            let middle = crate::precision::pointer(&ctx, &app, [10., 20.], Phase::Move);
+            app.drawing.virtual_events(vec![middle], false);
+            step(&mut app, &mut time, vec![]);
+        }
+        let moved = crate::precision::pointer(&ctx, &app, end, Phase::Move);
+        app.drawing.virtual_events(vec![moved], false);
+        step(&mut app, &mut time, vec![]);
+        if app
+            .drawing
+            .vector_edit_preview(app.documents[0].id)
+            .is_none()
+            || app.documents[0].snapshot() != before
+        {
+            return Err(format!(
+                "Refine preview/source isolation: {command} {:?}",
+                app.status
+            ));
+        }
+        let mut up = moved;
+        up.phase = Phase::Up;
+        app.drawing.virtual_events(vec![up], false);
+        step(&mut app, &mut time, vec![]);
+        if app.documents[0].history_counts().0 != history.0 + 1
+            || app.documents[0].scene.lines.layers[0].paths[1]
+                != before.scene.lines.layers[0].paths[1]
+        {
+            return Err("Refine one Undo/unselected path".into());
+        }
+        if app.documents[0].scene.lines.layers[0].paths[0].points
+            == before.scene.lines.layers[0].paths[0].points
+        {
+            return Err("Refine mouse did not change geometry".into());
+        }
+        let file = root.join(format!("{command}.drawer"));
+        drawer_core::files::save(&mut app.documents[0], &file).map_err(|e| e.to_string())?;
+        if drawer_core::files::open(&file, DEFAULT_DOCUMENT_BUDGET)
+            .map_err(|e| e.to_string())?
+            .snapshot()
+            != app.documents[0].snapshot()
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+        {
+            return Err("Refine native save/Undo".into());
+        }
+        for cancel in 0..3 {
+            let selection = app.drawing.vector_selection.clone();
+            let count = app.documents[0].history_counts();
+            app.drawing.virtual_events(vec![down], false);
+            step(&mut app, &mut time, vec![]);
+            app.drawing.virtual_events(vec![moved], false);
+            step(&mut app, &mut time, vec![]);
+            let events = match cancel {
+                0 => vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }],
+                1 => vec![egui::Event::WindowFocused(false)],
+                _ => {
+                    let mut event = up;
+                    event.phase = Phase::Cancel;
+                    app.drawing.virtual_events(vec![event], false);
+                    vec![]
+                }
+            };
+            step(&mut app, &mut time, events);
+            if app.drawing.pending()
+                || app.documents[0].snapshot() != before
+                || app.documents[0].history_counts() != count
+                || app.drawing.vector_selection != selection
+            {
+                return Err("Refine cancellation altered source/history/selection".into());
+            }
+            step(
+                &mut app,
+                &mut time,
+                vec![
+                    egui::Event::WindowFocused(true),
+                    egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        let id = app.documents[0].scene.lines.layers[0].paths[0].id;
+        app.drawing.vector_selection = Selection {
+            paths: vec![id],
+            ..Default::default()
+        };
+        app.execute_command(&ctx, "vector-refine-tools");
+        let e = app
+            .vector_edit
+            .draft
+            .as_mut()
+            .ok_or("Refine dialog missing")?;
+        e.selection = Selection {
+            paths: vec![id],
+            ..Default::default()
+        };
+        e.refine.kind = 3;
+        e.refine.width = drawer_core::vector_refine::Width::ScaleUp;
+        e.refine.value = 2.;
+        app.preview_vector_edit(&ctx, true)?;
+        if app.documents[0].snapshot() != before {
+            return Err("Refine dialog preview mutated original".into());
+        }
+        app.apply_vector_numbers()?;
+        if app.documents[0].scene.lines.layers[0].paths[0].width != 6.
+            || !app.documents[0].undo()
+            || app.documents[0].snapshot() != before
+        {
+            return Err("Refine dialog apply/Undo".into());
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vector_refinement_mouse_preview_cancel_save_numeric_and_undo() {
+        let root = crate::tests::TestDirectory::new();
+        super::refine_smoke(&root.0).unwrap();
+    }
     #[test]
     fn vector_mouse_pressure_points_color_numbers_cancellation_and_temporary_tool() {
         let root = crate::tests::TestDirectory::new();

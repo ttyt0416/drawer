@@ -1346,7 +1346,9 @@
   저장·취소: 문서 D  
   완료 검증: 최소 점 수·닫힌 경로 마지막 점·전환 전후 접선 연속
 
-- [ ] **144.** 선 연결·단순화·부분 밀기·다시 그리기
+- [x] **144.** 선 연결·단순화·부분 밀기·다시 그리기
+
+  검증 기록: 동일 스타일 열린 획의 최근접 끝점 연결·거리 제한과 방향별 압력 재배치, 문서 픽셀 오차 단순화·오차0 원본 보존, 반경 내 밀기와 두 점뿐인 긴 직선의 국소 굽힘, 선택 구간 다시 그리기를 구현했다. 양끝/가까운 한끝/끝점 자유·Polyline/Spline/Quadratic/Cubic·폭 가감/배율/고정/최소1문서픽셀 기본폭·획 알파·열린/닫힌 분할을 구분하고 기존 이동/추가/삭제/모서리 도구를 연결했다. 자기 교차의 구간 순서·선택 밖 윤곽/다른 획/압력·비균등 변환·짧은 선·분할 이음매·한 Undo·네이티브 재열기를 검증했다. 실제 마우스 밀기/굽은 구간 다시 그리기·원본 분리 미리보기·세 취소/선택 복원·수치 전후 미리보기/적용을 확인했다. 전체621개(앱219/코어384/플랫폼11/전달7) 통과, 기존 외부 코덱1개 제외. 경고 거부·라이브러리170개/글꼴4개 고지·릴리스·설치/재설치/제거·사용자파일18개 보존·설치본 vector_refine=true/gpu_color=true 통과. 윤곽 처리의 원래 곡선 정의는 Undo에 보존하며 입력/보존/한도 계약은 vector-refinement.md에 기록했다.
 
   입력·결과: 끝점 연결·오차 제한 단순화·국소 밀기·선택 구간 다시그리기 제공  
   필수 옵션: 벡터 제어점·끝점 고정·선폭 변경 방식 — Move control points, Add control point, Delete control point, Switch corner, Adjust line width, Adjust opacity, Split line, Polyline, Spline, Quadratic Bezier, Cubic Bezier, Fix both ends, Fix either end, Free both ends, Thicken, Narrow, Scale up width, Scale down width, Fix width, At least 1 pixel. 제어점 이동/추가/삭제/모서리 전환/선폭/불투명도/선분 분할, 곡선 종류 변환, 양끝/한끝/끝점 자유, 폭 가감/배율/고정폭을 구분한다.  

@@ -588,3 +588,7 @@ docs/process/vector-erase.md
 crates/drawer-core/src/vector_nodes.rs
 crates/drawer-core/src/vector_nodes_verify.rs
 docs/process/vector-nodes.md
+
+crates/drawer-core/src/vector_refine.rs
+crates/drawer-core/src/vector_refine_verify.rs
+docs/process/vector-refinement.md
