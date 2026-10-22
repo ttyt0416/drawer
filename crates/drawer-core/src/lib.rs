@@ -340,6 +340,8 @@ pub mod vector_reset_verify;
 pub mod vector_tip;
 pub mod vector_tip_verify;
 
+pub mod affine_transform;
+pub mod affine_transform_verify;
 pub mod vector_cleanup;
 pub mod vector_cleanup_verify;
 pub mod vector_clipboard;

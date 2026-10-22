@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 145] = [
+pub const EXTRA_COMMANDS: [&str; 146] = [
+    "scale-rotate",
     "raster-trace",
     "vector-remove-short",
     "vector-scope-tools",

@@ -618,3 +618,8 @@ crates/drawer-app/src/vector_cleanup.rs
 crates/drawer-core/src/vector_cleanup.rs
 crates/drawer-core/src/vector_cleanup_verify.rs
 docs/process/raster-trace-and-vector-cleanup.md
+
+crates/drawer-app/src/affine_transform.rs
+crates/drawer-core/src/affine_transform.rs
+crates/drawer-core/src/affine_transform_verify.rs
+docs/process/pivot-scale-rotation.md
