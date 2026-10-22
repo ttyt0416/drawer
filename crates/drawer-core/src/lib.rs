@@ -351,3 +351,6 @@ pub mod vector_cleanup_verify;
 pub mod vector_clipboard;
 pub mod vector_scope;
 pub mod vector_scope_verify;
+
+pub mod deform;
+pub mod deform_verify;

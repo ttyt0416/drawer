@@ -1449,7 +1449,7 @@
   저장·취소: D/P; 원본 자체형식 저장  
   완료 검증: 반경 0 무변화·1픽셀·투명색 테두리에 검은 띠 없음
 
-- [ ] **154.** 자유 변형·원근 변형·Liquify
+- [x] **154.** 자유 변형·원근 변형·Liquify
 
   입력·결과: 4모서리 자유/원근 변형 및 브러시형 밀기·확대·축소 변형 제공  
   필수 옵션: 유동화 조작 7종 — Push, Expand, Pinch, Push Left, Push Right, Twirl Clockwise, Twirl Anti-Clockwise, Only refer to editing area. 밀기·팽창·축소·진행 방향의 좌/우 밀기·시계/반시계 회전을 구분하고 편집 영역 안만 참조하는 경계 옵션을 제공한다.  

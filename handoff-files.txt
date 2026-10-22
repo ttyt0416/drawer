@@ -633,3 +633,8 @@ crates/drawer-app/src/gaussian.rs
 crates/drawer-core/src/gaussian.rs
 crates/drawer-core/src/gaussian_verify.rs
 docs/process/gaussian-blur.md
+
+crates/drawer-app/src/deform.rs
+crates/drawer-core/src/deform.rs
+crates/drawer-core/src/deform_verify.rs
+docs/process/raster-deformation.md
