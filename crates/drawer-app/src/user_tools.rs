@@ -75,6 +75,10 @@ impl Editor {
 }
 impl Drawer {
     pub(super) fn select_user_tool(&mut self, id: u64) -> Result<(), String> {
+        if self.defer_path(drawing::path_draft::Action::UserTool(id)) {
+            return Ok(());
+        }
+
         if self.workspaces.store.current.user_tools.active == Some(id) {
             self.drawing.mode = super::precision::Mode::Paint;
             return Ok(());

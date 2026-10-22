@@ -2,6 +2,8 @@ use super::*;
 use drawer_core::shapes::{self as core, Constraint, Curve, Input, Kind, Paint, Settings, Target};
 #[derive(Clone, Copy)]
 pub(super) struct Capture {
+    pub device_pressure: bool,
+    pub source_target: drawer_core::thumbnail::Target,
     pub settings: Settings,
     pub snapping: drawer_core::snapping::Settings,
     pub target: Target,
@@ -54,8 +56,11 @@ impl Drawer {
             ui.checkbox(&mut s.center,"Start box at center");ui.checkbox(&mut s.closed,"Close path");ui.checkbox(&mut s.snap,"Snap control points to grid");if s.snap{ui.add(egui::DragValue::new(&mut s.snap_step).range(0.1..=1e6).prefix("Grid step: "));}
             ui.horizontal(|ui|{ui.label("Line RGBA");super::edit::rgba(ui,&mut s.line);ui.label("Fill RGBA");super::edit::rgba(ui,&mut s.fill);});
             ui.checkbox(&mut self.workspaces.store.current.shapes_vector,"Vector output (selected vector layer, or create one)");
-            ui.label("Click mode: add control points, Enter to finish, Backspace to remove, Escape to cancel. Drag mode: boxes use two corners; curves use the traced control path. Polygon/fill closes automatically. Raster output respects selection strength; editable vector output requires an unrestricted selection.");
-            if old!=self.workspaces.store.current.shapes||old_vector!=self.workspaces.store.current.shapes_vector{self.finish_stroke();if self.drawing.mode.creation_shape(){self.drawing.mode=if self.workspaces.store.current.shapes.input==Input::ByClick{super::precision::Mode::ShapeClick}else{super::precision::Mode::ShapeDrag};}}
+            ui.label("Click mode: add control points, Enter to finish, Backspace/right-click/Ctrl+Z undo draft points; Ctrl+Y redo; Escape cancels. Drag mode: boxes use two corners; curves use the traced control path. Polygon/fill closes automatically. Raster output respects selection strength; editable vector output requires an unrestricted selection.");
+            if old!=self.workspaces.store.current.shapes||old_vector!=self.workspaces.store.current.shapes_vector {
+                let requested=self.workspaces.store.current.shapes;let vector=self.workspaces.store.current.shapes_vector;
+                if self.defer_path(drawing::path_draft::Action::Configure(requested,vector)){self.workspaces.store.current.shapes=old;self.workspaces.store.current.shapes_vector=old_vector;return;}
+                self.finish_stroke();if self.drawing.mode.creation_shape(){self.drawing.mode=if self.workspaces.store.current.shapes.input==Input::ByClick{super::precision::Mode::ShapeClick}else{super::precision::Mode::ShapeDrag};}}
             if ui.button("Draw shape on canvas").clicked(){self.execute_command(ui.ctx(),"shape-tool");}
             ui.horizontal(|ui|{if ui.button("Draw vector line").clicked(){self.execute_command(ui.ctx(),"vector-line-tool");}
 if ui.button("Draw vector curve").clicked(){self.execute_command(ui.ctx(),"vector-curve-tool");}});
@@ -218,7 +223,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                 step(&mut app, &mut time, vec![]);
                 let points = [[12.5, 10.5], [28.5, 26.5]];
                 let before = app.documents[0].snapshot();
-                let expected = core::prepare(
+                let mut expected = core::prepare(
                     &app.documents[0],
                     if vector {
                         Target::Vector(None)
@@ -228,6 +233,20 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                     &points,
                     app.workspaces.store.current.shapes,
                 )?;
+                if pen && click && vector {
+                    let path = expected
+                        .scene
+                        .lines
+                        .layers
+                        .last_mut()
+                        .unwrap()
+                        .paths
+                        .last_mut()
+                        .unwrap();
+                    path.pressure.device = vec![Some(0.6); 2];
+                    path.pressure.device_enabled =
+                        app.workspaces.store.current.pressure.tools[6].size;
+                }
                 let event = |app: &Drawer, p, phase| {
                     let mut e = super::precision::pointer(&ctx, app, p, phase);
                     if pen {

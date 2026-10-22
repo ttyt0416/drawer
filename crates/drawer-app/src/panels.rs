@@ -156,7 +156,8 @@ impl Panels {
 }
 impl Drawer {
     pub(super) fn tool_shortcuts_blocked(&self, ctx: &egui::Context) -> bool {
-        self.pending_close.is_some()
+        self.path_transition.is_some()
+            || self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()
             || self.paste_dialog.is_some()

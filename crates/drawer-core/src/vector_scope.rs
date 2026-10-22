@@ -27,7 +27,7 @@ pub fn validate(d: &Document, scope: &[Picked]) -> Result<(), String> {
     }
     Ok(())
 }
-pub(crate) fn checked(d: &Document, state: DocumentState) -> Result<DocumentState, String> {
+pub fn checked(d: &Document, state: DocumentState) -> Result<DocumentState, String> {
     if !state.scene.valid()
         || serde_json::to_vec(&state.scene)
             .map_err(|e| e.to_string())?

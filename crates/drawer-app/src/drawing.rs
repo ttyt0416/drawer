@@ -6,6 +6,8 @@ pub(crate) mod bucket;
 pub(crate) mod magnetic_lasso;
 #[path = "movement.rs"]
 mod movement;
+#[path = "path_draft.rs"]
+pub(crate) mod path_draft;
 #[path = "selection_edit.rs"]
 pub(crate) mod selection_edit;
 #[path = "vector_edit_ui.rs"]
@@ -63,6 +65,10 @@ pub(super) struct PaintInput<'a> {
     pub color: [u8; 4],
 }
 struct SelectionGesture {
+    journal: Option<path_draft::Journal>,
+    space: drawer_core::scene::Affine,
+    canvas: egui::Rect,
+    canvas_layer: egui::LayerId,
     assistance: Option<drawer_core::rulers::Runtime>,
     resolved: bool,
     document: u64,
@@ -130,6 +136,7 @@ pub(super) struct Drawing {
     pub auto_settings: drawer_core::auto_shape::Settings,
     pub auto_target: Option<drawer_core::shapes::Target>,
     selection: Option<SelectionGesture>,
+    edit_path_points: bool,
     lasso: Option<Box<magnetic_lasso::Gesture>>,
     pub lasso_settings: drawer_core::magnetic_lasso::Settings,
     movement: Option<movement::Gesture>,
@@ -140,6 +147,7 @@ pub(super) struct Drawing {
     pub enclosure_settings: drawer_core::enclosure::Settings,
     pub shape_settings: drawer_core::shapes::Settings,
     pub shape_target: Option<drawer_core::shapes::Target>,
+    pub shape_selected: Option<drawer_core::thumbnail::Target>,
     pub fill_budget: usize,
     pub fill_config: ([u8; 4], bool, bool),
     pub move_target: drawer_core::precision::Target,
@@ -281,6 +289,8 @@ impl Drawing {
         self.ownership.clear();
     }
     pub fn prepare(&mut self, ctx: &egui::Context) {
+        self.edit_path_points = ctx.input(|i| i.modifiers.alt);
+
         let rect = ctx.content_rect();
         let bounds = [
             [rect.min.x as f64, rect.min.y as f64],
@@ -352,7 +362,7 @@ impl Drawing {
     pub fn finish(&mut self, documents: &mut [Document]) {
         self.vector_eraser = None;
         self.cancel_vector_edit();
-        self.selection = None;
+        self.selection = self.selection.take().filter(|s| s.journal.is_some());
         self.lasso = None;
         self.correction = None;
         self.vector_auto = None;
@@ -376,7 +386,7 @@ impl Drawing {
     fn finish_document(&mut self, doc: &mut Document) {
         self.vector_eraser = None;
         self.cancel_vector_edit();
-        self.selection = None;
+        self.selection = self.selection.take().filter(|s| s.journal.is_some());
         self.lasso = None;
         self.correction = None;
         self.vector_auto = None;
@@ -613,7 +623,10 @@ impl Drawing {
     }
     fn commit_shape(&mut self, s: &SelectionGesture, doc: &mut Document) -> Result<bool, String> {
         if let Some(shape) = s.shape {
-            let state = if s.resolved {
+            if s.journal.is_some() && s.points.len() < 2 {
+                return Err("Add at least two path controls before confirming".into());
+            }
+            let mut state = if s.resolved {
                 drawer_core::shapes::prepare_resolved(doc, shape.target, &s.points, shape.settings)?
             } else {
                 drawer_core::shapes::prepare(doc, shape.target, &s.points, shape.settings)?
@@ -625,6 +638,27 @@ impl Drawing {
                 > shape.budget
             {
                 return Err("Shape exceeds workspace memory".into());
+            }
+            if let Some(j) = &s.journal
+                && matches!(shape.target, drawer_core::shapes::Target::Vector(_))
+            {
+                let layer = match shape.target {
+                    drawer_core::shapes::Target::Vector(Some(id)) => {
+                        state.scene.lines.layers.iter_mut().find(|l| l.id == id)
+                    }
+                    _ => state.scene.lines.layers.last_mut(),
+                };
+                if let Some(path) = layer.and_then(|l| l.paths.last_mut()) {
+                    if j.current.iter().any(|v| v.pressure.is_some()) {
+                        path.pressure.device = j.current.iter().map(|v| v.pressure).collect();
+                    }
+                    if j.current.iter().any(|v| v.pressure.is_some()) {
+                        path.pressure.device_enabled = shape.device_pressure;
+                    }
+                }
+            }
+            if s.journal.is_some() {
+                state = drawer_core::vector_scope::checked(doc, state)?;
             }
             let new_id = if shape.target == drawer_core::shapes::Target::Vector(None) {
                 state.scene.lines.layers.last().map(|l| l.id)
@@ -730,6 +764,28 @@ impl Drawing {
             return;
         }
         self.events[index].1 = true;
+        if event.phase == Phase::Cancel
+            && let Some(j) = &mut s.journal
+        {
+            j.cancel_contact();
+            s.points = j.current.iter().map(|v| v.point).collect();
+            self.selection = Some(s);
+            self.ownership.clear();
+            return;
+        }
+        if s.journal.is_some() {
+            if s.mode != self.mode || self.shape_changed(s.shape) {
+                self.selection = Some(s);
+                self.ownership.clear();
+                return;
+            }
+            if s.frame != doc.current_frame || s.space != doc.scene.transform {
+                self.selection = Some(s);
+                self.ownership.clear();
+                return;
+            }
+            s.revision = doc.revision;
+        }
         if s.revision != doc.revision
             || s.frame != doc.current_frame
             || s.mode != self.mode
@@ -764,6 +820,39 @@ impl Drawing {
         {
             self.error = Some(e);
             self.ownership.clear();
+            return;
+        }
+        if let Some(j) = &mut s.journal {
+            if event.phase == Phase::Down {
+                let radius = if self.edit_path_points {
+                    6. * s.projection.ppp / s.projection.view.zoom
+                } else {
+                    -1.
+                };
+                if let Err(e) = j.begin(
+                    path_draft::Vertex {
+                        point: p,
+                        pressure: if event.source.kind == drawer_core::pointer_input::Kind::Pen {
+                            event.pressure
+                        } else {
+                            None
+                        },
+                    },
+                    radius,
+                ) {
+                    self.error = Some(e);
+                    self.ownership.clear();
+                }
+            } else if event.phase == Phase::Move {
+                j.move_to(p);
+            } else if event.phase == Phase::Up {
+                j.move_to(p);
+                j.finish();
+                self.ownership.clear();
+            }
+            s.points = j.current.iter().map(|v| v.point).collect();
+            s.hover = Some(p);
+            self.selection = Some(s);
             return;
         }
         if polygon {
@@ -853,6 +942,18 @@ impl Drawing {
         }
     }
     fn focus_loss(&mut self, documents: &mut [Document]) {
+        let mut path = self.selection.take().filter(|s| s.journal.is_some());
+        if let Some(s) = &mut path {
+            s.journal.as_mut().unwrap().cancel_contact();
+            s.points = s
+                .journal
+                .as_ref()
+                .unwrap()
+                .current
+                .iter()
+                .map(|v| v.point)
+                .collect();
+        }
         self.controls.reset();
         self.touch.reset();
         if self
@@ -863,6 +964,9 @@ impl Drawing {
             self.finish(documents);
         } else {
             self.cancel();
+        }
+        if path.is_some() {
+            self.selection = path;
         }
         self.events.clear();
     }
@@ -898,6 +1002,9 @@ impl Drawing {
         {
             self.cancel();
         }
+        if self.path_keys(ctx, documents) {
+            return;
+        }
         if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.controls.reset();
             self.touch.clear_touches();
@@ -908,21 +1015,35 @@ impl Drawing {
             });
             return;
         }
+        if let Some(s) = self.selection.as_mut().filter(|s| s.journal.is_some())
+            && let Some(d) = documents.iter().find(|d| d.id == s.document)
+        {
+            if s.frame != d.current_frame || s.space != d.scene.transform {
+                self.error = Some(
+                    "Page frame or geometry changed; keep the draft or discard it with Escape"
+                        .into(),
+                );
+                return;
+            }
+            s.revision = d.revision;
+        }
         if self.selection.as_ref().is_some_and(|s| {
-            s.mode != self.mode
-                || s.combine != self.selection_settings.combine
-                || self.enclosure_changed(s.fill)
-                || self.shape_changed(s.shape)
-                || documents
-                    .iter()
-                    .find(|d| d.id == s.document)
-                    .is_none_or(|d| {
-                        d.revision != s.revision
-                            || d.current_frame != s.frame
-                            || d.view != s.projection.view
-                    })
-                || s.root != ctx.content_rect()
-                || (s.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8
+            s.journal.is_none()
+                && (s.mode != self.mode
+                    || s.combine != self.selection_settings.combine
+                    || self.enclosure_changed(s.fill)
+                    || self.shape_changed(s.shape)
+                    || documents
+                        .iter()
+                        .find(|d| d.id == s.document)
+                        .is_none_or(|d| {
+                            d.revision != s.revision
+                                || d.current_frame != s.frame
+                                || s.journal.is_none() && d.view != s.projection.view
+                        })
+                    || s.journal.is_none()
+                        && (s.root != ctx.content_rect()
+                            || (s.projection.ppp - ctx.pixels_per_point() as f64).abs() > 1e-8))
         }) {
             self.cancel();
         }
@@ -1148,6 +1269,20 @@ impl Drawing {
                 .as_ref()
                 .is_some_and(|s| s.document == doc.id && s.view == view)
             {
+                if self.selection.as_ref().is_some_and(|s| {
+                    s.journal.is_some()
+                        && (!enabled
+                            || s.frame != doc.current_frame
+                            || s.space != doc.scene.transform)
+                }) {
+                    continue;
+                }
+                if let Some(s) = self.selection.as_mut().filter(|s| s.journal.is_some()) {
+                    s.projection = projection;
+                    s.root = ui.ctx().content_rect();
+                    s.canvas = rect;
+                    s.canvas_layer = response.layer_id;
+                }
                 if !enabled
                     || self
                         .selection
@@ -1156,8 +1291,7 @@ impl Drawing {
                 {
                     self.cancel();
                 } else {
-                    let polygon_down = self.mode == super::precision::Mode::SelectPolygon
-                        && event.phase == Phase::Down;
+                    let polygon_down = self.mode.click_points() && event.phase == Phase::Down;
                     let pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
                     if polygon_down
                         && (!rect.contains(pos)
@@ -1362,6 +1496,10 @@ impl Drawing {
                     };
                     Some(super::shapes::Capture {
                         settings: self.shape_settings,
+                        device_pressure: self.pressure.tools[6].size,
+                        source_target: self
+                            .shape_selected
+                            .unwrap_or(drawer_core::thumbnail::Target::Raster(0)),
                         snapping: self.snap_settings,
                         target,
                         budget: self.fill_budget,
@@ -1398,7 +1536,29 @@ impl Drawing {
                 } else {
                     None
                 };
+                let journal = if self.mode == super::precision::Mode::ShapeClick {
+                    let mut j = path_draft::Journal::default();
+                    let _ = j.begin(
+                        path_draft::Vertex {
+                            point,
+                            pressure: if event.source.kind == drawer_core::pointer_input::Kind::Pen
+                            {
+                                event.pressure
+                            } else {
+                                None
+                            },
+                        },
+                        0.,
+                    );
+                    Some(j)
+                } else {
+                    None
+                };
                 let mut selection = SelectionGesture {
+                    journal,
+                    space: doc.scene.transform,
+                    canvas: rect,
+                    canvas_layer: response.layer_id,
                     assistance,
                     resolved: false,
                     document: doc.id,
@@ -1795,6 +1955,7 @@ impl Drawer {
         }
     }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.guard_path_layer();
         self.sync_layer_identity();
         if self.drawing.quick_mask {
             self.drawing.mode = super::precision::Mode::SelectionBrush;
@@ -1858,6 +2019,9 @@ impl Drawer {
         self.drawing.lasso_settings = self.workspaces.store.current.magnetic_lasso;
         self.drawing.enclosure_settings = self.workspaces.store.current.enclosure;
         self.drawing.shape_settings = self.workspaces.store.current.shapes;
+        self.drawing.shape_selected = self
+            .active
+            .and_then(|n| self.panels.targets.get(&self.documents[n].id).copied());
         self.drawing.shape_target = self.active.and_then(|n| {
             let target = self
                 .panels

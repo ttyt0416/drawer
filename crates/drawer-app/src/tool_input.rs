@@ -125,6 +125,7 @@ impl Drawer {
                     self.runtime_tool(tool, id);
                 }
             } else if down
+                && !self.drawing.has_path_draft()
                 && !self.tool_input.modifiers[n]
                 && !self.tool_input.blocked[n]
                 && let Some(tip) = settings.modifiers[n]
@@ -151,6 +152,9 @@ impl Drawer {
         tip: BrushTip,
         repeat: bool,
     ) {
+        if !repeat && self.defer_path(drawing::path_draft::Action::Tool(tip)) {
+            return;
+        }
         if !repeat {
             self.precision.finish();
             self.drawing.mode = super::precision::Mode::Paint;

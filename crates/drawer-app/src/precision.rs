@@ -87,6 +87,9 @@ impl Drawer {
                     .selectable_label(self.drawing.mode == mode, label)
                     .clicked()
                 {
+                    if self.defer_path(drawing::path_draft::Action::Mode(mode)) {
+                        return;
+                    }
                     self.finish_stroke();
                     self.restore_locked_tool();
                     self.drawing.mode = mode;

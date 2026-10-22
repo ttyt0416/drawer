@@ -231,7 +231,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                 frame(&ctx, &mut app, &mut time, false, true, vec![]);
                 let raw = [[5.25, 11.25], [20.25, 11.25]];
                 let resolved = [[5.25, 10.5], [20.25, 10.5]];
-                let expected = drawer_core::shapes::prepare_resolved(
+                let mut expected = drawer_core::shapes::prepare_resolved(
                     &app.documents[0],
                     if vector {
                         drawer_core::shapes::Target::Vector(None)
@@ -241,6 +241,20 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                     &resolved,
                     app.workspaces.store.current.shapes,
                 )?;
+                if pen && click && vector {
+                    let path = expected
+                        .scene
+                        .lines
+                        .layers
+                        .last_mut()
+                        .unwrap()
+                        .paths
+                        .last_mut()
+                        .unwrap();
+                    path.pressure.device = vec![Some(0.8); 2];
+                    path.pressure.device_enabled =
+                        app.workspaces.store.current.pressure.tools[6].size;
+                }
                 let before = app.documents[0].snapshot();
                 let event = |app: &Drawer, p, phase| {
                     let mut e = super::precision::pointer(&ctx, app, p, phase);

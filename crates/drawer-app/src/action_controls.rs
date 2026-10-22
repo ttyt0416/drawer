@@ -143,6 +143,10 @@ pub(super) struct Controls {
 }
 impl Drawer {
     pub(super) fn command_reason(&self, command: &str) -> Option<String> {
+        if self.drawing.has_path_draft() && matches!(command, "undo" | "redo") {
+            return None;
+        }
+
         if (command.starts_with("opacity-")
             || ["brush-grow", "brush-shrink", "connect-line"].contains(&command))
             && self.drawing.mode != super::precision::Mode::Paint
@@ -213,6 +217,23 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if self.drawing.has_path_draft() && matches!(command, "undo" | "redo") {
+            self.drawing.path_history(command == "redo");
+            return;
+        }
+        if !matches!(
+            command,
+            "view-center"
+                | "view-reset"
+                | "zoom-in"
+                | "zoom-out"
+                | "vector-path-overlay"
+                | "selection-outline"
+        ) && self.defer_path(drawing::path_draft::Action::Command(command.into()))
+        {
+            return;
+        }
+
         if command == "vector-path-overlay" {
             self.workspaces.store.current.vector_overlay.enabled =
                 !self.workspaces.store.current.vector_overlay.enabled;

@@ -611,3 +611,5 @@ crates/drawer-core/src/vector_clipboard.rs
 crates/drawer-core/src/vector_scope_verify.rs
 crates/drawer-app/src/vector_scope.rs
 docs/process/vector-scopes-and-transfer.md
+crates/drawer-app/src/path_draft.rs
+docs/process/click-path-history.md

@@ -100,6 +100,13 @@ impl Drawer {
         }
     }
     pub(super) fn select_tab(&mut self, index: usize) {
+        if index < self.tabs.len()
+            && self.active_tab != Some(index)
+            && self.defer_path(drawing::path_draft::Action::Tab(self.tabs[index].id))
+        {
+            return;
+        }
+
         if self.active_tab != Some(index) {
             self.drawing.cancel_sample();
         }
@@ -157,6 +164,10 @@ impl Drawer {
         self.select_tab(self.tabs.len() - 1);
     }
     pub(super) fn set_tool(&mut self, tip: BrushTip) {
+        if self.defer_path(drawing::path_draft::Action::Tool(tip)) {
+            return;
+        }
+
         if self.selected == tip
             && self.workspaces.store.current.user_tools.active.is_none()
             && drawer_core::tool_locks::baseline(&self.workspaces.store.current, tip).is_some()
@@ -183,6 +194,10 @@ impl Drawer {
         }
     }
     pub(super) fn open_path(&mut self, path: &Path) -> Result<(), String> {
+        if self.defer_path(drawing::path_draft::Action::Open(path.to_owned())) {
+            return Ok(());
+        }
+
         let path = path.canonicalize().map_err(|e| e.to_string())?;
         if let Some(id) = self
             .documents
@@ -222,6 +237,13 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        if self.defer_path(drawing::path_draft::Action::Save(
+            self.documents[index].id,
+            path.to_owned(),
+        )) {
+            return Err("Resolve the unfinished path before saving".into());
+        }
+
         self.finish_stroke();
         let _awake = self.synchronous_power();
         let target = if path.exists() {
@@ -262,6 +284,13 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn save_as(&mut self, index: usize) -> Result<bool, String> {
+        if self.defer_path(drawing::path_draft::Action::SaveDialog(
+            self.documents[index].id,
+            true,
+        )) {
+            return Ok(false);
+        }
+
         let filename = Path::new(&self.documents[index].title)
             .file_stem()
             .unwrap_or_default()
@@ -277,6 +306,13 @@ impl Drawer {
         })
     }
     pub(super) fn save_document(&mut self, index: usize) -> Result<bool, String> {
+        if self.defer_path(drawing::path_draft::Action::SaveDialog(
+            self.documents[index].id,
+            false,
+        )) {
+            return Ok(false);
+        }
+
         if let Some(path) = self.documents[index].path.clone() {
             self.save_to(index, &path)?;
             Ok(true)
@@ -327,6 +363,12 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn request_close(&mut self, tab: usize) {
+        if tab < self.tabs.len()
+            && self.defer_path(drawing::path_draft::Action::Close(self.tabs[tab].id))
+        {
+            return;
+        }
+
         self.finish_stroke();
         if self.pending_close.is_some() || tab >= self.tabs.len() {
             return;
@@ -361,6 +403,10 @@ impl Drawer {
         }
     }
     pub(super) fn begin_quit(&mut self) {
+        if self.defer_path(drawing::path_draft::Action::Quit) {
+            return;
+        }
+
         self.finish_stroke();
         self.quit_requested = true;
         self.advance_quit();
@@ -464,7 +510,7 @@ impl Drawer {
                 let (undo, redo) = self.documents[active].history_counts();
                 if ui
                     .add_enabled(
-                        undo > 0,
+                        undo > 0 || self.drawing.has_path_draft(),
                         egui::Button::new(format!(
                             "Undo  {}",
                             self.workspaces.command_label("undo")
@@ -472,11 +518,11 @@ impl Drawer {
                     )
                     .clicked()
                 {
-                    self.documents[active].undo();
+                    self.execute_command(ui.ctx(), "undo");
                 }
                 if ui
                     .add_enabled(
-                        redo > 0,
+                        redo > 0 || self.drawing.has_path_draft(),
                         egui::Button::new(format!(
                             "Redo  {}",
                             self.workspaces.command_label("redo")
@@ -484,7 +530,7 @@ impl Drawer {
                     )
                     .clicked()
                 {
-                    self.documents[active].redo();
+                    self.execute_command(ui.ctx(), "redo");
                 }
                 if crate::help::button(ui, "Duplicate view", "files").clicked() {
                     self.duplicate_view();
