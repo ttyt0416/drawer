@@ -24,6 +24,7 @@ impl DustTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Operation {
+    Style(crate::stylized_effects::Operation),
     Mosaic {
         cell: u16,
         origin: [i64; 2],
@@ -43,6 +44,31 @@ pub enum Operation {
     },
 }
 impl Operation {
+    pub fn all() -> Vec<Self> {
+        Self::defaults()
+            .into_iter()
+            .chain(crate::stylized_effects::Operation::defaults().map(Self::Style))
+            .collect()
+    }
+    pub fn same_kind(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Style(a), Self::Style(b)) => {
+                std::mem::discriminant(&a) == std::mem::discriminant(&b)
+            }
+            (a, b) => std::mem::discriminant(&a) == std::mem::discriminant(&b),
+        }
+    }
+    pub fn preserves_alpha(self) -> bool {
+        match self {
+            Self::Style(op) => op.preserves_alpha(),
+            Self::Noise { .. }
+            | Self::Dust {
+                target: DustTarget::Dark | DustTarget::Light,
+                ..
+            } => true,
+            _ => false,
+        }
+    }
     pub fn defaults() -> [Self; 4] {
         [
             Self::Mosaic {
@@ -64,6 +90,7 @@ impl Operation {
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Style(op) => op.label(),
             Self::Mosaic { .. } => "Mosaic",
             Self::Noise { .. } => "Generate noise",
             Self::Dust { .. } => "Remove specks",
@@ -72,6 +99,7 @@ impl Operation {
     }
     pub fn valid(self) -> bool {
         match self {
+            Self::Style(op) => op.valid(),
             Self::Mosaic { cell, origin } => {
                 (1..=256).contains(&cell) && origin.iter().all(|v| v.unsigned_abs() <= 1_000_000)
             }
@@ -86,6 +114,7 @@ impl Operation {
     }
     pub fn identity(self) -> bool {
         match self {
+            Self::Style(op) => op.identity(),
             Self::Mosaic { cell, .. } => cell == 1,
             Self::Noise { amount, .. } => amount == 0.,
             Self::Dust { max_area, .. } => max_area == 0,
@@ -354,19 +383,19 @@ pub fn prepare(
         );
     }
     let old = src.extent(d.width, d.height);
-    let mut extent = old;
-    if let Operation::LineWidth { delta } = op
-        && delta > 0
-    {
-        let r = delta as u32;
-        extent = PlacedRaster {
-            width: old.width + 2 * r,
-            height: old.height + 2 * r,
-            offset: [old.offset[0] - r as i64, old.offset[1] - r as i64],
-        };
-    }
+    let pad = match op {
+        Operation::LineWidth { delta } if delta > 0 => [delta as u32; 2],
+        Operation::Style(op) if !locked => op.padding(),
+        _ => [0; 2],
+    };
+    let extent = PlacedRaster {
+        width: old.width + 2 * pad[0],
+        height: old.height + 2 * pad[1],
+        offset: [old.offset[0] - pad[0] as i64, old.offset[1] - pad[1] as i64],
+    };
     let output = extent.width as usize * extent.height as usize;
     let (work, scratch) = match op {
+        Operation::Style(op) => (output.saturating_mul(op.cost()), 0),
         Operation::Mosaic { cell, .. } => {
             let cols = old.width as usize / cell as usize + 2;
             let rows = old.height as usize / cell as usize + 2;
@@ -428,10 +457,11 @@ pub fn prepare(
         } else {
             1.
         };
-        let mapped = if weight == 0. {
+        let mapped = if weight == 0. || locked && before.alpha() == 0. {
             before
         } else {
             match op {
+                Operation::Style(op) => crate::stylized_effects::sample(d, layer, xy, before, op)?,
                 Operation::Mosaic { origin, .. } => {
                     let p = blocks.as_ref().unwrap().sample(xy, origin);
                     if locked { before.with_rgb(p.rgb())? } else { p }
@@ -459,6 +489,11 @@ pub fn prepare(
                 }
             }
         };
+        let mapped = if locked || op.preserves_alpha() {
+            before.with_rgb(mapped.rgb())?
+        } else {
+            mapped
+        };
         if mapped.alpha() == 0. && before.alpha() == 0.
             || mapped
                 .components()
@@ -474,16 +509,7 @@ pub fn prepare(
         }
         let result = before.mix(mapped, weight)?;
         let mut stored = result.store(d.color.depth, d.color.dither, xy);
-        if locked
-            || matches!(
-                op,
-                Operation::Noise { .. }
-                    | Operation::Dust {
-                        target: DustTarget::Dark | DustTarget::Light,
-                        ..
-                    }
-            )
-        {
+        if locked || op.preserves_alpha() {
             stored[3] = if d.color.depth == Depth::Sixteen {
                 before.rgba16()[3]
             } else {

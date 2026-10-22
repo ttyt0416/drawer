@@ -16,9 +16,40 @@ impl Default for Controls {
         }
     }
 }
+impl Controls {
+    pub(super) fn seed(&mut self, ui: &mut egui::Ui, seed: &mut u64) {
+        if self.source != Some(*seed) {
+            self.seed = seed.to_string();
+            self.source = Some(*seed);
+        }
+        ui.horizontal(|ui| {
+            ui.label("Seed");
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut self.seed)
+                    .char_limit(20)
+                    .desired_width(185.),
+            );
+            self.seed_rect = Some(r.rect);
+        });
+        match self.seed.parse::<u64>() {
+            Ok(value) => {
+                *seed = value;
+                self.source = Some(value);
+            }
+            Err(_) => {
+                self.valid = false;
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    "Seed must be an integer from0 to18446744073709551615",
+                );
+            }
+        }
+    }
+}
 pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Controls) {
     state.valid = true;
     match op {
+        Operation::Style(op) => crate::stylized_effects::controls(ui, op, state),
         Operation::Mosaic { cell, origin } => {
             ui.add(egui::Slider::new(cell, 1..=256).text("Cell size (pixels)"));
             ui.horizontal(|ui| {
@@ -33,33 +64,8 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Contro
             seed,
             monochrome,
         } => {
-            if state.source != Some(*seed) {
-                state.seed = seed.to_string();
-                state.source = Some(*seed);
-            }
             ui.add(egui::Slider::new(amount, 0. ..=1.).text("Noise amount"));
-            ui.horizontal(|ui| {
-                ui.label("Seed");
-                let r = ui.add(
-                    egui::TextEdit::singleline(&mut state.seed)
-                        .char_limit(20)
-                        .desired_width(185.),
-                );
-                state.seed_rect = Some(r.rect);
-            });
-            match state.seed.parse::<u64>() {
-                Ok(value) => {
-                    *seed = value;
-                    state.source = Some(value);
-                }
-                Err(_) => {
-                    state.valid = false;
-                    ui.colored_label(
-                        egui::Color32::YELLOW,
-                        "Seed must be an integer from0 to18446744073709551615",
-                    );
-                }
-            }
+            state.seed(ui, seed);
             ui.checkbox(monochrome, "Monochrome grain");
         }
         Operation::Dust {

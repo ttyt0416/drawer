@@ -9,6 +9,11 @@ use std::sync::{
 };
 #[path = "pixel_effects_verify.rs"]
 mod pixel_verify;
+#[path = "stylized_effects_verify.rs"]
+mod style_verify;
+pub(super) fn style_smoke(root: &std::path::Path) -> Result<(), String> {
+    style_verify::smoke(root)
+}
 #[path = "detail_filter_verify.rs"]
 mod verify;
 pub(super) fn pixel_smoke(root: &std::path::Path) -> Result<(), String> {

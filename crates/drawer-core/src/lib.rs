@@ -350,6 +350,8 @@ pub mod pixel_effects;
 pub mod pixel_effects_verify;
 pub mod spatial_blur;
 pub mod spatial_blur_verify;
+pub mod stylized_effects;
+pub mod stylized_effects_verify;
 pub mod tone_mapping;
 pub mod tone_mapping_verify;
 pub mod vector_cleanup;

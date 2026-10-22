@@ -1,7 +1,7 @@
 use super::verify::{click, frame, settle, wait};
 use super::*;
 use drawer_core::pixel_effects::{DustTarget, Operation as P};
-fn seed_text(
+pub(super) fn seed_text(
     ctx: &egui::Context,
     app: &mut Drawer,
     time: &mut f64,

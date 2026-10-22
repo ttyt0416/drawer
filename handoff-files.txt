@@ -666,3 +666,9 @@ crates/drawer-core/src/pixel_effects_verify.rs
 crates/drawer-app/src/pixel_effects.rs
 crates/drawer-app/src/pixel_effects_verify.rs
 docs/process/pixel-effects.md
+
+crates/drawer-core/src/stylized_effects.rs
+crates/drawer-core/src/stylized_effects_verify.rs
+crates/drawer-app/src/stylized_effects.rs
+crates/drawer-app/src/stylized_effects_verify.rs
+docs/process/stylized-effects.md

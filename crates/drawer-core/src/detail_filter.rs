@@ -26,16 +26,18 @@ pub enum Operation {
 impl Operation {
     pub fn same_kind(self, other: Self) -> bool {
         match (self, other) {
-            (Self::Pixels(a), Self::Pixels(b)) => {
-                std::mem::discriminant(&a) == std::mem::discriminant(&b)
-            }
+            (Self::Pixels(a), Self::Pixels(b)) => a.same_kind(b),
             (a, b) => std::mem::discriminant(&a) == std::mem::discriminant(&b),
         }
     }
     pub fn all() -> Vec<Self> {
         Self::defaults()
             .into_iter()
-            .chain(crate::pixel_effects::Operation::defaults().map(Self::Pixels))
+            .chain(
+                crate::pixel_effects::Operation::all()
+                    .into_iter()
+                    .map(Self::Pixels),
+            )
             .collect()
     }
     pub fn defaults() -> [Self; 3] {
