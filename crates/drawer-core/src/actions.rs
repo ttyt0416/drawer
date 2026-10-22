@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 150] = [
+pub const EXTRA_COMMANDS: [&str; 151] = [
+    "mesh-puppet",
     "raster-deformation",
     "gaussian-blur",
     "tone-curves",

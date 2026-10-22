@@ -162,6 +162,7 @@ try {
     if ($smokeResult -notmatch 'vector_cleanup=true') { throw '래스터 윤곽 변환·짧은 선/구간 정리·다른 속성 선 연결 검증 실패' }
     if ($smokeResult -notmatch 'affine_transform=true') { throw '기준점·축별 배율·회전·선택 픽셀 변형 검증 실패' }
     if ($smokeResult -notmatch 'tone_mapping=true') { throw 'RGB·채널 톤 커브·그라데이션 맵 검증 실패' }
+    if ($smokeResult -notmatch 'mesh_puppet=true') { throw '메시·퍼펫 핀 변형 검증 실패' }
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
     if ($smokeResult -notmatch 'gaussian_blur=true') { throw '가우시안 블러·투명 경계·반경0·저장/취소 검증 실패' }
     if ($smokeResult -notmatch 'svg_io=true') { throw '로컬 SVG 가져오기·내보내기·복사 검증 실패' }

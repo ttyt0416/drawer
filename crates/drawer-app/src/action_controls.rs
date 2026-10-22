@@ -380,6 +380,7 @@ impl Drawer {
                 "gradient-map" => self.begin_tone_mapping(true)?,
                 "gaussian-blur" => self.begin_gaussian()?,
                 "raster-deformation" => self.begin_deform(ctx)?,
+                "mesh-puppet" => self.begin_mesh_deform(ctx)?,
                 "vector-remove-short" => self.begin_vector_cleanup(false)?,
                 "vector-scope-tools" => self.begin_vector_scope()?,
                 "vector-copy-strokes" => self.copy_vector_scope(ctx, false, false)?,

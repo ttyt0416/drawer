@@ -61,6 +61,11 @@ impl Drawer {
             .draft
             .as_ref()
             .is_some_and(|e| e.id == self.documents[index].id)
+            || self
+                .mesh_deform
+                .draft
+                .as_ref()
+                .is_some_and(|e| e.id == self.documents[index].id)
         {
             Err("Unconfirmed deformation: apply it, or cancel the deformation window, before saving.".into())
         } else {

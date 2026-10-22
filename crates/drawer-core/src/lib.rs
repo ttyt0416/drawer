@@ -354,3 +354,6 @@ pub mod vector_scope_verify;
 
 pub mod deform;
 pub mod deform_verify;
+
+pub mod mesh_deform;
+pub mod mesh_deform_verify;

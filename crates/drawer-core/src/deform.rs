@@ -96,7 +96,39 @@ impl Dab {
 }
 pub enum Change<'a> {
     Quad(&'a Warp),
+    Mesh(&'a crate::mesh_deform::Mesh),
     Liquify { dabs: &'a [Dab], only_refer: bool },
+}
+#[derive(Clone, Copy)]
+enum Mapping<'a> {
+    Quad(&'a Warp),
+    Mesh(&'a crate::mesh_deform::Mesh),
+}
+impl Mapping<'_> {
+    fn points(self) -> Vec<Point> {
+        match self {
+            Self::Quad(w) => w.points(),
+            Self::Mesh(m) => m.points.clone(),
+        }
+    }
+    fn identity(self) -> bool {
+        match self {
+            Self::Quad(w) => w.points() == crate::material_mapping::UNIT,
+            Self::Mesh(m) => m.identity(),
+        }
+    }
+    fn cost(self) -> usize {
+        match self {
+            Self::Quad(_) => 1,
+            Self::Mesh(m) => 2 * (m.columns as usize - 1) * (m.rows as usize - 1),
+        }
+    }
+    fn inverse(self, area: Rect, p: Point) -> Option<Point> {
+        match self {
+            Self::Quad(w) => inverse_quad(w, area, p),
+            Self::Mesh(m) => m.inverse(normalized(area, p)).map(|p| document(area, p)),
+        }
+    }
 }
 pub fn corners(r: Rect) -> [Point; 4] {
     [r.min, [r.max[0], r.min[1]], r.max, [r.min[0], r.max[1]]]
@@ -223,7 +255,7 @@ struct Pass<'a> {
 impl Pass<'_> {
     fn render(
         &self,
-        quad: Option<&Warp>,
+        quad: Option<Mapping<'_>>,
         dab: Option<Dab>,
         only_refer: bool,
     ) -> Result<RasterLayer, String> {
@@ -249,7 +281,7 @@ impl Pass<'_> {
                     1.
                 };
                 let input = if let Some(w) = quad {
-                    inverse_quad(w, area, point)
+                    w.inverse(area, point)
                 } else {
                     Some(dab.unwrap().inverse(point))
                 };
@@ -327,7 +359,15 @@ pub fn prepare(
             if !matches!(w, Warp::Distort(_) | Warp::Perspective(_)) || !w.valid() {
                 return Err("Quadrilateral is reversed, folded, degenerate or crosses a perspective horizon".into());
             }
-            (Some(w), &[][..], false)
+            (Some(Mapping::Quad(w)), &[][..], false)
+        }
+        Change::Mesh(m) => {
+            if !m.valid() {
+                return Err(
+                    "Mesh is folded, overlapping, degenerate or outside the grid limit".into(),
+                );
+            }
+            (Some(Mapping::Mesh(m)), &[][..], false)
         }
         Change::Liquify { dabs, only_refer } => {
             if dabs.len() > 512 || dabs.iter().any(|d| !d.valid()) {
@@ -339,7 +379,7 @@ pub fn prepare(
     let Some(area) = area(d, &layers, selection)? else {
         return Ok(d.snapshot());
     };
-    if warp.is_some_and(|w| w.points() == crate::material_mapping::UNIT)
+    if warp.is_some_and(|w| w.identity())
         || warp.is_none()
             && dabs.iter().all(|b| {
                 b.strength == 0.
@@ -358,8 +398,24 @@ pub fn prepare(
             ]
         }))
     };
+    let grid = if warp.is_some()
+        && selection
+        && (d.scene.selection.is_some() || d.scene.selection_mask.is_some())
+    {
+        Some(crate::selection_edit::Grid::with_bounds(
+            d,
+            &corners(mapped),
+        )?)
+    } else {
+        None
+    };
     let mut plans = vec![];
-    let mut work = 0usize;
+    let mut work = grid.as_ref().map_or(0, |g| {
+        g.size[0]
+            .saturating_mul(g.size[1])
+            .saturating_mul(16)
+            .saturating_mul(warp.unwrap().cost())
+    });
     let mut bytes = 0usize;
     for n in &layers {
         let old = d.layers[*n].extent(d.width, d.height);
@@ -372,7 +428,8 @@ pub fn prepare(
         };
         let e = extent(bounds(corners(old_rect).into_iter().chain(corners(mapped))))?;
         let count = e.width as usize * e.height as usize;
-        work = work.saturating_add(count.saturating_mul(dabs.len().max(1)));
+        work = work
+            .saturating_add(count.saturating_mul(warp.map_or(dabs.len().max(1), Mapping::cost)));
         bytes = bytes.saturating_add(count.saturating_mul(d.color.depth.bytes()));
         plans.push((*n, e));
     }
@@ -382,7 +439,7 @@ pub fn prepare(
             .saturating_add(bytes.saturating_mul(3))
             > DEFAULT_DOCUMENT_BUDGET
     {
-        return Err("Deformation processing32M or workspace memory limit; apply fewer dabs or smaller layers".into());
+        return Err("Deformation processing32M or workspace memory limit; reduce layer size, cage density, selected extent or liquify dabs".into());
     }
     let mut state = d.snapshot();
     for (n, extent) in plans {
@@ -410,13 +467,10 @@ pub fn prepare(
             }
         }
     }
-    if let Some(w) = warp
-        && selection
-        && (d.scene.selection.is_some() || d.scene.selection_mask.is_some())
-    {
-        let grid = crate::selection_edit::Grid::with_bounds(d, &corners(mapped))?;
+    if let (Some(w), Some(grid)) = (warp, grid) {
         let values = grid.sample(d, false, |p| {
-            inverse_quad(w, area, p).map_or(0, |p| d.scene.selection_coverage(p))
+            w.inverse(area, p)
+                .map_or(0, |p| d.scene.selection_coverage(p))
         });
         state.scene = grid.scene(d, &values)?;
     }

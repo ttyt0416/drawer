@@ -638,3 +638,8 @@ crates/drawer-app/src/deform.rs
 crates/drawer-core/src/deform.rs
 crates/drawer-core/src/deform_verify.rs
 docs/process/raster-deformation.md
+
+crates/drawer-app/src/mesh_deform.rs
+crates/drawer-core/src/mesh_deform.rs
+crates/drawer-core/src/mesh_deform_verify.rs
+docs/process/mesh-puppet.md

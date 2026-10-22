@@ -162,6 +162,7 @@ impl Drawer {
             || self.tone_mapping.draft.is_some()
             || self.gaussian.draft.is_some()
             || self.deform.draft.is_some()
+            || self.mesh_deform.draft.is_some()
             || self.pending_close.is_some()
             || self.sizing_dialog.is_some()
             || self.import_dialog.is_some()
@@ -658,6 +659,7 @@ impl Drawer {
                                 ("Scale and rotate…", "scale-rotate"),
                                 ("RGB and channel tone curves…", "tone-curves"),
                                 ("Luminance gradient map…", "gradient-map"),
+                                ("Mesh and puppet deformation…", "mesh-puppet"),
                                 ("Free / perspective / liquify…", "raster-deformation"),
                                 ("Gaussian blur…", "gaussian-blur"),
                                 ("Remove short vector strokes/spans…", "vector-remove-short"),
