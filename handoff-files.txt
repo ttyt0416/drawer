@@ -718,3 +718,7 @@ crates/drawer-infer/src/fixtures.rs
 crates/drawer-infer/src/verify.rs
 docs/process/local-models.md
 crates/drawer-infer/src/comparison.rs
+crates/drawer-core/src/metal_material.rs
+crates/drawer-core/src/metal_material_verify.rs
+crates/drawer-app/src/metal_material_verify.rs
+docs/process/metallic-material.md

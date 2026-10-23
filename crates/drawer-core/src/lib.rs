@@ -384,3 +384,6 @@ pub mod color_deepen_verify;
 pub mod local_inference;
 #[cfg(test)]
 mod local_inference_verify;
+
+pub mod metal_material;
+pub mod metal_material_verify;

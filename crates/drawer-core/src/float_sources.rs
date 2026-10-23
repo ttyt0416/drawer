@@ -296,7 +296,10 @@ impl Renderer<'_> {
         if let crate::material_layer::Source::Gradient(s) = &m.source {
             self.gradient_color(s, p, None)
         } else {
-            if matches!(m.source, crate::material_layer::Source::Image(_)) {
+            if matches!(
+                m.source,
+                crate::material_layer::Source::Image(_) | crate::material_layer::Source::Metal(_)
+            ) {
                 self.plan()
                     .space
                     .from_srgb(Sample::from8(m.pixel(original)))

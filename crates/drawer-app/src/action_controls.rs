@@ -453,6 +453,7 @@ impl Drawer {
                 }
                 "color-deepen" => self.begin_color_deepen()?,
                 "local-inference" => self.begin_local_inference()?,
+                "metallic-material" => self.begin_metal_material()?,
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "batch-filters" => self.begin_batch_filters()?,

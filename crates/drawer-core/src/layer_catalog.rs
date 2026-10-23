@@ -592,6 +592,7 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
                     crate::material_layer::Source::Solid(_) => Kind::Solid,
                     crate::material_layer::Source::Gradient(_) => Kind::Gradient,
                     crate::material_layer::Source::Image(_) => Kind::Image,
+                    crate::material_layer::Source::Metal(_) => Kind::Image,
                 },
             ),
             _ => (format!("Page object {}", c.objects.id(n)), Kind::Image),

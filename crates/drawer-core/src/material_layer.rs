@@ -19,12 +19,38 @@ pub struct Image {
     #[serde(skip)]
     pub pixels: Arc<Vec<[u8; 4]>>,
 }
+impl Image {
+    pub fn valid(&self, missing: bool) -> bool {
+        (1..=32768).contains(&self.width)
+            && (1..=32768).contains(&self.height)
+            && u64::from(self.width) * u64::from(self.height) <= 4 * 1024 * 1024
+            && (self.pixels.len() == self.width as usize * self.height as usize
+                || missing && self.pixels.is_empty())
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Source {
     Solid([u8; 4]),
     Gradient(Box<gradient::Settings>),
     Image(Image),
+    Metal(Box<crate::metal_material::Metal>),
+}
+impl Source {
+    pub fn image(&self) -> Option<&Image> {
+        match self {
+            Self::Image(i) => Some(i),
+            Self::Metal(m) => m.texture.as_ref(),
+            _ => None,
+        }
+    }
+    fn image_mut(&mut self) -> Option<&mut Image> {
+        match self {
+            Self::Image(i) => Some(i),
+            Self::Metal(m) => m.texture.as_mut(),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,13 +79,8 @@ impl Layer {
             && match &self.source {
                 Source::Solid(_) => true,
                 Source::Gradient(s) => s.valid() && s.shape != gradient::Shape::Freeform,
-                Source::Image(i) => {
-                    (1..=32768).contains(&i.width)
-                        && (1..=32768).contains(&i.height)
-                        && u64::from(i.width) * u64::from(i.height) <= 4 * 1024 * 1024
-                        && (i.pixels.len() == i.width as usize * i.height as usize
-                            || (missing && i.pixels.is_empty()))
-                }
+                Source::Image(i) => i.valid(missing),
+                Source::Metal(m) => m.valid(missing),
             }
     }
     pub fn bounds(&self) -> Rect {
@@ -89,6 +110,12 @@ impl Layer {
             + match &self.source {
                 Source::Image(i) => i.width as usize * i.height as usize * 4,
                 Source::Gradient(s) => serde_json::to_vec(s).map_or(0, |b| b.len()),
+                Source::Metal(m) => {
+                    128 + m
+                        .texture
+                        .as_ref()
+                        .map_or(0, |i| i.width as usize * i.height as usize * 4)
+                }
                 _ => 0,
             }
     }
@@ -124,6 +151,14 @@ impl Layer {
                     .copied()
                     .unwrap_or([0; 4])
             }
+            Source::Metal(m) => m.pixel(p, |q| {
+                let i = m.texture.as_ref()?;
+                let q = self
+                    .mapping
+                    .tiling
+                    .pixel(q, [i.width, i.height], self.repeat)?;
+                i.pixels.get(q[1] * i.width as usize + q[0]).copied()
+            }),
         }
     }
 }
@@ -211,7 +246,7 @@ pub(crate) fn write(scene: &crate::scene::Scene, w: &mut impl Write) -> io::Resu
         })
         .chain(scene.file_objects.entries.iter().map(|l| &l.cache))
     {
-        if let Source::Image(i) = &m.source {
+        if let Some(i) = m.source.image() {
             w.write_all(&(i.pixels.len() as u64 * 4).to_le_bytes())?;
             for chunk in i.pixels.chunks(4096) {
                 let mut buffer = [0; 16384];
@@ -237,7 +272,7 @@ pub(crate) fn read(scene: &mut crate::scene::Scene, r: &mut impl Read) -> io::Re
         })
         .chain(scene.file_objects.entries.iter_mut().map(|l| &mut l.cache))
     {
-        if let Source::Image(i) = &mut m.source {
+        if let Some(i) = m.source.image_mut() {
             let mut size = [0; 8];
             r.read_exact(&mut size)?;
             let count = i.width as usize * i.height as usize;

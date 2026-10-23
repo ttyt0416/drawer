@@ -9,6 +9,8 @@ pub(super) struct Panel {
     preview: Option<egui::Rect>,
     apply: Option<egui::Rect>,
     load: Option<egui::Rect>,
+    metal: Option<egui::Rect>,
+    fallback: Option<egui::Rect>,
 }
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     drawer_core::material_layer_verify::verify(root)?;
@@ -258,6 +260,13 @@ impl Drawer {
         }));
         Ok(())
     }
+    pub(super) fn begin_metal_material(&mut self) -> Result<(), String> {
+        self.begin_material_layer(false)?;
+        let e = self.material_layer.draft.as_mut().unwrap();
+        e.name = "Metallic foil".into();
+        e.layer.source = Source::Metal(Box::default());
+        Ok(())
+    }
     fn preview_material_layer(&mut self, ctx: &egui::Context) -> Result<(), String> {
         let e = self
             .material_layer
@@ -340,7 +349,8 @@ impl Drawer {
             if !fresh{ui.label("Page/frame changed; cancel and reopen materials.");return;}
             let mut changed=ui.text_edit_singleline(&mut e.name).changed();
             ui.horizontal(|ui|{if ui.button("Solid color").clicked(){e.layer.source=Source::Solid(self.references.session.workspace.color);changed=true;}
-if ui.button("Gradient").clicked(){e.layer.source=Source::Gradient(Box::default());changed=true;}});
+if ui.button("Gradient").clicked(){e.layer.source=Source::Gradient(Box::default());changed=true;}
+let r=ui.button("Metallic foil");self.material_layer.metal=Some(r.rect);if r.clicked(){let texture=e.layer.source.image().cloned();e.layer.source=Source::Metal(Box::new(drawer_core::metal_material::Metal{texture,..Default::default()}));changed=true;}});
             match &mut e.layer.source{
                 Source::Solid(c)=>{ui.label("Fill RGBA");changed|=ui.color_edit_button_srgba_unmultiplied(c).changed();},
                 Source::Gradient(g)=>{
@@ -350,9 +360,18 @@ if ui.button("Gradient").clicked(){e.layer.source=Source::Gradient(Box::default(
                     ui.horizontal(|ui|{ui.label("Start X/Y");for v in &mut g.start{changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}ui.label("End X/Y");for v in &mut g.end{changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}});
                     changed|=ui.add(egui::Slider::new(&mut g.ellipse_ratio,0.01..=100.).logarithmic(true).text("Ellipse ratio")).changed();changed|=ui.checkbox(&mut g.dithering,"Dither gradient").changed();
                 },
-                Source::Image(i)=>{ui.label(format!("Embedded image: {} × {} pixels",i.width,i.height));}
+                Source::Image(i)=>{ui.label(format!("Embedded image: {} × {} pixels",i.width,i.height));},
+                Source::Metal(m)=>{
+                    ui.label("Metal tint (sRGB)");changed|=ui.color_edit_button_srgb(&mut m.color).changed();
+                    changed|=ui.add(egui::Slider::new(&mut m.strength,0. ..=1.).text("Metal strength")).changed();
+                    changed|=ui.add(egui::Slider::new(&mut m.gloss,0. ..=1.).text("Gloss")).changed();
+                    changed|=ui.add(egui::Slider::new(&mut m.direction,0. ..=360.).text("Light direction").suffix("°")).changed();
+                    if m.fallback(){ui.label("No texture: using the built-in procedural foil pattern.");}else{let i=m.texture.as_ref().unwrap();ui.label(format!("Embedded user texture: {} × {}",i.width,i.height));}
+                    let r=ui.button("Use procedural fallback");self.material_layer.fallback=Some(r.rect);if r.clicked(){m.texture=None;changed=true;}
+                    ui.small("Texture luminance controls relief; alpha stays intact. Strength 0 shows the unmodified user texture, or the tint when no texture is provided.");
+                }
             }
-            ui.horizontal(|ui|{ui.label("Local image path");ui.text_edit_singleline(&mut e.path);let r=ui.button("Load image");self.material_layer.load=Some(r.rect);if r.clicked(){match core::load(std::path::Path::new(&e.path)){Ok(source)=>{e.layer.source=source;changed=true;},Err(err)=>self.status=Some(err)}}});
+            ui.horizontal(|ui|{ui.label("Local image path");ui.text_edit_singleline(&mut e.path);let r=ui.button("Load image");self.material_layer.load=Some(r.rect);if r.clicked(){match core::load(std::path::Path::new(&e.path)){Ok(source)=>{if let Source::Metal(m)=&mut e.layer.source {m.texture=source.image().cloned();}else{e.layer.source=source;}changed=true;},Err(err)=>{if let Source::Metal(m)=&mut e.layer.source{m.texture=None;changed=true;self.status=Some(format!("Texture unavailable; using procedural foil: {err}"));}else{self.status=Some(err);}}}}});
             ui.horizontal(|ui|{changed|=ui.checkbox(&mut e.layer.repeat[0],"Repeat image horizontally").changed();changed|=ui.checkbox(&mut e.layer.repeat[1],"Repeat image vertically").changed();});
             ui.horizontal(|ui|{ui.label("Local area left/top/right/bottom");for v in e.layer.area.min.iter_mut().chain(&mut e.layer.area.max){changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}});
             ui.horizontal(|ui|{ui.label("Move X/Y");for v in &mut e.movement{changed|=ui.add(egui::DragValue::new(v).range(-1e6..=1e6)).changed();}});
@@ -381,4 +400,10 @@ mod tests {
         let root = crate::tests::TestDirectory::new();
         super::smoke(&root.0).unwrap();
     }
+}
+
+#[path = "metal_material_verify.rs"]
+mod metal_verify;
+pub(super) fn metal_smoke(root: &std::path::Path) -> Result<(), String> {
+    metal_verify::smoke(root)
 }
