@@ -52,8 +52,7 @@ impl Renderer<'_> {
                 s.scope_space = s.scope_space.then(d.scene.transform);
                 s
             });
-            let allocated = surface_effects::extent(extent, stack)?;
-            let pending = allocated.width as usize * allocated.height as usize * 96;
+            let pending = surface_effects::workspace_bytes(extent, stack)?;
             let appearance = self
                 .plan()
                 .caches

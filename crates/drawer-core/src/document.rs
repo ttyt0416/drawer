@@ -50,7 +50,8 @@ pub struct RasterLayer {
     pub pixels: Vec<[u8; 4]>,
     pub placement: Option<PlacedRaster>,
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlacedRaster {
     pub width: u32,
     pub height: u32,

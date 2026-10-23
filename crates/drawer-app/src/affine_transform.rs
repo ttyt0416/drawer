@@ -239,6 +239,7 @@ impl Drawer {
         self.transform_begin_guard(0)?;
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let key = target(self, d).ok_or("Choose a layer/object")?;
+        let (_, axes) = drawer_core::transform_policy::oriented(d, key)?;
         let bounds = catalog::bounds(d, key).unwrap_or(drawer_core::scene::Rect {
             min: [0.; 2],
             max: [d.width as f64, d.height as f64],
@@ -254,6 +255,7 @@ impl Drawer {
             pixels: false,
             bake: false,
             settings: Transform {
+                axes,
                 pivot: std::array::from_fn(|k| (bounds.min[k] + bounds.max[k]) / 2.),
                 ..Default::default()
             },
@@ -322,7 +324,7 @@ impl Drawer {
         let bounds = if e.pixels {
             core::selection_bounds(d).unwrap_or(bounds)
         } else {
-            bounds
+            drawer_core::transform_policy::oriented(d, e.target).map_or(bounds, |v| v.0)
         };
         let mut snap = self.workspaces.store.current.transform_snap;
         let old_snap = snap;
@@ -341,7 +343,13 @@ impl Drawer {
             egui::ScrollArea::vertical().id_salt("affine-controls").max_height(240.).show(ui,|ui|{
             ui.horizontal(|ui|{let r=ui.checkbox(&mut snap.enabled,"Angle snapping");self.affine_transform.snap=Some(r.rect);ui.add(egui::DragValue::new(&mut snap.degrees).range(1..=90).suffix("° interval"));});
             let (dragged,released)=self.affine_transform.handles.ui(ui,bounds,&mut e.settings,e.aspect,snap,fresh&&!working);changed|=dragged;preview|=released;
-            changed|=ui.checkbox(&mut e.pixels,"Transform selected pixels in the current raster").changed();
+            if ui.checkbox(&mut e.pixels,"Transform selected pixels in the current raster").changed(){
+                e.settings.axes=if e.pixels{0.}else{drawer_core::transform_policy::oriented(d,e.target).map_or(0.,|v|v.1)};
+                changed=true;
+            }
+            changed|=ui.checkbox(&mut e.settings.preserve_width,"Keep vector line width").changed();
+            changed|=ui.checkbox(&mut e.settings.individual,"Individual centers for linked objects").changed();
+            if ui.button("Use linked set center as pivot").clicked() && let Ok(pivot)=drawer_core::transform_policy::group_center(d,e.target){e.settings.pivot=pivot;changed=true;}
             changed|=crate::transform_review::scales(ui,&mut e.settings.scale,&mut e.aspect,-1e4..=1e4).0;
             changed|=ui.add(egui::DragValue::new(&mut e.settings.degrees).range(-36000. ..=36000.).prefix("Degrees: ")).changed();
             ui.horizontal(|ui|{for(k,label)in["Pivot X: ","Pivot Y: "].iter().enumerate(){changed|=ui.add(egui::DragValue::new(&mut e.settings.pivot[k]).range(-1e6..=1e6).prefix(*label)).changed();}});

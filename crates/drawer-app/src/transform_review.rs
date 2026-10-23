@@ -43,7 +43,9 @@ enum Task {
     Mesh {
         layers: Vec<usize>,
         selection: bool,
-        mesh: drawer_core::mesh_deform::Mesh,
+        settings: drawer_core::mesh_edit::Settings,
+        resume: bool,
+        area: drawer_core::scene::Rect,
     },
     Material {
         key: Key,
@@ -205,17 +207,14 @@ fn request(app: &Drawer, kind: u8) -> Result<Request, String> {
         }
         2 => {
             let e = app.mesh_deform.draft.as_ref().ok_or("Mesh closed")?;
-            let area = drawer_core::deform::area(d, &e.layers, e.selection)?.unwrap_or(
-                drawer_core::scene::Rect {
-                    min: [0.; 2],
-                    max: [d.width as f64, d.height as f64],
-                },
-            );
+            let area = e.area(d)?;
             (
                 Task::Mesh {
                     layers: e.layers.clone(),
                     selection: e.selection,
-                    mesh: e.geometry(area)?,
+                    settings: e.settings(),
+                    resume: e.resumed,
+                    area,
                 },
                 e.quality,
             )
@@ -251,8 +250,13 @@ fn request(app: &Drawer, kind: u8) -> Result<Request, String> {
                 return Err("Invalid quadrilateral/liquify parameters".into());
             }
         }
-        Task::Mesh { layers, mesh, .. } => {
-            if layers.is_empty() || !mesh.valid() {
+        Task::Mesh {
+            layers,
+            settings,
+            area,
+            ..
+        } => {
+            if layers.is_empty() || !settings.geometry(*area)?.valid() {
                 return Err("Invalid or folded mesh".into());
             }
         }
@@ -457,14 +461,12 @@ impl Drawer {
                     Task::Mesh {
                         layers,
                         selection,
-                        mesh,
+                        settings,
+                        resume,
+                        ..
                     } => {
-                        let state = drawer_core::deform::prepare_with_progress(
-                            &d,
-                            layers,
-                            *selection,
-                            drawer_core::deform::Change::Mesh(mesh),
-                            &mut tick,
+                        let state = drawer_core::mesh_edit::prepare(
+                            &d, layers, *selection, settings, *resume, &mut tick,
                         )?;
                         Prepared {
                             state,

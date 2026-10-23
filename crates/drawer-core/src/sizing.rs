@@ -571,6 +571,21 @@ pub fn prepare(
             .map(|p| inverse.map(p)),
         );
     }
+    for stack in result
+        .scene
+        .surface_effects
+        .rasters
+        .values_mut()
+        .chain(result.scene.surface_effects.baked.values_mut())
+    {
+        stack.space = stack.space.then(transform);
+        if let Change::Resample { filter, .. } = change {
+            stack.interpolation = filter;
+        }
+    }
+    for frame in &mut result.scene.layer_groups.transforms {
+        frame.matrix = frame.matrix.then(transform);
+    }
     result.scene.transform = result.scene.transform.then(transform);
     let translation = transform.map(source.scene.selection_translation);
     let origin = transform.map([0.0; 2]);

@@ -412,8 +412,14 @@ impl Drawer {
             });
             ui.horizontal(|ui|{for (v,label) in e.settings.translation.iter_mut().zip(["Move X: ","Y: "]){changed|=ui.add(egui::DragValue::new(v).speed(0.1).prefix(label).range(-1e9..=1e9)).changed();}});
             ui.horizontal(|ui|{for (v,label) in e.settings.scale.iter_mut().zip(["Scale X: ","Y: "]){changed|=ui.add(egui::DragValue::new(v).speed(0.01).prefix(label).range(-1e4..=1e4)).changed();}changed|=ui.add(egui::DragValue::new(&mut e.settings.degrees).speed(0.1).prefix("Rotate: ").range(-36000. ..=36000.)).changed();});
+            changed|=ui.checkbox(&mut e.settings.preserve_width,"Keep line width (otherwise geometric mean scale)").changed();
+            changed|=ui.checkbox(&mut e.settings.individual,"Individual selected path / anchor-set centers").changed();
+            if ui.button("Use selected set center").clicked() {
+                let points=e.scope.iter().flat_map(|entry|d.scene.lines.layers.iter().filter(move|l|l.id==entry.layer).flat_map(move|l|l.paths.iter().filter(move|p|entry.selection.path_ids().contains(&p.id)).flat_map(|p|p.points.iter().copied())));
+                if let Ok(p)=drawer_core::transform_policy::center(points.map(|p|d.scene.transform.map(p))){e.settings.pivot=p;changed=true;}
+            }
             changed|=ui.checkbox(&mut e.settings.duplicate,"Duplicate selected paths, then transform the selected scope in the copies").changed();
-            ui.small("Selected strokes transform in full; point selections transform only those anchors and their node handles. Base line width stays fixed. Duplicate creates fresh IDs and preserves every original path.");
+            ui.small("Selected strokes transform in full; point selections transform only those anchors and their node handles. Line width follows the selected policy. Duplicate creates fresh IDs and preserves every original path.");
             if changed{e.prepared=None;e.images=None;}
             preview=ui.add_enabled(fresh&&!e.scope.is_empty(),egui::Button::new("Prepare pivot transform preview")).clicked();
             if let Some(images)=&e.images{ui.horizontal(|ui|{for (label,image) in ["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}

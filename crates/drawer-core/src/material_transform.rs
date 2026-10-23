@@ -436,6 +436,10 @@ pub fn prepare(d: &Document, key: Key, s: &Settings) -> Result<Prepared, String>
             style.scope_space = style.scope_space.then(original);
         }
     }
+    if !s.mode.nonlinear() && !delta.is_identity() {
+        let prior = crate::transform_policy::frame(d, key);
+        state.scene.layer_groups.set_frame(key, prior.then(delta));
+    }
     crate::file_objects::validate(d, &state)?;
     if !state.scene.valid()
         || !state.color.valid_layers(&state.layers)

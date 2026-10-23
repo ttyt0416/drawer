@@ -87,18 +87,7 @@ fn prepare_inner(
 ) -> Result<Prepared, String> {
     tick()?;
     t.matrix()?;
-    let (s, c) = crate::texture::rotation(t.degrees);
-    let mut matrix = Affine([
-        c * t.scale[0],
-        s * t.scale[0],
-        -s * t.scale[1],
-        c * t.scale[1],
-        0.,
-        0.,
-    ]);
-    let pivot = matrix.map(t.pivot);
-    matrix.0[4] = t.pivot[0] - pivot[0] + t.translation[0];
-    matrix.0[5] = t.pivot[1] - pivot[1] + t.translation[1];
+    let matrix = t.matrix()?;
     if t.duplicate {
         return Err("Use Duplicate vector selection or copy the layer before transforming".into());
     }
@@ -134,10 +123,17 @@ fn prepare_inner(
         settings.movement = [0.; 2];
         settings.scale = [1.; 2];
         settings.angle = 0.;
-        settings.preserve_width = false;
+        settings.preserve_width = t.preserve_width;
         return crate::material_transform::prepare(d, key, &settings);
     }
-    let attempted = crate::group_edits::transform_with_progress(d, &[key], matrix, tick);
+    let attempted = crate::group_edits::transform_policy(
+        d,
+        &[key],
+        matrix,
+        t.preserve_width,
+        t.individual.then_some(t.translation),
+        tick,
+    );
     if let Ok(state) = attempted {
         return Ok(Prepared {state,selected:key,notes:vec!["Layers use their stored pixels; linked transforms, masks, texture and rulers follow. Unsupported linked members reject the whole operation. Undo restores the original.".into()]});
     }

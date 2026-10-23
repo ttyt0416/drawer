@@ -85,9 +85,17 @@ pub enum Handle {
     Edge(usize),
     Rotate,
 }
+pub fn basis(degrees: f64) -> Affine {
+    let (s, c) = crate::texture::rotation(degrees);
+    Affine([c, s, -s, c, 0., 0.])
+}
+pub fn box_corners(bounds: Rect, t: Transform) -> Result<[Point; 4], String> {
+    let m = basis(t.axes).then(t.matrix()?);
+    Ok(corners(bounds).map(|p| m.map(p)))
+}
 pub fn pick(bounds: Rect, t: Transform, p: Point, radius: f64) -> Result<Handle, String> {
     let matrix = t.matrix()?;
-    let q = corners(bounds).map(|p| matrix.map(p));
+    let q = box_corners(bounds, t)?;
     let near = |a: Point| (a[0] - p[0]).hypot(a[1] - p[1]) <= radius;
     for (n, a) in q.iter().enumerate() {
         if near(*a) {
@@ -99,11 +107,13 @@ pub fn pick(bounds: Rect, t: Transform, p: Point, radius: f64) -> Result<Handle,
             return Ok(Handle::Edge(n));
         }
     }
-    Ok(if bounds.contains(matrix.inverse().map(p)) {
-        Handle::Move
-    } else {
-        Handle::Rotate
-    })
+    Ok(
+        if bounds.contains(basis(t.axes).inverse().map(matrix.inverse().map(p))) {
+            Handle::Move
+        } else {
+            Handle::Rotate
+        },
+    )
 }
 #[derive(Clone, Copy)]
 pub struct Drag {
@@ -147,11 +157,11 @@ impl Drag {
                     ),
                     _ => return Err("Invalid transform handle".into()),
                 };
-                let anchor = self.source.matrix()?.map(a);
-                let handle_point = self.source.matrix()?.map(b);
+                let anchor = self.source.matrix()?.map(basis(self.source.axes).map(a));
+                let handle_point = self.source.matrix()?.map(basis(self.source.axes).map(b));
                 let p = [0, 1].map(|n| p[n] + handle_point[n] - self.start[n]);
                 let v = [p[0] - anchor[0], p[1] - anchor[1]];
-                let (s, c) = self.source.degrees.to_radians().sin_cos();
+                let (s, c) = crate::texture::rotation(self.source.degrees + self.source.axes);
                 let local = [c * v[0] + s * v[1], -s * v[0] + c * v[1]];
                 let extent = [b[0] - a[0], b[1] - a[1]];
                 match handle {
@@ -171,11 +181,12 @@ impl Drag {
                     }
                     _ => unreachable!(),
                 }
-                let v = [0, 1].map(|n| (a[n] - out.pivot[n]) * out.scale[n]);
-                let mapped = [
-                    c * v[0] - s * v[1] + out.pivot[0],
-                    s * v[0] + c * v[1] + out.pivot[1],
-                ];
+                let mapped = Transform {
+                    translation: [0.; 2],
+                    ..out
+                }
+                .matrix()?
+                .map(basis(out.axes).map(a));
                 out.translation = [0, 1].map(|n| anchor[n] - mapped[n]);
             }
         }

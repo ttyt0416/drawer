@@ -727,3 +727,8 @@ crates/drawer-core/src/transform_handles_verify.rs
 crates/drawer-app/src/transform_handles.rs
 crates/drawer-app/src/transform_handles_verify.rs
 docs/process/transform-handles.md
+crates/drawer-core/src/transform_policy.rs
+crates/drawer-core/src/transform_policy_verify.rs
+crates/drawer-core/src/mesh_edit.rs
+crates/drawer-app/src/transform_policy.rs
+docs/process/transform-policies.md

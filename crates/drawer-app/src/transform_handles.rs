@@ -20,7 +20,7 @@ impl Pad {
         }
     }
     pub(super) fn fit(&mut self, bounds: Rect, t: Transform) {
-        let points = core::corners(bounds).map(|p| t.matrix().unwrap_or_default().map(p));
+        let points = core::box_corners(bounds, t).unwrap_or(core::corners(bounds));
         let mut r = Rect {
             min: [f64::INFINITY; 2],
             max: [f64::NEG_INFINITY; 2],
@@ -81,8 +81,8 @@ impl Pad {
             .rect_filled(r, 0., egui::Color32::from_gray(24));
         let mut changed = false;
         let mut released = false;
-        if let Ok(matrix) = t.matrix() {
-            let points = core::corners(bounds).map(|p| self.point(r, matrix.map(p)));
+        if let Ok(q) = core::box_corners(bounds, *t) {
+            let points = q.map(|p| self.point(r, p));
             for n in 0..4 {
                 ui.painter_at(r).line_segment(
                     [points[n], points[(n + 1) % 4]],

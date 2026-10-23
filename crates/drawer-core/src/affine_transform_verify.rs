@@ -207,7 +207,17 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         [10, 20, 30, 128],
     )?;
     let vk = Key::Layer(crate::layer_properties::Target::Vector(layer));
-    let p = core::prepare(&vector, vk, false, t, false, Filter::Nearest)?;
+    let p = core::prepare(
+        &vector,
+        vk,
+        false,
+        Transform {
+            preserve_width: false,
+            ..t
+        },
+        false,
+        Filter::Nearest,
+    )?;
     let line = &p.state.scene.lines.layers[0].paths[0];
     check(
         line.points == [[5., 2.], [3., 4.]] && (line.width - 2. * 2f64.sqrt()).abs() < 1e-9,

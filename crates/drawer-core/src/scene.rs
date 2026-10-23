@@ -194,6 +194,8 @@ pub struct WorldMesh {
 #[serde(deny_unknown_fields)]
 pub struct Scene {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mesh_edit: Option<Box<crate::mesh_edit::Edit>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_transform: Option<crate::transform_handles::Record>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_batch_filter: Option<Box<crate::batch_filters::Record>>,
@@ -295,6 +297,9 @@ impl Scene {
             return false;
         }
         if self.last_batch_filter.as_ref().is_some_and(|r| !r.valid()) {
+            return false;
+        }
+        if self.mesh_edit.as_ref().is_some_and(|e| !e.valid(missing)) {
             return false;
         }
         if self.last_transform.is_some_and(|r| !r.valid()) {
@@ -421,6 +426,7 @@ impl Scene {
             + self.appearance.bytes()
             + self.surface_effects.bytes()
             + self.last_batch_filter.as_ref().map_or(0, |r| r.bytes())
+            + self.mesh_edit.as_ref().map_or(0, |e| e.bytes())
             + usize::from(self.last_transform.is_some()) * 160
             + usize::from(self.last_color_deepen.is_some()) * 128
             + self.catalog.bytes()

@@ -22,6 +22,7 @@ pub fn geometry() -> Result<(), String> {
         target: [0.5; 2],
         degrees: 0.,
         locked: true,
+        ..Default::default()
     };
     check(
         Mesh::puppet(3, 3, &[fixed], area)?.identity(),
@@ -63,12 +64,14 @@ pub fn geometry() -> Result<(), String> {
             target: [0.; 2],
             degrees: 0.,
             locked: true,
+            ..Default::default()
         },
         Pin {
             vertex: 8,
             target: [1.1, 0.9],
             degrees: 10.,
             locked: false,
+            ..Default::default()
         },
     ];
     let moved = Mesh::puppet(3, 3, &pins, area)?;
@@ -206,6 +209,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         target: [0.5; 2],
         degrees: 90.,
         locked: false,
+        ..Default::default()
     };
     let rotated = Mesh::puppet(
         3,

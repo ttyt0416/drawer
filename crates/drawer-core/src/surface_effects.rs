@@ -252,16 +252,35 @@ pub struct Entry {
     pub enabled: bool,
     pub scope: Option<Scope>,
 }
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Stack {
+    /// Document sizing transforms the entire effect output while keeping original numeric parameters.
+    #[serde(skip_serializing_if = "Affine::is_identity")]
+    pub space: Affine,
+    #[serde(default = "smooth_filter")]
+    pub interpolation: crate::interpolation::Filter,
     pub effects: Vec<Entry>,
     /// This mask clips the final output; the layer's ordinary mask clips the source.
     pub output_mask: Option<Mask>,
 }
+fn smooth_filter() -> crate::interpolation::Filter {
+    crate::interpolation::Filter::Bilinear
+}
+impl Default for Stack {
+    fn default() -> Self {
+        Self {
+            space: Affine::default(),
+            interpolation: smooth_filter(),
+            effects: vec![],
+            output_mask: None,
+        }
+    }
+}
 impl Stack {
     pub fn valid(&self) -> bool {
-        self.effects.len() <= 16
+        self.space.valid()
+            && self.effects.len() <= 16
             && self
                 .effects
                 .iter()
@@ -276,7 +295,8 @@ impl Stack {
             || self.output_mask.as_ref().is_some_and(|m| m.enabled)
     }
     fn bytes(&self) -> usize {
-        self.effects
+        48 + self
+            .effects
             .iter()
             .map(|e| 192 + e.scope.as_ref().map_or(0, Scope::bytes))
             .sum::<usize>()
@@ -358,7 +378,58 @@ impl Image {
         }
     }
 }
+fn mapped_extent(source: PlacedRaster, m: Affine) -> Result<PlacedRaster, String> {
+    let rect = Rect {
+        min: source.offset.map(|v| v as f64),
+        max: [
+            source.offset[0] as f64 + source.width as f64,
+            source.offset[1] as f64 + source.height as f64,
+        ],
+    };
+    let q = crate::transform_handles::corners(rect).map(|p| m.map(p));
+    let lo: [f64; 2] =
+        std::array::from_fn(|k| q.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min).floor());
+    let hi: [f64; 2] = std::array::from_fn(|k| {
+        q.iter()
+            .map(|p| p[k])
+            .fold(f64::NEG_INFINITY, f64::max)
+            .ceil()
+    });
+    if lo
+        .iter()
+        .chain(&hi)
+        .any(|v| !v.is_finite() || v.abs() > 1e9)
+        || (0..2).any(|k| !(1. ..=32768.).contains(&(hi[k] - lo[k])))
+    {
+        return Err("Effect output transform extent limit".into());
+    }
+    let out = PlacedRaster {
+        offset: lo.map(|v| v as i64),
+        width: (hi[0] - lo[0]) as u32,
+        height: (hi[1] - lo[1]) as u32,
+    };
+    if out.width as usize * out.height as usize > 1024 * 1024 {
+        return Err("Effect output transform exceeds1M pixels".into());
+    }
+    Ok(out)
+}
 pub fn extent(source: PlacedRaster, stack: &Stack) -> Result<PlacedRaster, String> {
+    if stack.space.is_identity() {
+        return local_extent(source, stack);
+    }
+    let local = mapped_extent(source, stack.space.inverse())?;
+    mapped_extent(local_extent(local, stack)?, stack.space)
+}
+pub(crate) fn workspace_bytes(source: PlacedRaster, stack: &Stack) -> Result<usize, String> {
+    let out = extent(source, stack)?;
+    let mut count = out.width as usize * out.height as usize;
+    if !stack.space.is_identity() {
+        let local = local_extent(mapped_extent(source, stack.space.inverse())?, stack)?;
+        count = count.saturating_add(local.width as usize * local.height as usize);
+    }
+    Ok(count.saturating_mul(96))
+}
+fn local_extent(source: PlacedRaster, stack: &Stack) -> Result<PlacedRaster, String> {
     if !stack.valid() {
         return Err("Invalid surface effect stack".into());
     }
@@ -403,8 +474,71 @@ pub(crate) fn render_with_appearance(
 ) -> Result<Image, String> {
     let extent = extent(source, stack)?;
     let n = extent.width as usize * extent.height as usize;
-    if n.saturating_mul(96) > budget {
+    if workspace_bytes(source, stack)? > budget {
         return Err("Surface effects exceed memory budget".into());
+    }
+    if !stack.space.is_identity() {
+        let local_source = mapped_extent(source, stack.space.inverse())?;
+        let mut local_stack = stack.clone();
+        local_stack.space = Affine::default();
+        let local_style = style.map(|s| {
+            let mut s = s.clone();
+            s.scope_space = s.scope_space.then(stack.space.inverse());
+            s
+        });
+        let local = render_local(
+            local_source,
+            &local_stack,
+            budget,
+            |p| {
+                let q = stack.space.map(p.map(|v| v as f64 + 0.5));
+                pixel(q.map(|v| v.floor() as i64))
+            },
+            local_style.as_ref(),
+            &mut tick,
+        )?;
+        let mut out = Image {
+            extent,
+            pixels: Vec::with_capacity(n),
+        };
+        for i in 0..n {
+            if i.is_multiple_of(128) {
+                tick(i, n)?;
+            }
+            let p = stack
+                .space
+                .inverse()
+                .map(point(extent, i).map(|v| v as f64 + 0.5))
+                .map(|v| v - 0.5);
+            let sample = crate::interpolation::sample_float(
+                p,
+                crate::transform_handles::corners(Rect {
+                    min: point(extent, i).map(|v| v as f64),
+                    max: point(extent, i).map(|v| v as f64 + 1.),
+                })
+                .map(|p| stack.space.inverse().map(p).map(|v| v - 0.5)),
+                stack.interpolation,
+                |x, y| local.sample([x, y]),
+            );
+            out.pixels.push(sample.components().map(|v| v as f32));
+        }
+        tick(n, n)?;
+        return Ok(out);
+    }
+    render_local(source, stack, budget, pixel, style, tick)
+}
+fn render_local(
+    source: PlacedRaster,
+    stack: &Stack,
+    budget: usize,
+    mut pixel: impl FnMut([i64; 2]) -> Result<Sample, String>,
+    style: Option<&crate::appearance::Style>,
+    mut tick: impl FnMut(usize, usize) -> Result<(), String>,
+) -> Result<Image, String> {
+    let extent = local_extent(source, stack)?;
+    let n = extent.width as usize * extent.height as usize;
+    if n.saturating_mul(96) > budget {
+        return Err("Effect local workspace memory budget".into());
     }
     tick(0, n * (stack.effects.len() + 1))?;
     let mut image = Image {

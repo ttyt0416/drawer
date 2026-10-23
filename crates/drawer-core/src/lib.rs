@@ -390,3 +390,8 @@ pub mod metal_material_verify;
 
 pub mod transform_handles;
 pub mod transform_handles_verify;
+
+pub mod mesh_edit;
+pub mod transform_policy;
+
+pub mod transform_policy_verify;

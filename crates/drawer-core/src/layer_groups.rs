@@ -93,7 +93,7 @@ impl Data {
             && self
                 .transforms
                 .iter()
-                .all(|f| matches!(f.key,Key::Layer(Target::Raster(id))if id>0) && f.matrix.valid())
+                .all(|f| canonical(f.key) && f.matrix.valid())
             && self.groups.len() <= 64
             && self.groups.iter().all(|g| {
                 g.id > 0

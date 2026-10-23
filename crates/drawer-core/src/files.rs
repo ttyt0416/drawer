@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 80;
+const VERSION: u32 = 81;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -197,6 +197,26 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 81
+            && (document.scene.mesh_edit.is_some()
+                || document
+                    .scene
+                    .surface_effects
+                    .rasters
+                    .values()
+                    .chain(document.scene.surface_effects.baked.values())
+                    .any(|s| !s.space.is_identity())
+                || document.scene.layer_groups.transforms.iter().any(|f| {
+                    !matches!(
+                        f.key,
+                        crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(_))
+                    )
+                }))
+        {
+            return Err(invalid(
+                "Editable mesh sources and transform frames require native version81",
+            ));
+        }
         if version < 80 && document.scene.last_transform.is_some() {
             return Err(invalid("Transform receipts require native version80"));
         }
@@ -351,6 +371,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     }
     if version >= 54 {
         crate::material_layer::read(&mut document.scene, &mut reader)?;
+    }
+    if version >= 81 {
+        crate::mesh_edit::read(&mut document.scene, &mut reader)?;
     }
     if !document.scene.valid() || document.memory_bytes() > budget {
         return Err(invalid("Invalid material image payload or budget"));
@@ -511,6 +534,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
             writer.write_all(&0u32.to_le_bytes())?;
         }
         crate::material_layer::write(&document.scene, &mut writer)?;
+        crate::mesh_edit::write(&document.scene, &mut writer)?;
         crate::color_storage::write(document, &mut writer)?;
         writer.flush()?;
         writer.get_ref().sync_all()

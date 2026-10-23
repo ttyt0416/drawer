@@ -160,6 +160,9 @@ pub struct Transform {
     pub scale: Point,
     pub degrees: f64,
     pub duplicate: bool,
+    pub preserve_width: bool,
+    pub individual: bool,
+    pub axes: f64,
 }
 impl Default for Transform {
     fn default() -> Self {
@@ -169,6 +172,9 @@ impl Default for Transform {
             scale: [1.; 2],
             degrees: 0.,
             duplicate: false,
+            preserve_width: true,
+            individual: false,
+            axes: 0.,
         }
     }
 }
@@ -183,13 +189,17 @@ impl Transform {
                 .scale
                 .iter()
                 .any(|v| !v.is_finite() || v.abs() < 1e-6 || v.abs() > 1e4)
+            || !self.axes.is_finite()
+            || self.axes.abs() > 36000.
             || !self.degrees.is_finite()
             || self.degrees.abs() > 36000.
         {
             return Err("Invalid pivot, translation, scale or rotation".into());
         }
-        let (s, c) = self.degrees.to_radians().sin_cos();
+        let (s, c) = crate::texture::rotation(self.degrees);
+        let (sa, ca) = crate::texture::rotation(self.axes);
         Ok(Affine([1., 0., 0., 1., -self.pivot[0], -self.pivot[1]])
+            .then(Affine([ca, -sa, sa, ca, 0., 0.]))
             .then(Affine([
                 c * self.scale[0],
                 s * self.scale[0],
@@ -198,6 +208,7 @@ impl Transform {
                 0.,
                 0.,
             ]))
+            .then(Affine([ca, sa, -sa, ca, 0., 0.]))
             .then(Affine([
                 1.,
                 0.,
@@ -276,8 +287,33 @@ pub fn transform(
         let mut selection = Selection::default();
         for original in vector_edit::selected(d, entry.layer, &entry.selection)? {
             let mut path = original.clone();
+            let matrix = if settings.individual {
+                let selected = if entry.selection.paths.contains(&original.id) {
+                    original.points.clone()
+                } else {
+                    entry
+                        .selection
+                        .controls
+                        .iter()
+                        .filter(|c| c.path == original.id)
+                        .filter_map(|c| original.control_point(c.point as usize))
+                        .collect()
+                };
+                let pivot = crate::transform_policy::center(
+                    selected.into_iter().map(|p| d.scene.transform.map(p)),
+                )?;
+                d.scene
+                    .transform
+                    .then(Transform { pivot, ..settings }.matrix()?)
+                    .then(d.scene.transform.inverse())
+            } else {
+                matrix
+            };
             if !matrix.is_identity() && entry.selection.paths.contains(&original.id) {
                 whole(&mut path, matrix);
+                if !settings.preserve_width {
+                    path.width *= (settings.scale[0] * settings.scale[1]).abs().sqrt();
+                }
             } else if !matrix.is_identity() {
                 let indices = entry
                     .selection

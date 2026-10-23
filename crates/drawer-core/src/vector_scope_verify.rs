@@ -266,6 +266,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             scale: [2., 0.5],
             degrees: 90.,
             duplicate,
+            ..Default::default()
         };
         let (after, new) = core::transform(&d, &selected, settings)?;
         let p = if duplicate {

@@ -17,6 +17,16 @@ pub fn transform_with_progress(
     matrix: Affine,
     tick: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<DocumentState, String> {
+    transform_policy(d, selected, matrix, false, None, tick)
+}
+pub fn transform_policy(
+    d: &Document,
+    selected: &[Key],
+    matrix: Affine,
+    preserve_width: bool,
+    individual: Option<Point>,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<DocumentState, String> {
     tick()?;
     if !matrix.valid() {
         return Err("Invalid group transform".into());
@@ -32,11 +42,6 @@ pub fn transform_with_progress(
         .transform
         .then(matrix)
         .then(d.scene.transform.inverse());
-    let a = [original.0[0], original.0[1]];
-    let b = [original.0[2], original.0[3]];
-    let scale = a[0].hypot(a[1]);
-    let similarity = (scale - b[0].hypot(b[1])).abs() < 1e-8 * scale.max(1.)
-        && (a[0] * b[0] + a[1] * b[1]).abs() < 1e-8 * scale.max(1.).powi(2);
     for key in &members {
         tick()?;
         if d.scene.file_objects.get(*key).is_some() {
@@ -52,19 +57,14 @@ pub fn transform_with_progress(
                 }
             }
             Target::Folder(_) => {}
-            Target::Vector(_) => {
-                if !similarity {
-                    return Err("This page transform would distort vector stroke widths; rasterize this vector before applying the transform".into());
-                }
-            }
+            Target::Vector(_) => {}
             Target::Gradient(_) => {}
             Target::Object(id) => {
                 let n = c::source_index(d, Key::Object(id)).ok_or("Missing object")?;
                 if !matches!(
                     d.scene.objects[n],
                     PageObject::Material(_) | PageObject::Line { .. }
-                ) || !similarity
-                {
+                ) {
                     return Err(
                         "Rasterize text/tone/shadow objects before transforming this group".into(),
                     );
@@ -78,9 +78,38 @@ pub fn transform_with_progress(
     let mut state = d.snapshot();
     state.scene.layer_ids.initialize(d.layers.len())?;
     let mut total = 0usize;
+    let mut matrices = vec![];
     for key in &members {
         tick()?;
         let t = c::target(d, *key).ok_or("Missing transform member")?;
+        let matrix = if let Some(movement) = individual {
+            let r = c::bounds(d, *key).ok_or("Missing individual object bounds")?;
+            let pivot = [0, 1].map(|n| (r.min[n] + r.max[n]) * 0.5);
+            let q = matrix.vector(pivot);
+            Affine([
+                matrix.0[0],
+                matrix.0[1],
+                matrix.0[2],
+                matrix.0[3],
+                pivot[0] - q[0] + movement[0],
+                pivot[1] - q[1] + movement[1],
+            ])
+        } else {
+            matrix
+        };
+        let original = d
+            .scene
+            .transform
+            .then(matrix)
+            .then(d.scene.transform.inverse());
+        matrices.push((*key, original));
+        let width_scale = if preserve_width {
+            1.
+        } else {
+            (matrix.0[0] * matrix.0[3] - matrix.0[1] * matrix.0[2])
+                .abs()
+                .sqrt()
+        };
         if let Some(link) = state
             .scene
             .file_objects
@@ -172,7 +201,7 @@ pub fn transform_with_progress(
                             }
                         }
                     }
-                    let prior = d.scene.layer_groups.frame(*key).unwrap_or_default();
+                    let prior = crate::transform_policy::frame(d, *key);
                     state.scene.layer_groups.set_frame(*key, prior.then(matrix));
                     state.layers[n].pixels = pixels;
                     state.layers[n].precise = precise;
@@ -194,7 +223,7 @@ pub fn transform_with_progress(
                         for p in &mut path.points {
                             *p = original.map(*p);
                         }
-                        path.width *= scale;
+                        path.width *= width_scale;
                         if let Some(def) = &mut path.definition {
                             def.creation = original.inverse().then(def.creation);
                         }
@@ -222,7 +251,7 @@ pub fn transform_with_progress(
                         } => {
                             *start = original.map(*start);
                             *end = original.map(*end);
-                            *width_px *= scale;
+                            *width_px *= width_scale;
                         }
                         _ => unreachable!(),
                     }
@@ -230,6 +259,10 @@ pub fn transform_with_progress(
                 Target::Folder(_) => {}
                 _ => unreachable!(),
             }
+        }
+        if !matches!(t, Target::Raster(_)) {
+            let prior = crate::transform_policy::frame(d, *key);
+            state.scene.layer_groups.set_frame(*key, prior.then(matrix));
         }
         let effect = match t {
             Target::Raster(id) => state.scene.layer_effects.rasters.get_mut(&id),
@@ -273,7 +306,26 @@ pub fn transform_with_progress(
         });
         let scoped = matches!(guide.scope,crate::ruler_scope::Scope::Folder(n)if members.contains(&Key::Layer(Target::Folder(n))));
         if linked || scoped {
-            guide.space = guide.space.then(original);
+            let key = guide
+                .link
+                .and_then(|t| match t {
+                    crate::line_tools::Target::Raster(n) => {
+                        Some(Key::Layer(crate::layer_properties::raster(d, n)))
+                    }
+                    crate::line_tools::Target::Vector(id) => Some(Key::Layer(Target::Vector(id))),
+                    _ => None,
+                })
+                .or({
+                    if let crate::ruler_scope::Scope::Folder(n) = guide.scope {
+                        Some(Key::Layer(Target::Folder(n)))
+                    } else {
+                        None
+                    }
+                });
+            let matrix = key
+                .and_then(|key| matrices.iter().find(|(k, _)| *k == key))
+                .map_or(original, |(_, m)| *m);
+            guide.space = guide.space.then(matrix);
         }
     }
     tick()?;
