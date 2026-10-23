@@ -395,3 +395,6 @@ pub mod mesh_edit;
 pub mod transform_policy;
 
 pub mod transform_policy_verify;
+
+pub mod extended_filters;
+pub mod extended_filters_verify;

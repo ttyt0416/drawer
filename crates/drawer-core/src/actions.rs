@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 186] = [
+pub const EXTRA_COMMANDS: [&str; 198] = [
     "chromatic-aberration",
     "film-effect",
     "pencil-effect",
@@ -14,6 +14,18 @@ pub const EXTRA_COMMANDS: [&str; 186] = [
     "generate-noise",
     "remove-specks",
     "adjust-line-width",
+    "normal-map",
+    "line-color-abstraction",
+    "jpeg-noise-reduction",
+    "polar-coordinates",
+    "smoothing-filter",
+    "blur-filter",
+    "blur-strong",
+    "sharpen-more",
+    "pinch-filter",
+    "curved-surface",
+    "zigzag-filter",
+    "ripple-filter",
     "sharpen",
     "unsharp-mask",
     "reduce-noise",

@@ -166,6 +166,7 @@ try {
     if ($smokeResult -notmatch 'mesh_puppet=true') { throw '메시·퍼펫 핀 변형 검증 실패' }
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
     if ($smokeResult -notmatch 'transform_review=true') { throw '변형 품질·저장 확정/취소 검증 실패' }
+    if ($smokeResult -notmatch 'finishing_filters=true') { throw '노멀/극좌표/스무딩 필터 검증 실패' }
     if ($smokeResult -notmatch 'transform_policy=true') { throw '선폭/기준점/메시 재편집 검증 실패' }
     if ($smokeResult -notmatch 'transform_handles=true') { throw '변형 핸들/각도 맞춤 검증 실패' }
     if ($smokeResult -notmatch 'metallic_material=true') { throw '금속 재질 레이어 검증 실패' }

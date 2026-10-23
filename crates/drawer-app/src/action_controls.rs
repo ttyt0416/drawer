@@ -436,6 +436,17 @@ impl Drawer {
                         drawer_core::pixel_effects::Operation::defaults()[3],
                     ))?
                 }
+                id if drawer_core::extended_filters::Operation::COMMANDS.contains(&id) => {
+                    let n = drawer_core::extended_filters::Operation::COMMANDS
+                        .iter()
+                        .position(|v| *v == id)
+                        .unwrap();
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Extended(
+                            drawer_core::extended_filters::Operation::defaults()[n],
+                        ),
+                    ))?;
+                }
                 "sharpen" => {
                     self.begin_detail_filter(drawer_core::detail_filter::Operation::defaults()[0])?
                 }

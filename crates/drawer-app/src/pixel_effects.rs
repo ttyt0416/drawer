@@ -49,6 +49,7 @@ impl Controls {
 pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Controls) {
     state.valid = true;
     match op {
+        Operation::Extended(op) => crate::extended_filters::controls(ui, op),
         Operation::Warp(op) => crate::warp_filters::controls(ui, op),
         Operation::Style(op) => crate::stylized_effects::controls(ui, op, state),
         Operation::Mosaic { cell, origin } => {

@@ -7,6 +7,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc,
 };
+#[path = "extended_filters_verify.rs"]
+mod extended_verify;
+pub(super) fn extended_smoke(root: &std::path::Path) -> Result<(), String> {
+    extended_verify::smoke(root)
+}
 #[path = "pixel_effects_verify.rs"]
 mod pixel_verify;
 #[path = "stylized_effects_verify.rs"]
@@ -66,6 +71,7 @@ impl Drop for Job {
 }
 pub(super) struct Draft {
     pixel_controls: crate::pixel_effects::Controls,
+    preset_name: String,
     source: Source,
     settings: Settings,
     prepared: Option<(Settings, DocumentState)>,
@@ -131,6 +137,7 @@ impl Drawer {
         drawer_core::layer_properties::paintable(d, source.layer)?;
         self.detail_filter.draft = Some(Box::new(Draft {
             pixel_controls: Default::default(),
+            preset_name: "My filter".into(),
             source,
             settings: Settings {
                 operation,
@@ -306,6 +313,24 @@ impl Drawer {
         self.status = None;
         Ok(())
     }
+    fn save_detail_preset(&mut self, name: String, settings: Settings) -> Result<(), String> {
+        let old = self.workspaces.store.current.finishing_presets.clone();
+        let mut next = old.clone();
+        if let Some((_, s)) = next.values.iter_mut().find(|(n, _)| *n == name) {
+            *s = settings;
+        } else {
+            next.values.push((name, settings));
+        }
+        if !next.valid() {
+            return Err("Use a unique nonempty preset name, at most64 characters, and at most32 valid presets".into());
+        }
+        self.workspaces.store.current.finishing_presets = next;
+        if let Err(err) = self.persist_workspace() {
+            self.workspaces.store.current.finishing_presets = old;
+            return Err(err);
+        }
+        Ok(())
+    }
     pub(super) fn detail_filter_window(&mut self, ctx: &egui::Context) {
         self.poll_detail_filter(ctx);
         let Some(mut e) = self.detail_filter.draft.take() else {
@@ -315,12 +340,20 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel, mut changed) = (false, false, false, false);
         let working = self.detail_filter.job.is_some();
+        let mut save_preset = None;
+        let mut remove_preset = None;
         egui::Window::new("Detail and pixel effects").default_width(430.).default_pos(egui::pos2(35.,55.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Source changed; close and reopen.");}
             let old=e.settings;
             egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::all(){if ui.selectable_label(op.same_kind(e.settings.operation),op.label()).clicked(){e.settings.operation=op;e.pixel_controls=Default::default();}}});
             controls(ui,&mut e.settings.operation,&mut e.pixel_controls);
             ui.checkbox(&mut e.settings.selection,"Only within the area selection");
+            ui.collapsing("Local user presets",|ui|{
+                egui::ComboBox::from_id_salt("finishing-presets").selected_text("Load a saved filter").show_ui(ui,|ui|{for(name,s)in &self.workspaces.store.current.finishing_presets.values{if ui.selectable_label(false,name).clicked(){e.settings = *s;e.preset_name=name.clone();e.pixel_controls=Default::default();}}});
+                ui.add(egui::TextEdit::singleline(&mut e.preset_name).char_limit(64));
+                ui.horizontal(|ui|{if ui.add_enabled(e.settings.valid()&&e.pixel_controls.valid,egui::Button::new("Save local preset")).clicked(){save_preset=Some((e.preset_name.trim().to_string(),e.settings));}
+                    if ui.button("Delete named preset").clicked(){remove_preset=Some(e.preset_name.trim().to_string());}});
+            });
             if ui.button("Restore last applied settings").clicked()&&let Some(s)=self.active.and_then(|n|self.documents[n].scene.last_detail_filter){e.settings=s;e.pixel_controls=Default::default();}
             changed=e.settings!=old;if changed{e.prepared=None;e.images=None;e.candidates=None;}
             let r=ui.add_enabled(fresh&&!working&&e.pixel_controls.valid,egui::Button::new("Prepare filter preview"));self.detail_filter.preview=Some(r.rect);preview=r.clicked();
@@ -330,6 +363,24 @@ impl Drawer {
             let r=ui.add_enabled(fresh&&!working&&e.pixel_controls.valid&&e.prepared.is_some(),egui::Button::new("Apply filter as one Undo"));self.detail_filter.apply=Some(r.rect);apply=r.clicked();
             ui.small("Keeps8/16-bit precision and the document profile. Apply or cancel before saving. Escape/close discards the preview.");
         });
+        if let Some((name, settings)) = save_preset
+            && let Err(err) = self.save_detail_preset(name, settings)
+        {
+            self.status = Some(err);
+        }
+        if let Some(name) = remove_preset {
+            let old = self.workspaces.store.current.finishing_presets.clone();
+            self.workspaces
+                .store
+                .current
+                .finishing_presets
+                .values
+                .retain(|(n, _)| *n != name);
+            if let Err(err) = self.persist_workspace() {
+                self.workspaces.store.current.finishing_presets = old;
+                self.status = Some(err);
+            }
+        }
         if changed || !fresh || !open || cancel {
             self.cancel_detail_job();
         }
