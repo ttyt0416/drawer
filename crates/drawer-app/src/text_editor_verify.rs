@@ -93,7 +93,10 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         || app.documents[0].history_counts().0 != count.0 + 1
         || app.documents[0].layers != original.layers
     {
-        return Err(format!("Text Apply/one Undo: {:?}", app.status));
+        return Err(format!(
+            "Text Apply/one Undo: {:?}; buttons {:?} {:?}",
+            app.status, app.text_editor.apply, app.text_editor.cancel
+        ));
     }
     let file = root.join("text-ui.drawer");
     app.save_to(0, &file)?;

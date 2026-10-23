@@ -168,6 +168,7 @@ try {
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
     if ($smokeResult -notmatch 'transform_review=true') { throw '변형 품질·저장 확정/취소 검증 실패' }
     if ($smokeResult -notmatch 'effect_source_delete=true') { throw '효과 원본 삭제 검토/보존 검증 실패' }
+    if ($smokeResult -notmatch 'text_reading=true') { throw '세로쓰기/자간/합자/루비 검증 실패' }
     if ($smokeResult -notmatch 'text_ime=true') { throw '캔버스 한글 조합/대체 글꼴 검증 실패' }
     if ($smokeResult -notmatch 'text_layout=true') { throw '텍스트/글꼴/정렬/줄 간격 검증 실패' }
     if ($smokeResult -notmatch 'quick_filters=true') { throw '필터 입출력/새 레이어/손실 확인 검증 실패' }

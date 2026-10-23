@@ -181,7 +181,7 @@ impl PageObject {
                     text.len() <= 65536
                         && positive(*size_px)
                         && layout.as_ref().is_none_or(|s| {
-                            s.valid() && *size_px <= 4096. && text.chars().count() <= 4096
+                            s.text_valid(text) && *size_px <= 4096. && text.chars().count() <= 4096
                         })
                 }
                 Self::Line { width_px, .. } => positive(*width_px),
@@ -406,7 +406,7 @@ impl Scene {
                 .objects
                 .iter()
                 .map(|o| match o {
-                    PageObject::Text { text, .. } => text.len(),
+                    PageObject::Text { text, layout, .. } => text.len()+layout.as_ref().map_or(0,|s|s.ruby.iter().map(|r|r.text.len()).sum::<usize>()),
                     _ => 0,
                 })
                 .sum::<usize>()
@@ -482,10 +482,7 @@ impl Scene {
                     std::mem::size_of_val(o)
                         + match o {
                             PageObject::Text { text, layout, .. } => {
-                                text.len()
-                                    + layout
-                                        .as_ref()
-                                        .map_or(0, |s| std::mem::size_of_val(s.as_ref()))
+                                text.len() + layout.as_ref().map_or(0, |s| s.bytes())
                             }
                             PageObject::Material(m) => m.bytes(),
                             _ => 0,

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 86;
+const VERSION: u32 = 87;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,13 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 87
+            && document.scene.objects.iter().any(
+                |o| matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.extended()),
+            )
+        {
+            return Err(invalid("Extended text layout requires native version87"));
         }
         if version < 86
             && document.scene.objects.iter().any(|o| {

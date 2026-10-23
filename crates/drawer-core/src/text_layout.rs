@@ -1,5 +1,8 @@
-//! Editable horizontal text. Font references and Unicode remain in the document.
+//! Editable text. Font references and Unicode remain in the document.
+#[path = "text_reading.rs"]
+mod reading;
 use crate::scene::{PageObject, Point, Rect};
+pub use reading::{Flow, Ruby, Side};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +38,10 @@ pub struct Style {
     pub align: Align,
     pub line_height: f64,
     pub wrap_width: f64,
+    pub flow: Flow,
+    pub tracking: f64,
+    pub ligatures: bool,
+    pub ruby: Vec<Ruby>,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -43,6 +50,10 @@ impl Default for Style {
             align: Align::Left,
             line_height: 1.2,
             wrap_width: 320.,
+            flow: Flow::Horizontal,
+            tracking: 0.,
+            ligatures: false,
+            ruby: Vec::new(),
         }
     }
 }
@@ -55,9 +66,48 @@ impl Style {
         }
     }
     pub fn valid(&self) -> bool {
-        (0.5..=8.).contains(&self.line_height) && (0. ..=32768.).contains(&self.wrap_width)
+        (0.5..=8.).contains(&self.line_height)
+            && (0. ..=32768.).contains(&self.wrap_width)
+            && (-0.5..=4.).contains(&self.tracking)
+            && self.ruby.len() <= 64
+            && self.ruby.iter().all(Ruby::valid)
+    }
+    pub fn extended(&self) -> bool {
+        self.flow != Flow::Horizontal
+            || self.tracking != 0.
+            || self.ligatures
+            || !self.ruby.is_empty()
+    }
+    pub fn bytes(&self) -> usize {
+        std::mem::size_of_val(self)
+            + self
+                .ruby
+                .iter()
+                .map(|r| std::mem::size_of_val(r) + r.text.len())
+                .sum::<usize>()
+    }
+    pub fn text_valid(&self, text: &str) -> bool {
+        self.valid() && reading::ranges_valid(text, &self.ruby)
+    }
+    pub fn remap_text(&mut self, before: &str, after: &str) {
+        reading::remap(before, after, &mut self.ruby);
     }
     pub fn bounds(&self, baseline: Point, text: &str, size: f64) -> Rect {
+        if self.extended()
+            && let Ok(shape) = layout(baseline, text, size, self)
+        {
+            let mut bounds = Rect {
+                min: [baseline[0] - size, baseline[1] - size],
+                max: [baseline[0] + size, baseline[1] + size],
+            };
+            for p in shape.paths.iter().flatten() {
+                for (axis, value) in p.iter().enumerate() {
+                    bounds.min[axis] = bounds.min[axis].min(*value);
+                    bounds.max[axis] = bounds.max[axis].max(*value);
+                }
+            }
+            return bounds;
+        }
         let width = if self.wrap_width > 0. {
             self.wrap_width
         } else {
@@ -139,12 +189,15 @@ fn bytes(font: Font) -> Option<Bytes> {
 pub struct Layout {
     pub paths: Vec<Vec<Point>>,
     pub lines: usize,
+    pub glyphs: usize,
+    pub unavailable_fonts: Vec<Font>,
     pub missing: usize,
     pub substituted: usize,
     pub widths: Vec<f64>,
     pub requested_available: bool,
     pub fallback_fonts: Vec<Font>,
     pub missing_characters: Vec<char>,
+    pub ligature_unavailable: Vec<Font>,
 }
 struct Glyph {
     font: usize,
@@ -177,13 +230,16 @@ fn layout_with_fonts(
     style: &Style,
     fonts: Vec<(Font, Bytes)>,
 ) -> Result<Layout, String> {
-    if !style.valid()
+    if !style.text_valid(text)
         || !(0.1..=4096.).contains(&size)
         || text.len() > 65536
         || text.chars().count() > 4096
         || baseline.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
     {
         return Err("Text size0.1–4096, Unicode4096 characters/64KiB, wrap0–32768 and line spacing0.5–8 required".into());
+    }
+    if style.extended() {
+        return reading::layout(baseline, text, size, style, &fonts);
     }
     let requested_available = fonts.iter().any(|(font, _)| *font == style.font);
     let mut fallback_fonts = Vec::new();
@@ -254,6 +310,7 @@ fn layout_with_fonts(
     };
     let mut paths = Vec::new();
     let mut points = 0usize;
+    let glyph_count = glyphs.len();
     for glyph in glyphs {
         let shift = match style.align {
             Align::Left => 0.,
@@ -280,12 +337,15 @@ fn layout_with_fonts(
     Ok(Layout {
         paths,
         lines: widths.len(),
+        glyphs: glyph_count,
+        unavailable_fonts: Vec::new(),
         missing,
         substituted,
         widths,
         requested_available,
         fallback_fonts,
         missing_characters,
+        ligature_unavailable: Vec::new(),
     })
 }
 // Own outline ensures that a font with an empty .notdef glyph cannot hide missing text.
@@ -307,6 +367,14 @@ impl Layout {
         let mut messages = Vec::new();
         if !self.requested_available {
             messages.push(format!("Requested font unavailable: {}", requested.label()));
+        }
+        for font in &self.unavailable_fonts {
+            if *font != requested {
+                messages.push(format!(
+                    "Requested reading font unavailable: {}",
+                    font.label()
+                ));
+            }
         }
         if self.substituted > 0 {
             messages.push(format!(
@@ -330,11 +398,24 @@ impl Layout {
                     .join(", ")
             ));
         }
+        if !self.ligature_unavailable.is_empty() {
+            messages.push(format!(
+                "Standard ligatures unavailable in {}; separate glyphs retained",
+                self.ligature_unavailable
+                    .iter()
+                    .map(|f| f.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
         if !messages.is_empty() {
             messages.push("Original Unicode is preserved".into());
         }
         messages.join(". ")
     }
+}
+pub fn remap_ruby(before: &str, after: &str, ruby: &mut Vec<Ruby>) {
+    reading::remap(before, after, ruby);
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
@@ -499,5 +580,20 @@ mod fallback_tests {
         assert_eq!(empty.missing, 1);
         assert_eq!(empty.paths.len(), 2);
         assert!(empty.widths[0] > 0.);
+        let style = Style {
+            flow: Flow::Vertical,
+            ruby: vec![Ruby {
+                start: 0,
+                end: 1,
+                text: "독음".into(),
+                font: Font::Hack,
+                ..Default::default()
+            }],
+            ..style
+        };
+        let l = layout_with_fonts([30., 30.], "한", 20., &style, vec![]).unwrap();
+        assert_eq!(l.missing, 3);
+        assert_eq!(l.paths.len(), 6);
+        assert!(l.notice(style.font).contains("reading font unavailable"));
     }
 }

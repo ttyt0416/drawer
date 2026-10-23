@@ -767,3 +767,8 @@ docs/process/text-layout.md
 
 crates/drawer-app/src/text_canvas.rs
 docs/process/text-ime.md
+crates/drawer-core/src/text_reading.rs
+crates/drawer-app/src/text_reading_ui.rs
+crates/drawer-core/src/text_reading_verify.rs
+docs/process/text-reading.md
+crates/drawer-app/src/text_reading_ui_verify.rs

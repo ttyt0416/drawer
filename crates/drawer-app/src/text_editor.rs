@@ -2,13 +2,16 @@
 mod canvas;
 #[path = "text_composition.rs"]
 mod composition;
+#[path = "text_reading_ui.rs"]
+mod reading_ui;
 #[path = "text_editor_verify.rs"]
 mod verify;
 pub(super) use canvas::CanvasPreview;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::smoke(root)?;
     verify::composition_smoke()?;
-    canvas::smoke()
+    canvas::smoke()?;
+    reading_ui::smoke(root)
 }
 use super::*;
 use drawer_core::text_layout::{self as core, Align, Font, Settings, Style};
@@ -19,6 +22,9 @@ pub(super) struct Panel {
     pub preview: Option<egui::Rect>,
     pub apply: Option<egui::Rect>,
     pub cancel: Option<egui::Rect>,
+    pub reading_text: Option<egui::Rect>,
+    pub add_reading: Option<egui::Rect>,
+    pub vertical: Option<egui::Rect>,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -31,6 +37,7 @@ pub(super) struct Draft {
     image: Option<egui::TextureHandle>,
     canvas_settings: Option<Settings>,
     canvas_notice: String,
+    reading_history: Vec<(String, Vec<core::Ruby>)>,
 }
 impl Drawer {
     pub(super) fn text_save_guard(&self, index: usize) -> Result<(), String> {
@@ -105,17 +112,25 @@ impl Drawer {
             image: None,
             canvas_settings: None,
             canvas_notice: String::new(),
+            reading_history: Vec::new(),
         }));
         self.drawing.text_document = Some(d.id);
         let e = self.text_editor.draft.as_ref().unwrap();
-        let id = composition::widget_id(e);
-        let mut state = egui::text_edit::TextEditState::default();
-        state
-            .cursor
-            .set_char_range(Some(egui::text::CCursorRange::one(
-                egui::text::CCursor::new(e.settings.text.chars().count()),
-            )));
-        state.store(ctx, id);
+        for field in std::iter::once(composition::Field::Body)
+            .chain((0..e.settings.style.ruby.len()).map(composition::Field::Reading))
+        {
+            let count = match field {
+                composition::Field::Body => e.settings.text.chars().count(),
+                composition::Field::Reading(n) => e.settings.style.ruby[n].text.chars().count(),
+            };
+            let mut state = egui::text_edit::TextEditState::default();
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::one(
+                    egui::text::CCursor::new(count),
+                )));
+            state.store(ctx, composition::field_id(e, field));
+        }
         Ok(())
     }
     fn preview_text(&mut self, ctx: &egui::Context) -> Result<(), String> {
@@ -186,26 +201,48 @@ impl Drawer {
             let d = &self.documents[n];
             d.id == e.document && d.revision == e.revision && d.current_frame == e.frame
         });
-        let (ime_commit, ime_cancel) = composition::before(ctx, &mut e);
+        let (mut ime_commit, ime_cancel) = composition::before(ctx, &mut e);
         let mut open = ime_cancel || !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel) = (false, false, false);
         let old = e.settings.clone();
-        egui::Window::new("Text content and layout").default_width(470.).default_pos(egui::pos2(25.,25.)).open(&mut open).show(ctx,|ui|{
-            ui.label(if e.id.is_some(){"Edit selected text object"}else{"Create a new editable text object"});if !fresh{ui.colored_label(egui::Color32::YELLOW,"Document changed; cancel and reopen.");}
-            let widget_id=composition::widget_id(&e);let mut output=egui::TextEdit::multiline(&mut e.settings.text).id(widget_id).char_limit(4096).desired_rows(4).desired_width(430.).show(ui);self.text_editor.text=Some(output.response.rect);composition::after(ctx,&mut e,&mut output,ime_commit);
-            egui::ComboBox::from_id_salt("text-font").selected_text(e.settings.style.font.label()).show_ui(ui,|ui|{for font in Font::ALL{ui.selectable_value(&mut e.settings.style.font,font,font.label());}});
-            ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut e.settings.size).range(0.1..=4096.).prefix("Size px "));ui.add(egui::DragValue::new(&mut e.settings.style.line_height).range(0.5..=8.).prefix("Line spacing × "));});
-            ui.horizontal(|ui|{for(value,label)in [(Align::Left,"Left"),(Align::Center,"Center"),(Align::Right,"Right")]{ui.radio_value(&mut e.settings.style.align,value,label);}});
-            ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut e.settings.style.wrap_width).range(0. ..=32768.).prefix("Wrap width px (0 = none) "));});
-            ui.horizontal(|ui|{for(v,label)in e.settings.baseline.iter_mut().zip(["Position X ","Baseline Y "]){ui.add(egui::DragValue::new(v).range(-1e6..=1e6).prefix(label));}ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);});
-            if e.settings!=old{e.prepared=None;e.image=None;}
-            let r=ui.add_enabled(fresh&&e.composition.is_none(),egui::Button::new("Prepare text preview"));self.text_editor.preview=Some(r.rect);preview=r.clicked();
-            if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
-            if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}
-            if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));}
-            let r=ui.add_enabled(fresh&&e.composition.is_none()&&e.prepared.is_some(),egui::Button::new("Apply text as one Undo"));self.text_editor.apply=Some(r.rect);apply=r.clicked();let r=ui.button("Cancel text edit");self.text_editor.cancel=Some(r.rect);cancel=r.clicked();
-            ui.small("Text field Undo handles local typing/composition. Apply changes the document once. Local system fonts are read without copying them into the package. Emoji uses monochrome outlines.");
-        });
+        egui::Window::new("Text content and layout")
+            .default_width(470.).default_height(620.).max_height(620.)
+            .default_pos(egui::pos2(25.,25.)).open(&mut open).show(ctx,|ui|{
+                ui.label(if e.id.is_some(){"Edit selected text object"}else{"Create a new editable text object"});
+                if !fresh {ui.colored_label(egui::Color32::YELLOW,"Document changed; cancel and reopen.");}
+                let body_height=(ui.available_height()-76.).max(80.);
+                egui::ScrollArea::vertical().id_salt("text-layout-form").max_height(body_height).show(ui,|ui|{
+                    let widget_id=composition::widget_id(&e);
+                    composition::checkpoint(ctx,&e,composition::Field::Body);
+                    let mut output=egui::TextEdit::multiline(&mut e.settings.text).id(widget_id).char_limit(4096).desired_rows(4).desired_width(430.).show(ui);
+                    self.text_editor.text=Some(output.response.rect);
+                    let managed=composition::after(ctx,&mut e,composition::Field::Body,&mut output,&mut ime_commit);
+                    if !managed && e.settings.text!=old.text {reading_ui::remap_field(&mut e,&old);}
+                    egui::ComboBox::from_id_salt("text-font").selected_text(e.settings.style.font.label()).show_ui(ui,|ui|{for font in Font::ALL{ui.selectable_value(&mut e.settings.style.font,font,font.label());}});
+                    ui.horizontal(|ui|{
+                        ui.add(egui::DragValue::new(&mut e.settings.size).range(0.1..=4096.).prefix("Size px "));
+                        ui.add(egui::DragValue::new(&mut e.settings.style.line_height).range(0.5..=8.).prefix("Line spacing × "));
+                    });
+                    ui.horizontal(|ui|{for(value,label)in [(Align::Left,"Left"),(Align::Center,"Center"),(Align::Right,"Right")]{ui.radio_value(&mut e.settings.style.align,value,label);}});
+                    ui.add(egui::DragValue::new(&mut e.settings.style.wrap_width).range(0. ..=32768.).prefix("Wrap length px (0 = none) "));
+                    ui.horizontal(|ui|{
+                        for(v,label)in e.settings.baseline.iter_mut().zip(["Position X ","Baseline Y "]){ui.add(egui::DragValue::new(v).range(-1e6..=1e6).prefix(label));}
+                        ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);
+                    });
+                    reading_ui::controls(ui,&mut e,&mut self.text_editor,&mut ime_commit);
+                    if e.settings!=old{e.prepared=None;e.image=None;}
+                    if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
+                    if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}
+                    if let Some(image)=&e.image{egui::CollapsingHeader::new("Prepared thumbnail").show(ui,|ui|{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(100.,100.)));});}
+                });
+                ui.separator();
+                ui.horizontal_wrapped(|ui|{
+                    let r=ui.add_enabled(fresh&&e.composition.is_none(),egui::Button::new("Prepare text preview"));self.text_editor.preview=Some(r.rect);preview=r.clicked();
+                    let r=ui.add_enabled(fresh&&e.composition.is_none()&&e.prepared.is_some(),egui::Button::new("Apply text as one Undo"));self.text_editor.apply=Some(r.rect);apply=r.clicked();
+                    let r=ui.button("Cancel text edit");self.text_editor.cancel=Some(r.rect);cancel=r.clicked();
+                });
+                ui.small("Field Undo handles local typing and composition. Apply changes the document once. Local fonts are read without copying. Emoji uses monochrome outlines.");
+            });
         if open && !cancel {
             self.text_editor.draft = Some(e);
             self.refresh_text_canvas();

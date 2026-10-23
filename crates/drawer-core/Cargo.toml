@@ -13,6 +13,7 @@ tiff = "=0.11.3"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }
 ttf-parser = "=0.25.1"
+rustybuzz = "=0.20.1"
 epaint_default_fonts = "=0.36.2"
 usvg = { version = "=0.47.0", default-features = false }
 resvg = { version = "=0.47.0", default-features = false, features = ["raster-images"] }

@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "67eb8300f449af6824052a0a9b51d1740859f2fa17d0d079922f9f3e3974a3ac",
+  "cargo_lock_sha256": "015d631065df326a2638fee9bf3a56da33ecc0daa46b9c27be9356a3d30fda7a",
   "libraries": [
     {
       "name": "accesskit",
@@ -504,6 +504,21 @@
         {
           "name": "LICENSE",
           "sha256": "592dc80f1a865d20d61a2006a2d29ce34a2bc28cd7e868ab300fdeed6da154ca"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "core_maths",
+      "version": "0.1.1",
+      "source": "https://crates.io/crates/core_maths/0.1.1",
+      "repository": "https://github.com/robertbastian/core_maths",
+      "license": "MIT",
+      "crate_sha256": "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "9ebf8c4cc0b735ca13a766451f7b8097db3185975ceb2ba94b5abf439156a91f"
         }
       ],
       "supplement_sources": []
@@ -3312,6 +3327,21 @@
       "supplement_sources": []
     },
     {
+      "name": "rustybuzz",
+      "version": "0.20.1",
+      "source": "https://crates.io/crates/rustybuzz/0.20.1",
+      "repository": "https://github.com/harfbuzz/rustybuzz",
+      "license": "MIT",
+      "crate_sha256": "fd3c7c96f8a08ee34eff8857b11b49b07d71d1c3f4e88f8a88d4c9e9f90b1702",
+      "notice_files": [
+        {
+          "name": "LICENSE",
+          "sha256": "3a7c3f0b887abb7c638faf022d29257418458614c6724b120ceeffb279f9c7d2"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "same-file",
       "version": "1.0.6",
       "source": "https://crates.io/crates/same-file/1.0.6",
@@ -4326,6 +4356,44 @@
       "supplement_sources": []
     },
     {
+      "name": "unicode-bidi-mirroring",
+      "version": "0.4.0",
+      "source": "https://crates.io/crates/unicode-bidi-mirroring/0.4.0",
+      "repository": "https://github.com/RazrFalcon/unicode-bidi-mirroring",
+      "license": "MIT/Apache-2.0",
+      "crate_sha256": "5dfa6e8c60bb66d49db113e0125ee8711b7647b5579dc7f5f19c42357ed039fe",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "59a1fdac3bd550043599bd159fd70f09a1108c2b09e3751d39b11e1ff8e51f00"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "unicode-ccc",
+      "version": "0.4.0",
+      "source": "https://crates.io/crates/unicode-ccc/0.4.0",
+      "repository": "https://github.com/RazrFalcon/unicode-ccc",
+      "license": "MIT/Apache-2.0",
+      "crate_sha256": "ce61d488bcdc9bc8b5d1772c404828b17fc481c0a582b5581e95fb233aef503e",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "59a1fdac3bd550043599bd159fd70f09a1108c2b09e3751d39b11e1ff8e51f00"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
       "name": "unicode-general-category",
       "version": "1.1.0",
       "source": "https://crates.io/crates/unicode-general-category/1.1.0",
@@ -4378,6 +4446,44 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "unicode-properties",
+      "version": "0.1.4",
+      "source": "https://crates.io/crates/unicode-properties/0.1.4",
+      "repository": "https://github.com/unicode-rs/unicode-properties",
+      "license": "MIT/Apache-2.0",
+      "crate_sha256": "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "unicode-script",
+      "version": "0.5.8",
+      "source": "https://crates.io/crates/unicode-script/0.5.8",
+      "repository": "https://github.com/unicode-rs/unicode-script",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "383ad40bb927465ec0ce7720e033cb4ca06912855fc35db31b5755d0de75b1ee",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "7cbb56d1b5d83d735056b363ab20958524120afafc4ad8206e6be98cdec5d737"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "7ad3ea8ca3caf894db98c3f31d5d4949173ffa93c883ef19a9e529ad48960f8c"
         }
       ],
       "supplement_sources": []
