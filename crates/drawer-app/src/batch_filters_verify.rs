@@ -1,14 +1,19 @@
 use super::*;
-fn frame(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, events: Vec<egui::Event>) {
+pub(super) fn frame(
+    ctx: &egui::Context,
+    app: &mut Drawer,
+    time: &mut f64,
+    events: Vec<egui::Event>,
+) {
     *time += 0.1;
     crate::input_replay::frame(ctx, app, *time, events);
 }
-fn settle(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) {
+pub(super) fn settle(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) {
     for _ in 0..3 {
         frame(ctx, app, time, vec![]);
     }
 }
-fn click(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, rect: egui::Rect) {
+pub(super) fn click(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, rect: egui::Rect) {
     for pressed in [true, false] {
         frame(
             ctx,
@@ -26,7 +31,7 @@ fn click(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, rect: egui::Rect
         );
     }
 }
-fn wait(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) -> Result<(), String> {
+pub(super) fn wait(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) -> Result<(), String> {
     let until = std::time::Instant::now() + std::time::Duration::from_secs(20);
     while app.batch_filters.working() {
         if std::time::Instant::now() > until {

@@ -492,6 +492,8 @@ impl Drawer {
                 "metallic-material" => self.begin_metal_material()?,
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
+                "quick-filters" => self.begin_quick_filters(false)?,
+                "pixel-filter-route" => self.begin_quick_filters(true)?,
                 "batch-filters" => self.begin_batch_filters()?,
                 "fisheye-filter" => {
                     self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(

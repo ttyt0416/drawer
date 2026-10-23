@@ -166,6 +166,8 @@ try {
     if ($smokeResult -notmatch 'mesh_puppet=true') { throw '메시·퍼펫 핀 변형 검증 실패' }
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
     if ($smokeResult -notmatch 'transform_review=true') { throw '변형 품질·저장 확정/취소 검증 실패' }
+    if ($smokeResult -notmatch 'effect_source_delete=true') { throw '효과 원본 삭제 검토/보존 검증 실패' }
+    if ($smokeResult -notmatch 'quick_filters=true') { throw '필터 입출력/새 레이어/손실 확인 검증 실패' }
     if ($smokeResult -notmatch 'cleanup_filters=true') { throw '톤/먼지/틈 채움/선택 도구 검증 실패' }
     if ($smokeResult -notmatch 'filter_options=true') { throw '필터 방향/파형/경계/프리셋 검증 실패' }
     if ($smokeResult -notmatch 'finishing_filters=true') { throw '노멀/극좌표/스무딩 필터 검증 실패' }

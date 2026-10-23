@@ -749,3 +749,10 @@ crates/drawer-core/src/cleanup_filters_verify.rs
 crates/drawer-app/src/cleanup_filters.rs
 crates/drawer-app/src/cleanup_filters_verify.rs
 docs/process/cleanup-filters.md
+
+crates/drawer-core/src/quick_filters.rs
+crates/drawer-core/src/quick_filters_verify.rs
+crates/drawer-app/src/quick_filters.rs
+crates/drawer-app/src/quick_filters_verify.rs
+crates/drawer-app/src/effect_delete_review.rs
+docs/process/quick-filter-routes.md

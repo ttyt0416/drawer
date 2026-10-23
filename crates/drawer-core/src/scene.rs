@@ -197,6 +197,10 @@ pub struct Scene {
     pub mesh_edit: Option<Box<crate::mesh_edit::Edit>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_transform: Option<crate::transform_handles::Record>,
+    #[serde(default)]
+    pub effect_algorithm: crate::quick_filters::EffectAlgorithm,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_quick_filter: Option<Box<crate::quick_filters::Record>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_batch_filter: Option<Box<crate::batch_filters::Record>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -303,6 +307,12 @@ impl Scene {
             return false;
         }
         if self.last_transform.is_some_and(|r| !r.valid()) {
+            return false;
+        }
+        if self.effect_algorithm.0 != 1 {
+            return false;
+        }
+        if self.last_quick_filter.as_ref().is_some_and(|r| !r.valid()) {
             return false;
         }
         if self.last_detail_filter.is_some_and(|s| !s.valid()) {
@@ -415,8 +425,11 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        usize::from(self.last_detail_filter.is_some())
-            * std::mem::size_of::<crate::detail_filter::Settings>()
+        self.last_quick_filter
+            .as_ref()
+            .map_or(0, |r| std::mem::size_of_val(r.as_ref()))
+            + usize::from(self.last_detail_filter.is_some())
+                * std::mem::size_of::<crate::detail_filter::Settings>()
             + usize::from(self.last_spatial_blur.is_some())
                 * std::mem::size_of::<crate::spatial_blur::Settings>()
             + self.layer_groups.bytes()

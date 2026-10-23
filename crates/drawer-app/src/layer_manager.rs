@@ -1,8 +1,14 @@
 use super::*;
 use drawer_core::layers::{self as core, Command, Kind, Target};
+#[path = "effect_delete_review.rs"]
+mod effect_delete;
+pub(super) fn effect_smoke() -> Result<(), String> {
+    effect_delete::smoke()
+}
 #[derive(Default)]
 pub(super) struct Panel {
     draft: Option<Box<Draft>>,
+    effect_delete: Option<Box<effect_delete::Review>>,
     tracked: std::collections::HashMap<u64, Tracked>,
     create: Option<egui::Rect>,
     duplicate: Option<egui::Rect>,
@@ -206,6 +212,13 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn layer_command(&mut self, command: Command) -> Result<(), String> {
+        if let Command::Delete(target) = &command
+            && self.active.is_some_and(|n| {
+                drawer_core::quick_filters::attached_effects(&self.documents[n], *target)
+            })
+        {
+            return self.review_effect_delete(*target);
+        }
         self.finish_stroke();
         let n = self.active.ok_or("Open a page first")?;
         let old = stamp(
@@ -310,6 +323,7 @@ impl Drawer {
         self.layer_command(command)
     }
     pub(super) fn layer_manager_window(&mut self, ctx: &egui::Context) {
+        self.effect_delete_window(ctx);
         let Some(mut e) = self.layer_manager.draft.take() else {
             return;
         };

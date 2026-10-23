@@ -406,3 +406,7 @@ pub mod filter_options_verify;
 pub mod cleanup_filters;
 
 pub mod cleanup_filters_verify;
+
+pub mod quick_filters;
+
+pub mod quick_filters_verify;

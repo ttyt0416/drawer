@@ -325,6 +325,11 @@ pub struct Snapshot {
         skip_serializing_if = "crate::extended_filters::Presets::is_default"
     )]
     pub finishing_presets: crate::extended_filters::Presets,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::quick_filters::Presets::is_default"
+    )]
+    pub quick_presets: crate::quick_filters::Presets,
     #[serde(default)]
     pub vector_overlay: crate::vector_tip::Overlay,
     #[serde(default)]
@@ -429,6 +434,7 @@ impl Default for Snapshot {
             version: 1,
             spatial_blur: Default::default(),
             finishing_presets: Default::default(),
+            quick_presets: Default::default(),
             surface_effects: Default::default(),
             transparency_colors: crate::paper_background::checker_default(),
             layer_move: Default::default(),
@@ -531,7 +537,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.finishing_presets.valid()
+        if !self.quick_presets.valid()
+            || !self.finishing_presets.valid()
             || !self.spatial_blur.valid()
             || !self.surface_effects.valid()
         {
@@ -650,6 +657,7 @@ impl Snapshot {
         if scope.other {
             next.spatial_blur = incoming.spatial_blur.clone();
             next.finishing_presets = incoming.finishing_presets.clone();
+            next.quick_presets = incoming.quick_presets.clone();
             next.surface_effects = incoming.surface_effects.clone();
             next.selection_edit = incoming.selection_edit;
             next.magnetic_lasso = incoming.magnetic_lasso;
