@@ -172,22 +172,64 @@ impl Operation {
     }
 }
 pub fn sample(d: &Document, layer: usize, xy: [i64; 2], op: Operation) -> Result<Sample, String> {
-    if !op.valid() {
+    sample_options(d, layer, xy, op, Default::default())
+}
+pub fn sample_options(
+    d: &Document,
+    layer: usize,
+    xy: [i64; 2],
+    mut op: Operation,
+    mut options: crate::filter_options::Options,
+) -> Result<Sample, String> {
+    if !op.valid() || !options.valid() {
         return Err("Invalid distortion parameters".into());
     }
-    let src = &d.layers[layer];
-    let p = op
-        .map(xy.map(|v| v as f64 + 0.5), src.extent(d.width, d.height))
-        .map(|v| v - 0.5);
-    Ok(crate::interpolation::sample_float(
-        p,
+    let e = options.region(d, d.layers[layer].extent(d.width, d.height));
+    let auto = [
+        e.offset[0] as f64 + e.width as f64 / 2.,
+        e.offset[1] as f64 + e.height as f64 / 2.,
+    ];
+    if options.area == crate::filter_options::Area::EntireSelection {
+        options.shape = e.width as f64 / e.height as f64;
+        match &mut op {
+            Operation::Fisheye { center, radius, .. } | Operation::Swirl { center, radius, .. } => {
+                *center = Some(auto);
+                *radius = e.height as f64 / 2.;
+            }
+            _ => {}
+        }
+    }
+    let point = xy.map(|v| v as f64 + 0.5);
+    let p = if let Operation::Wave {
+        amplitude,
+        period,
+        phase,
+    } = op
+    {
+        let q = [point[0] - e.offset[0] as f64, point[1] - e.offset[1] as f64];
         [
-            [p[0] - 0.5, p[1] - 0.5],
-            [p[0] + 0.5, p[1] - 0.5],
-            [p[0] + 0.5, p[1] + 0.5],
-            [p[0] - 0.5, p[1] + 0.5],
-        ],
-        crate::interpolation::Filter::Bilinear,
-        |x, y| src.sample(d.width, d.height, x, y),
-    ))
+            point[0] + amplitude[0] * options.waveform.value(q[1] / period[0] + phase / 360.),
+            point[1] + amplitude[1] * options.waveform.value(q[0] / period[1] + phase / 360.),
+        ]
+    } else {
+        let c = match op {
+            Operation::Fisheye { center, .. } | Operation::Swirl { center, .. } => {
+                center.unwrap_or(auto)
+            }
+            _ => auto,
+        };
+        let shaped = options.ellipse(point, c);
+        let mapped = op.map(shaped, e);
+        [
+            point[0] + (mapped[0] - shaped[0]) * options.shape,
+            point[1] + mapped[1] - shaped[1],
+        ]
+    }
+    .map(|v| v - 0.5);
+    Ok(crate::filter_options::Sampler {
+        document: d,
+        layer,
+        boundary: options.boundary,
+    }
+    .bilinear(p))
 }

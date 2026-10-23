@@ -1629,12 +1629,14 @@
 
   구현·검증 기록: 노멀 기울기/Y방향, 선·색 양자화/윤곽,8×8 블록/링잉, 중심·반경을 가진 극좌표 양방향, 반경/윤곽/혼합 강도 스무딩을 추가했다. Blur/Blur (strong), 기존 Sharpen/Sharpen more, Pinch, 구/원통 Curved surface, ZigZag, Ripple을 각각 목록/명령으로 제공한다. 로컬 이름 프리셋 저장/불러오기/삭제와 workspace other 범위 복원을 연결했다. v82에 결과/마지막 설정을 저장하고 기존 비동기 미리보기·선택 밖 보존·알파·한 Undo를 공유한다. 독립 수식·경계/0값/잘못된 입력·16비트 극저알파·프리셋 디스크/재시작·네이티브/이전 헤더 거절·실제 마우스 적용을 확인했다. 강한 샤픈 대비 검사는 수정 전 실패/보완 후 통과했다. 전체695개(앱247/코어426/추론4/플랫폼11/전달7) 통과, 기존 외부 코덱1개 제외. 정적 검사·릴리스·설치/재설치/제거·설치본 finishing_filters=true와 사용자파일18개 보존을 확인했다. 상세: `docs/process/finishing-filters.md`.
 
-- [ ] **172.** 필터별 세부값: 언샤프 반경/강도/임계, 흐리기 방향·중심, 파형·파장·진폭과 영역 밖 반복 처리
+- [x] **172.** 필터별 세부값: 언샤프 반경/강도/임계, 흐리기 방향·중심, 파형·파장·진폭과 영역 밖 반복 처리
 
   입력·결과: 필터별 지원 매개변수만 표시한다. 문서 경계 밖 표본은 투명/가장자리유지/반복/거울반복 중 선택하고 기본은 투명으로 한다. 선택경계는 출력 적용 범위이며 계산 입력을 임의 반복시키는 경계로 취급하지 않는다. 파형은 사인/삼각/사각, 파장>0·진폭>=0으로 한정한다.  
   필수 옵션: 필터별 방향·형상·출력·영역 밖 처리 선택값 — 모션 블러: Both directions, Forward, Backward, Box, Smooth; 방사형 블러: Both directions, Outward, Inward, Box, Smooth; 회전 블러: Rotate right, Rotate left, Both directions; 파형: Sine, Triangle, Rectangular, Wrap around, Repeat edge pixels; 곡면: Sphere, Cylinder, Entire selection, Specify area (use Radius and Shape); 극좌표: Rectangular to polar, Polar to rectangular, Spherize; 렌즈 왜곡: Entire selection, Specify area (use Radius and Shape); 핀치: Entire selection, Specify area (use Radius and Shape); 소용돌이: Entire selection, Specify area (use Radius and Shape); 잔물결: Entire selection, Specify area (use Radius and Shape); 색수차: Radial (use center point), Lateral (use Angle); 노이즈: Color, Gray; 노멀맵: Y up, Y down; 선·색 추상화: Color and lines, Color only, Lines only; 선폭: Thicken, Narrow, At least 1 pixel; 필름 효과: None, Sepia, Light leak (slant), Light leak (all), Sepia + Light leak (slant), Sepia + Light leak (all). 모션은 양쪽/앞/뒤, 방사는 양쪽/안/밖, 회전은 좌/우/양쪽; box/smooth 커널 목적을 구분한다. 파형·구/원통·극좌표 변환·색수차 방향·컬러/회색 잡음·노멀 Y방향·아티스틱 색/선 출력·선폭 증감·빛샘 종류를 각 필터의 명시적 옵션으로 제공한다.  
   저장·취소: 필터 프리셋과 결과 픽셀 저장; 미리보기 취소 무변경; 적용 한 번 실행 취소  
   완료 검증: 기능162의 범위 밖 투명 검증은 기본 모드에 적용한다. 다른 모드는 모서리 색표식으로 반복/거울/유지 결과를 비교하고 선택 밖 출력은 모든 모드에서 불변이어야 한다. 각 옵션의 방향을 확인할 비대칭 패턴 사용; 선택 외부·투명 경계·반경0·음수/최대값 거절·고정 입력 재현·미리보기 취소·저장/실행 취소 확인.
+
+  검증 기록: 필터별 세부 옵션을 실제 계산·UI·로컬 프리셋·일괄 적용에 연결했다. 모션 앞/뒤·방사 안/밖·회전 좌/우/양쪽과 정규화 Box/Smooth, 사인/삼각/사각 파형, 문서 기준 투명/가장자리/반복/끝픽셀 포함 거울 경계, 전체 선택/중심·반경·타원 Shape, 극좌표 Spherize, 추상화3종, 색수차 각도/중심, 필름6종, 노이즈 Color/Gray와 선폭 최소1픽셀을 제공한다. 선택은 출력 범위이며 전체 선택 모드는 실제 마스크/사각형의 문서 좌표 경계를 사용한다. 숨긴 지정영역 값은 전체 선택 결과에 영향을 주지 않는다. 거리 능선으로 최소 선 코어를 보존하며 필름 None은 추가 프리셋만 끈다. 결과와 설정은 v83에 보존하고 이전 헤더 위장은 거절한다. 상세 계약은 filter-options.md다. 전체699개(앱248/코어429/추론4/플랫폼11/전달7), 기존 외부 코덱1개 제외. 경계 모서리/큰 유한 좌표·파형 기대값·비대칭 방향·커널 차이·추상화/필름/색수차·16비트 알파1/선택 밖 원본·최소 선폭·결정성·취소/한 Undo·네이티브/로컬 프리셋 재시작·실제 앱 미리보기/적용/취소를 확인했다. 회귀 검사에서 발견한 선 끝점과 앱 상태 크기를 보완하고 전체를 재실행했다. 큰 유한 좌표의 경계 검사도 수정 전 실패/수정 후 통과를 확인했다. 경고 거부·고지280/글꼴4·릴리스·설치/재설치/제거·사용자파일18개 보존·설치본 filter_options=true를 통과했다. 실물 펜 검증은 대기한다.
 
 - [ ] **173.** 톤 제거·회색화와 먼지의 투명 배경/흰 배경 판별·틈 채움 모드
 

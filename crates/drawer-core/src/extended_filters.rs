@@ -308,8 +308,7 @@ fn luma(p: Sample) -> f64 {
     c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722
 }
 fn mean(
-    d: &Document,
-    layer: usize,
+    sampler: &crate::filter_options::Sampler<'_>,
     xy: [i64; 2],
     radius: i64,
     edge: f64,
@@ -319,7 +318,7 @@ fn mean(
     let mut total = 0.;
     for y in -radius..=radius {
         for x in -radius..=radius {
-            let p = d.layers[layer].sample(d.width, d.height, xy[0] + x, xy[1] + y);
+            let p = sampler.at(xy[0] + x, xy[1] + y);
             let diff = p
                 .rgb()
                 .into_iter()
@@ -346,23 +345,77 @@ pub fn sample(
     before: Sample,
     op: Operation,
 ) -> Result<Sample, String> {
-    if !op.valid() {
+    sample_options(d, layer, xy, before, op, Default::default())
+}
+pub fn sample_options(
+    d: &Document,
+    layer: usize,
+    xy: [i64; 2],
+    before: Sample,
+    mut op: Operation,
+    mut options: crate::filter_options::Options,
+) -> Result<Sample, String> {
+    if !op.valid() || !options.valid() {
         return Err("Invalid finishing filter settings".into());
     }
-    if op.identity() || op.preserves_alpha() && before.alpha() == 0. {
+    if op.identity() && options.area != crate::filter_options::Area::EntireSelection
+        || op.preserves_alpha() && before.alpha() == 0.
+    {
         return Ok(before);
     }
+    let sampler = crate::filter_options::Sampler {
+        document: d,
+        layer,
+        boundary: options.boundary,
+    };
     if !op.preserves_alpha() {
-        let e = d.layers[layer].extent(d.width, d.height);
-        let p = op.map(xy.map(|v| v as f64 + 0.5), e).map(|v| v - 0.5);
-        return Ok(crate::interpolation::sample_float(
-            p,
-            [p; 4],
-            crate::interpolation::Filter::Bilinear,
-            |x, y| d.layers[layer].sample(d.width, d.height, x, y),
-        ));
+        let e = options.region(d, d.layers[layer].extent(d.width, d.height));
+        let auto = [
+            e.offset[0] as f64 + e.width as f64 / 2.,
+            e.offset[1] as f64 + e.height as f64 / 2.,
+        ];
+        if options.area == crate::filter_options::Area::EntireSelection {
+            options.shape = e.width as f64 / e.height as f64;
+            match &mut op {
+                Operation::Pinch { center, radius, .. }
+                | Operation::Curved { center, radius, .. }
+                | Operation::Zigzag { center, radius, .. }
+                | Operation::Ripple { center, radius, .. } => {
+                    *center = Some(auto);
+                    *radius = e.height as f64 / 2.;
+                }
+                _ => {}
+            }
+        }
+        let (center, radius) = match op {
+            Operation::Polar { center, radius, .. }
+            | Operation::Pinch { center, radius, .. }
+            | Operation::Curved { center, radius, .. }
+            | Operation::Zigzag { center, radius, .. }
+            | Operation::Ripple { center, radius, .. } => (center.unwrap_or(auto), radius),
+            _ => (auto, 1.),
+        };
+        let point = xy.map(|v| v as f64 + 0.5);
+        let shaped = options.ellipse(point, center);
+        let mapped = if matches!(op, Operation::Polar { .. }) && options.spherize {
+            let v = [shaped[0] - center[0], shaped[1] - center[1]];
+            let r = v[0].hypot(v[1]);
+            let q = r / radius;
+            if q > 0. && q < 1. {
+                let f = q.asin() / std::f64::consts::FRAC_PI_2 / q;
+                [center[0] + v[0] * f, center[1] + v[1] * f]
+            } else {
+                shaped
+            }
+        } else {
+            op.map(shaped, e)
+        };
+        return Ok(sampler.bilinear([
+            point[0] + (mapped[0] - shaped[0]) * options.shape - 0.5,
+            point[1] + mapped[1] - shaped[1] - 0.5,
+        ]));
     }
-    let at = |x, y| d.layers[layer].sample(d.width, d.height, xy[0] + x, xy[1] + y);
+    let at = |x, y| sampler.at(xy[0] + x, xy[1] + y);
     let height = |x, y| {
         let p = at(x, y);
         if p.alpha() == 0. {
@@ -386,9 +439,14 @@ pub fn sample(
             let gx = height(1, 0) - height(-1, 0);
             let gy = height(0, 1) - height(0, -1);
             let ink = (gx.hypot(gy) * outline).clamp(0., 1.);
-            before
+            let color = before
                 .rgb()
-                .map(|v| (v * (levels - 1) as f64).round() / (levels - 1) as f64 * (1. - ink))
+                .map(|v| (v * (levels - 1) as f64).round() / (levels - 1) as f64);
+            match options.abstraction {
+                crate::filter_options::Abstraction::ColorAndLines => color.map(|v| v * (1. - ink)),
+                crate::filter_options::Abstraction::ColorOnly => color,
+                crate::filter_options::Abstraction::LinesOnly => [1. - ink; 3],
+            }
         }
         Operation::Jpeg { block, ring } => {
             let mut out = before.rgb();
@@ -406,7 +464,7 @@ pub fn sample(
                 }
             }
             if ring > 0. && xy.iter().any(|v| matches!(v.rem_euclid(8),0..=2|5..=7)) {
-                let soft = mean(d, layer, xy, 1, 0.5, before);
+                let soft = mean(&sampler, xy, 1, 0.5, before);
                 for (k, v) in out.iter_mut().enumerate() {
                     *v += ring * (soft[k] - *v).clamp(-0.15, 0.15);
                 }
@@ -418,13 +476,13 @@ pub fn sample(
             edge,
             amount,
         } => {
-            let soft = mean(d, layer, xy, radius as i64, edge, before);
+            let soft = mean(&sampler, xy, radius as i64, edge, before);
             [0, 1, 2].map(|k| before.rgb()[k] + amount * (soft[k] - before.rgb()[k]))
         }
-        Operation::Blur => mean(d, layer, xy, 1, 0., before),
-        Operation::BlurStrong => mean(d, layer, xy, 3, 0., before),
+        Operation::Blur => mean(&sampler, xy, 1, 0., before),
+        Operation::BlurStrong => mean(&sampler, xy, 3, 0., before),
         Operation::SharpenMore => {
-            let soft = mean(d, layer, xy, 1, 0., before);
+            let soft = mean(&sampler, xy, 1, 0., before);
             [0, 1, 2].map(|k| (before.rgb()[k] + 3. * (before.rgb()[k] - soft[k])).clamp(0., 1.))
         }
         _ => before.rgb(),

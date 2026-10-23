@@ -242,6 +242,7 @@ pub fn equations() -> Result<(), String> {
         &pulse,
         0,
         crate::detail_filter::Settings {
+            options: Default::default(),
             operation: crate::detail_filter::Operation::Sharpen { strength: 0.5 },
             selection: false,
         },
@@ -359,6 +360,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Old header accepted finishing recipe",
     )?;
     let settings = crate::detail_filter::Settings {
+        options: Default::default(),
         operation: crate::detail_filter::Operation::Pixels(P::Extended(O::Normal {
             strength: 2.,
             y_up: false,
@@ -433,6 +435,7 @@ pub fn precision_and_disk_presets(root: &std::path::Path) -> Result<(), String> 
         .map_err(|e| e.to_string())?;
     let mut store = crate::workspaces::Store::default();
     let settings = crate::detail_filter::Settings {
+        options: Default::default(),
         operation: crate::detail_filter::Operation::Pixels(P::Extended(O::Smoothing {
             radius: 3,
             edge: 0.7,

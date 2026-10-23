@@ -307,6 +307,29 @@ impl Drawer {
 }
 
 pub(super) fn controls(ui: &mut egui::Ui, settings: &mut Settings) {
+    ui.collapsing("Direction and boundary", |ui| {
+        use drawer_core::spatial_blur::{Direction, Kernel};
+        if settings.mode != Mode::Lens {
+            let labels = match settings.mode {
+                Mode::Motion => ["Both directions", "Forward", "Backward"],
+                Mode::Radial => ["Both directions", "Outward", "Inward"],
+                _ => ["Both directions", "Rotate right", "Rotate left"],
+            };
+            for (value, label) in [Direction::Both, Direction::Forward, Direction::Backward]
+                .into_iter()
+                .zip(labels)
+            {
+                ui.radio_value(&mut settings.direction, value, label);
+            }
+            if settings.mode != Mode::Spin {
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut settings.kernel, Kernel::Box, "Box");
+                    ui.radio_value(&mut settings.kernel, Kernel::Smooth, "Smooth");
+                });
+            }
+        }
+        crate::filter_options::boundary(ui, &mut settings.boundary);
+    });
     match settings.mode {
         Mode::Motion => {
             ui.add(egui::Slider::new(&mut settings.length, 0. ..=128.).text("Length (pixels)"));
@@ -323,7 +346,7 @@ pub(super) fn controls(ui: &mut egui::Ui, settings: &mut Settings) {
                         .text("Radial length (pixels)"),
                 );
             } else {
-                ui.add(egui::Slider::new(&mut settings.angle, -360. ..=360.).text("Spin angle °"));
+                ui.add(egui::Slider::new(&mut settings.angle, 0. ..=360.).text("Spin angle °"));
             }
             ui.horizontal(|ui| {
                 ui.label("Center X / Y");

@@ -46,11 +46,16 @@ impl Controls {
         }
     }
 }
-pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Controls) {
+pub(super) fn controls(
+    ui: &mut egui::Ui,
+    op: &mut Operation,
+    state: &mut Controls,
+    options: &drawer_core::filter_options::Options,
+) {
     state.valid = true;
     match op {
-        Operation::Extended(op) => crate::extended_filters::controls(ui, op),
-        Operation::Warp(op) => crate::warp_filters::controls(ui, op),
+        Operation::Extended(op) => crate::extended_filters::controls(ui, op, options),
+        Operation::Warp(op) => crate::warp_filters::controls(ui, op, options),
         Operation::Style(op) => crate::stylized_effects::controls(ui, op, state),
         Operation::Mosaic { cell, origin } => {
             ui.add(egui::Slider::new(cell, 1..=256).text("Cell size (pixels)"));
@@ -68,7 +73,10 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Contro
         } => {
             ui.add(egui::Slider::new(amount, 0. ..=1.).text("Noise amount"));
             state.seed(ui, seed);
-            ui.checkbox(monochrome, "Monochrome grain");
+            ui.horizontal(|ui| {
+                ui.radio_value(monochrome, false, "Color");
+                ui.radio_value(monochrome, true, "Gray");
+            });
         }
         Operation::Dust {
             max_area,
@@ -87,6 +95,15 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation, state: &mut Contro
             ui.small("The red candidate map marks affected pixels. Intentional dots can also be candidates: restrict the selection or lower the area limit. Components touching stored edges are protected.");
         }
         Operation::LineWidth { delta } => {
+            ui.horizontal(|ui| {
+                let mut thicken = *delta >= 0;
+                if ui.radio_value(&mut thicken, true, "Thicken").changed() {
+                    *delta = delta.abs();
+                }
+                if ui.radio_value(&mut thicken, false, "Narrow").changed() {
+                    *delta = -delta.abs().max(1);
+                }
+            });
             ui.add(egui::Slider::new(delta, -16..=16).text("Width change (pixels)"));
             ui.small("Positive expands alpha with a square neighborhood; negative shrinks it. Existing ink colors remain; expansion inherits the nearest highest-alpha sample. Unlock transparency first.");
         }

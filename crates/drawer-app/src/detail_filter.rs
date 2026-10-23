@@ -7,6 +7,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc,
 };
+#[path = "filter_options_verify.rs"]
+mod options_verify;
+pub(super) fn options_smoke(root: &std::path::Path) -> Result<(), String> {
+    options_verify::smoke(root)
+}
 #[path = "extended_filters_verify.rs"]
 mod extended_verify;
 pub(super) fn extended_smoke(root: &std::path::Path) -> Result<(), String> {
@@ -140,6 +145,7 @@ impl Drawer {
             preset_name: "My filter".into(),
             source,
             settings: Settings {
+                options: Default::default(),
                 operation,
                 selection: false,
             },
@@ -345,8 +351,8 @@ impl Drawer {
         egui::Window::new("Detail and pixel effects").default_width(430.).default_pos(egui::pos2(35.,55.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Source changed; close and reopen.");}
             let old=e.settings;
-            egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::all(){if ui.selectable_label(op.same_kind(e.settings.operation),op.label()).clicked(){e.settings.operation=op;e.pixel_controls=Default::default();}}});
-            controls(ui,&mut e.settings.operation,&mut e.pixel_controls);
+            egui::ComboBox::from_id_salt("detail-operation").selected_text(e.settings.operation.label()).show_ui(ui,|ui|{for op in Operation::all(){if ui.selectable_label(op.same_kind(e.settings.operation),op.label()).clicked(){e.settings.operation=op;e.settings.options=Default::default();e.pixel_controls=Default::default();}}});
+            controls(ui,&mut e.settings,&mut e.pixel_controls);
             ui.checkbox(&mut e.settings.selection,"Only within the area selection");
             ui.collapsing("Local user presets",|ui|{
                 egui::ComboBox::from_id_salt("finishing-presets").selected_text("Load a saved filter").show_ui(ui,|ui|{for(name,s)in &self.workspaces.store.current.finishing_presets.values{if ui.selectable_label(false,name).clicked(){e.settings = *s;e.preset_name=name.clone();e.pixel_controls=Default::default();}}});
@@ -398,11 +404,12 @@ impl Drawer {
 
 pub(super) fn controls(
     ui: &mut egui::Ui,
-    operation: &mut Operation,
+    settings: &mut Settings,
     state: &mut crate::pixel_effects::Controls,
 ) {
-    match operation {
-        Operation::Pixels(op) => crate::pixel_effects::controls(ui, op, state),
+    crate::filter_options::controls(ui, settings.operation, &mut settings.options);
+    match &mut settings.operation {
+        Operation::Pixels(op) => crate::pixel_effects::controls(ui, op, state, &settings.options),
         Operation::Sharpen { strength } => {
             ui.add(egui::Slider::new(strength, 0. ..=5.).text("Strength"));
         }

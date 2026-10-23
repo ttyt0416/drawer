@@ -33,6 +33,19 @@ impl Mode {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Direction {
+    #[default]
+    Both,
+    Forward,
+    Backward,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Kernel {
+    #[default]
+    Box,
+    Smooth,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
@@ -46,6 +59,9 @@ pub struct Settings {
     pub highlight: f64,
     pub amount: f64,
     pub selection: bool,
+    pub boundary: crate::filter_options::Boundary,
+    pub direction: Direction,
+    pub kernel: Kernel,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -60,10 +76,18 @@ impl Default for Settings {
             highlight: 0.,
             amount: 1.,
             selection: false,
+            boundary: Default::default(),
+            direction: Default::default(),
+            kernel: Default::default(),
         }
     }
 }
 impl Settings {
+    pub fn options_default(self) -> bool {
+        self.boundary == Default::default()
+            && self.direction == Default::default()
+            && self.kernel == Default::default()
+    }
     pub fn valid(self) -> bool {
         self.length.is_finite()
             && (0. ..=128.).contains(&self.length)
@@ -158,13 +182,29 @@ fn output_extent(old: PlacedRaster, s: Settings, locked: bool) -> Result<PlacedR
         Mode::Motion => {
             let (sin, cos) = crate::texture::rotation(s.angle);
             for (k, v) in [cos, sin].into_iter().enumerate() {
-                let pad = (v * s.length / 2.).abs().ceil() + 1.;
+                let pad = (v
+                    * s.length
+                    * if s.direction == Direction::Both {
+                        0.5
+                    } else {
+                        1.
+                    })
+                .abs()
+                .ceil()
+                    + 1.;
                 r.min[k] -= pad;
                 r.max[k] += pad;
             }
         }
         Mode::Radial | Mode::Lens => {
-            let pad = (s.radius / if s.mode == Mode::Radial { 2. } else { 1. }).ceil() + 1.;
+            let pad = (s.radius
+                / if s.mode == Mode::Radial && s.direction == Direction::Both {
+                    2.
+                } else {
+                    1.
+                })
+            .ceil()
+                + 1.;
             for k in 0..2 {
                 r.min[k] -= pad;
                 r.max[k] += pad;
@@ -175,7 +215,12 @@ fn output_extent(old: PlacedRaster, s: Settings, locked: bool) -> Result<PlacedR
                 r.min[k] -= 1.;
                 r.max[k] += 1.;
             }
-            let half = s.angle.abs() / 2.;
+            let half = s.angle.abs()
+                * if s.direction == Direction::Both {
+                    0.5
+                } else {
+                    1.
+                };
             let mut points = Vec::with_capacity(24);
             for p in crate::deform::corners(r) {
                 points.extend([-half, 0., half].map(|angle| rotate(p, s.center, angle)));
@@ -279,20 +324,32 @@ fn kernel(
         }
         Mode::Lens => unreachable!(),
     };
-    let intervals = (travel * 2.).ceil().clamp(1., 256.) as usize;
-    Ok((0..=intervals)
+    let intervals = (travel * 2.).ceil().clamp(2., 256.) as usize;
+    let mut values: Vec<_> = (0..=intervals)
         .map(|n| {
-            let t = n as f64 / intervals as f64 - 0.5;
-            (
-                [t, 0.],
-                if n == 0 || n == intervals {
-                    0.5 / intervals as f64
-                } else {
-                    1. / intervals as f64
-                },
-            )
+            let u = n as f64 / intervals as f64;
+            let t = match s.direction {
+                Direction::Both => u - 0.5,
+                Direction::Forward => -u,
+                Direction::Backward => u,
+            };
+            let endpoint = if n == 0 || n == intervals { 0.5 } else { 1. };
+            let shape = if s.kernel == Kernel::Smooth {
+                1. - (u * 2. - 1.).abs()
+            } else {
+                1.
+            };
+            ([t, 0.], endpoint * shape)
         })
-        .collect())
+        .collect();
+    let total: f64 = values.iter().map(|(_, w)| w).sum();
+    if total == 0. {
+        return Ok(vec![([0.; 2], 1.)]);
+    }
+    for (_, w) in &mut values {
+        *w /= total;
+    }
+    Ok(values)
 }
 pub fn prepare(
     d: &Document,
@@ -383,15 +440,15 @@ pub fn prepare(
                                 ]
                             }
                         }
-                        Mode::Spin => rotate(point, s.center, offset[0] * s.angle),
+                        Mode::Spin => rotate(point, s.center, offset[0] * s.angle.abs()),
                         Mode::Lens => [point[0] - offset[0], point[1] - offset[1]],
                     };
-                    let sample = crate::interpolation::sample_float(
-                        q.map(|v| v - 0.5),
-                        [q; 4],
-                        crate::interpolation::Filter::Bilinear,
-                        |x, y| source.sample(d.width, d.height, x, y),
-                    );
+                    let sample = crate::filter_options::Sampler {
+                        document: d,
+                        layer,
+                        boundary: s.boundary,
+                    }
+                    .bilinear(q.map(|v| v - 0.5));
                     let a = sample.alpha() * weight;
                     let rgb = sample.rgb();
                     let gain = if s.mode == Mode::Lens {

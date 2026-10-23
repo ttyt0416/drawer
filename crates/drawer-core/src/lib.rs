@@ -398,3 +398,7 @@ pub mod transform_policy_verify;
 
 pub mod extended_filters;
 pub mod extended_filters_verify;
+
+pub mod filter_options;
+
+pub mod filter_options_verify;

@@ -22,6 +22,7 @@ pub enum Task {
 impl Default for Task {
     fn default() -> Self {
         Self::Detail(crate::detail_filter::Settings {
+            options: Default::default(),
             operation: crate::detail_filter::Operation::Sharpen { strength: 0.5 },
             selection: false,
         })

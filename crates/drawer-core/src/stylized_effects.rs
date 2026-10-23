@@ -105,9 +105,36 @@ impl Operation {
             _ => [0; 2],
         }
     }
+    pub fn padding_options(
+        self,
+        options: crate::filter_options::Options,
+        e: crate::document::PlacedRaster,
+        size: [u32; 2],
+    ) -> [u32; 2] {
+        let Self::Aberration { offset, .. } = self else {
+            return self.padding();
+        };
+        let length = (offset[0] as f64).hypot(offset[1] as f64);
+        match options.aberration {
+            crate::filter_options::Aberration::Offset => self.padding(),
+            crate::filter_options::Aberration::Lateral => {
+                let (s, c) = options.angle.to_radians().sin_cos();
+                [c, s].map(|v| (v.abs() * length).ceil() as u32)
+            }
+            crate::filter_options::Aberration::Radial => {
+                let c = options.center.unwrap_or(size.map(|v| v as f64 / 2.));
+                let scale = length / (size[0].max(size[1]) as f64 / 2.);
+                [0, 1].map(|k| {
+                    let lo = e.offset[k] as f64;
+                    let hi = lo + if k == 0 { e.width } else { e.height } as f64;
+                    ((lo - c[k]).abs().max((hi - c[k]).abs()) * scale).ceil() as u32
+                })
+            }
+        }
+    }
     pub fn cost(self) -> usize {
         match self {
-            Self::Aberration { .. } => 3,
+            Self::Aberration { .. } => 9,
             Self::Film { .. } => 1,
             Self::Pencil { .. } => 9,
         }
@@ -128,15 +155,46 @@ pub fn sample(
     before: Sample,
     op: Operation,
 ) -> Result<Sample, String> {
-    let src = &d.layers[layer];
+    sample_options(d, layer, xy, before, op, Default::default())
+}
+pub fn sample_options(
+    d: &Document,
+    layer: usize,
+    xy: [i64; 2],
+    before: Sample,
+    op: Operation,
+    options: crate::filter_options::Options,
+) -> Result<Sample, String> {
+    if !op.valid() || !options.valid() {
+        return Err("Invalid stylized filter options".into());
+    }
+    let sampler = crate::filter_options::Sampler {
+        document: d,
+        layer,
+        boundary: options.boundary,
+    };
     match op {
         Operation::Aberration { offset, strength } => {
-            let dx = offset[0] as i64;
-            let dy = offset[1] as i64;
+            let shift = match options.aberration {
+                crate::filter_options::Aberration::Offset => offset.map(|v| v as f64),
+                crate::filter_options::Aberration::Lateral => {
+                    let (s, c) = options.angle.to_radians().sin_cos();
+                    let length = (offset[0] as f64).hypot(offset[1] as f64);
+                    [length * c, length * s]
+                }
+                crate::filter_options::Aberration::Radial => {
+                    let c = options
+                        .center
+                        .unwrap_or([d.width as f64 / 2., d.height as f64 / 2.]);
+                    let scale = (offset[0] as f64).hypot(offset[1] as f64)
+                        / (d.width.max(d.height) as f64 / 2.);
+                    [0, 1].map(|k| (xy[k] as f64 + 0.5 - c[k]) * scale)
+                }
+            };
             let channels = [
-                src.sample(d.width, d.height, xy[0] - dx, xy[1] - dy),
+                sampler.bilinear([xy[0] as f64 - shift[0], xy[1] as f64 - shift[1]]),
                 before,
-                src.sample(d.width, d.height, xy[0] + dx, xy[1] + dy),
+                sampler.bilinear([xy[0] as f64 + shift[0], xy[1] as f64 + shift[1]]),
             ];
             let alpha = channels.iter().map(|p| p.alpha()).fold(0., f64::max);
             let mapped = if alpha == 0. {
@@ -176,6 +234,34 @@ pub fn sample(
                 };
                 (tone + tint + noise).clamp(0., 1.)
             });
+            let mut mapped = mapped;
+            use crate::filter_options::Film;
+            if matches!(
+                options.film,
+                Film::Sepia | Film::SepiaSlant | Film::SepiaAll
+            ) {
+                let [r, g, b] = mapped;
+                mapped = [
+                    (0.393 * r + 0.769 * g + 0.189 * b).min(1.),
+                    (0.349 * r + 0.686 * g + 0.168 * b).min(1.),
+                    (0.272 * r + 0.534 * g + 0.131 * b).min(1.),
+                ];
+            }
+            if matches!(
+                options.film,
+                Film::Slant | Film::All | Film::SepiaSlant | Film::SepiaAll
+            ) {
+                let u = (xy[0] as f64 + 0.5) / d.width as f64;
+                let v = (xy[1] as f64 + 0.5) / d.height as f64;
+                let leak = if matches!(options.film, Film::Slant | Film::SepiaSlant) {
+                    ((u + v) * 0.5).powi(4)
+                } else {
+                    ((u - 0.5).abs().max((v - 0.5).abs()) * 2.).powi(4)
+                };
+                for (k, c) in mapped.iter_mut().enumerate() {
+                    *c = (*c + leak * [0.55, 0.18, 0.04][k]).min(1.);
+                }
+            }
             before.mix(before.with_rgb(mapped)?, strength)
         }
         Operation::Pencil {
@@ -191,12 +277,9 @@ pub fn sample(
             let mut values = [[0.; 3]; 3];
             for (y, row) in values.iter_mut().enumerate() {
                 for (x, v) in row.iter_mut().enumerate() {
-                    *v = luminance(src.sample(
-                        d.width,
-                        d.height,
-                        xy[0] + (x as i64 - 1) * r,
-                        xy[1] + (y as i64 - 1) * r,
-                    ));
+                    *v = luminance(
+                        sampler.at(xy[0] + (x as i64 - 1) * r, xy[1] + (y as i64 - 1) * r),
+                    );
                 }
             }
             let gx = values[0][2] + 2. * values[1][2] + values[2][2]

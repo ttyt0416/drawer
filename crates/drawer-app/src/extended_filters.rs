@@ -21,7 +21,11 @@ fn center_radius(ui: &mut egui::Ui, center: &mut Option<[f64; 2]>, radius: &mut 
             .prefix("Radius (pixels) "),
     );
 }
-pub(super) fn controls(ui: &mut egui::Ui, op: &mut O) {
+pub(super) fn controls(
+    ui: &mut egui::Ui,
+    op: &mut O,
+    options: &drawer_core::filter_options::Options,
+) {
     match op {
         O::Normal { strength, y_up } => {
             ui.add(egui::Slider::new(strength, 0. ..=32.).text("Height gradient strength"));
@@ -31,8 +35,12 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut O) {
             });
         }
         O::Abstract { outline, levels } => {
-            ui.add(egui::Slider::new(outline, 0. ..=4.).text("Outline strength"));
-            ui.add(egui::Slider::new(levels, 2..=32).text("Color levels"));
+            if options.abstraction != drawer_core::filter_options::Abstraction::ColorOnly {
+                ui.add(egui::Slider::new(outline, 0. ..=4.).text("Outline strength"));
+            }
+            if options.abstraction != drawer_core::filter_options::Abstraction::LinesOnly {
+                ui.add(egui::Slider::new(levels, 2..=32).text("Color levels"));
+            }
         }
         O::Jpeg { block, ring } => {
             ui.add(egui::Slider::new(block, 0. ..=1.).text("8×8 block boundary strength"));
@@ -43,10 +51,12 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut O) {
             center,
             radius,
         } => {
-            ui.horizontal(|ui| {
-                ui.radio_value(inverse, false, "Rectangular to polar");
-                ui.radio_value(inverse, true, "Polar to rectangular");
-            });
+            if !options.spherize {
+                ui.horizontal(|ui| {
+                    ui.radio_value(inverse, false, "Rectangular to polar");
+                    ui.radio_value(inverse, true, "Polar to rectangular");
+                });
+            }
             center_radius(ui, center, radius);
         }
         O::Smoothing {
@@ -70,7 +80,9 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut O) {
             ..
         } => {
             ui.add(egui::Slider::new(strength, -1. ..=1.).text("Strength"));
-            center_radius(ui, center, radius);
+            if options.area == drawer_core::filter_options::Area::Specify {
+                center_radius(ui, center, radius);
+            }
         }
         O::Zigzag {
             amplitude,
@@ -94,7 +106,9 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut O) {
                     .range(0.25..=32768.)
                     .prefix("Wavelength (pixels) "),
             );
-            center_radius(ui, center, radius);
+            if options.area == drawer_core::filter_options::Area::Specify {
+                center_radius(ui, center, radius);
+            }
         }
         O::Blur => {
             ui.small("Alpha-preserving 3×3 box blur.");

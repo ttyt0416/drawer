@@ -99,10 +99,15 @@ pub struct Settings {
     pub operation: Operation,
     #[serde(default)]
     pub selection: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::filter_options::Options::is_default"
+    )]
+    pub options: crate::filter_options::Options,
 }
 impl Settings {
     pub fn valid(self) -> bool {
-        self.operation.valid()
+        self.operation.valid() && self.options.valid()
     }
 }
 fn components(rgb: [f64; 3]) -> [f64; 3] {
@@ -114,16 +119,6 @@ fn components(rgb: [f64; 3]) -> [f64; 3] {
 }
 fn from_components(v: [f64; 3]) -> [f64; 3] {
     [v[0] + v[1] - v[2], v[0] + v[2], v[0] - v[1] - v[2]].map(|v| v.clamp(0., 1.))
-}
-fn sample(d: &Document, layer: usize, x: i64, y: i64) -> Sample {
-    let src = &d.layers[layer];
-    let e = src.extent(d.width, d.height);
-    src.sample(
-        d.width,
-        d.height,
-        x.clamp(e.offset[0], e.offset[0] + e.width as i64 - 1),
-        y.clamp(e.offset[1], e.offset[1] + e.height as i64 - 1),
-    )
 }
 fn median(values: &mut [(f64, f64)]) -> f64 {
     values.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -138,8 +133,7 @@ fn median(values: &mut [(f64, f64)]) -> f64 {
     values.last().unwrap().0
 }
 fn denoise(
-    d: &Document,
-    layer: usize,
+    sampler: &crate::filter_options::Sampler<'_>,
     xy: [i64; 2],
     before: Sample,
     luminance: f64,
@@ -158,7 +152,7 @@ fn denoise(
         [1, 1],
     ];
     let neighbors = offsets.map(|v| {
-        let p = sample(d, layer, xy[0] + v[0], xy[1] + v[1]);
+        let p = sampler.at(xy[0] + v[0], xy[1] + v[1]);
         (components(p.rgb()), p.alpha())
     });
     let old = components(before.rgb());
@@ -168,7 +162,22 @@ fn denoise(
         let line = (0..4).any(|n| {
             let (a, aa) = neighbors[n];
             let (b, ba) = neighbors[7 - n];
-            aa > 0. && ba > 0. && (a[k] - old[k]).abs() <= detail && (b[k] - old[k]).abs() <= detail
+            let close_a = aa > 0. && (a[k] - old[k]).abs() <= detail;
+            let close_b = ba > 0. && (b[k] - old[k]).abs() <= detail;
+            let outside = |offset: [i64; 2]| {
+                sampler.boundary == crate::filter_options::Boundary::Transparent
+                    && (sampler
+                        .boundary
+                        .coordinate(xy[0] + offset[0], sampler.document.width)
+                        .is_none()
+                        || sampler
+                            .boundary
+                            .coordinate(xy[1] + offset[1], sampler.document.height)
+                            .is_none())
+            };
+            close_a && close_b
+                || close_a && outside(offsets[7 - n])
+                || close_b && outside(offsets[n])
         });
         if line || amount == 0. {
             continue;
@@ -188,12 +197,12 @@ fn denoise(
     from_components(out)
 }
 fn gaussian(
-    d: &Document,
-    layer: usize,
+    sampler: &crate::filter_options::Sampler<'_>,
     radius: u8,
     tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<Vec<[f64; 3]>, String> {
-    let src = &d.layers[layer];
+    let d = sampler.document;
+    let src = &d.layers[sampler.layer];
     let e = src.extent(d.width, d.height);
     let count = src.pixels.len();
     let r = radius as i64;
@@ -215,7 +224,7 @@ fn gaussian(
             e.offset[1] + (i / e.width as usize) as i64,
         ];
         for (n, w) in weights.iter().enumerate() {
-            let p = sample(d, layer, xy[0] + n as i64 - r, xy[1]);
+            let p = sampler.at(xy[0] + n as i64 - r, xy[1]);
             let a = p.alpha() * w;
             let rgb = p.rgb();
             for k in 0..3 {
@@ -233,7 +242,15 @@ fn gaussian(
         let y = i / e.width as usize;
         let mut sum = [0.; 4];
         for (n, w) in weights.iter().enumerate() {
-            let row = (y as i64 + n as i64 - r).clamp(0, e.height as i64 - 1) as usize;
+            let world_y = e.offset[1] + y as i64 + n as i64 - r;
+            let Some(mapped_y) = sampler.boundary.coordinate(world_y, d.height) else {
+                continue;
+            };
+            let row = mapped_y - e.offset[1];
+            if !(0..e.height as i64).contains(&row) {
+                continue;
+            }
+            let row = row as usize;
             for (k, v) in rows[row * e.width as usize + x].into_iter().enumerate() {
                 sum[k] += v * w;
             }
@@ -262,7 +279,15 @@ pub fn prepare_with_budget(
     mut tick: impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<DocumentState, String> {
     if let Operation::Pixels(op) = s.operation {
-        return crate::pixel_effects::prepare(d, layer, op, s.selection, budget, tick);
+        return crate::pixel_effects::prepare_options(
+            d,
+            layer,
+            op,
+            s.selection,
+            s.options,
+            budget,
+            tick,
+        );
     }
     tick(0, 1)?;
     crate::layer_properties::paintable(d, layer)?;
@@ -304,8 +329,13 @@ pub fn prepare_with_budget(
             "Detail filter64M samples or workspace memory limit; reduce radius/source".into(),
         );
     }
+    let sampler = crate::filter_options::Sampler {
+        document: d,
+        layer,
+        boundary: s.options.boundary,
+    };
     let blurred = if radius > 0 {
-        Some(gaussian(d, layer, radius, &mut tick)?)
+        Some(gaussian(&sampler, radius, &mut tick)?)
     } else {
         None
     };
@@ -342,7 +372,7 @@ pub fn prepare_with_budget(
             Operation::Sharpen { strength } => {
                 let mut lap = [0.; 3];
                 for offset in [[-1, 0], [1, 0], [0, -1], [0, 1]] {
-                    let p = sample(d, layer, xy[0] + offset[0], xy[1] + offset[1]);
+                    let p = sampler.at(xy[0] + offset[0], xy[1] + offset[1]);
                     let factor = p.alpha().min(before.alpha()) / before.alpha();
                     for k in 0..3 {
                         lap[k] += (rgb[k] - p.rgb()[k]) * factor;
@@ -367,7 +397,7 @@ pub fn prepare_with_budget(
                 luminance,
                 chroma,
                 detail,
-            } => denoise(d, layer, xy, before, luminance, chroma, detail),
+            } => denoise(&sampler, xy, before, luminance, chroma, detail),
         };
         if mapped.iter().zip(rgb).all(|(a, b)| (a - b).abs() <= 1e-12) {
             continue;

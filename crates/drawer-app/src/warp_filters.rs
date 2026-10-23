@@ -1,6 +1,10 @@
 use drawer_core::warp_filters::Operation;
 use eframe::egui;
-pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation) {
+pub(super) fn controls(
+    ui: &mut egui::Ui,
+    op: &mut Operation,
+    options: &drawer_core::filter_options::Options,
+) {
     match op {
         Operation::Fisheye {
             strength,
@@ -8,12 +12,14 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation) {
             center,
         } => {
             ui.add(egui::Slider::new(strength, -1. ..=1.).text("Fisheye strength"));
-            ui.add(
-                egui::Slider::new(radius, 0. ..=32768.)
-                    .logarithmic(true)
-                    .text("Radius (pixels)"),
-            );
-            center_controls(ui, center);
+            if options.area == drawer_core::filter_options::Area::Specify {
+                ui.add(
+                    egui::Slider::new(radius, 0. ..=32768.)
+                        .logarithmic(true)
+                        .text("Radius (pixels)"),
+                );
+                center_controls(ui, center);
+            }
         }
         Operation::Panorama {
             field_of_view,
@@ -53,15 +59,17 @@ pub(super) fn controls(ui: &mut egui::Ui, op: &mut Operation) {
             ui.add(
                 egui::Slider::new(angle, -720. ..=720.).text("Swirl angle ° (clockwise positive)"),
             );
-            ui.add(
-                egui::Slider::new(radius, 0. ..=32768.)
-                    .logarithmic(true)
-                    .text("Radius (pixels)"),
-            );
-            center_controls(ui, center);
+            if options.area == drawer_core::filter_options::Area::Specify {
+                ui.add(
+                    egui::Slider::new(radius, 0. ..=32768.)
+                        .logarithmic(true)
+                        .text("Radius (pixels)"),
+                );
+                center_controls(ui, center);
+            }
         }
     }
-    ui.small("Inverse mapping; bilinear samples outside stored source are transparent. Output keeps its stored bounds. Selection limits output only. Alpha lock preserves original alpha.");
+    ui.small("Inverse mapping; bilinear samples use the selected document-edge policy. Output keeps its stored bounds. Selection limits output only. Alpha lock preserves original alpha.");
 }
 fn center_controls(ui: &mut egui::Ui, center: &mut Option<[f64; 2]>) {
     let mut auto = center.is_none();

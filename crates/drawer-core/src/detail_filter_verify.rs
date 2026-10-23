@@ -34,6 +34,7 @@ pub fn fixture() -> Result<Document, String> {
 }
 fn settings(operation: O) -> Settings {
     Settings {
+        options: Default::default(),
         operation,
         selection: false,
     }
@@ -204,6 +205,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         &d,
         0,
         Settings {
+            options: Default::default(),
             selection: true,
             operation: op,
         },
@@ -224,6 +226,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             &d,
             0,
             Settings {
+                options: Default::default(),
                 selection: true,
                 operation: op,
             },

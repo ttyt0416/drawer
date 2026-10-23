@@ -312,15 +312,13 @@ fn specks(
     Ok(result)
 }
 fn width_sample(
-    d: &Document,
-    layer: usize,
+    sampler: &crate::filter_options::Sampler<'_>,
     xy: [i64; 2],
     before: Sample,
     delta: i8,
     tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
     progress: [usize; 2],
 ) -> Result<Sample, String> {
-    let src = &d.layers[layer];
     let r = delta.unsigned_abs() as i64;
     let mut best = before;
     let mut distance = 0i64;
@@ -331,7 +329,7 @@ fn width_sample(
                 tick(progress[0], progress[1])?;
             }
             n += 1;
-            let p = src.sample(d.width, d.height, xy[0] + x, xy[1] + y);
+            let p = sampler.at(xy[0] + x, xy[1] + y);
             let dist = x * x + y * y;
             let wins = if delta > 0 {
                 p.alpha() > best.alpha() || p.alpha() == best.alpha() && dist < distance
@@ -357,17 +355,102 @@ fn width_sample(
         Ok(best)
     }
 }
+// Two-pass Chebyshev distance ridges preserve a one-pixel core during erosion.
+fn line_ridges(
+    d: &Document,
+    layer: usize,
+    tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+) -> Result<Vec<bool>, String> {
+    let src = &d.layers[layer];
+    let e = src.extent(d.width, d.height);
+    let w = e.width as usize;
+    let h = e.height as usize;
+    let mut distance = vec![0u16; src.pixels.len()];
+    for y in 0..h {
+        tick(y * w, w * h * 2)?;
+        for x in 0..w {
+            let i = y * w + x;
+            if src.sample_at(i).alpha() == 0. {
+                continue;
+            }
+            let mut n = if x == 0 || y == 0 { 0 } else { u16::MAX - 1 };
+            if x > 0 {
+                n = n.min(distance[i - 1]);
+            }
+            if y > 0 {
+                n = n.min(distance[i - w]);
+                if x > 0 {
+                    n = n.min(distance[i - w - 1]);
+                }
+                if x + 1 < w {
+                    n = n.min(distance[i - w + 1]);
+                }
+            }
+            distance[i] = n.saturating_add(1);
+        }
+    }
+    for y in (0..h).rev() {
+        tick(w * h + (h - 1 - y) * w, w * h * 2)?;
+        for x in (0..w).rev() {
+            let i = y * w + x;
+            if distance[i] == 0 {
+                continue;
+            }
+            let mut n = if x + 1 == w || y + 1 == h {
+                0
+            } else {
+                u16::MAX - 1
+            };
+            if x + 1 < w {
+                n = n.min(distance[i + 1]);
+            }
+            if y + 1 < h {
+                n = n.min(distance[i + w]);
+                if x > 0 {
+                    n = n.min(distance[i + w - 1]);
+                }
+                if x + 1 < w {
+                    n = n.min(distance[i + w + 1]);
+                }
+            }
+            distance[i] = distance[i].min(n.saturating_add(1));
+        }
+    }
+    Ok((0..distance.len())
+        .map(|i| {
+            let x = i % w;
+            let y = i / w;
+            let v = distance[i];
+            let left = if x > 0 { distance[i - 1] } else { 0 };
+            let right = if x + 1 < w { distance[i + 1] } else { 0 };
+            let up = if y > 0 { distance[i - w] } else { 0 };
+            let down = if y + 1 < h { distance[i + w] } else { 0 };
+            v > 0 && ((v > left && v >= right) || (v > up && v >= down))
+        })
+        .collect())
+}
 pub fn prepare(
     d: &Document,
     layer: usize,
     op: Operation,
     selection: bool,
     budget: usize,
+    tick: impl FnMut(usize, usize) -> Result<(), String>,
+) -> Result<DocumentState, String> {
+    prepare_options(d, layer, op, selection, Default::default(), budget, tick)
+}
+pub fn prepare_options(
+    d: &Document,
+    layer: usize,
+    op: Operation,
+    selection: bool,
+    options: crate::filter_options::Options,
+    budget: usize,
     mut tick: impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<DocumentState, String> {
     tick(0, 1)?;
     crate::layer_properties::paintable(d, layer)?;
-    if !op.valid() {
+    if !op.valid() || !options.valid() {
         return Err("Mosaic cell1–256/origin±1M, noise0–1, speck area0–4096/threshold0–1 or width−16–16 required".into());
     }
     let src = &d.layers[layer];
@@ -375,8 +458,39 @@ pub fn prepare(
     if count > 4 * 1024 * 1024 || d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Pixel effect source4M/snapshot32MiB limit".into());
     }
-    if op.identity()
-        || selection
+    let selected = selection
+        || options.area == crate::filter_options::Area::EntireSelection
+            && matches!(
+                op,
+                Operation::Warp(
+                    crate::warp_filters::Operation::Fisheye { .. }
+                        | crate::warp_filters::Operation::Swirl { .. }
+                ) | Operation::Extended(
+                    crate::extended_filters::Operation::Pinch { .. }
+                        | crate::extended_filters::Operation::Curved { .. }
+                        | crate::extended_filters::Operation::Zigzag { .. }
+                        | crate::extended_filters::Operation::Ripple { .. }
+                )
+            );
+    let film_override = matches!(op,Operation::Style(crate::stylized_effects::Operation::Film{strength,..})if strength>0.&&options.film!=crate::filter_options::Film::None);
+    let entire_override = options.area == crate::filter_options::Area::EntireSelection
+        && match op {
+            Operation::Extended(
+                crate::extended_filters::Operation::Pinch { strength, .. }
+                | crate::extended_filters::Operation::Curved { strength, .. },
+            ) => strength != 0.,
+            Operation::Extended(
+                crate::extended_filters::Operation::Ripple { amplitude, .. }
+                | crate::extended_filters::Operation::Zigzag { amplitude, .. },
+            ) => amplitude != 0.,
+            Operation::Warp(crate::warp_filters::Operation::Fisheye { strength, .. }) => {
+                strength != 0.
+            }
+            Operation::Warp(crate::warp_filters::Operation::Swirl { angle, .. }) => angle != 0.,
+            _ => false,
+        };
+    if op.identity() && !film_override && !entire_override
+        || selected
             && d.scene
                 .selection_mask
                 .as_ref()
@@ -402,7 +516,7 @@ pub fn prepare(
     let old = src.extent(d.width, d.height);
     let pad = match op {
         Operation::LineWidth { delta } if delta > 0 => [delta as u32; 2],
-        Operation::Style(op) if !locked => op.padding(),
+        Operation::Style(op) if !locked => op.padding_options(options, old, [d.width, d.height]),
         _ => [0; 2],
     };
     let extent = PlacedRaster {
@@ -426,8 +540,10 @@ pub fn prepare(
         Operation::Noise { .. } => (count, 0),
         Operation::Dust { .. } => (count.saturating_mul(8), count.saturating_mul(64)),
         Operation::LineWidth { delta } => (
-            output.saturating_mul((2 * delta.unsigned_abs() as usize + 1).pow(2)),
-            0,
+            output
+                .saturating_mul((2 * delta.unsigned_abs() as usize + 1).pow(2))
+                .saturating_add(if options.minimum_line { count * 8 } else { 0 }),
+            if options.minimum_line { count * 3 } else { 0 },
         ),
     };
     if !extent.valid()
@@ -458,6 +574,10 @@ pub fn prepare(
     } else {
         None
     };
+    let ridges = (options.minimum_line && matches!(op,Operation::LineWidth{delta}if delta<0))
+        .then(|| line_ridges(d, layer, &mut tick))
+        .transpose()?;
+    tick(0, output)?;
     let mut pixels = Vec::with_capacity(output);
     let mut precise = (d.color.depth == Depth::Sixteen).then(|| Vec::with_capacity(output));
     let mut changed = false;
@@ -471,7 +591,7 @@ pub fn prepare(
         ];
         let index = src.pixel_index(d.width, d.height, xy[0], xy[1]);
         let before = src.sample(d.width, d.height, xy[0], xy[1]);
-        let weight = if selection {
+        let weight = if selected {
             d.scene.selection_coverage(xy.map(|v| v as f64 + 0.5)) as f64 / 255.
         } else {
             1.
@@ -481,10 +601,14 @@ pub fn prepare(
         } else {
             match op {
                 Operation::Extended(op) => {
-                    crate::extended_filters::sample(d, layer, xy, before, op)?
+                    crate::extended_filters::sample_options(d, layer, xy, before, op, options)?
                 }
-                Operation::Warp(op) => crate::warp_filters::sample(d, layer, xy, op)?,
-                Operation::Style(op) => crate::stylized_effects::sample(d, layer, xy, before, op)?,
+                Operation::Warp(op) => {
+                    crate::warp_filters::sample_options(d, layer, xy, op, options)?
+                }
+                Operation::Style(op) => {
+                    crate::stylized_effects::sample_options(d, layer, xy, before, op, options)?
+                }
                 Operation::Mosaic { origin, .. } => {
                     let p = blocks.as_ref().unwrap().sample(xy, origin);
                     if locked { before.with_rgb(p.rgb())? } else { p }
@@ -507,10 +631,27 @@ pub fn prepare(
                 Operation::Dust { .. } => index
                     .and_then(|n| dust.as_ref().unwrap()[n])
                     .unwrap_or(before),
-                Operation::LineWidth { delta } => {
-                    width_sample(d, layer, xy, before, delta, &mut tick, [i, output])?
-                }
+                Operation::LineWidth { delta } => width_sample(
+                    &crate::filter_options::Sampler {
+                        document: d,
+                        layer,
+                        boundary: options.boundary,
+                    },
+                    xy,
+                    before,
+                    delta,
+                    &mut tick,
+                    [i, output],
+                )?,
             }
+        };
+        let mapped = if mapped.alpha() == 0.
+            && before.alpha() > 0.
+            && ridges.as_ref().is_some_and(|r| index.is_some_and(|i| r[i]))
+        {
+            before
+        } else {
+            mapped
         };
         let mapped = if locked || op.preserves_alpha() {
             before.with_rgb(mapped.rgb())?
@@ -567,6 +708,7 @@ pub fn prepare(
     state.scene.last_detail_filter = Some(crate::detail_filter::Settings {
         operation: crate::detail_filter::Operation::Pixels(op),
         selection,
+        options,
     });
     crate::layer_groups::finish(d, &state)?;
     tick(1, 1)?;

@@ -409,6 +409,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         &legacy,
         0,
         crate::detail_filter::Settings {
+            options: Default::default(),
             operation: crate::detail_filter::Operation::defaults()[0],
             selection: false,
         },
