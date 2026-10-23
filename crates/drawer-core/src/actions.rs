@@ -6,13 +6,19 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 198] = [
+pub const EXTRA_COMMANDS: [&str; 204] = [
     "chromatic-aberration",
     "film-effect",
     "pencil-effect",
     "mosaic",
     "generate-noise",
     "remove-specks",
+    "remove-tone",
+    "grayscale-filter",
+    "cleanup-dust",
+    "select-dust-transparency",
+    "select-dust-white",
+    "select-transparent-hole",
     "adjust-line-width",
     "normal-map",
     "line-color-abstraction",

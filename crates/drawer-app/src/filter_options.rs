@@ -26,6 +26,16 @@ pub(super) fn boundary(ui: &mut egui::Ui, value: &mut Boundary) {
     );
 }
 pub(super) fn controls(ui: &mut egui::Ui, op: D, o: &mut Options) {
+    if matches!(
+        op,
+        D::SelectCleanup(_)
+            | D::Pixels(P::Cleanup(
+                drawer_core::cleanup_filters::Operation::Gray
+                    | drawer_core::cleanup_filters::Operation::Dust(_)
+            ))
+    ) {
+        return;
+    }
     ui.collapsing("Filter-specific options", |ui| {
         if !matches!(
             op,

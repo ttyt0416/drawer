@@ -54,6 +54,7 @@ pub(super) fn controls(
 ) {
     state.valid = true;
     match op {
+        Operation::Cleanup(op) => crate::cleanup_filters::controls(ui, op),
         Operation::Extended(op) => crate::extended_filters::controls(ui, op, options),
         Operation::Warp(op) => crate::warp_filters::controls(ui, op, options),
         Operation::Style(op) => crate::stylized_effects::controls(ui, op, state),

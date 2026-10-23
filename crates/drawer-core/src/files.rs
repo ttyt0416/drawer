@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 83;
+const VERSION: u32 = 84;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 84 && crate::cleanup_filters::active(&document.scene) {
+            return Err(invalid("Dust/tone tools require native version84"));
         }
         if version < 83 && crate::filter_options::active(&document.scene) {
             return Err(invalid("Filter options require native version83"));

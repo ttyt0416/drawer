@@ -31,7 +31,13 @@ impl Default for Task {
 impl Task {
     pub fn valid(self) -> bool {
         match self {
-            Self::Detail(s) => s.valid(),
+            Self::Detail(s) => {
+                s.valid()
+                    && !matches!(
+                        s.operation,
+                        crate::detail_filter::Operation::SelectCleanup(_)
+                    )
+            }
             Self::Blur(s) => s.valid(),
             Self::Gaussian { radius, .. } => radius <= 64,
             Self::Surface { operation, .. } => operation.valid(),

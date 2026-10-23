@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub enum Operation {
     Pixels(crate::pixel_effects::Operation),
+    SelectCleanup(crate::cleanup_filters::Selection),
     Sharpen {
         strength: f64,
     },
@@ -58,6 +59,7 @@ impl Operation {
     pub fn label(self) -> &'static str {
         match self {
             Self::Pixels(op) => op.label(),
+            Self::SelectCleanup(s) => s.kind.label(),
             Self::Sharpen { .. } => "Sharpen",
             Self::Unsharp { .. } => "Unsharp mask",
             Self::Denoise { .. } => "Reduce noise",
@@ -67,6 +69,7 @@ impl Operation {
         let range = |v: f64, hi: f64| v.is_finite() && (0. ..=hi).contains(&v);
         match self {
             Self::Pixels(op) => op.valid(),
+            Self::SelectCleanup(s) => s.valid(),
             Self::Sharpen { strength } => range(strength, 5.),
             Self::Unsharp {
                 radius,
@@ -85,6 +88,7 @@ impl Operation {
     fn identity(self) -> bool {
         match self {
             Self::Pixels(op) => op.identity(),
+            Self::SelectCleanup(_) => false,
             Self::Sharpen { strength } => strength == 0.,
             Self::Unsharp { radius, amount, .. } => radius == 0 || amount == 0.,
             Self::Denoise {
@@ -278,6 +282,12 @@ pub fn prepare_with_budget(
     budget: usize,
     mut tick: impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<DocumentState, String> {
+    if let Operation::SelectCleanup(settings) = s.operation {
+        if !s.valid() {
+            return Err("Invalid dust selection settings".into());
+        }
+        return crate::cleanup_filters::select(d, layer, settings, budget, tick);
+    }
     if let Operation::Pixels(op) = s.operation {
         return crate::pixel_effects::prepare_options(
             d,
@@ -368,7 +378,9 @@ pub fn prepare_with_budget(
         }
         let rgb = before.rgb();
         let mapped = match s.operation {
-            Operation::Pixels(_) => unreachable!("Pixel operations use their own planner"),
+            Operation::Pixels(_) | Operation::SelectCleanup(_) => {
+                unreachable!("Pixel/selection operations use their own planner")
+            }
             Operation::Sharpen { strength } => {
                 let mut lap = [0.; 3];
                 for offset in [[-1, 0], [1, 0], [0, -1], [0, 1]] {

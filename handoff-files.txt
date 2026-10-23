@@ -743,3 +743,9 @@ crates/drawer-core/src/filter_options_verify.rs
 crates/drawer-app/src/filter_options.rs
 crates/drawer-app/src/filter_options_verify.rs
 docs/process/filter-options.md
+
+crates/drawer-core/src/cleanup_filters.rs
+crates/drawer-core/src/cleanup_filters_verify.rs
+crates/drawer-app/src/cleanup_filters.rs
+crates/drawer-app/src/cleanup_filters_verify.rs
+docs/process/cleanup-filters.md

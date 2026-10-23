@@ -426,6 +426,31 @@ impl Drawer {
                         drawer_core::pixel_effects::Operation::defaults()[1],
                     ))?
                 }
+                id if drawer_core::cleanup_filters::Operation::COMMANDS.contains(&id) => {
+                    let n = drawer_core::cleanup_filters::Operation::COMMANDS
+                        .iter()
+                        .position(|v| *v == id)
+                        .unwrap();
+                    self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
+                        drawer_core::pixel_effects::Operation::Cleanup(
+                            drawer_core::cleanup_filters::Operation::defaults()[n],
+                        ),
+                    ))?;
+                }
+                id if drawer_core::cleanup_filters::SelectionKind::COMMANDS.contains(&id) => {
+                    let n = drawer_core::cleanup_filters::SelectionKind::COMMANDS
+                        .iter()
+                        .position(|v| *v == id)
+                        .unwrap();
+                    self.begin_detail_filter(
+                        drawer_core::detail_filter::Operation::SelectCleanup(
+                            drawer_core::cleanup_filters::Selection {
+                                kind: drawer_core::cleanup_filters::SelectionKind::ALL[n],
+                                ..Default::default()
+                            },
+                        ),
+                    )?;
+                }
                 "remove-specks" => {
                     self.begin_detail_filter(drawer_core::detail_filter::Operation::Pixels(
                         drawer_core::pixel_effects::Operation::defaults()[2],

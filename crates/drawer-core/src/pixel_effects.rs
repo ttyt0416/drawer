@@ -24,6 +24,7 @@ impl DustTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum Operation {
+    Cleanup(crate::cleanup_filters::Operation),
     Extended(crate::extended_filters::Operation),
     Warp(crate::warp_filters::Operation),
     Style(crate::stylized_effects::Operation),
@@ -49,6 +50,7 @@ impl Operation {
     pub fn all() -> Vec<Self> {
         Self::defaults()
             .into_iter()
+            .chain(crate::cleanup_filters::Operation::defaults().map(Self::Cleanup))
             .chain(crate::stylized_effects::Operation::defaults().map(Self::Style))
             .chain(crate::warp_filters::Operation::defaults().map(Self::Warp))
             .chain(crate::extended_filters::Operation::defaults().map(Self::Extended))
@@ -56,6 +58,9 @@ impl Operation {
     }
     pub fn same_kind(self, other: Self) -> bool {
         match (self, other) {
+            (Self::Cleanup(a), Self::Cleanup(b)) => {
+                std::mem::discriminant(&a) == std::mem::discriminant(&b)
+            }
             (Self::Extended(a), Self::Extended(b)) => {
                 std::mem::discriminant(&a) == std::mem::discriminant(&b)
             }
@@ -70,6 +75,7 @@ impl Operation {
     }
     pub fn preserves_alpha(self) -> bool {
         match self {
+            Self::Cleanup(op) => op.preserves_alpha(),
             Self::Extended(op) => op.preserves_alpha(),
             Self::Style(op) => op.preserves_alpha(),
             Self::Noise { .. }
@@ -101,6 +107,7 @@ impl Operation {
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Cleanup(op) => op.label(),
             Self::Extended(op) => op.label(),
             Self::Warp(op) => op.label(),
             Self::Style(op) => op.label(),
@@ -112,6 +119,7 @@ impl Operation {
     }
     pub fn valid(self) -> bool {
         match self {
+            Self::Cleanup(op) => op.valid(),
             Self::Extended(op) => op.valid(),
             Self::Warp(op) => op.valid(),
             Self::Style(op) => op.valid(),
@@ -129,6 +137,7 @@ impl Operation {
     }
     pub fn identity(self) -> bool {
         match self {
+            Self::Cleanup(op) => op.identity(),
             Self::Extended(op) => op.identity(),
             Self::Warp(op) => op.identity(),
             Self::Style(op) => op.identity(),
@@ -458,7 +467,8 @@ pub fn prepare_options(
     if count > 4 * 1024 * 1024 || d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Pixel effect source4M/snapshot32MiB limit".into());
     }
-    let selected = selection
+    let selected = matches!(op, Operation::Cleanup(_))
+        || selection
         || options.area == crate::filter_options::Area::EntireSelection
             && matches!(
                 op,
@@ -503,6 +513,14 @@ pub fn prepare_options(
         && matches!(
             op,
             Operation::LineWidth { .. }
+                | Operation::Cleanup(crate::cleanup_filters::Operation::Dust(
+                    crate::cleanup_filters::Dust {
+                        mode: crate::cleanup_filters::Mode::Transparency
+                            | crate::cleanup_filters::Mode::Foreground
+                            | crate::cleanup_filters::Mode::Surrounding,
+                        ..
+                    }
+                ))
                 | Operation::Dust {
                     target: DustTarget::Ink,
                     ..
@@ -510,7 +528,7 @@ pub fn prepare_options(
         )
     {
         return Err(
-            "Unlock layer transparency before changing line width or erasing isolated ink".into(),
+            "Unlock layer transparency before changing alpha with line width, dust removal or gap filling".into(),
         );
     }
     let old = src.extent(d.width, d.height);
@@ -526,6 +544,14 @@ pub fn prepare_options(
     };
     let output = extent.width as usize * extent.height as usize;
     let (work, scratch) = match op {
+        Operation::Cleanup(op) => (
+            output.saturating_mul(op.cost()),
+            if matches!(op, crate::cleanup_filters::Operation::Dust(_)) {
+                count.saturating_mul(64)
+            } else {
+                0
+            },
+        ),
         Operation::Extended(op) => (output.saturating_mul(op.cost()), 0),
         Operation::Warp(_) => (output.saturating_mul(8), 0),
         Operation::Style(op) => (output.saturating_mul(op.cost()), 0),
@@ -578,6 +604,11 @@ pub fn prepare_options(
         .then(|| line_ridges(d, layer, &mut tick))
         .transpose()?;
     tick(0, output)?;
+    let cleanup = if let Operation::Cleanup(crate::cleanup_filters::Operation::Dust(s)) = op {
+        Some(crate::cleanup_filters::candidates(d, layer, s, &mut tick)?)
+    } else {
+        None
+    };
     let mut pixels = Vec::with_capacity(output);
     let mut precise = (d.color.depth == Depth::Sixteen).then(|| Vec::with_capacity(output));
     let mut changed = false;
@@ -596,10 +627,23 @@ pub fn prepare_options(
         } else {
             1.
         };
+        let weight = if matches!(op, Operation::Cleanup(_))
+            && (xy[0] < 0 || xy[1] < 0 || xy[0] >= d.width as i64 || xy[1] >= d.height as i64)
+        {
+            0.
+        } else {
+            weight
+        };
         let mapped = if weight == 0. || locked && before.alpha() == 0. {
             before
         } else {
             match op {
+                Operation::Cleanup(crate::cleanup_filters::Operation::Dust(_)) => index
+                    .and_then(|i| cleanup.as_ref().unwrap()[i])
+                    .unwrap_or(before),
+                Operation::Cleanup(op) => {
+                    crate::cleanup_filters::sample(d, layer, xy, op, options)?
+                }
                 Operation::Extended(op) => {
                     crate::extended_filters::sample_options(d, layer, xy, before, op, options)?
                 }

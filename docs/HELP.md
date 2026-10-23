@@ -1279,3 +1279,12 @@ Filter-specific options에서 파형 사인/삼각/사각, 전체 선택/중심�
 문서 밖 표본은 기본 Transparent, Repeat edge pixels, Wrap around, Mirror repeat다. 거울 반복은 끝 픽셀도 반복한다. 선택은 출력 범위이며 계산 입력을 반복 경계로 쓰지 않는다. Entire selection은 선택 마스크/사각형의 실제 문서 좌표 경계로 중심/반경/비율을 구하고 선택 밖을 보존한다. 필름 None은 추가 프리셋을 끄며 기본 대비/그레인 조절은 유지한다. 최소 선폭은 거리 능선의 한 픽셀 코어 보존이다.
 
 세부값은 로컬 사용자 프리셋과 네이티브 v83 마지막 설정에 저장한다. 미리보기/취소는 원본을 보존하고 Apply는 한 Undo다. 잘못된 수치와 메모리/작업량 초과를 계산 전에 거절한다. 상세 계산 규칙은 process/filter-options.md다.
+
+
+## 톤 제거·회색화·먼지와 투명 틈 (173)
+
+remove-tone은 반경0~8/강도/연속선 허용차로 점망을 독립 공간 평균하고 가는 연속선을 보호한다. Also average transparent tone coverage를 켜면 투명 바탕의 점망 알파도 평균하며 투명도 잠금은 원래 알파를 유지한다. 원본의 톤 이전 그림을 복원하는 기능은 아니다. grayscale-filter는 작업 RGB의 명도를 같은 회색 채널로 쓰고 원래 알파와 완전 투명 색을 보존한다.
+
+cleanup-dust는 Remove dust from transparency / Remove dust from white background / Fill transparent gaps with surrounding color / Fill transparent gaps with foreground color를 제공한다. 투명 바탕의 점은 알파를 제거하고, 흰 바탕의 점은 실제 흰 테두리를 확인해 흰색으로 채운다. 투명/반투명 구멍은 주변의 알파 가중 색 또는 저장한 전경 RGBA로 채운다. 대각선을 포함한8연결 성분 전체 크기로 판별하고 문서/저장 영역 경계에 닿은 성분은 보호한다. 최대 크기0은 픽셀을 바꾸지 않는다. 선택이 있으면 문서 안의 선택 범위에만 적용하며 입력 연결 성분을 선택 경계에서 자르지 않는다.
+
+select-dust-transparency / select-dust-white / select-transparent-hole은 별도 선택 전용 명령이다. 픽셀을 수정하지 않고 대상만 교체 선택한다. 빨간 후보 지도에서 결과를 확인한다. 모드·크기가 실제로 바뀌면 비동기 미리보기를 자동 갱신하며 동일값은 다시 계산하지 않는다. 닫기/취소는 원본을 유지하고 Apply는 최종 결과 한 Undo다. 전경색은 창을 열 때 캡처하며 Use current foreground color로 다시 가져온다. 로컬 프리셋과 네이티브v84에 설정/결과를 저장한다. 상세 계약은 process/cleanup-filters.md다.
