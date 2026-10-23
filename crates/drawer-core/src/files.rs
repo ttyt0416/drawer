@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 79;
+const VERSION: u32 = 80;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -197,6 +197,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if version < 80 && document.scene.last_transform.is_some() {
+            return Err(invalid("Transform receipts require native version80"));
+        }
         if version < 79 && (document.scene.objects.iter().any(|o| matches!(o, crate::scene::PageObject::Material(m) if matches!(m.source, crate::material_layer::Source::Metal(_))))
             || document.scene.file_objects.entries.iter().any(|l| matches!(l.cache.source, crate::material_layer::Source::Metal(_)))) {
             return Err(invalid("Metallic materials require native version79"));

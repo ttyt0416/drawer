@@ -722,3 +722,8 @@ crates/drawer-core/src/metal_material.rs
 crates/drawer-core/src/metal_material_verify.rs
 crates/drawer-app/src/metal_material_verify.rs
 docs/process/metallic-material.md
+crates/drawer-core/src/transform_handles.rs
+crates/drawer-core/src/transform_handles_verify.rs
+crates/drawer-app/src/transform_handles.rs
+crates/drawer-app/src/transform_handles_verify.rs
+docs/process/transform-handles.md

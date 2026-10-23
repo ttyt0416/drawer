@@ -24,7 +24,7 @@ fn bounds(points: impl IntoIterator<Item = Point>) -> Rect {
     }
     r
 }
-fn selection_bounds(d: &Document) -> Result<Rect, String> {
+pub fn selection_bounds(d: &Document) -> Result<Rect, String> {
     if d.scene.selection_empty() {
         return Err("Create a nonempty pixel selection first".into());
     }
@@ -54,6 +54,29 @@ pub fn prepare(
     prepare_with_progress(d, key, pixels, t, bake, filter, &mut || Ok(()))
 }
 pub fn prepare_with_progress(
+    d: &Document,
+    key: Key,
+    pixels: bool,
+    t: Transform,
+    bake: bool,
+    filter: Filter,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<Prepared, String> {
+    let mut out = prepare_inner(d, key, pixels, t, bake, filter, tick)?;
+    if out.state != d.snapshot() {
+        out.state.scene.last_transform = Some(crate::transform_handles::Record::Affine {
+            degrees: t.degrees,
+            matrix: t.matrix()?,
+        });
+    }
+    if out.state.memory_bytes().saturating_add(d.memory_bytes())
+        > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+    {
+        return Err("Transform receipt/output exceeds Undo memory budget".into());
+    }
+    Ok(out)
+}
+fn prepare_inner(
     d: &Document,
     key: Key,
     pixels: bool,

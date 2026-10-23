@@ -366,6 +366,45 @@ pub fn prepare_with_progress(
     change: Change<'_>,
     tick: &mut impl FnMut() -> Result<(), String>,
 ) -> Result<DocumentState, String> {
+    let record = if let Change::Quad(w) = &change {
+        if let Some(area) = area(d, layers, selection)? {
+            match w {
+                Warp::Distort(points) => Some(crate::transform_handles::Record::Quad {
+                    points: *points,
+                    area,
+                    perspective: false,
+                }),
+                Warp::Perspective(points) => Some(crate::transform_handles::Record::Quad {
+                    points: *points,
+                    area,
+                    perspective: true,
+                }),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let mut state = prepare_inner(d, layers, selection, change, tick)?;
+    if state != d.snapshot() && record.is_some() {
+        state.scene.last_transform = record;
+    }
+    if state.memory_bytes().saturating_add(d.memory_bytes())
+        > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+    {
+        return Err("Deformation receipt/output exceeds Undo memory budget".into());
+    }
+    Ok(state)
+}
+fn prepare_inner(
+    d: &Document,
+    layers: &[usize],
+    selection: bool,
+    change: Change<'_>,
+    tick: &mut impl FnMut() -> Result<(), String>,
+) -> Result<DocumentState, String> {
     tick()?;
     let layers = targets(d, layers)?;
     let (warp, dabs, only_refer) = match change {

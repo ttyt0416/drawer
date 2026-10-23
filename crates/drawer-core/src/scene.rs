@@ -194,6 +194,8 @@ pub struct WorldMesh {
 #[serde(deny_unknown_fields)]
 pub struct Scene {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_transform: Option<crate::transform_handles::Record>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_batch_filter: Option<Box<crate::batch_filters::Record>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_color_deepen: Option<Box<crate::color_deepen::Record>>,
@@ -293,6 +295,9 @@ impl Scene {
             return false;
         }
         if self.last_batch_filter.as_ref().is_some_and(|r| !r.valid()) {
+            return false;
+        }
+        if self.last_transform.is_some_and(|r| !r.valid()) {
             return false;
         }
         if self.last_detail_filter.is_some_and(|s| !s.valid()) {
@@ -416,6 +421,7 @@ impl Scene {
             + self.appearance.bytes()
             + self.surface_effects.bytes()
             + self.last_batch_filter.as_ref().map_or(0, |r| r.bytes())
+            + usize::from(self.last_transform.is_some()) * 160
             + usize::from(self.last_color_deepen.is_some()) * 128
             + self.catalog.bytes()
             + self.clipping.bytes()

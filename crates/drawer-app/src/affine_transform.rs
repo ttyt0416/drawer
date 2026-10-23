@@ -8,6 +8,8 @@ pub(super) struct Panel {
     pub draft: Option<Box<Draft>>,
     preview: Option<egui::Rect>,
     apply: Option<egui::Rect>,
+    pub(super) handles: Box<crate::transform_handles::Pad>,
+    pub(super) snap: Option<egui::Rect>,
 }
 
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
@@ -241,6 +243,7 @@ impl Drawer {
             min: [0.; 2],
             max: [d.width as f64, d.height as f64],
         });
+        *self.affine_transform.handles = Default::default();
         self.affine_transform.draft = Some(Box::new(Draft {
             id: d.id,
             revision: d.revision,
@@ -263,7 +266,6 @@ impl Drawer {
     pub(super) fn preview_affine_transform(&mut self, ctx: &egui::Context) -> Result<(), String> {
         if let Some(e) = &mut self.affine_transform.draft {
             e.prepared = None;
-            e.images = None;
         }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let e = self
@@ -279,6 +281,9 @@ impl Drawer {
         self.start_transform_preview(ctx, 0)
     }
     pub(super) fn apply_affine_transform(&mut self) -> Result<(), String> {
+        if self.affine_transform.handles.error.is_some() {
+            return Err("Resolve the invalid transform handle edit first".into());
+        }
         self.transform_apply_guard(0)?;
         let n = self.active.ok_or("Open a page first")?;
         let current = target(self, &self.documents[n]);
@@ -310,15 +315,32 @@ impl Drawer {
             return;
         };
         let fresh = e.fresh(d) && target(self, d) == Some(e.target);
+        let bounds = catalog::bounds(d, e.target).unwrap_or(drawer_core::scene::Rect {
+            min: [0.; 2],
+            max: [d.width as f64, d.height as f64],
+        });
+        let bounds = if e.pixels {
+            core::selection_bounds(d).unwrap_or(bounds)
+        } else {
+            bounds
+        };
+        let mut snap = self.workspaces.store.current.transform_snap;
+        let old_snap = snap;
+        let mut switch = None;
+
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply) = (false, false);
         let mut cancel = false;
         egui::Window::new("Scale and rotate").default_width(465.).default_pos(egui::pos2(35.,30.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame/target changed; close and reopen this window.");}
+            ui.horizontal(|ui|{ui.label("Basic transform");let raster=matches!(e.target,Key::Layer(drawer_core::layer_properties::Target::Raster(_)));if ui.add_enabled(raster&&!working&&fresh,egui::Button::new("Free mode")).clicked(){switch=Some(0);}
+                if ui.add_enabled(raster&&!working&&fresh,egui::Button::new("Perspective mode")).clicked(){switch=Some(1);}});
             let mut changed=false;
             changed|=crate::transform_review::quality(ui,&mut e.quality);
             if working {ui.label("Calculating transform — close or Escape to cancel");}
             egui::ScrollArea::vertical().id_salt("affine-controls").max_height(240.).show(ui,|ui|{
+            ui.horizontal(|ui|{let r=ui.checkbox(&mut snap.enabled,"Angle snapping");self.affine_transform.snap=Some(r.rect);ui.add(egui::DragValue::new(&mut snap.degrees).range(1..=90).suffix("° interval"));});
+            let (dragged,released)=self.affine_transform.handles.ui(ui,bounds,&mut e.settings,e.aspect,snap,fresh&&!working);changed|=dragged;preview|=released;
             changed|=ui.checkbox(&mut e.pixels,"Transform selected pixels in the current raster").changed();
             changed|=crate::transform_review::scales(ui,&mut e.settings.scale,&mut e.aspect,-1e4..=1e4).0;
             changed|=ui.add(egui::DragValue::new(&mut e.settings.degrees).range(-36000. ..=36000.).prefix("Degrees: ")).changed();
@@ -329,12 +351,37 @@ impl Drawer {
             if e.pixels{ui.horizontal(|ui|{for(f,label)in[(Filter::Nearest,"Hard edges"),(Filter::Bilinear,"Smooth edges")]{changed|=ui.radio_value(&mut e.filter,f,label).changed();}});ui.small("Only the selected coverage moves; its area selection follows. The current layer's mask stays fixed. Transparent edges use premultiplied interpolation.");}
             else{changed|=ui.checkbox(&mut e.bake,"Convert unsupported text/tone/3D/animation sources to a paintable raster on Apply").changed();ui.small("This conversion is optional and included in the preview. Undo restores the editable source. Linked layers transform together; incompatible linked members reject the operation.");}
             });
-            if changed{e.prepared=None;e.images=None;}
-            let r=ui.add_enabled(fresh,egui::Button::new("Prepare transform preview"));self.affine_transform.preview=Some(r.rect);preview=r.clicked();cancel=ui.button("Cancel transform").clicked();
+            if changed||snap!=old_snap{
+                if e.settings.matrix().is_ok(){self.affine_transform.handles.edited();}
+                if snap.enabled && let Ok(angle)=snap.angle(e.settings.degrees){e.settings.degrees=angle;}
+                e.prepared=None;
+            }
+            let valid=e.settings.matrix().is_ok()&&self.affine_transform.handles.error.is_none();
+            if !valid{ui.colored_label(egui::Color32::YELLOW,"Invalid transform. Last valid preview retained; confirmation is disabled.");}
+            let r=ui.add_enabled(fresh&&valid,egui::Button::new("Prepare transform preview"));self.affine_transform.preview=Some(r.rect);preview|=r.clicked();cancel=ui.button("Cancel transform").clicked();
             if let Some(p)=&e.prepared{egui::ScrollArea::vertical().id_salt("affine-notes").max_height(72.).show(ui,|ui|{for note in &p.notes{ui.small(note);}});}
-            if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));});}});}
-            let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply transform as one Undo"));self.affine_transform.apply=Some(r.rect);apply=r.clicked();ui.small("Escape or close discards the transform.");
+            if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Before",if e.prepared.is_some(){"After"}else{"Last valid preview"}].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));});}});}
+            let r=ui.add_enabled(fresh&&valid&&e.prepared.is_some(),egui::Button::new("Apply transform as one Undo"));self.affine_transform.apply=Some(r.rect);apply=r.clicked();
+            apply|=fresh&&valid&&e.prepared.is_some()&&!ctx.egui_wants_keyboard_input()&&ctx.input(|i|i.key_pressed(egui::Key::Enter));
+            ui.small("Enter confirms a ready transform; Escape or close discards the transform. Angle snapping and aspect lock are independent.");
         });
+        if snap != old_snap {
+            self.workspaces.store.current.transform_snap = snap;
+            if let Some(storage) = &self.storage
+                && let Err(err) = self.workspaces.store.save(storage)
+            {
+                self.status = Some(err.to_string());
+            }
+        }
+        if let Some(kind) = switch {
+            self.affine_transform.draft = None;
+            if let Err(err) = self.begin_deform(ctx) {
+                self.status = Some(err);
+            } else {
+                self.deform.draft.as_mut().unwrap().kind = kind;
+            }
+            return;
+        }
         if open && !cancel {
             self.affine_transform.draft = Some(e);
         }

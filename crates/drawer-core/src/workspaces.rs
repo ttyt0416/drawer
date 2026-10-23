@@ -349,6 +349,8 @@ pub struct Snapshot {
     #[serde(default)]
     pub snapping: crate::snapping::Settings,
     #[serde(default)]
+    pub transform_snap: crate::transform_handles::Snap,
+    #[serde(default)]
     pub shapes: crate::shapes::Settings,
     #[serde(default)]
     pub shapes_vector: bool,
@@ -455,6 +457,7 @@ impl Default for Snapshot {
             gradient_presets: Default::default(),
             shapes: Default::default(),
             snapping: Default::default(),
+            transform_snap: Default::default(),
             selection_outline: true,
             selection_shortcuts: Default::default(),
             magnetic_lasso: Default::default(),
@@ -536,6 +539,7 @@ impl Snapshot {
             || !self.enclosure.valid()
             || !self.gradient_presets.valid()
             || !self.shapes.valid()
+            || !self.transform_snap.valid()
             || !self.snapping.valid()
         {
             return false;
@@ -666,6 +670,7 @@ impl Snapshot {
             next.user_tools = incoming.user_tools.clone();
             next.eyedropper = incoming.eyedropper.clone();
             next.preferences = incoming.preferences.clone();
+            next.transform_snap = incoming.transform_snap;
             next.properties = incoming.properties.clone();
             next.brushes = incoming.brushes.clone();
             next.input = incoming.input.clone();

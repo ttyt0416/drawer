@@ -387,3 +387,6 @@ mod local_inference_verify;
 
 pub mod metal_material;
 pub mod metal_material_verify;
+
+pub mod transform_handles;
+pub mod transform_handles_verify;

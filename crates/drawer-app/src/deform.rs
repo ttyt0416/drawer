@@ -3,7 +3,7 @@ use drawer_core::{deform as core, material_mapping::UNIT, scene::Point};
 #[derive(Default)]
 pub(super) struct Panel {
     pub draft: Option<Box<Draft>>,
-    pad: Option<egui::Rect>,
+    pub(super) pad: Option<egui::Rect>,
     preview: Option<egui::Rect>,
     apply: Option<egui::Rect>,
 }
@@ -15,6 +15,8 @@ pub(super) struct Draft {
     pub(super) selection: bool,
     pub(super) kind: u8,
     pub(super) quad: [Point; 4],
+    pub(super) candidate: Option<[Point; 4]>,
+    pub(super) invalid: Option<String>,
     pub(super) mode: core::Mode,
     pub(super) radius: f64,
     pub(super) strength: f64,
@@ -23,6 +25,7 @@ pub(super) struct Draft {
     pub(super) strokes: Vec<usize>,
     pub(super) last: Option<Point>,
     pub(super) corner: Option<usize>,
+    pub(super) corner_offset: Point,
     pub(super) base: egui::TextureHandle,
     pub(super) prepared: Option<drawer_core::sizing::DocumentState>,
     pub(super) images: Option<[egui::TextureHandle; 2]>,
@@ -30,12 +33,31 @@ pub(super) struct Draft {
     pub(super) depth: f64,
 }
 impl Draft {
+    pub(super) fn offer_quad(&mut self, q: [Point; 4]) -> bool {
+        match crate::transform_handles::quad_valid(q, self.kind, self.depth) {
+            Ok(()) => {
+                if q == self.quad && self.candidate.is_none() && self.invalid.is_none() {
+                    return false;
+                }
+                self.quad = q;
+                self.candidate = None;
+                self.invalid = None;
+                self.invalidate();
+                true
+            }
+            Err(error) => {
+                self.candidate = Some(q);
+                self.invalid = Some(error);
+                false
+            }
+        }
+    }
+
     fn fresh(&self, d: &Document) -> bool {
         (self.id, self.revision, self.frame) == (d.id, d.revision, d.current_frame)
     }
     fn invalidate(&mut self) {
         self.prepared = None;
-        self.images = None;
     }
     fn dab(&mut self, point: Point, delta: Point) -> Result<(), String> {
         if self.dabs.len() >= 512 {
@@ -77,6 +99,8 @@ impl Drawer {
             depth: 0.,
             kind: 0,
             quad: UNIT,
+            candidate: None,
+            invalid: None,
             mode: core::Mode::Push,
             radius: 32.,
             strength: 0.5,
@@ -85,6 +109,7 @@ impl Drawer {
             strokes: vec![],
             last: None,
             corner: None,
+            corner_offset: [0.; 2],
             base: crate::layer_merge::image(ctx, d, "deform-source"),
             prepared: None,
             images: None,
@@ -94,7 +119,17 @@ impl Drawer {
     pub(super) fn preview_deform(&mut self, ctx: &egui::Context) -> Result<(), String> {
         if let Some(e) = &mut self.deform.draft {
             e.prepared = None;
-            e.images = None;
+        }
+        let e = self
+            .deform
+            .draft
+            .as_ref()
+            .ok_or("Transform window closed")?;
+        if e.kind < 2 {
+            if let Some(err) = &e.invalid {
+                return Err(err.clone());
+            }
+            crate::transform_handles::quad_valid(e.quad, e.kind, e.depth)?;
         }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let e = self
@@ -108,6 +143,9 @@ impl Drawer {
         self.start_transform_preview(ctx, 1)
     }
     pub(super) fn apply_deform(&mut self) -> Result<(), String> {
+        if let Some(err) = self.deform.draft.as_ref().and_then(|e| e.invalid.as_ref()) {
+            return Err(err.clone());
+        }
         self.transform_apply_guard(1)?;
         let n = self.active.ok_or("Open a page first")?;
         let e = self
@@ -140,13 +178,14 @@ impl Drawer {
         let (mut preview, mut apply) = (false, false);
         let mut cancel = false;
         let mut error = None;
+        let mut basic = false;
         egui::Window::new("Free / perspective / liquify").default_width(570.).default_pos(egui::pos2(20.,35.)).open(&mut open).show(ctx,|ui|{
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed; close and reopen.");}
             ui.small("Unconfirmed deformation: apply or cancel before saving. Escape/close discards every draft operation.");
             let mut changed=false;
             changed|=crate::transform_review::quality(ui,&mut e.quality);
             if working {ui.label("Calculating transform — close or Escape to cancel");}
-            ui.horizontal(|ui|{for(i,label)in["Four-corner free","Perspective","Liquify"].into_iter().enumerate(){changed|=ui.selectable_value(&mut e.kind,i as u8,label).changed();}});
+            ui.horizontal(|ui|{basic=ui.button("Basic mode").clicked();for(i,label)in["Four-corner free","Perspective","Liquify"].into_iter().enumerate(){changed|=ui.selectable_value(&mut e.kind,i as u8,label).changed();}});
             ui.collapsing("Raster layers (linked raster members are included)",|ui|{egui::ScrollArea::vertical().max_height(70.).show(ui,|ui|{for(n,l)in d.layers.iter().enumerate(){let mut on=e.layers.contains(&n);if ui.checkbox(&mut on,&l.name).changed(){if on{e.layers.push(n);}else{e.layers.retain(|v|*v!=n);}changed=true;}}});});
             changed|=ui.checkbox(&mut e.selection,"Only selected pixels").changed();
             if e.kind==2{
@@ -155,11 +194,15 @@ impl Drawer {
                 ui.horizontal(|ui|{if ui.button("Undo draft stroke").clicked()&&let Some(n)=e.strokes.pop(){e.dabs.truncate(n);changed=true;}
 if ui.button("Clear strokes").clicked(){e.dabs.clear();e.strokes.clear();changed=true;}ui.label(format!("{} /512 dabs",e.dabs.len()));});
             }else{
-                ui.horizontal(|ui|{for(n,p)in e.quad.iter_mut().enumerate(){ui.vertical(|ui|{ui.label(format!("Corner {}",n+1));for v in p{changed|=ui.add(egui::DragValue::new(v).speed(0.01).range(-64. ..=64.)).changed();}});}if ui.button("Reset corners").clicked(){e.quad=UNIT;changed=true;}});
+                let mut proposed=e.candidate.unwrap_or(e.quad);let before=proposed;
+                ui.horizontal(|ui|{for(n,p)in proposed.iter_mut().enumerate(){ui.vertical(|ui|{ui.label(format!("Corner {}",n+1));for v in p{ui.add(egui::DragValue::new(v).speed(0.01).range(-64. ..=64.));}});}if ui.button("Reset corners").clicked(){proposed=UNIT;}});
+                if proposed!=before{e.offer_quad(proposed);}
                 ui.small("Corners use normalized editing bounds (0–1). Drag a white corner below; reversed/folded quads are rejected.");
             }
             if e.kind==1 {changed|=ui.add(egui::Slider::new(&mut e.depth,-0.9..=0.9).text("Perspective depth")).changed();ui.small("Depth projects the quadrilateral around its center. It is separate from scale/aspect and preview quality.");}
-            if changed{e.invalidate();}
+            if changed{
+                if e.kind<2 {match crate::transform_handles::quad_valid(e.quad,e.kind,e.depth){Ok(())=>{e.invalid=None;e.candidate=None;e.invalidate();},Err(err)=>e.invalid=Some(err)}}else{e.invalid=None;e.candidate=None;e.invalidate();}
+            }
             let area=core::area(d,&e.layers,e.selection);
             ui.horizontal(|ui|{
                 let size=egui::vec2(250.,190.);let(r,response)=ui.allocate_exact_size(size,egui::Sense::drag());self.deform.pad=Some(r);
@@ -167,16 +210,24 @@ if ui.button("Clear strokes").clicked(){e.dabs.clear();e.strokes.clear();changed
                 {let image=e.images.as_ref().map_or(&e.base,|images|&images[1]);ui.painter().image(image.id(),r,egui::Rect::from_min_max(egui::pos2(0.,0.),egui::pos2(1.,1.)),egui::Color32::WHITE);}
                 let to_doc=|p:egui::Pos2|[(p.x-r.min.x) as f64/r.width() as f64*d.width as f64,(p.y-r.min.y) as f64/r.height() as f64*d.height as f64];
                 let to_screen=|p:Point|egui::pos2(r.min.x+(p[0]/d.width as f64) as f32*r.width(),r.min.y+(p[1]/d.height as f64) as f32*r.height());
-                if e.kind<2&&let Ok(Some(a))=&area {for (n,p) in e.quad.iter().enumerate(){let point=[0,1].map(|k|a.min[k]+p[k]*(a.max[k]-a.min[k]));let next=e.quad[(n+1)%4];let next=[0,1].map(|k|a.min[k]+next[k]*(a.max[k]-a.min[k]));ui.painter().line_segment([to_screen(point),to_screen(next)],egui::Stroke::new(1.,egui::Color32::WHITE));ui.painter().circle_filled(to_screen(point),5.,egui::Color32::WHITE);}}
-                if fresh&&response.drag_started()&&let Some(pos)=response.interact_pointer_pos(){let p=to_doc(pos);e.last=Some(p);if e.kind==2{e.strokes.push(e.dabs.len());if let Err(err)=e.dab(p,[0.;2]){error=Some(err);}}else if let Ok(Some(a))=&area {e.corner=(0..4).min_by(|x,y|{let distance=|n:usize|{let v=to_screen([0,1].map(|k|a.min[k]+e.quad[n][k]*(a.max[k]-a.min[k])));v.distance_sq(pos)};distance(*x).total_cmp(&distance(*y))});}}
-                if fresh&&response.dragged()&&let Some(pos)=response.interact_pointer_pos(){let p=to_doc(pos);if e.kind==2{if let Some(last)=e.last {let delta=[p[0]-last[0],p[1]-last[1]];let steps=(delta[0].hypot(delta[1])/(e.radius*0.25).max(0.5)).ceil().clamp(1.,64.) as usize;if delta!=[0.;2]{for n in 1..=steps{let center=[0,1].map(|k|last[k]+delta[k]*n as f64/steps as f64);if let Err(err)=e.dab(center,delta.map(|v|v/steps as f64)){error=Some(err);break;}}}}}else if let (Some(n),Ok(Some(a)))=(e.corner,&area){e.quad[n]=[0,1].map(|k|((p[k]-a.min[k])/(a.max[k]-a.min[k])).clamp(-64.,64.));e.invalidate();}e.last=Some(p);}
-                if response.drag_stopped(){e.last=None;e.corner=None;preview=fresh;}
+                if e.kind<2&&let Ok(Some(a))=&area {for (n,p) in e.candidate.unwrap_or(e.quad).iter().enumerate(){let point=[0,1].map(|k|a.min[k]+p[k]*(a.max[k]-a.min[k]));let next=e.candidate.unwrap_or(e.quad)[(n+1)%4];let next=[0,1].map(|k|a.min[k]+next[k]*(a.max[k]-a.min[k]));ui.painter().line_segment([to_screen(point),to_screen(next)],egui::Stroke::new(1.,egui::Color32::WHITE));ui.painter().circle_filled(to_screen(point),5.,egui::Color32::WHITE);}}
+                if fresh&&response.drag_started()&&let Some(pos)=ui.input(|i|i.pointer.press_origin()).or_else(||response.interact_pointer_pos()){let p=to_doc(pos);e.last=Some(p);if e.kind==2{e.strokes.push(e.dabs.len());if let Err(err)=e.dab(p,[0.;2]){error=Some(err);}}else if let Ok(Some(a))=&area {e.corner=(0..4).min_by(|x,y|{let distance=|n:usize|{let v=to_screen([0,1].map(|k|a.min[k]+e.candidate.unwrap_or(e.quad)[n][k]*(a.max[k]-a.min[k])));v.distance_sq(pos)};distance(*x).total_cmp(&distance(*y))});if let Some(n)=e.corner{let v=[0,1].map(|k|a.min[k]+e.candidate.unwrap_or(e.quad)[n][k]*(a.max[k]-a.min[k]));e.corner_offset=[p[0]-v[0],p[1]-v[1]];}}}
+                if fresh&&response.dragged()&&let Some(pos)=response.interact_pointer_pos(){let p=to_doc(pos);if e.kind==2{if let Some(last)=e.last {let delta=[p[0]-last[0],p[1]-last[1]];let steps=(delta[0].hypot(delta[1])/(e.radius*0.25).max(0.5)).ceil().clamp(1.,64.) as usize;if delta!=[0.;2]{for n in 1..=steps{let center=[0,1].map(|k|last[k]+delta[k]*n as f64/steps as f64);if let Err(err)=e.dab(center,delta.map(|v|v/steps as f64)){error=Some(err);break;}}}}}else if let (Some(n),Ok(Some(a)))=(e.corner,&area){let mut proposed=e.candidate.unwrap_or(e.quad);proposed[n]=[0,1].map(|k|((p[k]-e.corner_offset[k]-a.min[k])/(a.max[k]-a.min[k])).clamp(-64.,64.));e.offer_quad(proposed);}e.last=Some(p);}
+                if response.drag_stopped(){e.last=None;e.corner=None;preview=fresh&&e.invalid.is_none();}
                 ui.vertical(|ui|{ui.label("Mouse / pen editing pad");ui.small("The pad maps the page to this rectangle. Drag to deform; a preview is prepared on release.");if let Some(images)=&e.images{ui.label("Original");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(100.,76.)));}});
             });
+            if let Some(err)=&e.invalid{ui.colored_label(egui::Color32::YELLOW,err);}
             if let Err(err)=area{ui.colored_label(egui::Color32::YELLOW,err);}
-            let r=ui.add_enabled(fresh,egui::Button::new("Prepare deformation preview"));self.deform.preview=Some(r.rect);preview|=r.clicked();cancel=ui.button("Cancel transform").clicked();
-            let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply deformation as one Undo"));self.deform.apply=Some(r.rect);apply=r.clicked();
+            let r=ui.add_enabled(fresh&&e.invalid.is_none(),egui::Button::new("Prepare deformation preview"));self.deform.preview=Some(r.rect);preview|=r.clicked();cancel=ui.button("Cancel transform").clicked();
+            let r=ui.add_enabled(fresh&&e.invalid.is_none()&&e.prepared.is_some(),egui::Button::new("Apply deformation as one Undo"));self.deform.apply=Some(r.rect);apply=r.clicked();apply|=fresh&&e.invalid.is_none()&&e.prepared.is_some()&&!ctx.egui_wants_keyboard_input()&&ctx.input(|i|i.key_pressed(egui::Key::Enter));
         });
+        if basic {
+            self.deform.draft = None;
+            if let Err(err) = self.begin_affine_transform() {
+                self.status = Some(err);
+            }
+            return;
+        }
         if open && !cancel {
             self.deform.draft = Some(e);
         }
