@@ -242,10 +242,51 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
 }
 pub fn verify(root: &std::path::Path) -> Result<(), String> {
     equations()?;
-    lifecycle(root)
+    lifecycle(root)?;
+    missing_unicode(root)
+}
+pub fn missing_unicode(root: &std::path::Path) -> Result<(), String> {
+    let mut d = fixture()?;
+    let mut s = settings();
+    s.text = "한글 A 123 😀 \u{10ffff}".into();
+    s.style.font = Font::Emoji;
+    let p = text::prepare(&d, None, &s)?;
+    check(
+        p.missing == 1
+            && p.substituted > 0
+            && p.notice.contains("U+10FFFF")
+            && p.notice.contains("fonts:"),
+        "Missing/fallback notice",
+    )?;
+    d.commit_state(p.state)?;
+    // The missing marker has its own visible border, independent of .notdef outlines.
+    let mut marker = s.clone();
+    marker.text = "\u{10ffff}".into();
+    marker.baseline = [20., 40.];
+    marker.size = 20.;
+    let p = text::prepare(&d, Some(d.scene.catalog.objects.id(0)), &marker)?;
+    let page = crate::layer_merge::preview(&p.state, 0)?;
+    let r = crate::render::Renderer::new(&page);
+    check(
+        r.sample([22., 25.])?.alpha() > 0. && r.sample([26., 33.])?.alpha() == 0.,
+        "Missing box border/hole",
+    )?;
+    let path = root.join("unicode-fallback.drawer");
+    crate::files::save(&mut d, &path).map_err(|e| e.to_string())?;
+    let reopened = crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET).map_err(|e| e.to_string())?;
+    check(
+        Settings::from_object(&reopened.scene.objects[0])
+            .is_some_and(|q| q.text == s.text && q.style.font == s.style.font),
+        "Missing Unicode/font reference lost on reopen",
+    )
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_glyph_border_fallback_notice_and_unicode_native() {
+        let root = crate::test_support::TempDir::new();
+        super::missing_unicode(&root.0).unwrap();
+    }
     #[test]
     fn fonts_alignment_line_spacing_wrap_unicode_and_limits() {
         super::equations().unwrap();

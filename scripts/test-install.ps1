@@ -9,6 +9,7 @@ New-Item -ItemType Directory -Path $testRoot | Out-Null
 $oldData = $env:DRAWER_DATA_DIR
 $oldPath = $env:PATH
 $oldDiagnostics = $env:DRAWER_SMOKE_DIAGNOSTICS
+$process = $null
 try {
     & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot
     $env:DRAWER_DATA_DIR = $dataRoot
@@ -17,7 +18,7 @@ try {
     $receipt = Join-Path $testRoot 'receipt.txt'
     $errors = Join-Path $testRoot 'errors.txt'
     $process = Start-Process -FilePath (Join-Path $installRoot 'Drawer.exe') -ArgumentList @('--smoke-test', ('"' + $receipt + '"')) -WorkingDirectory $testRoot -WindowStyle Hidden -RedirectStandardError $errors -PassThru
-    if (-not $process.WaitForExit(30000)) { $process.Kill(); throw '설치 앱 시작 시간 초과' }
+    if (-not $process.WaitForExit(60000)) { $process.Kill(); $process.WaitForExit(); throw '설치 앱 기능 검증 시간 초과' }
     if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $receipt)) { Get-Content -LiteralPath $errors; if (Test-Path -LiteralPath (Join-Path $testRoot 'smoke-failure.txt')) { Get-Content -LiteralPath (Join-Path $testRoot 'smoke-failure.txt') }; throw '설치 앱 실행 실패' }
     $preferences = Join-Path $dataRoot 'settings/preferences.txt'
     if (-not (Test-Path -LiteralPath $preferences)) { throw '사용자 설정 저장 실패' }
@@ -167,6 +168,7 @@ try {
     if ($smokeResult -notmatch 'raster_deformation=true') { throw '자유·원근·유동화 변형 검증 실패' }
     if ($smokeResult -notmatch 'transform_review=true') { throw '변형 품질·저장 확정/취소 검증 실패' }
     if ($smokeResult -notmatch 'effect_source_delete=true') { throw '효과 원본 삭제 검토/보존 검증 실패' }
+    if ($smokeResult -notmatch 'text_ime=true') { throw '캔버스 한글 조합/대체 글꼴 검증 실패' }
     if ($smokeResult -notmatch 'text_layout=true') { throw '텍스트/글꼴/정렬/줄 간격 검증 실패' }
     if ($smokeResult -notmatch 'quick_filters=true') { throw '필터 입출력/새 레이어/손실 확인 검증 실패' }
     if ($smokeResult -notmatch 'cleanup_filters=true') { throw '톤/먼지/틈 채움/선택 도구 검증 실패' }
@@ -226,6 +228,7 @@ try {
     Get-Content -LiteralPath $receipt
     Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 18개 보존.'
 } finally {
+    if ($null -ne $process -and -not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
     $env:DRAWER_DATA_DIR = $oldData
     $env:PATH = $oldPath
     $env:DRAWER_SMOKE_DIAGNOSTICS = $oldDiagnostics

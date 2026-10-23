@@ -53,6 +53,36 @@ pub(super) fn before(ctx: &egui::Context, e: &mut Draft) -> (Option<Change>, boo
     let id = widget_id(e);
     let focused = ctx.memory(|m| m.has_focus(id));
     let events = ctx.input(|i| i.events.clone());
+    if e.composition.is_some()
+        && ctx.input(|i| {
+            !i.focused
+                || i.events
+                    .iter()
+                    .any(|v| matches!(v, egui::Event::WindowFocused(false)))
+        })
+    {
+        let mut base = *e.composition.take().unwrap();
+        if let Some(end) = events
+            .iter()
+            .position(|v| matches!(v, egui::Event::WindowFocused(false)))
+        {
+            for event in &events[..end] {
+                if let egui::Event::Ime(egui::ImeEvent::Commit(text)) = event
+                    && !text.is_empty()
+                    && text != "\n"
+                    && text != "\r"
+                {
+                    commit(&mut base, text);
+                }
+            }
+        }
+        e.settings.text = base.value;
+        base.state.set_undoer(base.undo);
+        base.state.store(ctx, id);
+        ctx.input_mut(|i| i.events.retain(|v| !matches!(v, egui::Event::Ime(_))));
+        return (None, false);
+    }
+
     let cancel_key = e.composition.is_some()
         && ctx.input(|i| {
             i.key_pressed(egui::Key::Escape) || i.modifiers.command && i.key_pressed(egui::Key::Z)

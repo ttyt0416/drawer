@@ -112,6 +112,8 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub text_document: Option<u64>,
+    pub text_canvas: Option<Box<super::text_editor::CanvasPreview>>,
     vector_eraser: Option<Box<vector_erase::Gesture>>,
     pub erase_settings: drawer_core::vector_erase::Settings,
     vector_capture: Option<Box<vector_edit::Gesture>>,

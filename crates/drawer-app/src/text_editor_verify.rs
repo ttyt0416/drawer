@@ -1,14 +1,19 @@
 use super::*;
-fn frame(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, events: Vec<egui::Event>) {
+pub(super) fn frame(
+    ctx: &egui::Context,
+    app: &mut Drawer,
+    time: &mut f64,
+    events: Vec<egui::Event>,
+) {
     *time += 0.1;
     crate::input_replay::frame(ctx, app, *time, events);
 }
-fn settle(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) {
+pub(super) fn settle(ctx: &egui::Context, app: &mut Drawer, time: &mut f64) {
     for _ in 0..3 {
         frame(ctx, app, time, vec![]);
     }
 }
-fn click(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, r: egui::Rect) {
+pub(super) fn click(ctx: &egui::Context, app: &mut Drawer, time: &mut f64, r: egui::Rect) {
     for pressed in [true, false] {
         frame(
             ctx,

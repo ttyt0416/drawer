@@ -1,10 +1,14 @@
+#[path = "text_canvas.rs"]
+mod canvas;
 #[path = "text_composition.rs"]
 mod composition;
 #[path = "text_editor_verify.rs"]
 mod verify;
+pub(super) use canvas::CanvasPreview;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::smoke(root)?;
-    verify::composition_smoke()
+    verify::composition_smoke()?;
+    canvas::smoke()
 }
 use super::*;
 use drawer_core::text_layout::{self as core, Align, Font, Settings, Style};
@@ -25,6 +29,8 @@ pub(super) struct Draft {
     composition: Option<Box<composition::Composition>>,
     prepared: Option<(Settings, core::Prepared)>,
     image: Option<egui::TextureHandle>,
+    canvas_settings: Option<Settings>,
+    canvas_notice: String,
 }
 impl Drawer {
     pub(super) fn text_save_guard(&self, index: usize) -> Result<(), String> {
@@ -97,7 +103,10 @@ impl Drawer {
             composition: None,
             prepared: None,
             image: None,
+            canvas_settings: None,
+            canvas_notice: String::new(),
         }));
+        self.drawing.text_document = Some(d.id);
         let e = self.text_editor.draft.as_ref().unwrap();
         let id = composition::widget_id(e);
         let mut state = egui::text_edit::TextEditState::default();
@@ -162,11 +171,15 @@ impl Drawer {
             drawer_core::thumbnail::Target::Source(drawer_core::layer_search::Key::Object(p.id)),
         );
         self.text_editor.draft = None;
+        self.drawing.text_document = None;
+        self.drawing.text_canvas = None;
         self.status = None;
         Ok(())
     }
     pub(super) fn text_editor_window(&mut self, ctx: &egui::Context) {
         let Some(mut e) = self.text_editor.draft.take() else {
+            self.drawing.text_document = None;
+            self.drawing.text_canvas = None;
             return;
         };
         let fresh = self.active.is_some_and(|n| {
@@ -187,13 +200,18 @@ impl Drawer {
             ui.horizontal(|ui|{for(v,label)in e.settings.baseline.iter_mut().zip(["Position X ","Baseline Y "]){ui.add(egui::DragValue::new(v).range(-1e6..=1e6).prefix(label));}ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);});
             if e.settings!=old{e.prepared=None;e.image=None;}
             let r=ui.add_enabled(fresh&&e.composition.is_none(),egui::Button::new("Prepare text preview"));self.text_editor.preview=Some(r.rect);preview=r.clicked();
-            if let Some((_,p))=&e.prepared&&(p.missing>0||p.substituted>0){ui.label(format!("Fallback characters: {}; missing glyph boxes: {}. Original Unicode is preserved.",p.substituted,p.missing));}
+            if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
+            if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}
             if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));}
             let r=ui.add_enabled(fresh&&e.composition.is_none()&&e.prepared.is_some(),egui::Button::new("Apply text as one Undo"));self.text_editor.apply=Some(r.rect);apply=r.clicked();let r=ui.button("Cancel text edit");self.text_editor.cancel=Some(r.rect);cancel=r.clicked();
             ui.small("Text field Undo handles local typing/composition. Apply changes the document once. Local system fonts are read without copying them into the package. Emoji uses monochrome outlines.");
         });
         if open && !cancel {
             self.text_editor.draft = Some(e);
+            self.refresh_text_canvas();
+        } else {
+            self.drawing.text_document = None;
+            self.drawing.text_canvas = None;
         }
         if preview && let Err(error) = self.preview_text(ctx) {
             self.status = Some(error);

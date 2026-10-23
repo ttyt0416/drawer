@@ -764,3 +764,6 @@ crates/drawer-app/src/text_editor.rs
 crates/drawer-app/src/text_editor_verify.rs
 crates/drawer-app/src/text_composition.rs
 docs/process/text-layout.md
+
+crates/drawer-app/src/text_canvas.rs
+docs/process/text-ime.md

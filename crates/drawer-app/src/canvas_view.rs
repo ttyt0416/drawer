@@ -323,6 +323,9 @@ impl CanvasView {
         self.cursor_trace.clear();
         self.input_blocked = true;
     }
+    pub(super) fn rendered_document_id(&self) -> Option<u64> {
+        self.image.as_ref().map(|(key, _)| key.0)
+    }
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
@@ -541,6 +544,7 @@ impl CanvasView {
             paint.layer,
             style,
             input_active
+                && paint.drawing.text_document != Some(document.id)
                 && !self.measurement_mode
                 && !self.area_zoom
                 && !ui.input(|i| i.key_down(egui::Key::Space)),
@@ -583,10 +587,12 @@ impl CanvasView {
         }
         paint.drawing.refresh_selection_edit(document);
         paint.drawing.refresh_movement(document);
+        paint.drawing.refresh_text_canvas(document);
         let original_id = document.id;
         let document = paint
             .drawing
-            .vector_erase_preview(document.id)
+            .text_canvas_preview(document)
+            .or_else(|| paint.drawing.vector_erase_preview(document.id))
             .or_else(|| paint.drawing.vector_edit_preview(document.id))
             .or_else(|| paint.drawing.conversion_preview(document.id))
             .or_else(|| paint.drawing.selection_edit_preview(document.id))

@@ -142,22 +142,18 @@ pub struct Layout {
     pub missing: usize,
     pub substituted: usize,
     pub widths: Vec<f64>,
+    pub requested_available: bool,
+    pub fallback_fonts: Vec<Font>,
+    pub missing_characters: Vec<char>,
 }
 struct Glyph {
     font: usize,
+    missing: bool,
     id: ttf_parser::GlyphId,
     x: f64,
     line: usize,
 }
 pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<Layout, String> {
-    if !style.valid()
-        || !(0.1..=4096.).contains(&size)
-        || text.len() > 65536
-        || text.chars().count() > 4096
-        || baseline.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
-    {
-        return Err("Text size0.1–4096, Unicode4096 characters/64KiB, wrap0–32768 and line spacing0.5–8 required".into());
-    }
     let mut fonts = Vec::new();
     for font in [
         style.font,
@@ -172,6 +168,26 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
             fonts.push((font, b));
         }
     }
+    layout_with_fonts(baseline, text, size, style, fonts)
+}
+fn layout_with_fonts(
+    baseline: Point,
+    text: &str,
+    size: f64,
+    style: &Style,
+    fonts: Vec<(Font, Bytes)>,
+) -> Result<Layout, String> {
+    if !style.valid()
+        || !(0.1..=4096.).contains(&size)
+        || text.len() > 65536
+        || text.chars().count() > 4096
+        || baseline.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
+    {
+        return Err("Text size0.1–4096, Unicode4096 characters/64KiB, wrap0–32768 and line spacing0.5–8 required".into());
+    }
+    let requested_available = fonts.iter().any(|(font, _)| *font == style.font);
+    let mut fallback_fonts = Vec::new();
+    let mut missing_characters = Vec::new();
     let faces: Vec<_> = fonts
         .iter()
         .map(|(_, b)| {
@@ -201,19 +217,30 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
         let (i, id) = found.unwrap_or((0, ttf_parser::GlyphId(0)));
         if found.is_none() {
             missing += 1;
+            if missing_characters.len() < 16 && !missing_characters.contains(&c) {
+                missing_characters.push(c);
+            }
         } else if fonts[i].0 != style.font {
             substituted += 1;
+            if !fallback_fonts.contains(&fonts[i].0) {
+                fallback_fonts.push(fonts[i].0);
+            }
         }
-        let face = &faces[i];
-        let advance = f64::from(face.glyph_hor_advance(id).unwrap_or(face.units_per_em()))
-            / f64::from(face.units_per_em())
-            * size;
+        let advance = if found.is_none() {
+            size * 0.7
+        } else {
+            let face = &faces[i];
+            f64::from(face.glyph_hor_advance(id).unwrap_or(face.units_per_em()))
+                / f64::from(face.units_per_em())
+                * size
+        };
         if style.wrap_width > 0. && widths[line] > 0. && widths[line] + advance > style.wrap_width {
             line += 1;
             widths.push(0.);
         }
         glyphs.push(Glyph {
             font: i,
+            missing: found.is_none(),
             id,
             x: widths[line],
             line,
@@ -237,7 +264,11 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
             baseline[0] + glyph.x + shift,
             baseline[1] + glyph.line as f64 * size * style.line_height,
         ];
-        let current = crate::render::glyph_paths(&faces[glyph.font], glyph.id, origin, size);
+        let current = if glyph.missing {
+            missing_box(origin, size)
+        } else {
+            crate::render::glyph_paths(&faces[glyph.font], glyph.id, origin, size)
+        };
         points = points.saturating_add(current.iter().map(Vec::len).sum::<usize>());
         if points > 512 * 1024 {
             return Err(
@@ -252,7 +283,58 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
         missing,
         substituted,
         widths,
+        requested_available,
+        fallback_fonts,
+        missing_characters,
     })
+}
+// Own outline ensures that a font with an empty .notdef glyph cannot hide missing text.
+fn missing_box([x, y]: Point, size: f64) -> Vec<Vec<Point>> {
+    let (left, right, top, bottom) = (x + size * 0.08, x + size * 0.62, y - size * 0.8, y);
+    let t = size * 0.065;
+    vec![
+        vec![[left, top], [right, top], [right, bottom], [left, bottom]],
+        vec![
+            [left + t, top + t],
+            [left + t, bottom - t],
+            [right - t, bottom - t],
+            [right - t, top + t],
+        ],
+    ]
+}
+impl Layout {
+    pub fn notice(&self, requested: Font) -> String {
+        let mut messages = Vec::new();
+        if !self.requested_available {
+            messages.push(format!("Requested font unavailable: {}", requested.label()));
+        }
+        if self.substituted > 0 {
+            messages.push(format!(
+                "Fallback characters: {}; fonts: {}",
+                self.substituted,
+                self.fallback_fonts
+                    .iter()
+                    .map(|f| f.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if self.missing > 0 {
+            messages.push(format!(
+                "Missing glyph boxes: {}; {}",
+                self.missing,
+                self.missing_characters
+                    .iter()
+                    .map(|c| format!("U+{:04X}", *c as u32))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !messages.is_empty() {
+            messages.push("Original Unicode is preserved".into());
+        }
+        messages.join(". ")
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
@@ -288,6 +370,7 @@ pub struct Prepared {
     pub id: u64,
     pub missing: usize,
     pub substituted: usize,
+    pub notice: String,
 }
 pub fn prepare(
     d: &crate::document::Document,
@@ -298,6 +381,7 @@ pub fn prepare(
         return Err("Text snapshot memory limit".into());
     }
     let shape = layout(s.baseline, &s.text, s.size, &s.style)?;
+    let notice = shape.notice(s.style.font);
     let mut state = d.snapshot();
     let object = PageObject::Text {
         baseline: s.baseline,
@@ -329,6 +413,7 @@ pub fn prepare(
                 id,
                 missing: shape.missing,
                 substituted: shape.substituted,
+                notice,
             });
         }
         state.scene.objects[n] = object;
@@ -363,6 +448,7 @@ pub fn prepare(
         id,
         missing: shape.missing,
         substituted: shape.substituted,
+        notice,
     })
 }
 
@@ -385,4 +471,33 @@ pub fn validate_scene(scene: &crate::scene::Scene) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use super::*;
+    #[test]
+    fn unavailable_system_and_no_fallback_glyph_still_get_notice_and_visible_outline() {
+        let style = Style::default();
+        let l = layout_with_fonts(
+            [0., 20.],
+            "한\u{10ffff}",
+            20.,
+            &style,
+            vec![(
+                Font::Emoji,
+                Bytes::Static(epaint_default_fonts::NOTO_EMOJI_REGULAR),
+            )],
+        )
+        .unwrap();
+        assert!(!l.requested_available);
+        assert_eq!(l.missing, 2);
+        assert_eq!(l.paths.len(), 4);
+        assert!(l.notice(style.font).contains("Requested font unavailable"));
+        assert!(l.notice(style.font).contains("U+10FFFF"));
+        let empty = layout_with_fonts([0., 20.], "한", 20., &style, vec![]).unwrap();
+        assert_eq!(empty.missing, 1);
+        assert_eq!(empty.paths.len(), 2);
+        assert!(empty.widths[0] > 0.);
+    }
 }
