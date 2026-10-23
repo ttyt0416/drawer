@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 85;
+const VERSION: u32 = 86;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -220,6 +220,19 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
                 "Editable mesh sources and transform frames require native version81",
             ));
         }
+        if version < 86
+            && document.scene.objects.iter().any(|o| {
+                matches!(
+                    o,
+                    crate::scene::PageObject::Text {
+                        layout: Some(_),
+                        ..
+                    }
+                )
+            })
+        {
+            return Err(invalid("Text layout requires native version86"));
+        }
         if version < 85 && document.scene.last_quick_filter.is_some() {
             return Err(invalid("Filter routing requires native version85"));
         }
@@ -419,6 +432,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
     }
+    crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
     document.mark_saved(path.into());
     Ok(document)
 }
@@ -496,6 +510,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         &document.scene,
     )
     .map_err(invalid)?;
+    crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
     let scene = serde_json::to_vec(&document.scene).map_err(|e| invalid(e.to_string()))?;
     if scene.len() > MAX_SCENE_BYTES {
         return Err(invalid("Page geometry is too large"));

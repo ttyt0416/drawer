@@ -302,6 +302,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     }
     let mut text = make(16, 16)?;
     text.scene.objects.push(crate::scene::PageObject::Text {
+        layout: None,
         baseline: [1.0, 12.0],
         text: "A".into(),
         size_px: 12.0,

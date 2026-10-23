@@ -18,6 +18,7 @@ pub fn mixed() -> Result<crate::document::Document, String> {
         color: [200, 40, 80, 128],
     });
     d.scene.objects.push(crate::scene::PageObject::Text {
+        layout: None,
         baseline: [25., 36.],
         text: "Hi".into(),
         size_px: 10.,

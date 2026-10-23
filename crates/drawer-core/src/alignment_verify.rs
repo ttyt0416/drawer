@@ -349,6 +349,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     )?;
     let samples = [
         PageObject::Text {
+            layout: None,
             baseline: [-10.0, 12.0],
             text: "X".into(),
             size_px: 10.0,

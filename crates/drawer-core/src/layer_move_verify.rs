@@ -60,6 +60,7 @@ pub fn fixture() -> Result<Document, String> {
         color: [255, 30, 50, 255],
     });
     d.scene.objects.push(PageObject::Text {
+        layout: None,
         baseline: [1., 6.],
         text: "Hi".into(),
         size_px: 5.,

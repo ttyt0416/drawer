@@ -756,3 +756,11 @@ crates/drawer-app/src/quick_filters.rs
 crates/drawer-app/src/quick_filters_verify.rs
 crates/drawer-app/src/effect_delete_review.rs
 docs/process/quick-filter-routes.md
+
+crates/drawer-core/src/text_layout.rs
+crates/drawer-core/src/text_layout_verify.rs
+crates/drawer-core/src/text_contour_tree.rs
+crates/drawer-app/src/text_editor.rs
+crates/drawer-app/src/text_editor_verify.rs
+crates/drawer-app/src/text_composition.rs
+docs/process/text-layout.md

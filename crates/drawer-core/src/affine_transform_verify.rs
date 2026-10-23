@@ -260,6 +260,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     )?;
     let mut text = fixture()?;
     text.scene.objects.push(crate::scene::PageObject::Text {
+        layout: None,
         baseline: [1., 6.],
         text: "A".into(),
         size_px: 4.,

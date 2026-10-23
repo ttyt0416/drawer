@@ -46,6 +46,7 @@ pub fn fixture() -> Result<Document, String> {
     d.scene.paper.layers.entry(7).or_default().pattern.source = 1;
     d.scene.paper_background = Some(9);
     d.scene.objects.push(crate::scene::PageObject::Text {
+        layout: None,
         baseline: [0., 7.],
         text: String::new(),
         size_px: 4.,

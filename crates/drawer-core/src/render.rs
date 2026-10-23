@@ -6,6 +6,8 @@ use crate::{
     scene::{PageObject, Point, Rect},
 };
 
+#[path = "text_contour_tree.rs"]
+mod text_contour_tree;
 pub struct Renderer<'a> {
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -15,7 +17,8 @@ pub struct Renderer<'a> {
     fill_graph: Option<crate::paper::Graph>,
     stroke: Option<&'a crate::painting::Stroke>,
     references: Option<&'a crate::eyedropper::References>,
-    text_contours: Vec<Vec<Contour>>,
+    text_contours: Vec<text_contour_tree::Set>,
+    text_error: Option<String>,
     vector_bounds: Vec<Vec<Rect>>,
     order: Vec<crate::render_order::Entry>,
     deferred: Vec<bool>,
@@ -127,6 +130,7 @@ impl<'a> Renderer<'a> {
             .err()
             .map(String::as_str)
             .or_else(|| self.appearance.as_ref().err().map(String::as_str))
+            .or(self.text_error.as_deref())
     }
     fn float_renderer(&self) -> Result<Option<crate::float_render::Renderer<'_>>, String> {
         match &self.float_plan {
@@ -246,11 +250,7 @@ impl<'a> Renderer<'a> {
         match object {
             PageObject::Material(m) => m.pixel(original),
             PageObject::Text { color, .. } => {
-                let winding: i32 = self.text_contours[index]
-                    .iter()
-                    .filter(|path| path.bounds.contains(original))
-                    .map(|path| winding(&path.points, original))
-                    .sum();
+                let winding = self.text_contours[index].winding(original);
                 if winding != 0 { *color } else { [0; 4] }
             }
             PageObject::Line {
@@ -575,6 +575,7 @@ impl<'a> Renderer<'a> {
         stroke: Option<&'a crate::painting::Stroke>,
         caches: bool,
     ) -> Self {
+        let mut text_error = None;
         let text_contours = document
             .scene
             .objects
@@ -584,9 +585,16 @@ impl<'a> Renderer<'a> {
                     baseline,
                     text,
                     size_px,
+                    layout,
                     ..
-                } => glyph_contours(*baseline, text, *size_px),
-                _ => Vec::new(),
+                } => match glyph_contours(*baseline, text, *size_px, layout.as_deref()) {
+                    Ok(paths) => text_contour_tree::Set::new(paths),
+                    Err(error) => {
+                        text_error = Some(error);
+                        text_contour_tree::Set::default()
+                    }
+                },
+                _ => text_contour_tree::Set::default(),
             })
             .collect();
         Self {
@@ -606,6 +614,7 @@ impl<'a> Renderer<'a> {
             fill: None,
             fill_graph: None,
             text_contours,
+            text_error,
             deferred: (0..document.layers.len())
                 .map(|n| {
                     document
@@ -988,7 +997,32 @@ impl ttf_parser::OutlineBuilder for Outline {
     }
     fn close(&mut self) {}
 }
-fn glyph_contours(baseline: Point, text: &str, size: f64) -> Vec<Contour> {
+pub(crate) fn glyph_paths(
+    face: &ttf_parser::Face<'_>,
+    id: ttf_parser::GlyphId,
+    origin: Point,
+    size: f64,
+) -> Vec<Vec<Point>> {
+    let mut outline = Outline {
+        paths: vec![],
+        current: [0.; 2],
+        scale: size / f64::from(face.units_per_em()),
+        origin,
+    };
+    face.outline_glyph(id, &mut outline);
+    outline.paths
+}
+fn glyph_contours(
+    baseline: Point,
+    text: &str,
+    size: f64,
+    layout: Option<&crate::text_layout::Style>,
+) -> Result<Vec<Contour>, String> {
+    if let Some(style) = layout {
+        return Ok(contour_paths(
+            crate::text_layout::layout(baseline, text, size, style)?.paths,
+        ));
+    }
     let face = ttf_parser::Face::parse(epaint_default_fonts::UBUNTU_LIGHT, 0)
         .expect("Embedded font is tested at build time");
     let scale = size / f64::from(face.units_per_em());
@@ -1011,8 +1045,10 @@ fn glyph_contours(baseline: Point, text: &str, size: f64) -> Vec<Contour> {
         outline.origin[0] +=
             f64::from(face.glyph_hor_advance(id).unwrap_or(face.units_per_em())) * scale;
     }
-    outline
-        .paths
+    Ok(contour_paths(outline.paths))
+}
+fn contour_paths(paths: Vec<Vec<Point>>) -> Vec<Contour> {
+    paths
         .into_iter()
         .filter(|path| !path.is_empty())
         .map(|points| {
@@ -1045,6 +1081,7 @@ pub(crate) fn text_pixel_bounds_budget(
         text,
         size_px,
         color,
+        layout,
     }) = doc.scene.objects.get(index)
     else {
         return Err("Choose a text object".into());
@@ -1052,7 +1089,7 @@ pub(crate) fn text_pixel_bounds_budget(
     if color[3] == 0 {
         return Err("Text contains no visible pixels".into());
     }
-    let paths = glyph_contours(*baseline, text, *size_px);
+    let paths = glyph_contours(*baseline, text, *size_px, layout.as_deref())?;
     let points = paths
         .iter()
         .flat_map(|p| &p.points)

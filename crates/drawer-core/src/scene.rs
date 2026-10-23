@@ -84,6 +84,8 @@ impl Affine {
 pub enum PageObject {
     Material(Box<crate::material_layer::Layer>),
     Text {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        layout: Option<Box<crate::text_layout::Style>>,
         baseline: Point,
         text: String,
         size_px: f64,
@@ -111,6 +113,13 @@ impl PageObject {
     pub fn bounds(&self) -> Rect {
         match self {
             Self::Material(m) => m.bounds(),
+            Self::Text {
+                baseline,
+                text,
+                size_px,
+                layout: Some(layout),
+                ..
+            } => layout.bounds(*baseline, text, *size_px),
             Self::Text {
                 baseline,
                 text,
@@ -163,7 +172,18 @@ impl PageObject {
         self.bounds().valid()
             && match self {
                 Self::Material(m) => m.valid(missing),
-                Self::Text { text, size_px, .. } => text.len() <= 65536 && positive(*size_px),
+                Self::Text {
+                    text,
+                    size_px,
+                    layout,
+                    ..
+                } => {
+                    text.len() <= 65536
+                        && positive(*size_px)
+                        && layout.as_ref().is_none_or(|s| {
+                            s.valid() && *size_px <= 4096. && text.chars().count() <= 4096
+                        })
+                }
                 Self::Line { width_px, .. } => positive(*width_px),
                 Self::Tone {
                     period_px,
@@ -461,7 +481,12 @@ impl Scene {
                 .map(|o| {
                     std::mem::size_of_val(o)
                         + match o {
-                            PageObject::Text { text, .. } => text.len(),
+                            PageObject::Text { text, layout, .. } => {
+                                text.len()
+                                    + layout
+                                        .as_ref()
+                                        .map_or(0, |s| std::mem::size_of_val(s.as_ref()))
+                            }
                             PageObject::Material(m) => m.bytes(),
                             _ => 0,
                         }

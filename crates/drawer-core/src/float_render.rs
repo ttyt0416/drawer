@@ -81,6 +81,11 @@ impl<'a> Renderer<'a> {
                 surfaces: Default::default(),
             })),
         };
+        if let PlanRef::Owned(plan) = &renderer.plan
+            && let Some(error) = plan.geometry.error()
+        {
+            return Err(error.into());
+        }
         renderer.build_display_caches()?;
         renderer.build_surface_caches(tick)?;
         Ok(renderer)

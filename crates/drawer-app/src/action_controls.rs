@@ -492,6 +492,7 @@ impl Drawer {
                 "metallic-material" => self.begin_metal_material()?,
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
+                "text-editor" => self.begin_text_editor(ctx)?,
                 "quick-filters" => self.begin_quick_filters(false)?,
                 "pixel-filter-route" => self.begin_quick_filters(true)?,
                 "batch-filters" => self.begin_batch_filters()?,

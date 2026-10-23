@@ -137,6 +137,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
 
     let mut text = make()?;
     text.scene.objects.push(PageObject::Text {
+        layout: None,
         baseline: [8.0, 24.0],
         text: "  I ".into(),
         size_px: 16.0,

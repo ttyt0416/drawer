@@ -646,6 +646,7 @@ mod tests {
         doc.layers[0].pixels[120 * 80 - 1] = [255, 255, 0, 255];
         doc.scene.objects = vec![
             PageObject::Text {
+                layout: None,
                 baseline: [2.0, 38.0],
                 text: "Hi".into(),
                 size_px: 10.0 * 300.0 / 72.0,

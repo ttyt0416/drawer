@@ -244,6 +244,7 @@ impl Drawer {
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
+        self.text_save_guard(index)?;
         self.local_color_save_guard(index)?;
         self.inference_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::Save(
@@ -300,6 +301,7 @@ impl Drawer {
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
+        self.text_save_guard(index)?;
         self.local_color_save_guard(index)?;
         self.inference_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::SaveDialog(
@@ -328,6 +330,7 @@ impl Drawer {
         self.detail_filter_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
+        self.text_save_guard(index)?;
         self.local_color_save_guard(index)?;
         self.inference_save_guard(index)?;
         if self.defer_path(drawing::path_draft::Action::SaveDialog(
@@ -387,6 +390,22 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn request_close(&mut self, tab: usize) {
+        if tab < self.tabs.len()
+            && self
+                .tabs
+                .iter()
+                .filter(|t| t.document_id == self.tabs[tab].document_id)
+                .count()
+                == 1
+            && self
+                .text_editor
+                .draft
+                .as_ref()
+                .is_some_and(|e| e.document == self.tabs[tab].document_id)
+        {
+            self.status = Some("Apply or cancel the text edit before closing its document".into());
+            return;
+        }
         if tab < self.tabs.len()
             && self.defer_path(drawing::path_draft::Action::Close(self.tabs[tab].id))
         {
