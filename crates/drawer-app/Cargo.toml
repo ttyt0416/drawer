@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+drawer-infer = { path = "../drawer-infer" }
 drawer-core = { path = "../drawer-core" }
 eframe = { version = "=0.36.2", default-features = false, features = ["default_fonts", "glow"] }
 rfd = { version = "=0.17.2", default-features = false }

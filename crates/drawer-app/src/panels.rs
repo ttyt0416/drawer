@@ -659,6 +659,7 @@ impl Drawer {
                                         ("Folders / grayscale masks…", "layer-folders"),
                                         ("Color correction layers…", "adjustment-layer"),
                                         ("Color deepen: pixels / layer…", "color-deepen"),
+                                        ("Local model inference…", "local-inference"),
                                         ("Local reference colors…", "local-reference-color"),
                                         ("Local light / shadow colors…", "local-light-shadow"),
                                         ("Levels…", "color-levels"),

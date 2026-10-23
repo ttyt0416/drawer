@@ -707,3 +707,14 @@ crates/drawer-core/src/color_deepen.rs
 crates/drawer-core/src/color_deepen_verify.rs
 crates/drawer-app/src/color_deepen_verify.rs
 docs/process/color-deepen.md
+crates/drawer-core/src/local_inference.rs
+crates/drawer-core/src/local_inference_verify.rs
+crates/drawer-app/src/local_inference.rs
+crates/drawer-app/src/local_inference_verify.rs
+crates/drawer-infer/Cargo.toml
+crates/drawer-infer/src/lib.rs
+crates/drawer-infer/src/process.rs
+crates/drawer-infer/src/fixtures.rs
+crates/drawer-infer/src/verify.rs
+docs/process/local-models.md
+crates/drawer-infer/src/comparison.rs

@@ -24,6 +24,9 @@ pub(super) struct Draft {
 }
 impl Drawer {
     pub(super) fn begin_adjustment(&mut self) -> Result<(), String> {
+        if self.inference_unconfirmed() {
+            return Err("Apply or cancel local inference first".into());
+        }
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let selected = self
             .panels

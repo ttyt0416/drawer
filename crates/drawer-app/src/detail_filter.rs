@@ -106,7 +106,7 @@ impl Drawer {
     }
     pub(super) fn begin_detail_filter(&mut self, operation: Operation) -> Result<(), String> {
         self.finish_stroke();
-        if self.transform_unconfirmed() {
+        if self.transform_unconfirmed() || self.inference_unconfirmed() {
             return Err("Apply or cancel the transform first".into());
         }
         if self.local_color.draft.is_some()

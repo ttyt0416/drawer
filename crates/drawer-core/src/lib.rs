@@ -380,3 +380,7 @@ pub mod color_corrections_verify;
 
 pub mod color_deepen;
 pub mod color_deepen_verify;
+
+pub mod local_inference;
+#[cfg(test)]
+mod local_inference_verify;

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/xtask", "crates/drawer-core", "crates/drawer-app", "crates/drawer-platform"]
+members = ["crates/xtask", "crates/drawer-infer", "crates/drawer-core", "crates/drawer-app", "crates/drawer-platform"]
 resolver = "3"
 [workspace.package]
 version = "0.1.0"

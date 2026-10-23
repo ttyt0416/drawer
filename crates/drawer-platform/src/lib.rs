@@ -176,6 +176,8 @@ mod dial;
 #[cfg(windows)]
 pub use child_job::acquisition_child_job;
 #[cfg(windows)]
+pub use child_job::acquisition_child_job as local_inference_child_job;
+#[cfg(windows)]
 pub use dial::Dial;
 #[cfg(test)]
 mod tests {

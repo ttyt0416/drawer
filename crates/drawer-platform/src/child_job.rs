@@ -1,4 +1,4 @@
-//! OS-owned helper lifetime: closing/exiting the host kills only its acquisition
+//! OS-owned helper lifetime: closing/exiting the host kills only its acquisition/inference
 //! helper job. The WIA service and other applications are never assigned.
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE},

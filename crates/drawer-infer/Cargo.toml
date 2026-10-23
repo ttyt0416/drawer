@@ -1,0 +1,20 @@
+[package]
+name = "drawer-infer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = "=1.0.104"
+drawer-core = { path = "../drawer-core" }
+tract-onnx = "=0.21.15"
+sha2 = "=0.10.9"
+prost = "=0.11.9"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+[lints]
+workspace = true
+
+[target.'cfg(windows)'.dependencies]
+drawer-platform = { path = "../drawer-platform" }

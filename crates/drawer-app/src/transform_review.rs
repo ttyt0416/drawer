@@ -351,6 +351,9 @@ impl Drawer {
         }
     }
     pub(super) fn transform_begin_guard(&mut self, kind: u8) -> Result<(), String> {
+        if self.inference_unconfirmed() {
+            return Err("Apply or cancel local inference first".into());
+        }
         if self.local_color.draft.is_some()
             || self.local_color.working()
             || self.batch_filters.draft.is_some()
