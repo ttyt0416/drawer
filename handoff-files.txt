@@ -822,3 +822,11 @@ crates/drawer-core/src/page_work_verify.rs
 crates/drawer-app/src/page_work.rs
 docs/process/page-work.md
 crates/drawer-platform/src/local_files.rs
+crates/drawer-core/src/book_io.rs
+crates/drawer-core/src/book_pdf.rs
+crates/drawer-core/src/book_epub.rs
+crates/drawer-core/src/book_verify.rs
+crates/drawer-platform/src/book_pdf.rs
+crates/drawer-platform/src/book_print.rs
+crates/drawer-app/src/book_io.rs
+docs/process/book-io.md

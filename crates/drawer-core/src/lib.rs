@@ -455,3 +455,9 @@ pub mod comic_verify;
 pub mod page_work;
 
 pub mod page_work_verify;
+
+pub mod book_epub;
+pub mod book_io;
+pub mod book_pdf;
+
+pub mod book_verify;

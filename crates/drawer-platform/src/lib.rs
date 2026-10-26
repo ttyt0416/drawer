@@ -296,3 +296,10 @@ pub mod gpu_color;
 
 #[allow(unsafe_code)]
 pub mod local_files;
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod book_pdf;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod book_print;

@@ -363,7 +363,7 @@ fn decode_tiff(
     }
     Ok((rgba, orientation, profile, gray))
 }
-fn convert_profile(
+pub(crate) fn convert_profile(
     rgba: &mut image::RgbaImage,
     bytes: &[u8],
     gray: bool,

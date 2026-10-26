@@ -493,6 +493,7 @@ impl Drawer {
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "comic-composition" => self.begin_comics()?,
+                "page-exchange" => self.begin_book_io()?,
                 "page-manager" => self.begin_page_work()?,
                 "text-editor" => self.begin_text_editor(ctx)?,
                 "story-text" => self.begin_story_text()?,

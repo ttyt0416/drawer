@@ -13,6 +13,13 @@ pub fn publish_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
         .encode_wide()
         .chain(Some(0))
         .collect();
+    if source[..source.len() - 1].contains(&0) || destination[..destination.len() - 1].contains(&0)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "File path contains a null character",
+        ));
+    }
     // SAFETY: The null-terminated UTF-16 buffers outlive this synchronous Kernel32
     // call. The ABI matches the SDK; WRITE_THROUGH does not permit replacement.
     let moved = unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), 8) };
@@ -39,6 +46,11 @@ pub fn verify(root: &Path) -> Result<(), String> {
             || std::fs::read(&destination).map_err(|e| e.to_string())? != b"foreign"
         {
             return Err("Native file publication overwrote an existing destination".into());
+        }
+        if publish_no_replace(&source, &dir.join("truncated\0.png")).is_ok()
+            || dir.join("truncated").exists()
+        {
+            return Err("Native publication accepted a null-truncated destination".into());
         }
         std::fs::remove_file(&destination).map_err(|e| e.to_string())?;
         publish_no_replace(&source, &destination).map_err(|e| e.to_string())?;
