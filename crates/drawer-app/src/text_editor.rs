@@ -2,6 +2,8 @@
 mod canvas;
 #[path = "text_composition.rs"]
 mod composition;
+#[path = "font_library_ui.rs"]
+mod font_ui;
 #[path = "text_format_ui.rs"]
 mod format_ui;
 #[path = "text_reading_ui.rs"]
@@ -14,7 +16,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::composition_smoke()?;
     canvas::smoke()?;
     reading_ui::smoke(root)?;
-    format_ui::smoke(root)
+    format_ui::smoke(root)?;
+    font_ui::smoke(root)
 }
 use super::*;
 use drawer_core::text_format as fmt_text;
@@ -30,6 +33,7 @@ pub(super) struct Panel {
     pub add_reading: Option<egui::Rect>,
     pub vertical: Option<egui::Rect>,
     format: format_ui::Panel,
+    fonts: Box<font_ui::Panel>,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -236,7 +240,7 @@ impl Drawer {
                     self.text_editor.text=Some(output.response.rect);
                     let managed=composition::after(ctx,&mut e,composition::Field::Body,&mut output,&mut ime_commit);
                     if !managed && e.settings.text!=old.text {reading_ui::remap_field(&mut e,&old);}
-                    egui::ComboBox::from_id_salt("text-font").selected_text(e.settings.style.font.label()).show_ui(ui,|ui|{for font in Font::ALL{ui.selectable_value(&mut e.settings.style.font,font,font.label());}});
+                    font_ui::picker(ui,"text-font",&mut e.settings.style.font);
                     ui.horizontal(|ui|{
                         ui.add(egui::DragValue::new(&mut e.settings.size).range(0.1..=4096.).prefix("Size px "));
                         ui.add(egui::DragValue::new(&mut e.settings.style.line_height).range(0.5..=8.).prefix("Line spacing × "));

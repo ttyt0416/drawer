@@ -139,13 +139,7 @@ if ui.add_enabled(selected,egui::Button::new("Delete selected preset")).clicked(
     action
 }
 fn font_picker(ui: &mut egui::Ui, id: &str, font: &mut Font) {
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(font.label())
-        .show_ui(ui, |ui| {
-            for f in Font::ALL {
-                ui.selectable_value(font, f, f.label());
-            }
-        });
+    super::font_ui::picker(ui, id, font);
 }
 pub(super) fn normalize(ctx: &egui::Context, e: &mut Draft) -> Option<String> {
     e.settings.style.rich.as_ref()?;

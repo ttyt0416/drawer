@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 207] = [
+pub const EXTRA_COMMANDS: [&str; 208] = [
     "chromatic-aberration",
     "film-effect",
     "pencil-effect",
@@ -18,6 +18,7 @@ pub const EXTRA_COMMANDS: [&str; 207] = [
     "cleanup-dust",
     "quick-filters",
     "text-editor",
+    "font-library",
     "pixel-filter-route",
     "select-dust-transparency",
     "select-dust-white",

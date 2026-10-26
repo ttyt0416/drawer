@@ -275,6 +275,12 @@ impl CanvasView {
             },
         );
     }
+    pub(crate) fn invalidate_font_display(&mut self) {
+        self.image = None;
+        self.screen_image = None;
+        self.preview_sample = None;
+        self.render_error = None;
+    }
     pub(super) fn set_proof(&mut self, settings: &drawer_core::soft_proof::Settings) {
         if self.proof_settings.as_ref() == Some(settings) {
             return;

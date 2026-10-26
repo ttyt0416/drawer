@@ -12,15 +12,23 @@ pub enum Font {
     Ubuntu,
     Hack,
     Emoji,
+    Local(crate::font_library::Reference),
 }
 impl Font {
     pub const ALL: [Self; 4] = [Self::Korean, Self::Ubuntu, Self::Hack, Self::Emoji];
-    pub fn label(self) -> &'static str {
+    pub fn valid(self) -> bool {
         match self {
-            Self::Korean => "Malgun Gothic (local system)",
-            Self::Ubuntu => "Ubuntu Light",
-            Self::Hack => "Hack Regular",
-            Self::Emoji => "Noto Emoji (monochrome)",
+            Self::Local(r) => r.valid(),
+            _ => true,
+        }
+    }
+    pub fn label(self) -> String {
+        match self {
+            Self::Korean => "Malgun Gothic (local system)".into(),
+            Self::Ubuntu => "Ubuntu Light".into(),
+            Self::Hack => "Hack Regular".into(),
+            Self::Emoji => "Noto Emoji (monochrome)".into(),
+            Self::Local(reference) => reference.name().into(),
         }
     }
 }
@@ -60,6 +68,19 @@ impl Default for Style {
     }
 }
 impl Style {
+    pub fn fonts(&self) -> Vec<Font> {
+        let mut fonts = vec![self.font];
+        fonts.extend(Font::ALL);
+        fonts.extend(self.ruby.iter().map(|r| r.font));
+        if let Some(r) = &self.rich {
+            fonts.extend(r.spans.iter().filter_map(|s| s.attr.font));
+            if let Some(m) = &r.mapping {
+                fonts.push(m.base);
+                fonts.extend(m.rules.iter().map(|r| r.font));
+            }
+        }
+        fonts
+    }
     pub fn legacy() -> Self {
         Self {
             font: Font::Ubuntu,
@@ -68,7 +89,8 @@ impl Style {
         }
     }
     pub fn valid(&self) -> bool {
-        (0.5..=8.).contains(&self.line_height)
+        self.fonts().iter().all(|f| f.valid())
+            && (0.5..=8.).contains(&self.line_height)
             && (0. ..=32768.).contains(&self.wrap_width)
             && (-0.5..=4.).contains(&self.tracking)
             && self.ruby.len() <= 64
@@ -175,18 +197,25 @@ impl Style {
 enum Bytes {
     Static(&'static [u8]),
     System(Arc<Vec<u8>>),
+    Indexed(Arc<Vec<u8>>, u32),
 }
 impl Bytes {
+    fn index(&self) -> u32 {
+        match self {
+            Self::Indexed(_, n) => *n,
+            _ => 0,
+        }
+    }
     fn data(&self) -> &[u8] {
         match self {
             Self::Static(b) => b,
-            Self::System(b) => b,
+            Self::System(b) | Self::Indexed(b, _) => b,
         }
     }
 }
 type SystemCache = Option<(u64, std::time::SystemTime, Arc<Vec<u8>>)>;
+static SYSTEM_FONT_CACHE: Mutex<SystemCache> = Mutex::new(None);
 fn system_font() -> Option<Arc<Vec<u8>>> {
-    static CACHE: Mutex<SystemCache> = Mutex::new(None);
     let root = std::path::PathBuf::from(std::env::var_os("WINDIR")?);
     if !root.is_absolute() || root.to_string_lossy().starts_with("\\\\") {
         return None;
@@ -197,7 +226,7 @@ fn system_font() -> Option<Arc<Vec<u8>>> {
         return None;
     }
     let stamp = meta.modified().ok()?;
-    let mut cached = CACHE.lock().ok()?;
+    let mut cached = SYSTEM_FONT_CACHE.lock().ok()?;
     if let Some((len, time, data)) = &*cached
         && *len == meta.len()
         && *time == stamp
@@ -216,6 +245,9 @@ fn bytes(font: Font) -> Option<Bytes> {
         Font::Ubuntu => Bytes::Static(epaint_default_fonts::UBUNTU_LIGHT),
         Font::Hack => Bytes::Static(epaint_default_fonts::HACK_REGULAR),
         Font::Emoji => Bytes::Static(epaint_default_fonts::NOTO_EMOJI_REGULAR),
+        Font::Local(reference) => {
+            Bytes::Indexed(crate::font_library::data(reference)?, reference.index)
+        }
     })
 }
 pub struct Layout {
@@ -242,15 +274,15 @@ struct Glyph {
 }
 pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<Layout, String> {
     let mut fonts = Vec::new();
-    for font in [
-        style.font,
-        Font::Korean,
-        Font::Ubuntu,
-        Font::Hack,
-        Font::Emoji,
-    ] {
+    for font in style.fonts() {
         if !fonts.iter().any(|(f, _)| *f == font)
             && let Some(b) = bytes(font)
+            && fonts
+                .iter()
+                .map(|(_, b): &(Font, Bytes)| b.data().len())
+                .sum::<usize>()
+                + b.data().len()
+                <= 64 * 1024 * 1024
         {
             fonts.push((font, b));
         }
@@ -281,7 +313,7 @@ fn layout_with_fonts(
     let faces: Vec<_> = fonts
         .iter()
         .map(|(_, b)| {
-            ttf_parser::Face::parse(b.data(), 0).map_err(|e| format!("Font parse: {e:?}"))
+            ttf_parser::Face::parse(b.data(), b.index()).map_err(|e| format!("Font parse: {e:?}"))
         })
         .collect::<Result<_, _>>()?;
     let mut glyphs = Vec::new();
@@ -300,10 +332,11 @@ fn layout_with_fonts(
             continue;
         }
         let c = if c == '\t' { ' ' } else { c };
-        let found = faces
-            .iter()
-            .enumerate()
-            .find_map(|(i, f)| f.glyph_index(c).map(|id| (i, id)));
+        let found = faces.iter().enumerate().find_map(|(i, f)| {
+            glyph_supported(f, c)
+                .then(|| f.glyph_index(c).map(|id| (i, id)))
+                .flatten()
+        });
         let (i, id) = found.unwrap_or((0, ttf_parser::GlyphId(0)));
         if found.is_none() {
             missing += 1;
@@ -594,6 +627,44 @@ pub fn validate_scene(scene: &crate::scene::Scene) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub(crate) fn glyph_supported(face: &ttf_parser::Face<'_>, c: char) -> bool {
+    face.glyph_index(c).is_some_and(|id| {
+        c.is_whitespace()
+            || face
+                .glyph_bounding_box(id)
+                .is_some_and(|r| r.x_max > r.x_min && r.y_max > r.y_min)
+    })
+}
+pub fn font_covers(font: Font, text: &str) -> bool {
+    bytes(font).is_some_and(|b| {
+        ttf_parser::Face::parse(b.data(), b.index()).is_ok_and(|f| {
+            text.chars()
+                .all(|c| c.is_whitespace() || glyph_supported(&f, c))
+        })
+    })
+}
+pub fn invalidate_font_data() {
+    if let Ok(mut c) = SYSTEM_FONT_CACHE.lock() {
+        *c = None;
+    }
+    crate::font_library::invalidate_data();
+}
+pub fn font_supports(font: Font, c: char) -> bool {
+    bytes(font).is_some_and(|b| {
+        ttf_parser::Face::parse(b.data(), b.index()).is_ok_and(|f| glyph_supported(&f, c))
+    })
+}
+
+pub fn font_bytes(font: Font) -> Option<(Arc<Vec<u8>>, u32)> {
+    let b = bytes(font)?;
+    let index = b.index();
+    let data = match b {
+        Bytes::Static(b) => Arc::new(b.to_vec()),
+        Bytes::System(b) | Bytes::Indexed(b, _) => b,
+    };
+    Some((data, index))
 }
 
 #[cfg(test)]

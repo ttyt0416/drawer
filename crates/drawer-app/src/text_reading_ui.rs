@@ -166,17 +166,7 @@ pub(super) fn controls(
                                             remove = Some(n);
                                         }
                                     });
-                                    egui::ComboBox::from_id_salt("reading-font")
-                                        .selected_text(r.font.label())
-                                        .show_ui(ui, |ui| {
-                                            for font in Font::ALL {
-                                                ui.selectable_value(
-                                                    &mut r.font,
-                                                    font,
-                                                    font.label(),
-                                                );
-                                            }
-                                        });
+                                    super::font_ui::picker(ui, "reading-font", &mut r.font);
                                     ui.horizontal(|ui| {
                                         ui.add(
                                             egui::DragValue::new(&mut r.ratio)

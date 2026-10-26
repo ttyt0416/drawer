@@ -25,7 +25,9 @@ pub struct Attr {
 }
 impl Attr {
     pub fn valid(self) -> bool {
-        self.ratio.is_none_or(|v| (0.1..=4.).contains(&v)) && self.border.is_none_or(Border::valid)
+        self.font.is_none_or(Font::valid)
+            && self.ratio.is_none_or(|v| (0.1..=4.).contains(&v))
+            && self.border.is_none_or(Border::valid)
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -78,7 +80,8 @@ pub struct Rule {
 }
 impl Rule {
     pub fn valid(&self) -> bool {
-        (0.1..=4.).contains(&self.ratio)
+        self.font.valid()
+            && (0.1..=4.).contains(&self.ratio)
             && (self.group != Group::Custom
                 || (self.from <= self.through && self.through <= 0x10ffff))
     }
@@ -124,7 +127,7 @@ impl Default for Mapping {
 }
 impl Mapping {
     pub fn valid(&self) -> bool {
-        self.rules.len() <= 16 && self.rules.iter().all(Rule::valid)
+        self.base.valid() && self.rules.len() <= 16 && self.rules.iter().all(Rule::valid)
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

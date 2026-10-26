@@ -150,8 +150,8 @@ impl<'a> Engine<'a> {
         self.fonts
             .iter()
             .position(|(f, _)| *f == requested)
-            .filter(|i| self.faces[*i].glyph_index(c).is_some())
-            .or_else(|| self.faces.iter().position(|f| f.glyph_index(c).is_some()))
+            .filter(|i| glyph_supported(&self.faces[*i], c))
+            .or_else(|| self.faces.iter().position(|f| glyph_supported(f, c)))
     }
     fn outline(&mut self, paths: &[Vec<Point>]) -> Result<(), String> {
         self.points = self
@@ -226,7 +226,7 @@ impl<'a> Engine<'a> {
                     self.fallback_fonts.push(self.fonts[f].0);
                 }
             }
-            let face = rustybuzz::Face::from_slice(self.fonts[f].1.data(), 0)
+            let face = rustybuzz::Face::from_slice(self.fonts[f].1.data(), self.fonts[f].1.index())
                 .ok_or("Shaping font parse failed")?;
             if ligatures
                 && !face.tables().gsub.is_some_and(|table| {
@@ -384,7 +384,7 @@ pub(super) fn layout(
     let faces = fonts
         .iter()
         .map(|(_, b)| {
-            ttf_parser::Face::parse(b.data(), 0).map_err(|e| format!("Font parse: {e:?}"))
+            ttf_parser::Face::parse(b.data(), b.index()).map_err(|e| format!("Font parse: {e:?}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut engine = Engine {

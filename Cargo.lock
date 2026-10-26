@@ -782,6 +782,7 @@ dependencies = [
  "rustybuzz",
  "serde",
  "serde_json",
+ "sha2",
  "svgtypes",
  "tiff",
  "ttf-parser",

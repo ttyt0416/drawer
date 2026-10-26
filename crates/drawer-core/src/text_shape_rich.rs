@@ -26,11 +26,9 @@ impl Engine<'_> {
             let attr = rich.resolve(g, scalar, font);
             scalar += g.chars().count();
             let covers = |i: usize| {
-                g.chars().filter(|c| !ignored(*c)).all(|c| {
-                    self.faces[i]
-                        .glyph_index(if c == '\t' { ' ' } else { c })
-                        .is_some()
-                })
+                g.chars()
+                    .filter(|c| !ignored(*c))
+                    .all(|c| glyph_supported(&self.faces[i], if c == '\t' { ' ' } else { c }))
             };
             let requested = attr.font.unwrap_or(font);
             let face = self
@@ -101,7 +99,7 @@ impl Engine<'_> {
                     self.fallback_fonts.push(self.fonts[f].0);
                 }
             }
-            let face = rustybuzz::Face::from_slice(self.fonts[f].1.data(), 0)
+            let face = rustybuzz::Face::from_slice(self.fonts[f].1.data(), self.fonts[f].1.index())
                 .ok_or("Shaping font parse failed")?;
             if style.ligatures
                 && !face.tables().gsub.is_some_and(|t| {
