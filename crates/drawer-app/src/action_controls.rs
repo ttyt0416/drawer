@@ -493,6 +493,9 @@ impl Drawer {
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "text-editor" => self.begin_text_editor(ctx)?,
+                "story-text" => self.begin_story_text()?,
+                "font-files" => self.begin_font_files()?,
+                "text-output-review" => self.begin_text_output_review(),
                 "text-tool" => self.toggle_text_tool(),
                 "text-tool-settings" => self.begin_text_tool_settings(),
                 "text-layout-convert" => self.begin_text_conversion()?,
@@ -742,12 +745,16 @@ impl Drawer {
                     }
                 }
                 "undo" => {
-                    if let Some(n) = self.active {
+                    if let Some(n) = self.active
+                        && !self.story_text_history(false)?
+                    {
                         self.documents[n].undo();
                     }
                 }
                 "redo" => {
-                    if let Some(n) = self.active {
+                    if let Some(n) = self.active
+                        && !self.story_text_history(true)?
+                    {
                         self.documents[n].redo();
                     }
                 }

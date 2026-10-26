@@ -708,6 +708,16 @@ pub(super) fn layout(
         for (slot, index) in order.into_iter().enumerate() {
             let (g, _, _) = &mut current[index];
             let along = cursor + offset + gap * slot as f64;
+            if let Some(e) = style.effects {
+                crate::text_path::decorate(
+                    &mut g.paths,
+                    &mut g.paint,
+                    g.advance,
+                    size,
+                    style.flow,
+                    e,
+                );
+            }
             cursor += (g.advance + size * tracking).max(size * 0.05);
             let cross = line as f64
                 * size
@@ -742,6 +752,11 @@ pub(super) fn layout(
                         p[1] += along + baseline[1] - size * 0.8;
                     }
                 }
+                if let Some(circle) = style.circle {
+                    for p in &mut bg {
+                        *p = circle.map(*p, baseline, along, g.advance, slot, count);
+                    }
+                }
                 backgrounds.push(bg);
             }
             translate(&mut g.paths, style.flow, along, cross);
@@ -754,6 +769,11 @@ pub(super) fn layout(
                         0.
                     };
             }
+            if let Some(circle) = style.circle {
+                for p in g.paths.iter_mut().flatten() {
+                    *p = circle.map(*p, baseline, along, g.advance, slot, count);
+                }
+            }
             paint.extend(g.paint.iter().cloned().map(|mut p| {
                 p.start += paths.len();
                 p.end += paths.len();
@@ -761,6 +781,18 @@ pub(super) fn layout(
             }));
             paths.append(&mut g.paths);
         }
+    }
+    if let Some(circle) = style.circle
+        && (box_width > std::f64::consts::TAU * circle.radius
+            || (circle.equal
+                && placements
+                    .iter()
+                    .map(|(g, _, _)| g.advance)
+                    .fold(0., f64::max)
+                    * placements.len() as f64
+                    > std::f64::consts::TAU * circle.radius))
+    {
+        engine.feature_unavailable.push("Circular text may overlap: increase the radius or change spacing; Unicode is not clipped.".into());
     }
     Ok(Layout {
         paths,

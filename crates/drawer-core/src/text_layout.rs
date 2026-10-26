@@ -28,7 +28,15 @@ impl Font {
             Self::Ubuntu => "Ubuntu Light".into(),
             Self::Hack => "Hack Regular".into(),
             Self::Emoji => "Noto Emoji (monochrome)".into(),
-            Self::Local(reference) => reference.name().into(),
+            Self::Local(reference) => format!(
+                "{} [{:02x}{:02x}{:02x}{:02x}/{}]",
+                reference.name(),
+                reference.id[0],
+                reference.id[1],
+                reference.id[2],
+                reference.id[3],
+                reference.index
+            ),
         }
     }
 }
@@ -42,6 +50,8 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Style {
+    pub circle: Option<crate::text_path::Circle>,
+    pub effects: Option<crate::text_path::Effects>,
     /// 0: original embedded layout, 1: preserved editable layout, 2: current grapheme layout.
     pub typeset: Option<Box<crate::text_typeset::Options>>,
     pub generation: u8,
@@ -59,6 +69,8 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
+            circle: None,
+            effects: None,
             typeset: None,
             generation: 1,
             frame: Default::default(),
@@ -75,6 +87,26 @@ impl Default for Style {
     }
 }
 impl Style {
+    pub fn applied_fonts(&self, text: &str) -> Vec<Font> {
+        use unicode_segmentation::UnicodeSegmentation;
+        let mut fonts = vec![self.font];
+        let mut scalar = 0;
+        if let Some(r) = &self.rich {
+            for g in text.graphemes(true) {
+                let f = r.resolve(g, scalar, self.font).font.unwrap_or(self.font);
+                if !fonts.contains(&f) {
+                    fonts.push(f);
+                }
+                scalar += g.chars().count();
+            }
+        }
+        for r in &self.ruby {
+            if !r.text.is_empty() && !fonts.contains(&r.font) {
+                fonts.push(r.font);
+            }
+        }
+        fonts
+    }
     pub fn fonts(&self) -> Vec<Font> {
         let mut fonts = vec![self.font];
         fonts.extend(Font::ALL);
@@ -97,7 +129,11 @@ impl Style {
         }
     }
     pub fn valid(&self) -> bool {
-        self.generation <= 2
+        self.circle.is_none_or(crate::text_path::Circle::valid)
+            && self.effects.is_none_or(crate::text_path::Effects::valid)
+            && ((self.circle.is_none() && self.effects.is_none())
+                || (self.generation == 2 && self.rich.is_some()))
+            && self.generation <= 2
             && (self.typeset.is_none() || (self.generation == 2 && self.rich.is_some()))
             && self.frame.valid()
             && (self.generation != 0
@@ -115,7 +151,9 @@ impl Style {
             && self.ruby.iter().all(Ruby::valid)
     }
     pub fn extended(&self) -> bool {
-        self.typeset.is_some()
+        self.circle.is_some()
+            || self.effects.is_some()
+            || self.typeset.is_some()
             || self.flow != Flow::Horizontal
             || self.tracking != 0.
             || self.ligatures
@@ -337,6 +375,13 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
             missing_characters: vec![],
             ligature_unavailable: vec![],
         }
+    } else if style.circle.is_some() {
+        let (first, transient) = crate::text_path::transient(text, style);
+        let mut shape = layout_source(baseline, &first, size, &transient)?;
+        shape
+            .feature_unavailable
+            .extend(crate::text_path::hidden(text, style));
+        shape
     } else {
         layout_source(baseline, text, size, style)?
     };

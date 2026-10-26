@@ -795,3 +795,12 @@ crates/drawer-app/src/text_typeset_ui.rs
 crates/drawer-app/src/text_typeset_ui_verify.rs
 crates/drawer-app/src/text_tool_input.rs
 docs/process/text-typeset.md
+crates/drawer-core/src/owned_fonts.rs
+crates/drawer-core/src/text_path.rs
+crates/drawer-core/src/story_text.rs
+crates/drawer-core/src/text_extensions_verify.rs
+crates/drawer-app/src/text_path_ui.rs
+crates/drawer-app/src/text_path_ui_verify.rs
+crates/drawer-app/src/story_text_ui.rs
+crates/drawer-app/src/story_text_ui_verify.rs
+docs/process/text-extensions.md

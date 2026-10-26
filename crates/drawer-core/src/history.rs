@@ -6,6 +6,7 @@ pub(crate) struct PixelChange {
     pub before: [u8; 4],
     pub after: [u8; 4],
 }
+#[derive(Clone)]
 enum EditKind {
     Multi {
         layers: Vec<(usize, Vec<PixelChange>)>,
@@ -31,6 +32,7 @@ enum EditKind {
         after: Box<crate::scene::Scene>,
     },
 }
+#[derive(Clone)]
 struct Edit {
     group: Option<u64>,
     kind: EditKind,
@@ -65,7 +67,7 @@ impl Edit {
         }
     }
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct History {
     undo: Vec<Edit>,
     redo: Vec<Edit>,
@@ -389,6 +391,17 @@ impl Document {
         }
         self.history_changed();
         Ok(true)
+    }
+    pub(crate) fn history_token(&self) -> u64 {
+        self.history.current
+    }
+    pub fn history_group(&self, redo: bool) -> Option<u64> {
+        if redo {
+            self.history.redo.last()
+        } else {
+            self.history.undo.last()
+        }
+        .and_then(|e| e.group)
     }
     pub fn history_counts(&self) -> (usize, usize) {
         (self.history.undo.len(), self.history.redo.len())

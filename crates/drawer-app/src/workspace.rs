@@ -357,6 +357,7 @@ impl Drawer {
             .map_err(|e| e.to_string())
     }
     pub(super) fn export_target(&self, index: usize, path: &Path) -> Result<PathBuf, String> {
+        self.text_output_guard(index)?;
         let target = if path.exists() {
             path.canonicalize()
         } else {

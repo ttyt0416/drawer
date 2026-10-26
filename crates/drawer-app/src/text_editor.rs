@@ -6,8 +6,12 @@ mod composition;
 mod font_ui;
 #[path = "text_format_ui.rs"]
 mod format_ui;
+#[path = "text_path_ui.rs"]
+mod path_ui;
 #[path = "text_reading_ui.rs"]
 mod reading_ui;
+#[path = "story_text_ui.rs"]
+mod story_ui;
 #[path = "text_typeset_ui.rs"]
 mod typeset_ui;
 #[path = "text_editor_verify.rs"]
@@ -23,7 +27,9 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     format_ui::smoke(root)?;
     font_ui::smoke(root)?;
     version_ui::smoke(root)?;
-    typeset_ui::smoke(root)
+    typeset_ui::smoke(root)?;
+    path_ui::smoke(root)?;
+    story_ui::smoke(root)
 }
 use super::*;
 use drawer_core::text_format as fmt_text;
@@ -42,6 +48,8 @@ pub(super) struct Panel {
     fonts: Box<font_ui::Panel>,
     version: Box<version_ui::Panel>,
     typeset: Box<typeset_ui::Panel>,
+    paths: Box<path_ui::Panel>,
+    story: Box<story_ui::Panel>,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -217,6 +225,7 @@ impl Drawer {
         {
             return Err("Prepare a fresh text preview first".into());
         }
+        let used_fonts = e.settings.style.applied_fonts(&e.settings.text);
         let (_, p) = e.prepared.take().unwrap();
         self.documents[n].commit_state(p.state)?;
         self.panels.targets.insert(
@@ -226,7 +235,10 @@ impl Drawer {
         self.text_editor.draft = None;
         self.drawing.text_document = None;
         self.drawing.text_canvas = None;
-        self.status = None;
+        self.status = self
+            .note_recent_fonts(&used_fonts)
+            .err()
+            .map(|e| format!("Text applied; recent font setting could not be saved: {e}"));
         Ok(())
     }
     pub(super) fn text_editor_window(&mut self, ctx: &egui::Context) {
@@ -272,7 +284,7 @@ impl Drawer {
                         ui.add(egui::DragValue::new(&mut e.settings.style.line_height).range(0.5..=8.).prefix("Line spacing × "));
                     });
                     ui.horizontal(|ui|{for(value,label)in [(Align::Left,"Left"),(Align::Center,"Center"),(Align::Right,"Right")]{ui.radio_value(&mut e.settings.style.align,value,label);}});
-                    ui.add(egui::DragValue::new(&mut e.settings.style.wrap_width).range(0. ..=32768.).prefix("Wrap length px (0 = none) "));
+                    ui.add_enabled(e.settings.style.circle.is_none(),egui::DragValue::new(&mut e.settings.style.wrap_width).range(0. ..=32768.).prefix("Wrap length px (0 = none) "));
                     ui.horizontal(|ui|{
                         for(v,label)in e.settings.baseline.iter_mut().zip(["Position X ","Baseline Y "]){ui.add(egui::DragValue::new(v).range(-1e6..=1e6).prefix(label));}
                         ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);
@@ -280,6 +292,7 @@ impl Drawer {
                     reading_ui::controls(ui,&mut e,&mut self.text_editor,&mut ime_commit);
                     preset_action=format_ui::controls(ui,&mut e,&mut self.text_editor.format,&self.workspaces.store.current.text_mix,formatting_blocked);
                     typeset_ui::controls(ui,&mut e,&mut self.text_editor.typeset,formatting_blocked);
+                    path_ui::controls(ui,&mut e,&mut self.text_editor.paths,formatting_blocked);
                     if e.settings!=old{e.prepared=None;e.image=None;}
                     if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
                     if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}

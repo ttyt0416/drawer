@@ -1,4 +1,6 @@
-//! Local read-only font discovery. Documents keep content identity and a bounded display name.
+#[path = "owned_fonts.rs"]
+pub mod owned;
+// Local font discovery. Documents keep content identity and a bounded display name.
 use crate::text_layout::Font;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use sha2::{Digest, Sha256};
@@ -92,8 +94,17 @@ struct Cached {
 }
 static RECORDS: Mutex<Vec<Record>> = Mutex::new(Vec::new());
 static CACHE: Mutex<Vec<Cached>> = Mutex::new(Vec::new());
-fn local(path: &Path) -> bool {
-    path.is_absolute() && !path.to_string_lossy().starts_with("\\\\")
+pub fn local(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+        path.is_absolute()
+            && matches!(path.components().next(),Some(Component::Prefix(p)) if matches!(p.kind(),Prefix::Disk(_)|Prefix::VerbatimDisk(_)))
+    }
+    #[cfg(not(windows))]
+    {
+        path.is_absolute() && !path.to_string_lossy().starts_with("\\\\")
+    }
 }
 fn prefix(bytes: &[u8]) -> Sha256 {
     let mut hash = Sha256::new();
@@ -351,6 +362,8 @@ pub struct Settings {
     pub active: Option<u64>,
     pub lists: Vec<List>,
     pub favorites: Vec<Font>,
+    #[serde(default)]
+    pub recent: Vec<Font>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -359,6 +372,7 @@ impl Default for Settings {
             active: None,
             lists: vec![],
             favorites: vec![],
+            recent: vec![],
         }
     }
 }
@@ -366,11 +380,22 @@ fn name_valid(n: &str) -> bool {
     !n.trim().is_empty() && n.chars().count() <= 64 && !n.chars().any(char::is_control)
 }
 impl Settings {
+    pub fn used(&mut self, font: Font) {
+        self.recent.retain(|f| *f != font);
+        self.recent.insert(0, font);
+        self.recent.truncate(32);
+    }
     pub fn is_default(&self) -> bool {
         self == &Self::default()
     }
     pub fn valid(&self) -> bool {
-        self.next_id > 0
+        self.recent.len() <= 32
+            && self
+                .recent
+                .iter()
+                .enumerate()
+                .all(|(i, f)| f.valid() && !self.recent[..i].contains(f))
+            && self.next_id > 0
             && self.lists.len() <= 32
             && self.favorites.len() <= 1024
             && self.favorites.iter().all(|f| f.valid())

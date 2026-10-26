@@ -431,3 +431,9 @@ pub mod text_version_verify;
 pub mod text_typeset;
 
 pub mod text_typeset_verify;
+
+pub mod text_path;
+
+pub mod story_text;
+
+pub mod text_extensions_verify;

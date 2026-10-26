@@ -79,7 +79,20 @@ fn choices(ctx: &egui::Context) -> (Vec<Font>, Display) {
                 .active
                 .and_then(|id| s.settings.lists.iter().find(|l| l.id == id))
                 .map_or(Display::Ui, |l| l.display);
-            (s.settings.choices(&s.catalog), display)
+            let values = s.settings.choices(&s.catalog);
+            let mut recent: Vec<_> = s
+                .settings
+                .recent
+                .iter()
+                .copied()
+                .filter(|f| values.contains(f))
+                .collect();
+            recent.extend(
+                values
+                    .into_iter()
+                    .filter(|f| !s.settings.recent.contains(f)),
+            );
+            (recent, display)
         },
     )
 }
@@ -196,6 +209,17 @@ impl Drawer {
             });
         }
     }
+    pub(super) fn note_recent_fonts(&mut self, fonts: &[Font]) -> Result<(), String> {
+        let old = self.workspaces.store.current.font_lists.clone();
+        for font in fonts.iter().rev() {
+            self.workspaces.store.current.font_lists.used(*font);
+        }
+        if let Err(error) = self.persist_workspace() {
+            self.workspaces.store.current.font_lists = old;
+            return Err(error);
+        }
+        Ok(())
+    }
     pub(crate) fn begin_font_library(&mut self, ctx: &egui::Context) {
         let p = &mut self.text_editor.fonts;
         p.open = true;
@@ -205,7 +229,7 @@ impl Drawer {
         self.refresh_font_catalog();
         self.publish_fonts(ctx);
     }
-    fn refresh_font_catalog(&mut self) {
+    pub(super) fn refresh_font_catalog(&mut self) {
         self.text_editor.fonts.loaded = true;
         let roots = fonts::default_roots(self.storage.as_ref().map(|s| s.root()));
         let (cancel, receiver) = {
@@ -226,6 +250,7 @@ impl Drawer {
         ctx: &egui::Context,
         mut next: Settings,
     ) -> Result<(), String> {
+        next.recent = self.workspaces.store.current.font_lists.recent.clone();
         if !next.valid() {
             return Err("Invalid font-list settings".into());
         }

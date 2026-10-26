@@ -156,6 +156,7 @@ impl RasterLayer {
             .unwrap_or([0; 4])
     }
 }
+#[derive(Clone)]
 pub struct Document {
     pub id: u64,
     pub color: crate::color_storage::Config,

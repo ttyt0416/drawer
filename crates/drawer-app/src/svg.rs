@@ -159,6 +159,9 @@ impl Drawer {
         Ok(())
     }
     pub(crate) fn begin_svg_export(&mut self) -> Result<(), String> {
+        if let Some(n) = self.active {
+            self.text_output_guard(n)?;
+        }
         self.begin_svg()?;
         self.generate_svg()
     }

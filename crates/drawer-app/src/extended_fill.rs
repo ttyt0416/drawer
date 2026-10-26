@@ -67,6 +67,9 @@ impl Drawer {
         Ok(())
     }
     fn apply_animation_output(&mut self) -> Result<(), String> {
+        if let Some(n) = self.active {
+            self.text_output_guard(n)?;
+        }
         let e = self
             .extended_fill
             .draft
