@@ -687,6 +687,79 @@ pub fn metadata() -> Result<(), String> {
         "Short viewport not clipped",
     )
 }
+pub fn metadata_output() -> Result<(), String> {
+    let mut d = page();
+    d.dpi = 254.;
+    let mut info = PageInfo {
+        title: "Local work".into(),
+        author: "Author".into(),
+        trim_mm: [2.8, 6.0],
+        bleed_mm: 0.2,
+        safe_mm: 0.1,
+        number: 3,
+        total: 5,
+        include_guides: true,
+        ..Default::default()
+    };
+    info.guides(&d)?;
+    let mut state = d.snapshot();
+    state.scene.comics.page = info.clone();
+    d.commit_state(state)?;
+    let before = d.snapshot();
+    let guide = Renderer::for_export(&d)?;
+    check(
+        guide.pixel([2.5, 10.5])[3] > 0,
+        "Integer-aligned trim guide disappeared from output",
+    )?;
+    check(
+        Renderer::new(&d).pixel([2.5, 10.5]) == [0; 4],
+        "Output guide changed document pixels",
+    )?;
+    let (_, _, pixels) = guide.output(508., 1 << 20)?;
+    check(
+        pixels.iter().any(|p| p[3] > 0),
+        "Guide missing from resized output",
+    )?;
+    drop(guide);
+    info.include_guides = false;
+    info.include_number = true;
+    d.scene.comics.page = info.clone();
+    let number = Renderer::for_export(&d)?;
+    check(
+        (0..64).any(|y| (0..32).any(|x| number.pixel([x as f64 + 0.5, y as f64 + 0.5])[3] > 0)),
+        "Selected page number absent from output",
+    )?;
+    drop(number);
+    check(
+        Renderer::new(&d).pixel([16.5, 58.5]) == [0; 4],
+        "Page number changed view pixels",
+    )?;
+    let saved =
+        serde_json::from_slice::<crate::scene::Scene>(&serde_json::to_vec(&d.scene).unwrap())
+            .map_err(|e| e.to_string())?;
+    check(
+        saved.comics.page == info,
+        "Page metadata/output flags serialization",
+    )?;
+    info.include_number = false;
+    d.scene.comics.page = info;
+    let plain = Renderer::for_export(&d)?;
+    check(
+        (0..64).all(|y| (0..32).all(|x| plain.pixel([x as f64 + 0.5, y as f64 + 0.5]) == [0; 4])),
+        "Output exclusion flags ignored",
+    )?;
+    drop(plain);
+    d.scene.comics.page = before.scene.comics.page.clone();
+    check(
+        d.snapshot() == before,
+        "Metadata output mutated the document",
+    )?;
+    d.undo();
+    check(
+        d.scene.comics.page == PageInfo::default(),
+        "Page information not one Undo",
+    )
+}
 pub fn files(root: &std::path::Path) -> Result<(), String> {
     let root = root.join("comic-fixture");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
@@ -805,6 +878,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     rich_frame_bands()?;
     dialogue()?;
     metadata()?;
+    metadata_output()?;
     files(root)
 }
 #[cfg(test)]
@@ -845,6 +919,10 @@ mod tests {
     #[test]
     fn page_metadata_facing_sides_and_viewport() {
         metadata().unwrap();
+    }
+    #[test]
+    fn page_trim_guides_numbers_output_exclusion_dpi_and_document_undo() {
+        metadata_output().unwrap();
     }
     #[test]
     fn comic_native_and_exact_strip_output_collision_and_cancel() {
