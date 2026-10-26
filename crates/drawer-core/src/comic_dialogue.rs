@@ -125,6 +125,15 @@ pub fn insert(
         settings.text.push_str(text);
     } else {
         settings.text = text.into();
+        let visible = [
+            (d.width as f64 * 0.1).max(0.5),
+            ((settings.size + 8.).min(d.height as f64 * 0.8)).max(0.5),
+        ];
+        settings.baseline = settings
+            .style
+            .frame
+            .inverse()
+            .map(d.scene.transform.inverse().map(visible));
     }
     settings.style.remap_text(&prior_text, &settings.text);
     crate::text_layout::prepare(
@@ -136,4 +145,9 @@ pub fn insert(
         },
         &settings,
     )
+}
+
+/// One row at a time bounds the UI fingerprint allocation to a single text settings pair.
+pub fn row_bytes(row: &Row) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(&(&row.before, &row.after)).map_err(|e| e.to_string())
 }
