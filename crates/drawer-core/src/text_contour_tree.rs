@@ -32,6 +32,56 @@ impl Set {
             self.at(0, p)
         }
     }
+    pub fn bounds(&self) -> Option<Rect> {
+        self.nodes.first().map(|n| n.bounds)
+    }
+    pub fn candidates(&self, p: Point) -> Vec<usize> {
+        let mut result = vec![];
+        if !self.nodes.is_empty() {
+            self.visit(0, p, 0., &mut |i, _| result.push(i));
+        }
+        result
+    }
+    pub fn near(&self, p: Point, radius: f64) -> bool {
+        let mut hit = false;
+        if radius > 0. && !self.nodes.is_empty() {
+            self.visit(0, p, radius, &mut |_, path| {
+                if !hit && !path.points.is_empty() {
+                    let mut previous = path.points[path.points.len() - 1];
+                    for next in &path.points {
+                        if super::distance(p, previous, *next) <= radius {
+                            hit = true;
+                            break;
+                        }
+                        previous = *next;
+                    }
+                }
+            });
+        }
+        hit
+    }
+    fn visit(&self, n: usize, p: Point, radius: f64, f: &mut impl FnMut(usize, &Contour)) {
+        let contains = |b: Rect| {
+            p[0] >= b.min[0] - radius
+                && p[0] <= b.max[0] + radius
+                && p[1] >= b.min[1] - radius
+                && p[1] <= b.max[1] + radius
+        };
+        let node = &self.nodes[n];
+        if !contains(node.bounds) {
+            return;
+        }
+        if let Some([a, b]) = node.children {
+            self.visit(a, p, radius, f);
+            self.visit(b, p, radius, f);
+        } else {
+            for i in &self.order[node.start..node.end] {
+                if contains(self.paths[*i].bounds) {
+                    f(*i, &self.paths[*i]);
+                }
+            }
+        }
+    }
     fn at(&self, n: usize, p: Point) -> i32 {
         let node = &self.nodes[n];
         if !node.bounds.contains(p) {

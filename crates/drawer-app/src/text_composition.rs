@@ -9,6 +9,7 @@ pub(super) struct Composition {
     field: Field,
     value: String,
     ruby: Vec<core::Ruby>,
+    rich: Option<Box<fmt_text::Rich>>,
     state: egui::text_edit::TextEditState,
     undo: Undo,
 }
@@ -37,6 +38,7 @@ fn restore(ctx: &egui::Context, e: &mut Draft, mut c: Composition) {
         Field::Body => {
             e.settings.text = c.value;
             e.settings.style.ruby = c.ruby;
+            e.settings.style.rich = c.rich;
         }
         Field::Reading(n) => {
             if let Some(r) = e.settings.style.ruby.get_mut(n) {
@@ -81,6 +83,9 @@ fn commit(c: &mut Composition, text: &str) {
     c.value.replace_range(a..b, text);
     if c.field == Field::Body {
         core::remap_ruby(&old, &c.value, &mut c.ruby);
+        if let Some(r) = &mut c.rich {
+            r.remap(&old, &c.value);
+        }
     }
     c.state
         .cursor
@@ -159,7 +164,12 @@ pub(super) fn before(ctx: &egui::Context, e: &mut Draft) -> (Option<Change>, boo
         return (None, false);
     }
     if e.composition.is_none() && field == Field::Body {
-        reading_ui::remember(e, e.settings.text.clone(), e.settings.style.ruby.clone());
+        reading_ui::remember(
+            e,
+            e.settings.text.clone(),
+            e.settings.style.ruby.clone(),
+            e.settings.style.rich.clone(),
+        );
     }
     let mut active = e.composition.is_some();
     let mut base = e.composition.take().map(|c| *c).unwrap_or_else(|| {
@@ -169,6 +179,11 @@ pub(super) fn before(ctx: &egui::Context, e: &mut Draft) -> (Option<Change>, boo
         Composition {
             field,
             value: value(e, field).cloned().unwrap_or_default(),
+            rich: if field == Field::Body {
+                e.settings.style.rich.clone()
+            } else {
+                None
+            },
             ruby: if field == Field::Body {
                 e.settings.style.ruby.clone()
             } else {
@@ -207,7 +222,8 @@ pub(super) fn after(
         if active {
             if field == Field::Body {
                 e.settings.style.ruby = base.ruby.clone();
-                core::remap_ruby(&base.value, &e.settings.text, &mut e.settings.style.ruby);
+                e.settings.style.rich = base.rich.clone();
+                e.settings.style.remap_text(&base.value, &e.settings.text);
             }
             output.state.set_undoer(base.undo.clone());
             output.state.clone().store(ctx, field_id(e, field));

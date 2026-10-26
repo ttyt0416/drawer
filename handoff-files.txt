@@ -772,3 +772,10 @@ crates/drawer-app/src/text_reading_ui.rs
 crates/drawer-core/src/text_reading_verify.rs
 docs/process/text-reading.md
 crates/drawer-app/src/text_reading_ui_verify.rs
+crates/drawer-core/src/text_format.rs
+crates/drawer-core/src/text_format_verify.rs
+crates/drawer-core/src/text_shape_rich.rs
+crates/drawer-core/src/text_paint.rs
+crates/drawer-app/src/text_format_ui.rs
+crates/drawer-app/src/text_format_ui_verify.rs
+docs/process/text-format.md

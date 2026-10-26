@@ -2,6 +2,8 @@
 mod canvas;
 #[path = "text_composition.rs"]
 mod composition;
+#[path = "text_format_ui.rs"]
+mod format_ui;
 #[path = "text_reading_ui.rs"]
 mod reading_ui;
 #[path = "text_editor_verify.rs"]
@@ -11,9 +13,11 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::smoke(root)?;
     verify::composition_smoke()?;
     canvas::smoke()?;
-    reading_ui::smoke(root)
+    reading_ui::smoke(root)?;
+    format_ui::smoke(root)
 }
 use super::*;
+use drawer_core::text_format as fmt_text;
 use drawer_core::text_layout::{self as core, Align, Font, Settings, Style};
 #[derive(Default)]
 pub(super) struct Panel {
@@ -25,6 +29,7 @@ pub(super) struct Panel {
     pub reading_text: Option<egui::Rect>,
     pub add_reading: Option<egui::Rect>,
     pub vertical: Option<egui::Rect>,
+    format: format_ui::Panel,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -37,7 +42,13 @@ pub(super) struct Draft {
     image: Option<egui::TextureHandle>,
     canvas_settings: Option<Settings>,
     canvas_notice: String,
-    reading_history: Vec<(String, Vec<core::Ruby>)>,
+    reading_history: Vec<History>,
+}
+#[derive(Debug, PartialEq)]
+struct History {
+    text: String,
+    ruby: Vec<core::Ruby>,
+    rich: Option<Box<fmt_text::Rich>>,
 }
 impl Drawer {
     pub(super) fn text_save_guard(&self, index: usize) -> Result<(), String> {
@@ -201,10 +212,17 @@ impl Drawer {
             let d = &self.documents[n];
             d.id == e.document && d.revision == e.revision && d.current_frame == e.frame
         });
+        if let Some(error) = format_ui::normalize(ctx, &mut e) {
+            self.status = Some(error.clone());
+            self.text_editor.format.error = Some(error);
+        }
+        let was_composing = e.composition.is_some();
         let (mut ime_commit, ime_cancel) = composition::before(ctx, &mut e);
         let mut open = ime_cancel || !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel) = (false, false, false);
+        let formatting_blocked = was_composing || ime_commit.is_some();
         let old = e.settings.clone();
+        let mut preset_action = None;
         egui::Window::new("Text content and layout")
             .default_width(470.).default_height(620.).max_height(620.)
             .default_pos(egui::pos2(25.,25.)).open(&mut open).show(ctx,|ui|{
@@ -230,6 +248,7 @@ impl Drawer {
                         ui.color_edit_button_srgba_unmultiplied(&mut e.settings.color);
                     });
                     reading_ui::controls(ui,&mut e,&mut self.text_editor,&mut ime_commit);
+                    preset_action=format_ui::controls(ui,&mut e,&mut self.text_editor.format,&self.workspaces.store.current.text_mix,formatting_blocked);
                     if e.settings!=old{e.prepared=None;e.image=None;}
                     if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
                     if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}
@@ -243,6 +262,11 @@ impl Drawer {
                 });
                 ui.small("Field Undo handles local typing and composition. Apply changes the document once. Local fonts are read without copying. Emoji uses monochrome outlines.");
             });
+        if let Some(action) = preset_action
+            && let Err(error) = format_ui::preset(self, action)
+        {
+            self.text_editor.format.error = Some(error);
+        }
         if open && !cancel {
             self.text_editor.draft = Some(e);
             self.refresh_text_canvas();

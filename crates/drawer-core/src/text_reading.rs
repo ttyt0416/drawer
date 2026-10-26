@@ -1,4 +1,7 @@
+#[path = "text_shape_rich.rs"]
+mod rich_shape;
 use super::*;
+use crate::text_format::{Paint, PaintRange};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Flow {
     #[default]
@@ -110,6 +113,7 @@ pub(super) fn remap(before: &str, after: &str, ruby: &mut Vec<Ruby>) {
 struct Cell {
     paths: Vec<Vec<Point>>,
     advance: f64,
+    paint: Option<Paint>,
 }
 enum Token {
     Cell(Cell),
@@ -127,6 +131,21 @@ struct Engine<'a> {
     glyphs: usize,
 }
 impl<'a> Engine<'a> {
+    fn dispatch(
+        &mut self,
+        text: &str,
+        start: usize,
+        font: Font,
+        size: f64,
+        style: &Style,
+        body: bool,
+    ) -> Result<Vec<Token>, String> {
+        if style.rich.is_some() {
+            self.formatted(text, start, font, size, style, body)
+        } else {
+            self.shape(text, font, size, style.flow, style.ligatures)
+        }
+    }
     fn font(&self, c: char, requested: Font) -> Option<usize> {
         self.fonts
             .iter()
@@ -178,6 +197,7 @@ impl<'a> Engine<'a> {
                 self.outline(&paths)?;
                 tokens.push(Token::Cell(Cell {
                     paths,
+                    paint: None,
                     advance: if flow == Flow::Vertical && upright(c) {
                         size
                     } else {
@@ -276,6 +296,7 @@ impl<'a> Engine<'a> {
                 orient(&mut paths, advance, size, flow, upright(c));
                 tokens.push(Token::Cell(Cell {
                     paths,
+                    paint: None,
                     advance: if flow == Flow::Vertical && upright(c) {
                         size
                     } else {
@@ -312,13 +333,10 @@ fn translate(paths: &mut [Vec<Point>], flow: Flow, along: f64, cross: f64) {
         }
     }
 }
-fn pack(
-    tokens: Vec<Token>,
-    size: f64,
-    tracking: f64,
-    flow: Flow,
-) -> Result<(Vec<Vec<Point>>, f64), String> {
+type Packed = (Vec<Vec<Point>>, f64, Vec<PaintRange>);
+fn pack(tokens: Vec<Token>, size: f64, tracking: f64, flow: Flow) -> Result<Packed, String> {
     let mut paths = Vec::new();
+    let mut paint = vec![];
     let mut cursor = 0.;
     let mut last = 0.0_f64;
     for token in tokens {
@@ -326,13 +344,21 @@ fn pack(
             return Err("Reading annotation cannot cross a hard newline".into());
         };
         translate(&mut c.paths, flow, cursor, 0.);
+        if let Some(p) = c.paint {
+            paint.push(PaintRange {
+                start: paths.len(),
+                end: paths.len() + c.paths.len(),
+                paint: p,
+            });
+        }
         paths.extend(c.paths);
         last = last.max(cursor + c.advance);
         cursor += (c.advance + size * tracking).max(size * 0.05);
     }
-    Ok((paths, last))
+    Ok((paths, last, paint))
 }
 struct Group {
+    paint: Vec<PaintRange>,
     paths: Vec<Vec<Point>>,
     advance: f64,
 }
@@ -381,16 +407,27 @@ pub(super) fn layout(
     let mut cursor = 0;
     for annotation in style.ruby.iter().map(Some).chain(std::iter::once(None)) {
         let end = annotation.map_or(offsets.len() - 1, |r| r.start);
-        for token in engine.shape(
+        for token in engine.dispatch(
             &text[offsets[cursor]..offsets[end]],
+            cursor,
             style.font,
             size,
-            style.flow,
-            style.ligatures,
+            style,
+            true,
         )? {
             groups.push(match token {
                 Token::Break => GroupToken::Break,
                 Token::Cell(c) => GroupToken::Group(Group {
+                    paint: c
+                        .paint
+                        .map(|paint| {
+                            vec![PaintRange {
+                                start: 0,
+                                end: c.paths.len(),
+                                paint,
+                            }]
+                        })
+                        .unwrap_or_default(),
                     paths: c.paths,
                     advance: c.advance,
                 }),
@@ -399,21 +436,22 @@ pub(super) fn layout(
         let Some(r) = annotation else {
             break;
         };
-        let (mut body, body_length) = pack(
-            engine.shape(
+        let (mut body, body_length, mut body_paint) = pack(
+            engine.dispatch(
                 &text[offsets[r.start]..offsets[r.end]],
+                r.start,
                 style.font,
                 size,
-                style.flow,
-                style.ligatures,
+                style,
+                true,
             )?,
             size,
             style.tracking,
             style.flow,
         )?;
         let ruby_size = size * r.ratio;
-        let (mut reading, reading_length) = pack(
-            engine.shape(&r.text, r.font, ruby_size, style.flow, style.ligatures)?,
+        let (mut reading, reading_length, reading_paint) = pack(
+            engine.dispatch(&r.text, 0, r.font, ruby_size, style, false)?,
             ruby_size,
             r.tracking,
             style.flow,
@@ -432,8 +470,14 @@ pub(super) fn layout(
             align_offset(r.align, length - reading_length),
             cross,
         );
+        body_paint.extend(reading_paint.into_iter().map(|mut p| {
+            p.start += body.len();
+            p.end += body.len();
+            p
+        }));
         body.extend(reading);
         groups.push(GroupToken::Group(Group {
+            paint: body_paint,
             paths: body,
             advance: length,
         }));
@@ -469,6 +513,7 @@ pub(super) fn layout(
         widths.iter().copied().fold(0., f64::max)
     };
     let mut paths = Vec::new();
+    let mut paint = vec![];
     for (mut g, line, start) in placements {
         let along = start + align_offset(style.align, (box_width - widths[line]).max(0.));
         let cross = line as f64
@@ -489,10 +534,16 @@ pub(super) fn layout(
                     0.
                 };
         }
+        paint.extend(g.paint.into_iter().map(|mut p| {
+            p.start += paths.len();
+            p.end += paths.len();
+            p
+        }));
         paths.extend(g.paths);
     }
     Ok(Layout {
         paths,
+        paint,
         lines: widths.len(),
         glyphs: engine.glyphs,
         unavailable_fonts: style
@@ -501,6 +552,20 @@ pub(super) fn layout(
             .map(|r| r.font)
             .filter(|f| !fonts.iter().any(|(v, _)| v == f))
             .collect(),
+        format_unavailable: style.rich.as_ref().map_or_else(Vec::new, |r| {
+            let mut requested: Vec<Font> = r.spans.iter().filter_map(|s| s.attr.font).collect();
+            if let Some(m) = &r.mapping {
+                requested.push(m.base);
+                requested.extend(m.rules.iter().map(|r| r.font));
+            }
+            let mut missing = vec![];
+            for f in requested {
+                if !fonts.iter().any(|(v, _)| *v == f) && !missing.contains(&f) {
+                    missing.push(f);
+                }
+            }
+            missing
+        }),
         widths,
         missing: engine.missing,
         substituted: engine.substituted,

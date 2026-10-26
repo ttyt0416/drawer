@@ -786,6 +786,9 @@ dependencies = [
  "tiff",
  "ttf-parser",
  "unicode-normalization",
+ "unicode-properties",
+ "unicode-script",
+ "unicode-segmentation",
  "usvg",
 ]
 

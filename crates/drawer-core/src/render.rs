@@ -8,6 +8,8 @@ use crate::{
 
 #[path = "text_contour_tree.rs"]
 mod text_contour_tree;
+#[path = "text_paint.rs"]
+mod text_paint;
 pub struct Renderer<'a> {
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -17,7 +19,7 @@ pub struct Renderer<'a> {
     fill_graph: Option<crate::paper::Graph>,
     stroke: Option<&'a crate::painting::Stroke>,
     references: Option<&'a crate::eyedropper::References>,
-    text_contours: Vec<text_contour_tree::Set>,
+    text_contours: Vec<text_paint::Text>,
     text_error: Option<String>,
     vector_bounds: Vec<Vec<Rect>>,
     order: Vec<crate::render_order::Entry>,
@@ -249,10 +251,7 @@ impl<'a> Renderer<'a> {
         }
         match object {
             PageObject::Material(m) => m.pixel(original),
-            PageObject::Text { color, .. } => {
-                let winding = self.text_contours[index].winding(original);
-                if winding != 0 { *color } else { [0; 4] }
-            }
+            PageObject::Text { .. } => self.text_contours[index].pixel(original),
             PageObject::Line {
                 start,
                 end,
@@ -586,15 +585,21 @@ impl<'a> Renderer<'a> {
                     text,
                     size_px,
                     layout,
-                    ..
-                } => match glyph_contours(*baseline, text, *size_px, layout.as_deref()) {
-                    Ok(paths) => text_contour_tree::Set::new(paths),
+                    color,
+                } => match text_paint::Text::new(
+                    *baseline,
+                    text,
+                    *size_px,
+                    *color,
+                    layout.as_deref(),
+                ) {
+                    Ok(paths) => paths,
                     Err(error) => {
                         text_error = Some(error);
-                        text_contour_tree::Set::default()
+                        text_paint::Text::default()
                     }
                 },
-                _ => text_contour_tree::Set::default(),
+                _ => text_paint::Text::default(),
             })
             .collect();
         Self {
@@ -1086,7 +1091,7 @@ pub(crate) fn text_pixel_bounds_budget(
     else {
         return Err("Choose a text object".into());
     };
-    if color[3] == 0 {
+    if color[3] == 0 && layout.as_ref().is_none_or(|s| s.rich.is_none()) {
         return Err("Text contains no visible pixels".into());
     }
     let paths = glyph_contours(*baseline, text, *size_px, layout.as_deref())?;
@@ -1094,7 +1099,22 @@ pub(crate) fn text_pixel_bounds_budget(
         .iter()
         .flat_map(|p| &p.points)
         .map(|p| doc.scene.transform.map(*p));
-    let bounds = crate::alignment_detail::rectangle(points)?;
+    let geometry = text_paint::Text::new(*baseline, text, *size_px, *color, layout.as_deref())?;
+    let bounds = if layout.as_ref().is_some_and(|s| s.rich.is_some()) {
+        let b = geometry.bounds().ok_or("Text contains no visible pixels")?;
+        crate::alignment_detail::rectangle(
+            [
+                [b.min[0], b.min[1]],
+                [b.max[0], b.min[1]],
+                [b.max[0], b.max[1]],
+                [b.min[0], b.max[1]],
+            ]
+            .into_iter()
+            .map(|p| doc.scene.transform.map(p)),
+        )?
+    } else {
+        crate::alignment_detail::rectangle(points)?
+    };
     let x0 = bounds.min[0].floor() as i64;
     let y0 = bounds.min[1].floor() as i64;
     let x1 = bounds.max[0].ceil() as i64;
@@ -1118,14 +1138,7 @@ pub(crate) fn text_pixel_bounds_budget(
     for y in y0..y1 {
         for x in x0..x1 {
             let p = inv.map([x as f64 + 0.5, y as f64 + 0.5]);
-            if !doc.scene.clips.iter().any(|clip| !inside(clip, p))
-                && paths
-                    .iter()
-                    .filter(|c| c.bounds.contains(p))
-                    .map(|c| winding(&c.points, p))
-                    .sum::<i32>()
-                    != 0
-            {
+            if !doc.scene.clips.iter().any(|clip| !inside(clip, p)) && geometry.pixel(p)[3] > 0 {
                 r.min[0] = r.min[0].min(x as f64);
                 r.min[1] = r.min[1].min(y as f64);
                 r.max[0] = r.max[0].max(x as f64 + 1.0);

@@ -42,6 +42,7 @@ pub struct Style {
     pub tracking: f64,
     pub ligatures: bool,
     pub ruby: Vec<Ruby>,
+    pub rich: Option<Box<crate::text_format::Rich>>,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -54,6 +55,7 @@ impl Default for Style {
             tracking: 0.,
             ligatures: false,
             ruby: Vec::new(),
+            rich: None,
         }
     }
 }
@@ -77,9 +79,11 @@ impl Style {
             || self.tracking != 0.
             || self.ligatures
             || !self.ruby.is_empty()
+            || self.rich.is_some()
     }
     pub fn bytes(&self) -> usize {
-        std::mem::size_of_val(self)
+        self.rich.as_ref().map_or(0, |r| r.bytes())
+            + std::mem::size_of_val(self)
             + self
                 .ruby
                 .iter()
@@ -87,10 +91,30 @@ impl Style {
                 .sum::<usize>()
     }
     pub fn text_valid(&self, text: &str) -> bool {
-        self.valid() && reading::ranges_valid(text, &self.ruby)
+        self.valid()
+            && reading::ranges_valid(text, &self.ruby)
+            && self.rich.as_ref().is_none_or(|r| {
+                r.valid(text)
+                    && self.ruby.iter().all(|a| {
+                        crate::text_format::boundary(text, a.start)
+                            && crate::text_format::boundary(text, a.end)
+                    })
+            })
     }
     pub fn remap_text(&mut self, before: &str, after: &str) {
         reading::remap(before, after, &mut self.ruby);
+        if let Some(r) = &mut self.rich {
+            r.remap(before, after);
+            let mut end = 0;
+            self.ruby.retain_mut(|r| {
+                let (a, b) = crate::text_format::expand(after, r.start, r.end);
+                r.start = a;
+                r.end = b;
+                let keep = a >= end && a < b;
+                end = b;
+                keep
+            });
+        }
     }
     pub fn bounds(&self, baseline: Point, text: &str, size: f64) -> Rect {
         if self.extended()
@@ -106,6 +130,14 @@ impl Style {
                     bounds.max[axis] = bounds.max[axis].max(*value);
                 }
             }
+            let stroke = shape
+                .paint
+                .iter()
+                .filter_map(|p| p.paint.border)
+                .map(|b| b.width / 2.)
+                .fold(0., f64::max);
+            bounds.min = bounds.min.map(|v| v - stroke);
+            bounds.max = bounds.max.map(|v| v + stroke);
             return bounds;
         }
         let width = if self.wrap_width > 0. {
@@ -188,9 +220,11 @@ fn bytes(font: Font) -> Option<Bytes> {
 }
 pub struct Layout {
     pub paths: Vec<Vec<Point>>,
+    pub paint: Vec<crate::text_format::PaintRange>,
     pub lines: usize,
     pub glyphs: usize,
     pub unavailable_fonts: Vec<Font>,
+    pub format_unavailable: Vec<Font>,
     pub missing: usize,
     pub substituted: usize,
     pub widths: Vec<f64>,
@@ -336,9 +370,11 @@ fn layout_with_fonts(
     }
     Ok(Layout {
         paths,
+        paint: Vec::new(),
         lines: widths.len(),
         glyphs: glyph_count,
         unavailable_fonts: Vec::new(),
+        format_unavailable: Vec::new(),
         missing,
         substituted,
         widths,
@@ -375,6 +411,12 @@ impl Layout {
                     font.label()
                 ));
             }
+        }
+        for font in &self.format_unavailable {
+            messages.push(format!(
+                "Requested format font unavailable: {}",
+                font.label()
+            ));
         }
         if self.substituted > 0 {
             messages.push(format!(
@@ -595,5 +637,24 @@ mod fallback_tests {
         assert_eq!(l.missing, 3);
         assert_eq!(l.paths.len(), 6);
         assert!(l.notice(style.font).contains("reading font unavailable"));
+        let style = Style {
+            font: Font::Ubuntu,
+            rich: Some(Box::new(crate::text_format::Rich {
+                spans: vec![crate::text_format::Span {
+                    start: 0,
+                    end: 2,
+                    attr: crate::text_format::Attr {
+                        font: Some(Font::Korean),
+                        ..Default::default()
+                    },
+                }],
+                mapping: None,
+            })),
+            ..Default::default()
+        };
+        let l = layout_with_fonts([0.; 2], "a\u{301}", 20., &style, vec![]).unwrap();
+        assert_eq!(l.glyphs, 1);
+        assert_eq!(l.paint.len(), 1);
+        assert!(l.notice(style.font).contains("format font unavailable"));
     }
 }

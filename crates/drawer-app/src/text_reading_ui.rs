@@ -1,16 +1,25 @@
 use super::*;
-pub(super) fn remember(e: &mut Draft, text: String, ruby: Vec<core::Ruby>) {
+pub(super) fn remember(
+    e: &mut Draft,
+    text: String,
+    ruby: Vec<core::Ruby>,
+    rich: Option<Box<fmt_text::Rich>>,
+) {
     if e.reading_history
         .last()
-        .is_some_and(|(t, r)| *t == text && *r == ruby)
+        .is_some_and(|h| h.text == text && h.ruby == ruby && h.rich == rich)
     {
         return;
     }
-    e.reading_history.push((text, ruby));
+    e.reading_history.push(History { text, ruby, rich });
     while e.reading_history.len() > 32
         || e.reading_history
             .iter()
-            .map(|(t, r)| t.len() + r.iter().map(|r| r.text.len() + 128).sum::<usize>())
+            .map(|h| {
+                h.text.len()
+                    + h.ruby.iter().map(|r| r.text.len() + 128).sum::<usize>()
+                    + h.rich.as_ref().map_or(0, |r| r.bytes())
+            })
             .sum::<usize>()
             > 512 * 1024
     {
@@ -18,16 +27,22 @@ pub(super) fn remember(e: &mut Draft, text: String, ruby: Vec<core::Ruby>) {
     }
 }
 pub(super) fn remap_field(e: &mut Draft, before: &Settings) {
-    remember(e, before.text.clone(), before.style.ruby.clone());
-    if let Some((_, r)) = e
+    remember(
+        e,
+        before.text.clone(),
+        before.style.ruby.clone(),
+        before.style.rich.clone(),
+    );
+    if let Some(h) = e
         .reading_history
         .iter()
         .rev()
-        .find(|(t, _)| *t == e.settings.text)
+        .find(|h| h.text == e.settings.text)
     {
-        e.settings.style.ruby = r.clone();
+        e.settings.style.ruby = h.ruby.clone();
+        e.settings.style.rich = h.rich.clone();
     } else {
-        core::remap_ruby(&before.text, &e.settings.text, &mut e.settings.style.ruby);
+        e.settings.style.remap_text(&before.text, &e.settings.text);
     }
 }
 pub(super) fn controls(
