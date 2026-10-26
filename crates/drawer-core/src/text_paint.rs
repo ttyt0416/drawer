@@ -2,6 +2,8 @@ use super::*;
 use crate::text_format::Paint;
 #[derive(Default)]
 pub(super) struct Text {
+    background: text_contour_tree::Set,
+    background_color: [u8; 4],
     plain: text_contour_tree::Set,
     color: [u8; 4],
     groups: Vec<(text_contour_tree::Set, Paint)>,
@@ -23,6 +25,8 @@ impl Text {
             });
         };
         let layout = crate::text_layout::layout(baseline, text, size, style)?;
+        let background = text_contour_tree::Set::new(contour_paths(layout.backgrounds));
+        let background_color = style.typeset.as_ref().map_or([0; 4], |o| o.background);
         let mut paths = layout.paths.into_iter().enumerate().peekable();
         let mut groups = vec![];
         let mut index = vec![];
@@ -47,6 +51,8 @@ impl Text {
             }
         }
         Ok(Self {
+            background,
+            background_color,
             color,
             groups,
             index: text_contour_tree::Set::new(index),
@@ -54,19 +60,31 @@ impl Text {
         })
     }
     pub fn bounds(&self) -> Option<Rect> {
-        self.index.bounds().or_else(|| self.plain.bounds())
+        let base = self.index.bounds().or_else(|| self.plain.bounds());
+        match (base, self.background.bounds()) {
+            (Some(a), Some(b)) => Some(Rect {
+                min: std::array::from_fn(|n| a.min[n].min(b.min[n])),
+                max: std::array::from_fn(|n| a.max[n].max(b.max[n])),
+            }),
+            (a, b) => a.or(b),
+        }
     }
     pub fn pixel(&self, p: Point) -> [u8; 4] {
+        let background = if self.background.winding(p) != 0 {
+            self.background_color
+        } else {
+            [0; 4]
+        };
         if self.groups.is_empty() {
             return if self.plain.winding(p) != 0 {
-                self.color
+                over(background, self.color)
             } else {
-                [0; 4]
+                background
             };
         }
         let mut hits = self.index.candidates(p);
         hits.sort_unstable();
-        let mut result = [0; 4];
+        let mut result = background;
         for i in hits {
             let (set, paint) = &self.groups[i];
             if let Some(border) = paint.border

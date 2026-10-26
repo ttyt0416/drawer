@@ -340,6 +340,8 @@ pub struct Snapshot {
         skip_serializing_if = "crate::font_library::Settings::is_default"
     )]
     pub font_lists: crate::font_library::Settings,
+    #[serde(default, skip_serializing_if = "crate::text_typeset::Tool::is_default")]
+    pub text_tool: Box<crate::text_typeset::Tool>,
     #[serde(default)]
     pub vector_overlay: crate::vector_tip::Overlay,
     #[serde(default)]
@@ -447,6 +449,7 @@ impl Default for Snapshot {
             quick_presets: Default::default(),
             text_mix: Default::default(),
             font_lists: Default::default(),
+            text_tool: Default::default(),
             surface_effects: Default::default(),
             transparency_colors: crate::paper_background::checker_default(),
             layer_move: Default::default(),
@@ -549,7 +552,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.font_lists.valid()
+        if !self.text_tool.valid()
+            || !self.font_lists.valid()
             || !self.text_mix.valid()
             || !self.quick_presets.valid()
             || !self.finishing_presets.valid()
@@ -674,6 +678,7 @@ impl Snapshot {
             next.quick_presets = incoming.quick_presets.clone();
             next.text_mix = incoming.text_mix.clone();
             next.font_lists = incoming.font_lists.clone();
+            next.text_tool = incoming.text_tool.clone();
             next.surface_effects = incoming.surface_effects.clone();
             next.selection_edit = incoming.selection_edit;
             next.magnetic_lasso = incoming.magnetic_lasso;

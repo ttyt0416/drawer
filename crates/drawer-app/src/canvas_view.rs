@@ -594,6 +594,25 @@ impl CanvasView {
         paint.drawing.refresh_selection_edit(document);
         paint.drawing.refresh_movement(document);
         paint.drawing.refresh_text_canvas(document);
+        let text_preview = paint.drawing.text_canvas_preview(document).is_some();
+        let original_filter = self.filter;
+        if text_preview {
+            self.filter = match paint.drawing.text_quality {
+                drawer_core::text_typeset::Quality::Fast => {
+                    drawer_core::interpolation::Filter::Nearest
+                }
+                drawer_core::text_typeset::Quality::High => {
+                    drawer_core::interpolation::Filter::Oversample
+                }
+                drawer_core::text_typeset::Quality::Auto => {
+                    if document.view.zoom > 2. {
+                        drawer_core::interpolation::Filter::Bilinear
+                    } else {
+                        drawer_core::interpolation::Filter::Nearest
+                    }
+                }
+            };
+        }
         let original_id = document.id;
         let document = paint
             .drawing
@@ -608,6 +627,7 @@ impl CanvasView {
         let stroke = paint.drawing.preview(document.id);
         self.update_image(ui, document, stroke);
         self.paint_paper(ui, document, document.view, rect, stroke);
+        self.filter = original_filter;
         let painter = ui.painter_at(rect);
         super::drawing::vector_paths::paint(
             ui,

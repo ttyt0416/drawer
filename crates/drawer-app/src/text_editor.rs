@@ -8,6 +8,8 @@ mod font_ui;
 mod format_ui;
 #[path = "text_reading_ui.rs"]
 mod reading_ui;
+#[path = "text_typeset_ui.rs"]
+mod typeset_ui;
 #[path = "text_editor_verify.rs"]
 mod verify;
 #[path = "text_version_ui.rs"]
@@ -20,7 +22,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     reading_ui::smoke(root)?;
     format_ui::smoke(root)?;
     font_ui::smoke(root)?;
-    version_ui::smoke(root)
+    version_ui::smoke(root)?;
+    typeset_ui::smoke(root)
 }
 use super::*;
 use drawer_core::text_format as fmt_text;
@@ -38,6 +41,7 @@ pub(super) struct Panel {
     format: format_ui::Panel,
     fonts: Box<font_ui::Panel>,
     version: Box<version_ui::Panel>,
+    typeset: Box<typeset_ui::Panel>,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -57,6 +61,7 @@ struct History {
     text: String,
     ruby: Vec<core::Ruby>,
     rich: Option<Box<fmt_text::Rich>>,
+    typeset: Option<Box<drawer_core::text_typeset::Options>>,
 }
 impl Drawer {
     pub(super) fn text_save_guard(&self, index: usize) -> Result<(), String> {
@@ -101,6 +106,13 @@ impl Drawer {
                 None
             }
         });
+        let old = match self.workspaces.store.current.text_tool.create {
+            drawer_core::text_typeset::CreateAction::CreateLayerAlways => None,
+            drawer_core::text_typeset::CreateAction::AddToSelectedText => {
+                Some(old.ok_or("Select a text object to add text")?)
+            }
+            _ => old,
+        };
         let (id, settings) = old.map_or_else(
             || {
                 (
@@ -128,7 +140,11 @@ impl Drawer {
             revision: d.revision,
             frame: d.current_frame,
             id,
-            settings,
+            settings: drawer_core::text_typeset::apply_defaults(
+                &self.workspaces.store.current.text_tool,
+                id.is_some(),
+                &settings,
+            ),
             composition: None,
             prepared: None,
             image: None,
@@ -263,6 +279,7 @@ impl Drawer {
                     });
                     reading_ui::controls(ui,&mut e,&mut self.text_editor,&mut ime_commit);
                     preset_action=format_ui::controls(ui,&mut e,&mut self.text_editor.format,&self.workspaces.store.current.text_mix,formatting_blocked);
+                    typeset_ui::controls(ui,&mut e,&mut self.text_editor.typeset,formatting_blocked);
                     if e.settings!=old{e.prepared=None;e.image=None;}
                     if !e.canvas_notice.is_empty(){ui.label(&e.canvas_notice);}
                     if e.composition.is_some(){ui.label("IME composition preview on canvas; finish or cancel before Apply.");}

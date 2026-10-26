@@ -297,6 +297,7 @@ impl Drawer {
             old.text.clone(),
             old.style.ruby.clone(),
             old.style.rich.clone(),
+            old.style.typeset.clone(),
         );
         let mut undo = state.undoer();
         undo.add_undo(&(range, old.text));

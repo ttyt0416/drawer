@@ -4,14 +4,20 @@ pub(super) fn remember(
     text: String,
     ruby: Vec<core::Ruby>,
     rich: Option<Box<fmt_text::Rich>>,
+    typeset: Option<Box<drawer_core::text_typeset::Options>>,
 ) {
     if e.reading_history
         .last()
-        .is_some_and(|h| h.text == text && h.ruby == ruby && h.rich == rich)
+        .is_some_and(|h| h.text == text && h.ruby == ruby && h.rich == rich && h.typeset == typeset)
     {
         return;
     }
-    e.reading_history.push(History { text, ruby, rich });
+    e.reading_history.push(History {
+        text,
+        ruby,
+        rich,
+        typeset,
+    });
     while e.reading_history.len() > 32
         || e.reading_history
             .iter()
@@ -19,6 +25,9 @@ pub(super) fn remember(
                 h.text.len()
                     + h.ruby.iter().map(|r| r.text.len() + 128).sum::<usize>()
                     + h.rich.as_ref().map_or(0, |r| r.bytes())
+                    + h.typeset
+                        .as_ref()
+                        .map_or(0, |o| 512 + o.horizontal.len() * 16)
             })
             .sum::<usize>()
             > 512 * 1024
@@ -32,6 +41,7 @@ pub(super) fn remap_field(e: &mut Draft, before: &Settings) {
         before.text.clone(),
         before.style.ruby.clone(),
         before.style.rich.clone(),
+        before.style.typeset.clone(),
     );
     if let Some(h) = e
         .reading_history
@@ -41,6 +51,7 @@ pub(super) fn remap_field(e: &mut Draft, before: &Settings) {
     {
         e.settings.style.ruby = h.ruby.clone();
         e.settings.style.rich = h.rich.clone();
+        e.settings.style.typeset = h.typeset.clone();
     } else {
         e.settings.style.remap_text(&before.text, &e.settings.text);
     }
@@ -74,7 +85,23 @@ pub(super) fn controls(
                 .speed(0.01)
                 .prefix("Letter spacing × "),
         );
-        ui.checkbox(&mut e.settings.style.ligatures, "Standard ligatures");
+        let mut ligatures = e.settings.style.ligatures
+            || e.settings
+                .style
+                .typeset
+                .as_ref()
+                .is_some_and(|o| o.feature(drawer_core::text_typeset::Feature::Ligatures));
+        if ui.checkbox(&mut ligatures, "Standard ligatures").changed() {
+            e.settings.style.ligatures = ligatures;
+            if let Some(o) = &mut e.settings.style.typeset {
+                o.features
+                    .retain(|f| *f != drawer_core::text_typeset::Feature::Ligatures);
+                if ligatures {
+                    o.features
+                        .push(drawer_core::text_typeset::Feature::Ligatures);
+                }
+            }
+        }
     });
     let count = e.settings.text.chars().count();
     let composing = e.composition.is_some() || change.is_some();

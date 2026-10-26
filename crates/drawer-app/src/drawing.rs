@@ -10,6 +10,8 @@ mod movement;
 pub(crate) mod path_draft;
 #[path = "selection_edit.rs"]
 pub(crate) mod selection_edit;
+#[path = "text_tool_input.rs"]
+pub(crate) mod text_tool;
 #[path = "vector_edit_ui.rs"]
 pub(crate) mod vector_edit;
 #[path = "vector_erase_ui.rs"]
@@ -112,6 +114,10 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub text_tool_active: bool,
+    pub text_tool_request: Option<text_tool::Request>,
+    text_capture: Option<Box<text_tool::Capture>>,
+    pub text_quality: drawer_core::text_typeset::Quality,
     pub text_document: Option<u64>,
     pub text_canvas: Option<Box<super::text_editor::CanvasPreview>>,
     vector_eraser: Option<Box<vector_erase::Gesture>>,
@@ -362,6 +368,8 @@ impl Drawing {
         self.events = events.into_iter().map(|e| (e, false)).collect();
     }
     pub fn finish(&mut self, documents: &mut [Document]) {
+        self.text_capture = None;
+        self.text_tool_request = None;
         self.vector_eraser = None;
         self.cancel_vector_edit();
         self.selection = self.selection.take().filter(|s| s.journal.is_some());
@@ -1139,6 +1147,10 @@ impl Drawing {
             center: [rect.center().x as f64, rect.center().y as f64],
             ppp: ui.ctx().pixels_per_point() as f64,
         };
+        if self.text_tool_active {
+            self.text_tool_canvas(ui, response, doc, view, projection, enabled);
+            return;
+        }
         if self.mode == super::precision::Mode::VectorErase {
             self.vector_erase_canvas(ui, response, doc, view, projection, enabled);
             return;

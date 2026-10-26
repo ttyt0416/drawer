@@ -493,6 +493,8 @@ impl Drawer {
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "text-editor" => self.begin_text_editor(ctx)?,
+                "text-tool" => self.toggle_text_tool(),
+                "text-tool-settings" => self.begin_text_tool_settings(),
                 "text-layout-convert" => self.begin_text_conversion()?,
                 "font-library" => self.begin_font_library(ctx),
                 "quick-filters" => self.begin_quick_filters(false)?,

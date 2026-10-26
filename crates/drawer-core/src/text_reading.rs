@@ -114,12 +114,18 @@ struct Cell {
     paths: Vec<Vec<Point>>,
     advance: f64,
     paint: Option<Paint>,
+    level: unicode_bidi::Level,
+    ranges: Vec<PaintRange>,
+    base: unicode_bidi::Level,
+    whitespace: bool,
 }
 enum Token {
     Cell(Cell),
     Break,
 }
 struct Engine<'a> {
+    levels: Vec<unicode_bidi::Level>,
+    bases: Vec<unicode_bidi::Level>,
     fonts: &'a [(Font, Bytes)],
     faces: Vec<ttf_parser::Face<'a>>,
     missing: usize,
@@ -128,6 +134,7 @@ struct Engine<'a> {
     missing_characters: Vec<char>,
     ligature_unavailable: Vec<Font>,
     points: usize,
+    feature_unavailable: Vec<String>,
     glyphs: usize,
 }
 impl<'a> Engine<'a> {
@@ -140,6 +147,86 @@ impl<'a> Engine<'a> {
         style: &Style,
         body: bool,
     ) -> Result<Vec<Token>, String> {
+        if body
+            && style.flow == Flow::Vertical
+            && let Some(o) = &style.typeset
+        {
+            let offsets: Vec<_> = text
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain(std::iter::once(text.len()))
+                .collect();
+            let end = start + offsets.len() - 1;
+            let ranges: Vec<_> = o
+                .horizontal
+                .iter()
+                .copied()
+                .filter(|r| r[0] >= start && r[1] <= end)
+                .collect();
+            if !ranges.is_empty() {
+                let mut tokens = vec![];
+                let mut cursor = start;
+                for [a, b] in ranges {
+                    tokens.extend(self.formatted(
+                        &text[offsets[cursor - start]..offsets[a - start]],
+                        cursor,
+                        font,
+                        size,
+                        style,
+                        body,
+                    )?);
+                    let mut horizontal = style.clone();
+                    horizontal.flow = Flow::Horizontal;
+                    horizontal.typeset.as_mut().unwrap().horizontal.clear();
+                    let inner = self.formatted(
+                        &text[offsets[a - start]..offsets[b - start]],
+                        a,
+                        font,
+                        size,
+                        &horizontal,
+                        body,
+                    )?;
+                    let (level, base) = inner
+                        .iter()
+                        .find_map(|t| match t {
+                            Token::Cell(c) => Some((c.level, c.base)),
+                            _ => None,
+                        })
+                        .unwrap_or((unicode_bidi::Level::ltr(), unicode_bidi::Level::ltr()));
+                    let (mut paths, length, paints) = pack(
+                        inner,
+                        size,
+                        style.tracking + crate::text_typeset::manual(style),
+                        Flow::Horizontal,
+                    )?;
+                    let scale = (size / length.max(size)).min(1.);
+                    for p in paths.iter_mut().flatten() {
+                        p[0] = (p[0] - length / 2.) * scale;
+                        p[1] = p[1] * scale + size * 0.8;
+                    }
+                    // A single TCY unit retains each character's paint groups below.
+                    tokens.push(Token::Cell(Cell {
+                        paths,
+                        advance: size,
+                        paint: None,
+                        level,
+                        ranges: paints,
+                        base,
+                        whitespace: false,
+                    }));
+                    cursor = b;
+                }
+                tokens.extend(self.formatted(
+                    &text[offsets[cursor - start]..],
+                    cursor,
+                    font,
+                    size,
+                    style,
+                    body,
+                )?);
+                return Ok(tokens);
+            }
+        }
         if style.rich.is_some() {
             self.formatted(text, start, font, size, style, body)
         } else {
@@ -198,6 +285,10 @@ impl<'a> Engine<'a> {
                 tokens.push(Token::Cell(Cell {
                     paths,
                     paint: None,
+                    level: unicode_bidi::Level::ltr(),
+                    ranges: vec![],
+                    base: unicode_bidi::Level::ltr(),
+                    whitespace: c.is_whitespace(),
                     advance: if flow == Flow::Vertical && upright(c) {
                         size
                     } else {
@@ -297,6 +388,10 @@ impl<'a> Engine<'a> {
                 tokens.push(Token::Cell(Cell {
                     paths,
                     paint: None,
+                    level: unicode_bidi::Level::ltr(),
+                    ranges: vec![],
+                    base: unicode_bidi::Level::ltr(),
+                    whitespace: c.is_whitespace(),
                     advance: if flow == Flow::Vertical && upright(c) {
                         size
                     } else {
@@ -344,6 +439,11 @@ fn pack(tokens: Vec<Token>, size: f64, tracking: f64, flow: Flow) -> Result<Pack
             return Err("Reading annotation cannot cross a hard newline".into());
         };
         translate(&mut c.paths, flow, cursor, 0.);
+        paint.extend(c.ranges.into_iter().map(|mut p| {
+            p.start += paths.len();
+            p.end += paths.len();
+            p
+        }));
         if let Some(p) = c.paint {
             paint.push(PaintRange {
                 start: paths.len(),
@@ -358,6 +458,9 @@ fn pack(tokens: Vec<Token>, size: f64, tracking: f64, flow: Flow) -> Result<Pack
     Ok((paths, last, paint))
 }
 struct Group {
+    base: unicode_bidi::Level,
+    whitespace: bool,
+    level: unicode_bidi::Level,
     paint: Vec<PaintRange>,
     paths: Vec<Vec<Point>>,
     advance: f64,
@@ -387,7 +490,18 @@ pub(super) fn layout(
             ttf_parser::Face::parse(b.data(), b.index()).map_err(|e| format!("Font parse: {e:?}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let bidi = unicode_bidi::BidiInfo::new(text, None);
     let mut engine = Engine {
+        levels: text.char_indices().map(|(i, _)| bidi.levels[i]).collect(),
+        bases: text
+            .char_indices()
+            .map(|(i, _)| {
+                bidi.paragraphs
+                    .iter()
+                    .find(|p| p.range.contains(&i))
+                    .map_or(unicode_bidi::Level::ltr(), |p| p.level)
+            })
+            .collect(),
         fonts,
         faces,
         missing: 0,
@@ -396,6 +510,7 @@ pub(super) fn layout(
         missing_characters: Vec::new(),
         ligature_unavailable: Vec::new(),
         points: 0,
+        feature_unavailable: vec![],
         glyphs: 0,
     };
     let offsets: Vec<_> = text
@@ -418,16 +533,22 @@ pub(super) fn layout(
             groups.push(match token {
                 Token::Break => GroupToken::Break,
                 Token::Cell(c) => GroupToken::Group(Group {
-                    paint: c
-                        .paint
-                        .map(|paint| {
-                            vec![PaintRange {
-                                start: 0,
-                                end: c.paths.len(),
-                                paint,
-                            }]
-                        })
-                        .unwrap_or_default(),
+                    level: c.level,
+                    base: c.base,
+                    whitespace: c.whitespace,
+                    paint: if !c.ranges.is_empty() {
+                        c.ranges
+                    } else {
+                        c.paint
+                            .map(|paint| {
+                                vec![PaintRange {
+                                    start: 0,
+                                    end: c.paths.len(),
+                                    paint,
+                                }]
+                            })
+                            .unwrap_or_default()
+                    },
                     paths: c.paths,
                     advance: c.advance,
                 }),
@@ -446,14 +567,14 @@ pub(super) fn layout(
                 true,
             )?,
             size,
-            style.tracking,
+            style.tracking + crate::text_typeset::manual(style),
             style.flow,
         )?;
         let ruby_size = size * r.ratio;
         let (mut reading, reading_length, reading_paint) = pack(
             engine.dispatch(&r.text, 0, r.font, ruby_size, style, false)?,
             ruby_size,
-            r.tracking,
+            r.tracking + crate::text_typeset::manual(style),
             style.flow,
         )?;
         let length = body_length.max(reading_length);
@@ -477,12 +598,36 @@ pub(super) fn layout(
         }));
         body.extend(reading);
         groups.push(GroupToken::Group(Group {
+            base: engine
+                .bases
+                .get(r.start)
+                .copied()
+                .unwrap_or(unicode_bidi::Level::ltr()),
+            whitespace: false,
+            level: if style.typeset.is_some() {
+                engine
+                    .levels
+                    .get(r.start)
+                    .copied()
+                    .unwrap_or(unicode_bidi::Level::ltr())
+            } else {
+                unicode_bidi::Level::ltr()
+            },
             paint: body_paint,
             paths: body,
             advance: length,
         }));
         cursor = r.end;
     }
+    let tracking = style.tracking
+        + style.typeset.as_ref().map_or(0., |o| {
+            if o.kerning == crate::text_typeset::Kerning::Manual {
+                o.manual
+            } else {
+                0.
+            }
+        });
+    let mut last_lines = vec![];
     let mut widths = vec![0.0_f64];
     let mut placements = Vec::new();
     let mut line = 0;
@@ -490,6 +635,7 @@ pub(super) fn layout(
     let mut has_group = false;
     for token in groups {
         let GroupToken::Group(group) = token else {
+            last_lines.push(line);
             line += 1;
             widths.push(0.);
             cursor = 0.;
@@ -503,7 +649,7 @@ pub(super) fn layout(
         }
         widths[line] = widths[line].max(cursor + group.advance);
         let start = cursor;
-        cursor += (group.advance + size * style.tracking).max(size * 0.05);
+        cursor += (group.advance + size * tracking).max(size * 0.05);
         placements.push((group, line, start));
         has_group = true;
     }
@@ -512,37 +658,114 @@ pub(super) fn layout(
     } else {
         widths.iter().copied().fold(0., f64::max)
     };
+    last_lines.push(line);
     let mut paths = Vec::new();
+    let mut backgrounds = vec![];
     let mut paint = vec![];
-    for (mut g, line, start) in placements {
-        let along = start + align_offset(style.align, (box_width - widths[line]).max(0.));
-        let cross = line as f64
-            * size
-            * style.line_height
-            * if style.flow == Flow::Vertical {
-                -1.
-            } else {
-                1.
-            };
-        translate(&mut g.paths, style.flow, along, cross);
-        for p in g.paths.iter_mut().flatten() {
-            p[0] += baseline[0];
-            p[1] += baseline[1]
-                - if style.flow == Flow::Vertical {
-                    size * 0.8
+    for (line, line_width) in widths.iter().copied().enumerate() {
+        let mut current: Vec<_> = placements
+            .iter_mut()
+            .filter(|(_, n, _)| *n == line)
+            .collect();
+        let mut levels: Vec<_> = current.iter().map(|(g, _, _)| g.level).collect();
+        if let Some((first, _, _)) = current.first() {
+            for i in (0..current.len()).rev() {
+                if current[i].0.whitespace {
+                    levels[i] = first.base;
                 } else {
-                    0.
-                };
+                    break;
+                }
+            }
         }
-        paint.extend(g.paint.into_iter().map(|mut p| {
-            p.start += paths.len();
-            p.end += paths.len();
-            p
-        }));
-        paths.extend(g.paths);
+        let order = if style.typeset.is_some() {
+            unicode_bidi::BidiInfo::reorder_visual(&levels)
+        } else {
+            (0..current.len()).collect()
+        };
+        let count = current.len();
+        let mut cursor = 0.;
+        let justify = style.typeset.as_ref().is_some_and(|o| o.justify)
+            && !last_lines.contains(&line)
+            && count > 1;
+        let gap = if justify {
+            (box_width - line_width).max(0.) / (count - 1) as f64
+        } else {
+            0.
+        };
+        let factor = if last_lines.contains(&line) {
+            style.typeset.as_ref().map(|o| o.last.factor())
+        } else {
+            None
+        };
+        let offset = if justify {
+            0.
+        } else {
+            factor.map_or_else(
+                || align_offset(style.align, (box_width - line_width).max(0.)),
+                |f| f * (box_width - line_width).max(0.),
+            )
+        };
+        for (slot, index) in order.into_iter().enumerate() {
+            let (g, _, _) = &mut current[index];
+            let along = cursor + offset + gap * slot as f64;
+            cursor += (g.advance + size * tracking).max(size * 0.05);
+            let cross = line as f64
+                * size
+                * style.line_height
+                * if style.flow == Flow::Vertical {
+                    -1.
+                } else {
+                    1.
+                };
+            if style.typeset.as_ref().is_some_and(|o| o.background[3] > 0) {
+                let mut bg = if style.flow == Flow::Horizontal {
+                    vec![
+                        [0., -size],
+                        [g.advance, -size],
+                        [g.advance, size * 0.25],
+                        [0., size * 0.25],
+                    ]
+                } else {
+                    vec![
+                        [-size / 2., 0.],
+                        [size / 2., 0.],
+                        [size / 2., g.advance],
+                        [-size / 2., g.advance],
+                    ]
+                };
+                for p in &mut bg {
+                    if style.flow == Flow::Horizontal {
+                        p[0] += along + baseline[0];
+                        p[1] += cross + baseline[1];
+                    } else {
+                        p[0] += cross + baseline[0];
+                        p[1] += along + baseline[1] - size * 0.8;
+                    }
+                }
+                backgrounds.push(bg);
+            }
+            translate(&mut g.paths, style.flow, along, cross);
+            for p in g.paths.iter_mut().flatten() {
+                p[0] += baseline[0];
+                p[1] += baseline[1]
+                    - if style.flow == Flow::Vertical {
+                        size * 0.8
+                    } else {
+                        0.
+                    };
+            }
+            paint.extend(g.paint.iter().cloned().map(|mut p| {
+                p.start += paths.len();
+                p.end += paths.len();
+                p
+            }));
+            paths.append(&mut g.paths);
+        }
     }
     Ok(Layout {
         paths,
+        backgrounds,
+        feature_unavailable: engine.feature_unavailable,
         paint,
         lines: widths.len(),
         glyphs: engine.glyphs,

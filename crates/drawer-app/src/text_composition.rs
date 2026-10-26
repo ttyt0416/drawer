@@ -10,6 +10,7 @@ pub(super) struct Composition {
     value: String,
     ruby: Vec<core::Ruby>,
     rich: Option<Box<fmt_text::Rich>>,
+    typeset: Option<Box<drawer_core::text_typeset::Options>>,
     state: egui::text_edit::TextEditState,
     undo: Undo,
 }
@@ -39,6 +40,7 @@ fn restore(ctx: &egui::Context, e: &mut Draft, mut c: Composition) {
             e.settings.text = c.value;
             e.settings.style.ruby = c.ruby;
             e.settings.style.rich = c.rich;
+            e.settings.style.typeset = c.typeset;
         }
         Field::Reading(n) => {
             if let Some(r) = e.settings.style.ruby.get_mut(n) {
@@ -82,6 +84,9 @@ fn commit(c: &mut Composition, text: &str) {
     let old = c.value.clone();
     c.value.replace_range(a..b, text);
     if c.field == Field::Body {
+        if let Some(o) = &mut c.typeset {
+            o.remap(&old, &c.value);
+        }
         core::remap_ruby(&old, &c.value, &mut c.ruby);
         if let Some(r) = &mut c.rich {
             r.remap(&old, &c.value);
@@ -169,6 +174,7 @@ pub(super) fn before(ctx: &egui::Context, e: &mut Draft) -> (Option<Change>, boo
             e.settings.text.clone(),
             e.settings.style.ruby.clone(),
             e.settings.style.rich.clone(),
+            e.settings.style.typeset.clone(),
         );
     }
     let mut active = e.composition.is_some();
@@ -177,6 +183,7 @@ pub(super) fn before(ctx: &egui::Context, e: &mut Draft) -> (Option<Change>, boo
             egui::text_edit::TextEditState::load(ctx, field_id(e, field)).unwrap_or_default();
         let undo = state.undoer();
         Composition {
+            typeset: e.settings.style.typeset.clone(),
             field,
             value: value(e, field).cloned().unwrap_or_default(),
             rich: if field == Field::Body {
@@ -223,6 +230,7 @@ pub(super) fn after(
             if field == Field::Body {
                 e.settings.style.ruby = base.ruby.clone();
                 e.settings.style.rich = base.rich.clone();
+                e.settings.style.typeset = base.typeset.clone();
                 e.settings.style.remap_text(&base.value, &e.settings.text);
             }
             output.state.set_undoer(base.undo.clone());

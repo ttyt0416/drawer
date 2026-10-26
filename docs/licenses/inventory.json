@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "0e909d277ce9cdca10310d69b3b5135a5b5246de742fa0e9ff26041ce7ed224b",
+  "cargo_lock_sha256": "80c70c357736cffceb655ce78b45319b41e96c29ae64b2a3b8cca473f50123c7",
   "libraries": [
     {
       "name": "accesskit",
@@ -4351,6 +4351,25 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "unicode-bidi",
+      "version": "0.3.18",
+      "source": "https://crates.io/crates/unicode-bidi/0.3.18",
+      "repository": "https://github.com/servo/unicode-bidi",
+      "license": "MIT OR Apache-2.0",
+      "crate_sha256": "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
         }
       ],
       "supplement_sources": []

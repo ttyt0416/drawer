@@ -789,3 +789,9 @@ crates/drawer-core/src/text_version_verify.rs
 crates/drawer-app/src/text_version_ui.rs
 crates/drawer-app/src/text_version_ui_verify.rs
 docs/process/text-version.md
+crates/drawer-core/src/text_typeset.rs
+crates/drawer-core/src/text_typeset_verify.rs
+crates/drawer-app/src/text_typeset_ui.rs
+crates/drawer-app/src/text_typeset_ui_verify.rs
+crates/drawer-app/src/text_tool_input.rs
+docs/process/text-typeset.md

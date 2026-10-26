@@ -43,6 +43,7 @@ pub enum Align {
 #[serde(default, deny_unknown_fields)]
 pub struct Style {
     /// 0: original embedded layout, 1: preserved editable layout, 2: current grapheme layout.
+    pub typeset: Option<Box<crate::text_typeset::Options>>,
     pub generation: u8,
     pub frame: crate::scene::Affine,
     pub font: Font,
@@ -58,6 +59,7 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
+            typeset: None,
             generation: 1,
             frame: Default::default(),
             font: Font::Korean,
@@ -96,6 +98,7 @@ impl Style {
     }
     pub fn valid(&self) -> bool {
         self.generation <= 2
+            && (self.typeset.is_none() || (self.generation == 2 && self.rich.is_some()))
             && self.frame.valid()
             && (self.generation != 0
                 || (self.font == Font::Ubuntu
@@ -112,7 +115,8 @@ impl Style {
             && self.ruby.iter().all(Ruby::valid)
     }
     pub fn extended(&self) -> bool {
-        self.flow != Flow::Horizontal
+        self.typeset.is_some()
+            || self.flow != Flow::Horizontal
             || self.tracking != 0.
             || self.ligatures
             || !self.ruby.is_empty()
@@ -120,6 +124,9 @@ impl Style {
     }
     pub fn bytes(&self) -> usize {
         self.rich.as_ref().map_or(0, |r| r.bytes())
+            + self.typeset.as_ref().map_or(0, |o| {
+                std::mem::size_of_val(o.as_ref()) + o.horizontal.len() * 16 + o.features.len()
+            })
             + std::mem::size_of_val(self)
             + self
                 .ruby
@@ -129,6 +136,12 @@ impl Style {
     }
     pub fn text_valid(&self, text: &str) -> bool {
         self.valid()
+            && self.typeset.as_ref().is_none_or(|o| {
+                o.valid(text)
+                    && o.horizontal
+                        .iter()
+                        .all(|r| self.ruby.iter().all(|a| r[1] <= a.start || r[0] >= a.end))
+            })
             && reading::ranges_valid(text, &self.ruby)
             && self.rich.as_ref().is_none_or(|r| {
                 r.valid(text)
@@ -139,6 +152,9 @@ impl Style {
             })
     }
     pub fn remap_text(&mut self, before: &str, after: &str) {
+        if let Some(o) = &mut self.typeset {
+            o.remap(before, after);
+        }
         reading::remap(before, after, &mut self.ruby);
         if let Some(r) = &mut self.rich {
             r.remap(before, after);
@@ -166,7 +182,7 @@ impl Style {
             {
                 bounds = Rect { min: *p, max: *p };
             }
-            for p in shape.paths.iter().flatten() {
+            for p in shape.paths.iter().chain(&shape.backgrounds).flatten() {
                 for (axis, value) in p.iter().enumerate() {
                     bounds.min[axis] = bounds.min[axis].min(*value);
                     bounds.max[axis] = bounds.max[axis].max(*value);
@@ -272,6 +288,8 @@ fn bytes(font: Font) -> Option<Bytes> {
 }
 pub struct Layout {
     pub paths: Vec<Vec<Point>>,
+    pub backgrounds: Vec<Vec<Point>>,
+    pub feature_unavailable: Vec<String>,
     pub paint: Vec<crate::text_format::PaintRange>,
     pub lines: usize,
     pub glyphs: usize,
@@ -304,6 +322,8 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
     let mut shape = if style.generation == 0 {
         Layout {
             paths: crate::render::legacy_text_paths(baseline, text, size),
+            backgrounds: vec![],
+            feature_unavailable: vec![],
             paint: vec![],
             lines: text.split('\n').count(),
             glyphs: text.chars().filter(|c| *c != '\n').count(),
@@ -320,7 +340,7 @@ pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<L
     } else {
         layout_source(baseline, text, size, style)?
     };
-    for path in &mut shape.paths {
+    for path in shape.paths.iter_mut().chain(&mut shape.backgrounds) {
         for p in path {
             *p = style.frame.map(*p);
             if p.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
@@ -464,6 +484,8 @@ fn layout_with_fonts(
     }
     Ok(Layout {
         paths,
+        backgrounds: vec![],
+        feature_unavailable: vec![],
         paint: Vec::new(),
         lines: widths.len(),
         glyphs: glyph_count,
@@ -494,7 +516,7 @@ fn missing_box([x, y]: Point, size: f64) -> Vec<Vec<Point>> {
 }
 impl Layout {
     pub fn notice(&self, requested: Font) -> String {
-        let mut messages = Vec::new();
+        let mut messages = self.feature_unavailable.clone();
         if !self.requested_available {
             messages.push(format!("Requested font unavailable: {}", requested.label()));
         }
@@ -553,7 +575,8 @@ impl Layout {
 pub fn remap_ruby(before: &str, after: &str, ruby: &mut Vec<Ruby>) {
     reading::remap(before, after, ruby);
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Settings {
     pub baseline: Point,
     pub text: String,
