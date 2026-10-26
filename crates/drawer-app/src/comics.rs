@@ -266,7 +266,7 @@ if ui.button("Close editor").clicked(){action=9;}});
                     let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
                     let flag = cancel.clone();
                     let worker = std::thread::spawn(move || {
-                        drawer_core::webtoon::export(&d, &s, &folder, &mut |_, _| {
+                        export_local(&d, &s, &folder, &mut |_, _| {
                             if flag.load(std::sync::atomic::Ordering::Relaxed) {
                                 Err("Webtoon output cancelled; new results removed".into())
                             } else {
@@ -313,7 +313,76 @@ if ui.button("Close editor").clicked(){action=9;}});
     }
 }
 
+fn export_local(
+    d: &Document,
+    s: &c::Webtoon,
+    path: &std::path::Path,
+    tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+) -> Result<Vec<PathBuf>, String> {
+    drawer_core::webtoon::export_with_publisher(d, s, path, tick, &mut |source, destination| {
+        #[cfg(windows)]
+        {
+            drawer_platform::local_files::publish_no_replace(source, destination)
+                .map_err(|e| e.to_string())
+        }
+        #[cfg(not(windows))]
+        {
+            std::fs::hard_link(source, destination).map_err(|e| e.to_string())
+        }
+    })
+}
+fn drawer_platform_verify(root: &std::path::Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        drawer_platform::local_files::verify(root)?;
+    }
+    let dir = root.join("webtoon-native-publish");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let d = Document::create(
+            CanvasSpec {
+                width: 2,
+                height: 5,
+                dpi: 300.,
+                background: Background::Transparent,
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+        )
+        .map_err(|e| e.to_string())?;
+        let settings = c::Webtoon {
+            slice: 2,
+            ..Default::default()
+        };
+        let outputs = export_local(&d, &settings, &dir, &mut |_, _| Ok(()))?;
+        if outputs.len() != 3 {
+            return Err("Native publication strip count".into());
+        }
+        let race = c::Webtoon {
+            prefix: "race".into(),
+            ..settings
+        };
+        let foreign = dir.join("race-0002.png");
+        let result = export_local(&d, &race, &dir, &mut |done, _| {
+            if done == 6 {
+                std::fs::write(&foreign, b"foreign").map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        });
+        if result.is_ok()
+            || std::fs::read(&foreign).map_err(|e| e.to_string())? != b"foreign"
+            || dir.join("race-0001.png").exists()
+        {
+            return Err(
+                "Native publication race changed foreign bytes or retained a partial result".into(),
+            );
+        }
+        Ok(())
+    })();
+    let cleanup = std::fs::remove_dir_all(dir).map_err(|e| e.to_string());
+    result.and(cleanup)
+}
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_platform_verify(root)?;
     drawer_core::comic_verify::verify(root)?;
     let ctx = egui::Context::default();
     let mut app = Drawer::new(&ctx, None);

@@ -61,6 +61,29 @@ pub fn export(
     directory: &Path,
     tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
 ) -> Result<Vec<PathBuf>, String> {
+    export_with_publisher(d, s, directory, tick, &mut |a, b| {
+        fs::hard_link(a, b).map_err(|e| e.to_string())
+    })
+}
+pub fn export_with_publisher(
+    d: &Document,
+    s: &Webtoon,
+    directory: &Path,
+    tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+    publisher: &mut impl FnMut(&Path, &Path) -> Result<(), String>,
+) -> Result<Vec<PathBuf>, String> {
+    if !(1..=32768).contains(&d.width)
+        || !d.dpi.is_finite()
+        || d.dpi <= 0.
+        || !d.scene.valid()
+        || !d.scene.paper.valid_for(d.layers.len())
+        || !d.color.valid_layers(&d.layers)
+        || d.layers.iter().any(|l| !l.valid(d.width, d.height))
+        || !d.scene.catalog.valid_animation(d.animation.as_ref())
+        || d.animation.as_ref().is_some_and(|a| !a.valid())
+    {
+        return Err("Invalid document; no webtoon files were created".into());
+    }
     let strips = plan(d.height, s)?;
     let directory = directory.canonicalize().map_err(|e| e.to_string())?;
     if !crate::font_library::local(&directory) || !directory.is_dir() {
@@ -82,6 +105,9 @@ pub fn export(
         done: false,
     };
     let renderer = Renderer::for_export(d)?;
+    if let Some(error) = renderer.error() {
+        return Err(error.into());
+    }
     let mut completed = 0;
     let total = d.height as usize + strips.len();
     for strip in &strips {
@@ -119,7 +145,7 @@ pub fn export(
     for (strip, output) in strips.iter().zip(&outputs) {
         tick(completed, total)?;
         completed += 1;
-        fs::hard_link(stage.path.join(&strip.name), output)
+        publisher(&stage.path.join(&strip.name), output)
             .map_err(|e| format!("Could not publish without overwriting: {e}"))?;
         stage.published.push(output.clone());
     }

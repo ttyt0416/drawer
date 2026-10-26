@@ -445,6 +445,25 @@ pub fn bands() -> Result<(), String> {
             }
         }
     }
+    for (start, end) in [(0, 1), (63, 64)] {
+        let state = crate::webtoon_band::prepare(
+            &d,
+            crate::webtoon_band::Band::Remove { start, end },
+            true,
+        )?;
+        let mut copy = d.clone();
+        copy.commit_state(state)?;
+        let r = Renderer::new(&copy);
+        for y in 0..63 {
+            for x in 0..32 {
+                let source = if y < start as usize { y } else { y + 1 };
+                check(
+                    r.pixel([x as f64 + 0.5, y as f64 + 0.5]) == pixels[source * 32 + x],
+                    "First/last strip removal lost retained rows",
+                )?;
+            }
+        }
+    }
     d.layers[0].locked = true;
     check(
         crate::webtoon_band::prepare(&d, insert, true).is_err(),
@@ -760,6 +779,60 @@ pub fn metadata_output() -> Result<(), String> {
         "Page information not one Undo",
     )
 }
+pub fn metadata_files(root: &std::path::Path) -> Result<(), String> {
+    let dir = root.join("metadata-float-output");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let mut d = Document::create_with_color(
+            CanvasSpec {
+                width: 32,
+                height: 64,
+                dpi: 254.,
+                background: Background::Transparent,
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+            Default::default(),
+        )
+        .map_err(|e| e.to_string())?;
+        let sample = crate::color_precision::Sample::from16([12345, 23456, 34567, 65535]);
+        d.layers[0].precise.as_mut().unwrap()[32 * 32 + 16] = sample.rgba16();
+        d.layers[0].pixels[32 * 32 + 16] = sample.rgba8();
+        d.scene.comics.page = PageInfo {
+            trim_mm: [2.8, 6.],
+            bleed_mm: 0.2,
+            safe_mm: 0.1,
+            include_guides: true,
+            ..Default::default()
+        };
+        let before = d.snapshot();
+        let path = dir.join("guides.png");
+        crate::png_export::export(&d, &path, DEFAULT_DOCUMENT_BUDGET).map_err(|e| e.to_string())?;
+        let image = image::open(&path).map_err(|e| e.to_string())?.to_rgba8();
+        check(
+            image.get_pixel(2, 10).0[3] > 0,
+            "Float-color PNG omitted selected print guides",
+        )?;
+        check(
+            image.get_pixel(16, 32).0 == sample.rgba8() && d.snapshot() == before,
+            "Guide output changed color samples or original sixteen-bit data",
+        )?;
+        d.scene.comics.page.include_guides = false;
+        let path = dir.join("plain.png");
+        crate::png_export::export(&d, &path, DEFAULT_DOCUMENT_BUDGET).map_err(|e| e.to_string())?;
+        check(
+            image::open(&path)
+                .map_err(|e| e.to_string())?
+                .to_rgba8()
+                .get_pixel(2, 10)
+                .0[3]
+                == 0,
+            "Float PNG ignored output-guide exclusion",
+        )?;
+        Ok(())
+    })();
+    let cleanup = std::fs::remove_dir_all(dir).map_err(|e| e.to_string());
+    result.and(cleanup)
+}
 pub fn files(root: &std::path::Path) -> Result<(), String> {
     let root = root.join("comic-fixture");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
@@ -841,6 +914,36 @@ pub fn files(root: &std::path::Path) -> Result<(), String> {
             crate::webtoon::export(&d, &settings, &root, &mut |_, _| Ok(())).is_err(),
             "Output collision overwritten",
         )?;
+        let mut invalid = d.clone();
+        invalid.scene.transform = Affine([0.; 6]);
+        let invalid_settings = Webtoon {
+            prefix: "invalid".into(),
+            ..settings.clone()
+        };
+        check(
+            crate::webtoon::export(&invalid, &invalid_settings, &root, &mut |_, _| Ok(())).is_err(),
+            "Invalid scene produced transparent webtoon files",
+        )?;
+        let race = Webtoon {
+            prefix: "race".into(),
+            ..settings.clone()
+        };
+        let race_plan = crate::webtoon::plan(d.height, &race)?;
+        let foreign = root.join(&race_plan[1].name);
+        let mut injected = false;
+        let collision = crate::webtoon::export(&d, &race, &root, &mut |done, _| {
+            if !injected && done == d.height as usize + 1 {
+                std::fs::write(&foreign, b"foreign file").map_err(|e| e.to_string())?;
+                injected = true;
+            }
+            Ok(())
+        });
+        check(
+            collision.is_err()
+                && std::fs::read(&foreign).map_err(|e| e.to_string())? == b"foreign file"
+                && !root.join(&race_plan[0].name).exists(),
+            "Publication race overwrote a file or retained a partial result",
+        )?;
         let cancel = Webtoon {
             prefix: "cancel".into(),
             ..settings.clone()
@@ -879,6 +982,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     dialogue()?;
     metadata()?;
     metadata_output()?;
+    metadata_files(root)?;
     files(root)
 }
 #[cfg(test)]
@@ -923,6 +1027,11 @@ mod tests {
     #[test]
     fn page_trim_guides_numbers_output_exclusion_dpi_and_document_undo() {
         metadata_output().unwrap();
+    }
+    #[test]
+    fn floating_color_png_guides_respect_flags_without_mutating_sixteen_bits() {
+        let root = crate::test_support::TempDir::new();
+        metadata_files(&root.0).unwrap();
     }
     #[test]
     fn comic_native_and_exact_strip_output_collision_and_cancel() {

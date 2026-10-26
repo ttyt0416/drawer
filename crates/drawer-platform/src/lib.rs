@@ -293,3 +293,6 @@ pub use screen_sample::{ScreenSample, verify_screen_boundary};
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub mod gpu_color;
+
+#[allow(unsafe_code)]
+pub mod local_files;

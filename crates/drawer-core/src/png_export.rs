@@ -68,9 +68,31 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
                 budget.saturating_sub(extra) / 2,
             )
             .map_err(|e| invalid(&e))?;
-        let crate::color_precision::Pixels::Eight(pixels) = output else {
+        let crate::color_precision::Pixels::Eight(mut pixels) = output else {
             unreachable!()
         };
+        let page = &d.scene.comics.page;
+        page.guides(d).map_err(|e| invalid(&e))?;
+        if page.include_guides || page.include_number {
+            use crate::color_precision::{Depth, Sample};
+            let space = crate::color_profile::WorkingSpace::new(&d.color.profile)
+                .map_err(|e| invalid(&e))?;
+            for (i, pixel) in pixels.iter_mut().enumerate() {
+                let x = (i % d.width as usize) as i64;
+                let y = (i / d.width as usize) as i64;
+                let overlay = page.output_pixel(d, [x as f64 + 0.5, y as f64 + 0.5]);
+                if overlay[3] != 0 {
+                    let overlay = space
+                        .from_srgb(Sample::from8(overlay))
+                        .map_err(|e| invalid(&e))?;
+                    *pixel = Sample::from8(*pixel)
+                        .over(overlay, crate::layer_blend::Mode::Normal, 1.)
+                        .map_err(|e| invalid(&e))?
+                        .store(Depth::Eight, d.color.dither, [x, y])
+                        .map(|v| v as u8);
+                }
+            }
+        }
         (d.width, d.height, pixels)
     } else {
         Renderer::for_export(document)

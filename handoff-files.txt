@@ -821,3 +821,4 @@ crates/drawer-core/src/page_work.rs
 crates/drawer-core/src/page_work_verify.rs
 crates/drawer-app/src/page_work.rs
 docs/process/page-work.md
+crates/drawer-platform/src/local_files.rs
