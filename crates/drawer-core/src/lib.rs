@@ -477,3 +477,8 @@ pub mod book_production_verify;
 pub mod page_resources;
 pub mod scan_batch;
 pub mod storyboard;
+
+pub mod epub_metadata;
+
+pub mod publication_verify;
+pub mod shot_exchange;

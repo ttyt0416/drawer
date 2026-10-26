@@ -15,6 +15,12 @@ pub(super) struct Panel {
     export_range: String,
     dpi: f64,
     title: String,
+    author: String,
+    language: String,
+    cover: usize,
+    right_binding: bool,
+    blank_after: String,
+    import_meta: Option<drawer_core::epub_metadata::Metadata>,
     project: bool,
     prepared: Option<(PathBuf, Vec<Page>)>,
     job: Option<Job>,
@@ -32,7 +38,11 @@ impl Drop for Job {
     }
 }
 enum ResultValue {
-    Pages(PathBuf, Vec<Page>),
+    Pages(
+        PathBuf,
+        Vec<Page>,
+        Option<drawer_core::epub_metadata::Metadata>,
+    ),
     Output(String),
 }
 fn job(
@@ -142,6 +152,7 @@ impl Drawer {
         if self.book_io.dpi == 0. {
             self.book_io.dpi = 300.;
             self.book_io.title = "Local image book".into();
+            self.book_io.language = "ko".into();
             self.book_io.project = self.active_page_work().is_some();
         }
         Ok(())
@@ -162,9 +173,18 @@ impl Drawer {
         let budget = self.book_budget();
         let mut docs = vec![];
         let mut used = pages.iter().map(|p| p.image.memory_bytes()).sum::<usize>();
-        for p in pages {
+        for (n, p) in pages.iter().enumerate() {
             let mut d = p.document(budget.saturating_sub(used))?;
             d.source_path = Some(path.clone());
+            if let Some(meta) = &self.book_io.import_meta {
+                let info = &mut d.scene.comics.page;
+                info.title = meta.title.clone();
+                info.author = meta.author.clone();
+                info.language = meta.language.clone();
+                info.right_binding = meta.right_binding;
+                info.number = n as u32 + 1;
+                info.total = pages.len() as u32;
+            }
             used = used.saturating_add(d.resident_bytes());
             if used > budget {
                 return Err("Imported document memory limit; choose fewer pages".into());
@@ -232,9 +252,18 @@ impl Drawer {
         self.book_io.texture = None;
         self.book_io.notice = "Preparing every selected page before adding documents…".into();
         self.book_io.job = Some(job(ctx, move |cancel| {
-            let pages = import(&path, &range, dpi, budget, cancel)?;
+            let (pages, metadata) = if path
+                .extension()
+                .is_some_and(|s| s.eq_ignore_ascii_case("epub"))
+            {
+                let bytes = core::read_local(&path, budget / 2)?;
+                let decoded = drawer_core::epub_metadata::decode(&bytes, &range, budget, cancel)?;
+                (decoded.pages, Some(decoded.metadata))
+            } else {
+                (import(&path, &range, dpi, budget, cancel)?, None)
+            };
             core::check_cancel(cancel)?;
-            Ok(ResultValue::Pages(path, pages))
+            Ok(ResultValue::Pages(path, pages, metadata))
         }));
         Ok(())
     }
@@ -250,10 +279,32 @@ impl Drawer {
         let sources = self.book_sources()?;
         let dpi = self.book_io.dpi;
         let budget = self.book_budget();
-        let title = self.book_io.title.clone();
+        let metadata = drawer_core::epub_metadata::Metadata {
+            title: self.book_io.title.clone(),
+            author: self.book_io.author.clone(),
+            language: self.book_io.language.clone(),
+            identifier: String::new(),
+            cover: self.book_io.cover.checked_sub(1),
+            right_binding: self.book_io.right_binding,
+        };
+        let blank = self.book_io.blank_after.trim();
+        let blank = if kind != 2 || blank.is_empty() {
+            None
+        } else {
+            Some(
+                blank
+                    .parse::<usize>()
+                    .map_err(|_| "Blank position must be an integer or empty")?,
+            )
+        };
         self.book_io.notice = "Preparing selected page composites…".into();
         self.book_io.job = Some(job(ctx, move |cancel| {
-            let pages = output(sources, dpi, budget, cancel)?;
+            let mut pages = output(sources, dpi, budget, cancel)?;
+            if kind == 2
+                && let Some(after) = blank
+            {
+                drawer_core::epub_metadata::blank_after(&mut pages, after, budget)?;
+            }
             if kind == 3 {
                 #[cfg(windows)]
                 {
@@ -276,7 +327,7 @@ impl Drawer {
             let bytes = if kind == 1 {
                 drawer_core::book_pdf::encode(&pages, cancel)?
             } else {
-                drawer_core::book_epub::encode(&pages, &title, cancel)?
+                drawer_core::book_epub::encode_metadata(&pages, &metadata, cancel)?
             };
             publish(&path, &bytes, cancel)?;
             Ok(ResultValue::Output(format!(
@@ -298,7 +349,15 @@ impl Drawer {
                 let cancelled = j.cancel.load(Ordering::Relaxed);
                 self.book_io.job = None;
                 match result {
-                    Ok(ResultValue::Pages(path, pages)) if !cancelled => {
+                    Ok(ResultValue::Pages(path, pages, metadata)) if !cancelled => {
+                        if let Some(m) = &metadata {
+                            self.book_io.title = m.title.clone();
+                            self.book_io.author = m.author.clone();
+                            self.book_io.language = m.language.clone();
+                            self.book_io.right_binding = m.right_binding;
+                            self.book_io.cover = m.cover.map_or(0, |n| n + 1);
+                        }
+                        self.book_io.import_meta = metadata;
                         self.book_io.notice = format!(
                             "{} raster pages prepared. Review, then add all pages.",
                             pages.len()
@@ -334,6 +393,7 @@ impl Drawer {
                 if let Some((_,pages))=&p.prepared{
                     if p.texture.is_none(){let i=&pages[0].image;let scale=(i.width.max(i.height) as f64/256.).max(1.);let w=(i.width as f64/scale).round().max(1.)as usize;let h=(i.height as f64/scale).round().max(1.)as usize;let pixels=(0..h).flat_map(|y|(0..w).map(move|x|i.pixels[((y*i.height as usize/h)*i.width as usize)+(x*i.width as usize/w)])).flatten().collect::<Vec<_>>();p.texture=Some(ctx.load_texture("book-first-page",egui::ColorImage::from_rgba_unmultiplied([w,h],&pixels),egui::TextureOptions::LINEAR));}
                     if let Some(t)=&p.texture{ui.image((t.id(),t.size_vec2()));}ui.label(format!("First page shown · {} selected pages",pages.len()));
+                    if let Some(m)=&p.import_meta{ui.label(format!("{} · {} · {} · {} · cover {:?}",m.title,m.author,m.language,m.identifier,m.cover.map(|n|n+1)));}
                     let r=ui.button("Add all prepared pages");p.apply=Some(r.rect);if r.clicked(){action=2;}
                     if ui.button("Discard prepared import").clicked(){p.prepared=None;p.texture=None;}
                 }
@@ -341,6 +401,11 @@ impl Drawer {
                 ui.checkbox(&mut p.project,"Use current local project order (otherwise open documents)");
                 ui.horizontal(|ui|{ui.label("Output pages (e.g. 1,3-5)");ui.text_edit_singleline(&mut p.export_range);});
                 ui.horizontal(|ui|{ui.label("EPUB title");ui.text_edit_singleline(&mut p.title);});
+                ui.horizontal(|ui|{ui.label("Author / language");ui.text_edit_singleline(&mut p.author);ui.text_edit_singleline(&mut p.language);});
+                ui.checkbox(&mut p.right_binding,"EPUB reads right to left");
+                ui.horizontal(|ui|{ui.label("Cover page in final EPUB (0 = none)");ui.add(egui::DragValue::new(&mut p.cover).range(0..=512));});
+                ui.horizontal(|ui|{ui.label("Insert one blank after selected page (0 = before first; empty = none)");ui.text_edit_singleline(&mut p.blank_after);});
+                ui.label("EPUB identifier is generated locally from metadata and pixels. Cover numbering includes the inserted blank.");
                 ui.horizontal_wrapped(|ui|{if ui.button("Save composite PDF…").clicked(){action=3;}
 if ui.button("Save image EPUB…").clicked(){action=4;}
 if ui.button("Print selected pages…").clicked(){action=5;}});
@@ -529,8 +594,149 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     let cleanup = std::fs::remove_dir_all(dir).map_err(|e| e.to_string());
     result.and(cleanup)
 }
+pub(super) fn metadata_smoke(root: &Path) -> Result<(), String> {
+    drawer_core::publication_verify::epub()?;
+    let dir = root.join("epub-metadata-ui");
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.simple_view = true;
+        let mut d = Document::create(
+            CanvasSpec {
+                width: 12,
+                height: 18,
+                dpi: 300.,
+                background: Background::Transparent,
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+        )
+        .map_err(|e| e.to_string())?;
+        d.edit_pixel(0, 2, 2, [90, 30, 120, 255]);
+        let snapshot = d.snapshot();
+        let history = d.history_counts();
+        app.add_document(d);
+        app.execute_command(&ctx, "page-exchange");
+        app.book_io.project = false;
+        app.book_io.title = "한글 도서".into();
+        app.book_io.author = "로컬 저자".into();
+        app.book_io.language = "ko-KR".into();
+        app.book_io.right_binding = true;
+        app.book_io.cover = 2;
+        app.book_io.blank_after = "0".into();
+        let mut time = 0.;
+        let frame = |app: &mut Drawer, time: &mut f64, events| {
+            *time += 0.1;
+            input_replay::frame(&ctx, app, *time, events);
+        };
+        let wait = |app: &mut Drawer, time: &mut f64| -> Result<(), String> {
+            let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while app.book_io.job.is_some() {
+                frame(app, time, vec![]);
+                if std::time::Instant::now() > end {
+                    return Err("Metadata EPUB worker timeout".into());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Ok(())
+        };
+        let path = dir.join("book.epub");
+        app.start_book_output(&ctx, 2, Some(path.clone()))?;
+        wait(&mut app, &mut time)?;
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {}", e, app.book_io.notice))?;
+        let decoded = drawer_core::epub_metadata::decode(
+            &bytes,
+            "",
+            DEFAULT_DOCUMENT_BUDGET,
+            &AtomicBool::new(false),
+        )?;
+        if decoded.pages.len() != 2
+            || decoded.metadata.cover != Some(1)
+            || decoded.metadata.author != "로컬 저자"
+            || !decoded.pages[0].image.pixels.iter().all(|p| *p == [255; 4])
+        {
+            return Err("UI metadata EPUB output failed".into());
+        }
+        app.book_io.path = path.to_string_lossy().into_owned();
+        app.book_io.import_range = String::new();
+        app.start_book_import(&ctx)?;
+        wait(&mut app, &mut time)?;
+        if app.book_io.prepared.is_none() {
+            return Err(format!(
+                "Metadata import preparation failed: {}",
+                app.book_io.notice
+            ));
+        }
+        for _ in 0..3 {
+            frame(&mut app, &mut time, vec![]);
+        }
+        let r = app
+            .book_io
+            .apply
+            .ok_or("Metadata EPUB confirmation missing")?;
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                &mut time,
+                vec![
+                    egui::Event::PointerMoved(r.center()),
+                    egui::Event::PointerButton {
+                        pos: r.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        if app.documents.len() != 3
+            || app.documents[0].snapshot() != snapshot
+            || app.documents[0].history_counts() != history
+            || std::fs::read(&path).unwrap() != bytes
+        {
+            return Err("Metadata EPUB pointer import changed source or failed".into());
+        }
+        for d in &app.documents[1..] {
+            let p = &d.scene.comics.page;
+            if p.author != "로컬 저자" || p.language != "ko-KR" || !p.right_binding || p.total != 2
+            {
+                return Err("EPUB bibliography lost on imported native pages".into());
+            }
+        }
+        app.book_io.blank_after = "unused invalid EPUB field".into();
+        let pdf = dir.join("independent.pdf");
+        app.start_book_output(&ctx, 1, Some(pdf.clone()))?;
+        wait(&mut app, &mut time)?;
+        if !pdf.is_file() {
+            return Err(format!(
+                "EPUB-only option blocked PDF output: {}",
+                app.book_io.notice
+            ));
+        }
+        let invalid_epub = dir.join("invalid.epub");
+        if app
+            .start_book_output(&ctx, 2, Some(invalid_epub.clone()))
+            .is_ok()
+            || invalid_epub.exists()
+        {
+            return Err("Invalid EPUB blank position was accepted".into());
+        }
+        Ok(())
+    })();
+    let cleanup = std::fs::remove_dir_all(&dir).map_err(|e| e.to_string());
+    result.and(cleanup)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pointer_epub_bibliography_blank_cover_import() {
+        let root = std::env::temp_dir().join(format!("drawer-epub-meta-ui-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let r = super::metadata_smoke(&root);
+        std::fs::remove_dir(root).unwrap();
+        r.unwrap();
+    }
     #[test]
     fn book_preview_pointer_confirm_selected_output_and_atomic_partial_failure() {
         let root = std::env::temp_dir().join(format!("drawer-book-app-{}", std::process::id()));

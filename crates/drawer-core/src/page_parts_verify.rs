@@ -233,7 +233,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
         crate::files::save(&mut merged, &path).map_err(|e| e.to_string())?;
         let bytes = std::fs::read(&path).unwrap();
         check(
-            u32::from_le_bytes(bytes[8..12].try_into().unwrap()) == 94,
+            u32::from_le_bytes(bytes[8..12].try_into().unwrap()) == crate::files::VERSION,
             "Contained page native version",
         )?;
         let opened = crate::files::open(&path, B).map_err(|e| e.to_string())?;

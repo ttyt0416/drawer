@@ -216,6 +216,11 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::shot_exchange::Data::is_default"
+    )]
+    pub shots: crate::shot_exchange::Data,
     #[serde(default, skip_serializing_if = "crate::page_parts::Data::is_default")]
     pub page_parts: crate::page_parts::Data,
     #[serde(default, skip_serializing_if = "crate::comics::Data::is_default")]
@@ -377,6 +382,7 @@ impl Scene {
                         .all(|v| v.is_finite() && v.abs() <= 1e12)
                 })
             && crate::comics::valid_scene(self)
+            && self.shots.valid()
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
             && self.catalog.worlds.matches(self.worlds.len())
@@ -454,7 +460,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.page_parts.bytes()
+        self.shots.bytes()
+            + self.page_parts.bytes()
             + self.comics.bytes()
             + self
                 .objects

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 94;
+pub(crate) const VERSION: u32 = 95;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 95 && !document.scene.shots.is_default() {
+            return Err(invalid("Shot metadata requires native95"));
         }
         if version < 94
             && (!document.scene.page_parts.is_default()
@@ -466,7 +469,10 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if version >= 94 {
         crate::page_parts::read(&mut document, &mut reader, budget)?;
     }
-    if !document.scene.valid() || document.memory_bytes() > budget {
+    if !document.scene.valid()
+        || !crate::shot_exchange::valid_document(&document)
+        || document.memory_bytes() > budget
+    {
         return Err(invalid("Invalid embedded page sources or memory budget"));
     }
     let mut trailing = [0];
@@ -526,6 +532,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
+    if !crate::shot_exchange::valid_document(document) {
+        return Err(invalid("Invalid shot source identities"));
+    }
     if !(1..=MAX_DIMENSION).contains(&document.width)
         || !(1..=MAX_DIMENSION).contains(&document.height)
         || !document.dpi.is_finite()

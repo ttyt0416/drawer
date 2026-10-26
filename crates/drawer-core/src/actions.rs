@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 219] = [
+pub const EXTRA_COMMANDS: [&str; 220] = [
+    "shot-exchange",
     "book-production",
     "page-structure",
     "page-exchange",
@@ -522,6 +523,7 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "shot-exchange" => "Local shot and dialogue JSON / CSV exchange",
             "book-production" => "Local book preview, preflight, storyboard and continuous scan",
             "page-structure" => "Page batches, editable spreads and frame structure",
             "page-exchange" => "PDF, local image EPUB and selected-page printing",

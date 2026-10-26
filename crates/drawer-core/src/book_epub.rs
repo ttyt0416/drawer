@@ -15,7 +15,7 @@ fn xml(s: &str) -> String {
         .replace('\"', "&quot;")
         .replace('\'', "&apos;")
 }
-fn resolve(base: &str, href: &str) -> Result<String, String> {
+pub(crate) fn resolve(base: &str, href: &str) -> Result<String, String> {
     let mut decoded = vec![];
     let mut i = 0;
     let b = href.as_bytes();
@@ -338,12 +338,33 @@ pub fn decode(
     Ok(pages)
 }
 pub fn encode(pages: &[Page], title: &str, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
+    encode_metadata(
+        pages,
+        &crate::epub_metadata::Metadata {
+            title: title.into(),
+            ..Default::default()
+        },
+        cancel,
+    )
+}
+pub fn encode_metadata(
+    pages: &[Page],
+    metadata: &crate::epub_metadata::Metadata,
+    cancel: &AtomicBool,
+) -> Result<Vec<u8>, String> {
+    if !metadata.valid(pages.len()) {
+        return Err("Invalid EPUB title/author/language/cover metadata".into());
+    }
+    let title = &metadata.title;
     book_io::validate(pages, book_io::MAX_BYTES)?;
     if title.trim().is_empty() || title.len() > 4096 || title.chars().any(char::is_control) {
         return Err("Choose a book title".into());
     }
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
+    let mut seed = metadata.clone();
+    seed.identifier.clear();
+    hash.update(serde_json::to_vec(&seed).map_err(|e| e.to_string())?);
     for p in pages {
         hash.update(p.image.width.to_le_bytes());
         hash.update(p.image.height.to_le_bytes());
@@ -392,7 +413,12 @@ pub fn encode(pages: &[Page], title: &str, cancel: &AtomicBool) -> Result<Vec<u8
             p.image.width, p.image.height, p.dpi
         );
         add(&format!("EPUB/{xhtml}"), html.as_bytes(), true)?;
-        manifest.push_str(&format!("<item id=\"page{num}\" href=\"{xhtml}\" media-type=\"application/xhtml+xml\"/><item id=\"image{num}\" href=\"{png}\" media-type=\"image/png\"/>"));
+        let cover = if metadata.cover == Some(i) {
+            " properties=\"cover-image\""
+        } else {
+            ""
+        };
+        manifest.push_str(&format!("<item id=\"page{num}\" href=\"{xhtml}\" media-type=\"application/xhtml+xml\"/><item id=\"image{num}\" href=\"{png}\" media-type=\"image/png\"{cover}/>"));
         spine.push_str(&format!("<itemref idref=\"page{num}\"/>"));
         links.push_str(&format!("<li><a href=\"{xhtml}\">Page {num}</a></li>"));
     }
@@ -401,8 +427,11 @@ pub fn encode(pages: &[Page], title: &str, cancel: &AtomicBool) -> Result<Vec<u8
     );
     add("EPUB/nav.xhtml", nav.as_bytes(), true)?;
     let package = format!(
-        "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"book-id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"book-id\">{identifier}</dc:identifier><dc:title>{}</dc:title><dc:language>ko</dc:language><meta property=\"dcterms:modified\">1980-01-01T00:00:00Z</meta><meta property=\"rendition:layout\">pre-paginated</meta><meta property=\"rendition:spread\">none</meta></metadata><manifest>{manifest}</manifest><spine>{spine}</spine></package>",
-        xml(title)
+        "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"book-id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"book-id\">{identifier}</dc:identifier><dc:title>{}</dc:title><dc:creator>{}</dc:creator><dc:language>{}</dc:language><meta property=\"dcterms:modified\">1980-01-01T00:00:00Z</meta><meta property=\"rendition:layout\">pre-paginated</meta><meta property=\"rendition:spread\">none</meta></metadata><manifest>{manifest}</manifest><spine page-progression-direction=\"{}\">{spine}</spine></package>",
+        xml(title),
+        xml(&metadata.author),
+        xml(&metadata.language),
+        if metadata.right_binding { "rtl" } else { "ltr" }
     );
     add("EPUB/package.opf", package.as_bytes(), true)?;
     let out = zip.finish().map_err(|e| e.to_string())?.into_inner();

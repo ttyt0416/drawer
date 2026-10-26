@@ -437,6 +437,7 @@ pub(crate) fn valid_live(d: &Document) -> bool {
 }
 pub(crate) fn prune(s: &mut DocumentState) {
     crate::page_parts::prune(s);
+    crate::shot_exchange::prune(s);
     let live = s
         .scene
         .file_objects

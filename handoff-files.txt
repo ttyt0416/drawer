@@ -844,3 +844,8 @@ crates/drawer-core/src/storyboard.rs
 crates/drawer-core/src/scan_batch.rs
 crates/drawer-core/src/book_production_verify.rs
 docs/process/book-production.md
+crates/drawer-core/src/epub_metadata.rs
+crates/drawer-core/src/shot_exchange.rs
+crates/drawer-core/src/publication_verify.rs
+crates/drawer-app/src/shot_exchange.rs
+docs/process/publication-exchange.md
