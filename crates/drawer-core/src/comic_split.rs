@@ -52,6 +52,11 @@ pub fn prepare(d: &Document, id: u64, path: &[Point]) -> Result<DocumentState, S
     let Kind::Frame(frame) = &object.kind else {
         return Err("Select a frame folder".into());
     };
+    if !frame.compound.is_empty() || !frame.component_masks.is_empty() {
+        return Err(
+            "Use equal division for a compound frame, or edit its component polygons first".into(),
+        );
+    }
     crate::layer_groups::preflight(
         d,
         &[Key::Object(id)],
@@ -154,6 +159,8 @@ pub fn prepare(d: &Document, id: u64, path: &[Point]) -> Result<DocumentState, S
             unreachable!()
         };
         f.polygon = polygon;
+        f.hidden_edges.clear();
+        f.outline.clear();
         f.family = if frame.family == 0 { id } else { frame.family };
         child.name = format!(
             "{} {}",

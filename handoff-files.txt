@@ -830,3 +830,11 @@ crates/drawer-platform/src/book_pdf.rs
 crates/drawer-platform/src/book_print.rs
 crates/drawer-app/src/book_io.rs
 docs/process/book-io.md
+crates/drawer-core/src/page_parts.rs
+crates/drawer-core/src/page_parts_verify.rs
+crates/drawer-core/src/frame_ops.rs
+crates/drawer-core/src/page_batch.rs
+crates/drawer-core/src/page_resources.rs
+crates/drawer-core/src/page_structure_verify.rs
+crates/drawer-app/src/page_structure.rs
+docs/process/page-structure.md

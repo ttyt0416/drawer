@@ -273,8 +273,8 @@ pub fn coverage(d: &Document, key: Key, p: Point) -> f64 {
             let visible = !crate::layer_properties::inherited(d, Target::Object(id)).hidden;
             let inside = visible
                 && source_mask(d, Key::Object(id), p)
-                && contains(&f.polygon, local)
-                && edge_distance(&f.polygon, local) + 1e-9 >= f.gap / 2.;
+                && crate::frame_ops::contains(f, local)
+                && crate::frame_ops::edge_distance(f, local) + 1e-9 >= f.gap / 2.;
             *families.entry(family).or_default() |= inside;
         }
     }
@@ -291,7 +291,10 @@ pub fn shift_masks(s: &mut Scene, key: Key, matrix: Affine) {
         }
     }
 }
-pub fn prepare(d: &Document, id: Option<u64>, object: Object) -> Result<DocumentState, String> {
+pub fn prepare(d: &Document, id: Option<u64>, mut object: Object) -> Result<DocumentState, String> {
+    if let Kind::Frame(f) = &mut object.kind {
+        crate::frame_ops::refresh(f)?;
+    }
     if let Some(id) = id {
         crate::layer_groups::preflight(
             d,
@@ -361,6 +364,10 @@ pub fn defaults(rect: Rect) -> [Object; 4] {
             name: "Frame folder".into(),
             transform: Default::default(),
             kind: Kind::Frame(Frame {
+                component_masks: vec![],
+                compound: vec![],
+                outline: vec![],
+                hidden_edges: vec![],
                 polygon: vec![
                     rect.min,
                     [rect.max[0], rect.min[1]],

@@ -461,3 +461,15 @@ pub mod book_io;
 pub mod book_pdf;
 
 pub mod book_verify;
+
+pub mod page_parts;
+
+pub mod page_parts_verify;
+
+pub mod frame_ops;
+
+pub mod page_batch;
+
+pub mod page_structure_verify;
+
+pub mod page_resources;

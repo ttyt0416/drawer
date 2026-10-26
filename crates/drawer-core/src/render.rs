@@ -11,6 +11,7 @@ mod text_contour_tree;
 #[path = "text_paint.rs"]
 mod text_paint;
 pub struct Renderer<'a> {
+    page_parts: Vec<(u64, Box<Renderer<'a>>)>,
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
     owned: Option<Box<Document>>,
@@ -136,6 +137,7 @@ impl<'a> Renderer<'a> {
             .map(String::as_str)
             .or_else(|| self.appearance.as_ref().err().map(String::as_str))
             .or(self.text_error.as_deref())
+            .or_else(|| self.page_parts.iter().find_map(|(_, r)| r.error()))
     }
     fn float_renderer(&self) -> Result<Option<crate::float_render::Renderer<'_>>, String> {
         match &self.float_plan {
@@ -261,6 +263,22 @@ impl<'a> Renderer<'a> {
         document.scene.comics.page.guides(document)?;
         let mut r = Self::new(document);
         r.owned = crate::layer_roles::output_view(document)?;
+        r.page_parts = document
+            .scene
+            .page_parts
+            .entries
+            .iter()
+            .filter_map(|p| {
+                p.export_document()
+                    .map(|d| Self::for_export(d).map(|r| (p.object, Box::new(r))))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if document.color != crate::color_storage::Config::legacy()
+            || !document.scene.surface_effects.rasters.is_empty()
+            || crate::local_color::active(&document.scene)
+        {
+            r.float_plan = crate::float_render::Renderer::prepare_export_plan(document).map(Some);
+        }
         r.export_page = true;
         Ok(r)
     }
@@ -293,7 +311,14 @@ impl<'a> Renderer<'a> {
                 .map_or([0; 4], |g| {
                     g.pixel(original, self.doc().scene.transform, self.doc().dpi)
                 }),
-            PageObject::Material(m) => m.pixel(original),
+            PageObject::Material(m) => {
+                let id = self.doc().scene.catalog.objects.id(index);
+                if let Some((_, child)) = self.page_parts.iter().find(|(key, _)| *key == id) {
+                    m.local(original).map_or([0; 4], |p| child.pixel(p))
+                } else {
+                    m.pixel(original)
+                }
+            }
             PageObject::Text { .. } => self.text_contours[index].pixel(original),
             PageObject::Line {
                 start,
@@ -669,6 +694,17 @@ impl<'a> Renderer<'a> {
             })
             .collect();
         Self {
+            page_parts: if caches {
+                document
+                    .scene
+                    .page_parts
+                    .entries
+                    .iter()
+                    .filter_map(|p| p.document().map(|d| (p.object, Box::new(Renderer::new(d)))))
+                    .collect()
+            } else {
+                vec![]
+            },
             float_plan: Ok(None),
             document,
             owned: None,

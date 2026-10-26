@@ -216,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::page_parts::Data::is_default")]
+    pub page_parts: crate::page_parts::Data,
     #[serde(default, skip_serializing_if = "crate::comics::Data::is_default")]
     pub comics: Box<crate::comics::Data>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -348,6 +350,7 @@ impl Scene {
         }
         self.paper_background.is_none_or(|id| id > 0) && self.layer_groups.valid() && self.layer_comps.valid() && self.render_order.valid() && crate::render_order::relationships_valid(self)
             && !self.clipping.rasters.iter().any(|(id,base)|self.render_order.deferred(*id)||matches!(base,crate::layer_properties::Target::Raster(id)if self.render_order.deferred(*id)))
+            && self.page_parts.valid(self,missing)
             && self.file_objects.valid(missing)
             && self.file_objects.entries.iter().all(|l| {
                 [l.cache.bounds().min, l.cache.bounds().max]
@@ -451,7 +454,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.comics.bytes()
+        self.page_parts.bytes()
+            + self.comics.bytes()
             + self
                 .objects
                 .iter()

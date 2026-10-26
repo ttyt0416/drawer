@@ -343,6 +343,7 @@ pub fn reconcile(before: &Document, after: &mut DocumentState) -> Result<(), Str
     Ok(())
 }
 pub fn clear_rendered(d: &Document, state: &mut DocumentState) -> Result<(), String> {
+    state.scene.page_parts = Default::default();
     let c = &mut state.scene.catalog;
     state.scene.appearance = Default::default();
     c.objects.clear(d.scene.objects.len())?;
@@ -601,6 +602,13 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
                 Kind::Text,
             ),
             PageObject::Tone { .. } => (format!("Tone {}", n + 1), Kind::Tone),
+            PageObject::Material(_) if d.scene.page_parts.get(c.objects.id(n)).is_some() => (
+                format!(
+                    "Contained page · {}",
+                    d.scene.page_parts.get(c.objects.id(n)).unwrap().name
+                ),
+                Kind::Image,
+            ),
             PageObject::Material(m) => (
                 format!("Material {}", c.objects.id(n)),
                 match &m.source {

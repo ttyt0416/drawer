@@ -436,6 +436,7 @@ pub(crate) fn valid_live(d: &Document) -> bool {
         .all(|l| live(d.layers.len(), &d.scene, d.animation.as_ref(), l.target))
 }
 pub(crate) fn prune(s: &mut DocumentState) {
+    crate::page_parts::prune(s);
     let live = s
         .scene
         .file_objects

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 93;
+const VERSION: u32 = 94;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -220,6 +220,14 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
                 "Editable mesh sources and transform frames require native version81",
             ));
         }
+        if version < 94
+            && (!document.scene.page_parts.is_default()
+                || crate::frame_ops::requires94(&document.scene))
+        {
+            return Err(invalid(
+                "Editable page containers and compound/clipped frames require version94",
+            ));
+        }
         if version < 93
             && (!document.scene.comics.is_default()
                 || document
@@ -422,7 +430,12 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if version >= 81 {
         crate::mesh_edit::read(&mut document.scene, &mut reader)?;
     }
-    if !document.scene.valid() || document.memory_bytes() > budget {
+    if !(if version >= 94 {
+        document.scene.metadata_valid()
+    } else {
+        document.scene.valid()
+    }) || document.memory_bytes() > budget
+    {
         return Err(invalid("Invalid material image payload or budget"));
     }
     if !document
@@ -449,6 +462,12 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     .map_err(invalid)?;
     if version >= 62 {
         crate::color_storage::read(&mut document, &mut reader, budget)?;
+    }
+    if version >= 94 {
+        crate::page_parts::read(&mut document, &mut reader, budget)?;
+    }
+    if !document.scene.valid() || document.memory_bytes() > budget {
+        return Err(invalid("Invalid embedded page sources or memory budget"));
     }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
@@ -482,6 +501,31 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     } else {
         path
     };
+    let scene = native_scene(document)?;
+    let mut temp_name = path.file_name().unwrap().to_owned();
+    temp_name.push(".drawer-write.tmp");
+    let temporary = path.with_file_name(temp_name);
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let mut writer = BufWriter::new(file);
+    let result = (|| {
+        write_payload(document, &scene, &mut writer)?;
+        writer.flush()?;
+        writer.get_ref().sync_all()
+    })();
+    drop(writer);
+    let result = result.and_then(|_| fs::rename(&temporary, &path));
+    if let Err(error) = result {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    document.mark_saved(path);
+    Ok(())
+}
+
+fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     if !(1..=MAX_DIMENSION).contains(&document.width)
         || !(1..=MAX_DIMENSION).contains(&document.height)
         || !document.dpi.is_finite()
@@ -506,7 +550,11 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     if !document.scene.valid()
         || !document.scene.layer_ids.matches(document.layers.len())
         || !document.scene.paper.valid_for(document.layers.len())
-        || document.scene.size_bytes() > MAX_SCENE_BYTES
+        || document
+            .scene
+            .size_bytes()
+            .saturating_sub(document.scene.page_parts.payload_bytes())
+            > MAX_SCENE_BYTES
     {
         return Err(invalid("Invalid or oversized page geometry"));
     }
@@ -537,65 +585,80 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     if scene.len() > MAX_SCENE_BYTES {
         return Err(invalid("Page geometry is too large"));
     }
-    let mut temp_name = path.file_name().unwrap().to_owned();
-    temp_name.push(".drawer-write.tmp");
-    let temporary = path.with_file_name(temp_name);
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)?;
-    let mut writer = BufWriter::new(file);
-    let result = (|| {
-        writer.write_all(MAGIC)?;
-        writer.write_all(&VERSION.to_le_bytes())?;
-        writer.write_all(&document.width.to_le_bytes())?;
-        writer.write_all(&document.height.to_le_bytes())?;
-        writer.write_all(&document.dpi.to_bits().to_le_bytes())?;
-        writer.write_all(&(document.layers.len() as u32).to_le_bytes())?;
-        for layer in &document.layers {
-            writer.write_all(&(layer.name.len() as u32).to_le_bytes())?;
-            writer.write_all(layer.name.as_bytes())?;
-            if let Some(p) = layer.placement {
-                writer.write_all(&1u32.to_le_bytes())?;
-                writer.write_all(&p.width.to_le_bytes())?;
-                writer.write_all(&p.height.to_le_bytes())?;
-                writer.write_all(&p.offset[0].to_le_bytes())?;
-                writer.write_all(&p.offset[1].to_le_bytes())?;
-            } else {
-                writer.write_all(&0u32.to_le_bytes())?;
-            }
-            writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
-            writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
-            for chunk in layer.pixels.chunks(4096) {
-                let mut buffer = [0u8; 16384];
-                for (bytes, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(chunk) {
-                    bytes.copy_from_slice(pixel);
-                }
-                writer.write_all(&buffer[..chunk.len() * 4])?;
-            }
-        }
-        writer.write_all(&(scene.len() as u32).to_le_bytes())?;
-        writer.write_all(&scene)?;
-        if let Some(animation) = &document.animation {
+    Ok(scene)
+}
+
+pub(crate) fn native_bytes(document: &Document) -> io::Result<Vec<u8>> {
+    if document.memory_bytes() > 64 * 1024 * 1024 {
+        return Err(invalid("Contained native page exceeds64MiB"));
+    }
+    let scene = native_scene(document)?;
+    let mut bytes = Vec::new();
+    write_payload(document, &scene, &mut bytes)?;
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Err(invalid("Contained native payload exceeds64MiB"));
+    }
+    Ok(bytes)
+}
+fn write_payload(document: &Document, scene: &[u8], writer: &mut impl Write) -> io::Result<()> {
+    writer.write_all(MAGIC)?;
+    writer.write_all(&VERSION.to_le_bytes())?;
+    writer.write_all(&document.width.to_le_bytes())?;
+    writer.write_all(&document.height.to_le_bytes())?;
+    writer.write_all(&document.dpi.to_bits().to_le_bytes())?;
+    writer.write_all(&(document.layers.len() as u32).to_le_bytes())?;
+    for layer in &document.layers {
+        writer.write_all(&(layer.name.len() as u32).to_le_bytes())?;
+        writer.write_all(layer.name.as_bytes())?;
+        if let Some(p) = layer.placement {
             writer.write_all(&1u32.to_le_bytes())?;
-            animation.write(&mut writer)?;
+            writer.write_all(&p.width.to_le_bytes())?;
+            writer.write_all(&p.height.to_le_bytes())?;
+            writer.write_all(&p.offset[0].to_le_bytes())?;
+            writer.write_all(&p.offset[1].to_le_bytes())?;
         } else {
             writer.write_all(&0u32.to_le_bytes())?;
         }
-        crate::material_layer::write(&document.scene, &mut writer)?;
-        crate::mesh_edit::write(&document.scene, &mut writer)?;
-        crate::color_storage::write(document, &mut writer)?;
-        writer.flush()?;
-        writer.get_ref().sync_all()
-    })();
-    drop(writer);
-    let result = result.and_then(|_| fs::rename(&temporary, &path));
-    if let Err(error) = result {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
+        writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
+        writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
+        for chunk in layer.pixels.chunks(4096) {
+            let mut buffer = [0u8; 16384];
+            for (bytes, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(chunk) {
+                bytes.copy_from_slice(pixel);
+            }
+            writer.write_all(&buffer[..chunk.len() * 4])?;
+        }
     }
-    document.mark_saved(path);
+    writer.write_all(&(scene.len() as u32).to_le_bytes())?;
+    writer.write_all(scene)?;
+    if let Some(animation) = &document.animation {
+        writer.write_all(&1u32.to_le_bytes())?;
+        animation.write(writer)?;
+    } else {
+        writer.write_all(&0u32.to_le_bytes())?;
+    }
+    crate::material_layer::write(&document.scene, writer)?;
+    crate::mesh_edit::write(&document.scene, writer)?;
+    crate::color_storage::write(document, writer)?;
+    crate::page_parts::write(&document.scene, writer)?;
     Ok(())
+}
+
+pub(crate) fn write_new_native(document: &Document, path: &Path) -> io::Result<()> {
+    let scene = native_scene(document)?;
+    let file = fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)?;
+    let mut writer = BufWriter::new(file);
+    let result = write_payload(document, &scene, &mut writer)
+        .and_then(|_| writer.flush())
+        .and_then(|_| writer.get_ref().sync_all());
+    drop(writer);
+    if result.is_err() {
+        let _ = fs::remove_file(path);
+    }
+    result
 }
 
 #[cfg(test)]

@@ -385,7 +385,11 @@ pub struct Export {
 pub fn generate(source: &Document) -> Result<Export, String> {
     let owned = crate::layer_roles::output_view(source)?;
     let d = owned.as_deref().unwrap_or(source);
-    let renderer = crate::render::Renderer::new(d);
+    let renderer = if d.scene.page_parts.is_default() {
+        crate::render::Renderer::new(d)
+    } else {
+        crate::render::Renderer::for_export(d)?
+    };
     if let Some(e) = renderer.error() {
         return Err(e.into());
     }

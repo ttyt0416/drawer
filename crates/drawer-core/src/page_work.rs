@@ -30,6 +30,15 @@ pub enum Navigation {
 }
 #[derive(Clone, Debug)]
 pub enum Edit {
+    Replace {
+        id: u64,
+        path: PathBuf,
+    },
+    Batch {
+        paths: Vec<PathBuf>,
+        remove: Vec<u64>,
+        index: usize,
+    },
     Add {
         path: PathBuf,
         index: usize,
@@ -120,6 +129,67 @@ impl Model {
     pub fn edit(&mut self, e: Edit) -> Result<(), String> {
         let mut work = self.work.clone();
         match e {
+            Edit::Replace { id, path } => {
+                let index = self.index(id)?;
+                let path = canonical(&path)?;
+                if path == work.pages[index] {
+                    return Ok(());
+                }
+                if work.pages.iter().any(|p| {
+                    p.to_string_lossy()
+                        .eq_ignore_ascii_case(&path.to_string_lossy())
+                }) {
+                    return Err("This page is already in the work".into());
+                }
+                let next = work.next_page_id.max(self.high_water);
+                work.next_page_id = next.checked_add(1).ok_or("Page ID exhausted")?;
+                work.pages[index] = path;
+                work.page_ids[index] = next;
+            }
+            Edit::Batch {
+                paths,
+                remove,
+                index,
+            } => {
+                if paths.is_empty()
+                    || paths.len() > 512
+                    || remove.len() > 512
+                    || remove
+                        .iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        != remove.len()
+                    || remove.iter().any(|id| !work.page_ids.contains(id))
+                {
+                    return Err("Choose a nonempty page batch and existing removal IDs".into());
+                }
+                for n in (0..work.pages.len()).rev() {
+                    if remove.contains(&work.page_ids[n]) {
+                        work.pages.remove(n);
+                        work.page_ids.remove(n);
+                    }
+                }
+                if index > work.pages.len() || work.pages.len().saturating_add(paths.len()) > 512 {
+                    return Err("Batch insertion index/count limit512".into());
+                }
+                let mut prepared = vec![];
+                for path in paths {
+                    let path = canonical(&path)?;
+                    if work.pages.iter().chain(prepared.iter()).any(|p| {
+                        p.to_string_lossy()
+                            .eq_ignore_ascii_case(&path.to_string_lossy())
+                    }) {
+                        return Err("A batch page is duplicated or already in the work".into());
+                    }
+                    prepared.push(path);
+                }
+                for (offset, path) in prepared.into_iter().enumerate() {
+                    let next = work.next_page_id.max(self.high_water);
+                    work.next_page_id = next.checked_add(1).ok_or("Page ID exhausted")?;
+                    work.pages.insert(index + offset, path);
+                    work.page_ids.insert(index + offset, next);
+                }
+            }
             Edit::Add { path, index } => {
                 if index > work.pages.len() || work.pages.len() >= 512 {
                     return Err("Page insertion index/count limit512".into());

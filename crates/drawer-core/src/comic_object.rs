@@ -38,6 +38,14 @@ pub struct Balloon {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Frame {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub component_masks: Vec<Vec<Vec<Point>>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compound: Vec<Vec<Point>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<[Point; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_edges: Vec<[Point; 2]>,
     pub polygon: Vec<Point>,
     pub gap: f64,
     pub width: f64,
@@ -183,7 +191,31 @@ impl Object {
                         && b.text.is_none_or(|id| id > 0)
                 }
                 Kind::Frame(f) => {
-                    crate::comic_split::simple(&f.polygon)
+                    (f.component_masks.is_empty()
+                        || f.component_masks.len() == f.compound.len() + 1)
+                        && f.component_masks.iter().all(|group| {
+                            group.len() <= 32
+                                && group.iter().all(|p| {
+                                    p.len() >= 3 && p.len() <= 128 && p.iter().copied().all(point)
+                                })
+                        })
+                        && f.compound.len() <= 31
+                        && f.compound.iter().all(|p| {
+                            p.len() <= 128
+                                && p.iter().copied().all(point)
+                                && crate::comic_split::simple(p)
+                        })
+                        && f.outline.len() <= 4096
+                        && f.hidden_edges.len() <= 4096
+                        && f.outline
+                            .iter()
+                            .chain(&f.hidden_edges)
+                            .flatten()
+                            .copied()
+                            .all(point)
+                        && (f.compound.is_empty() && f.component_masks.is_empty()
+                            || !f.outline.is_empty())
+                        && crate::comic_split::simple(&f.polygon)
                         && f.polygon.len() >= 3
                         && f.polygon.len() <= 128
                         && f.polygon.iter().copied().all(point)
@@ -227,7 +259,7 @@ impl Object {
                 }
                 r
             }
-            Kind::Frame(f) => polygon_bounds(&f.polygon),
+            Kind::Frame(f) => crate::frame_ops::bounds(f),
             Kind::Tone(t) => t.rect,
             Kind::Effect(e) => e.rect,
         }
@@ -236,7 +268,18 @@ impl Object {
         self.name.len()
             + 128
             + match &self.kind {
-                Kind::Frame(f) => f.polygon.len() * 16 + f.children.len() * 32,
+                Kind::Frame(f) => {
+                    (f.polygon.len()
+                        + f.compound.iter().map(Vec::len).sum::<usize>()
+                        + f.component_masks
+                            .iter()
+                            .flatten()
+                            .map(Vec::len)
+                            .sum::<usize>())
+                        * 16
+                        + (f.outline.len() + f.hidden_edges.len()) * 32
+                        + f.children.len() * 32
+                }
                 _ => 256,
             }
     }
@@ -497,7 +540,13 @@ impl Geometry {
                 }
             }
             Kind::Frame(f) => {
-                if f.width > 0. && edge_distance(&f.polygon, p) <= f.width / 2. {
+                if f.width > 0.
+                    && crate::frame_ops::edge_distance(f, p) <= f.width / 2.
+                    && !f
+                        .hidden_edges
+                        .iter()
+                        .any(|e| distance(p, e[0], e[1]) <= f.width / 2.)
+                {
                     f.ink
                 } else {
                     [0; 4]

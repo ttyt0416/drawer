@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 217] = [
+pub const EXTRA_COMMANDS: [&str; 218] = [
+    "page-structure",
     "page-exchange",
     "page-manager",
     "comic-composition",
@@ -520,6 +521,7 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "page-structure" => "Page batches, editable spreads and frame structure",
             "page-exchange" => "PDF, local image EPUB and selected-page printing",
             "gradient-tool" => "Gradient and freeform gradient",
             "vector-line-tool" => "Draw an editable vector line with clicked control points",

@@ -60,7 +60,7 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
     let (width, height, pixels) = if floating {
         let owned = crate::layer_roles::output_view(document).map_err(|e| invalid(&e))?;
         let d = owned.as_deref().unwrap_or(document);
-        let output = crate::float_render::Renderer::new(d)
+        let output = crate::float_render::Renderer::for_export(d)
             .map_err(|e| invalid(&e))?
             .output(
                 crate::color_precision::Depth::Eight,

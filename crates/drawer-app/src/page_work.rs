@@ -901,6 +901,54 @@ impl Drawer {
         }
     }
 }
+impl Drawer {
+    pub(super) fn project_structure_facing_pair(&self) -> Option<(usize, usize)> {
+        let book = self.page_work.book.as_ref()?;
+        let first = book.current();
+        book.facing(first)
+            .map(|second| (first.min(second), first.max(second)))
+    }
+    pub(super) fn edit_project_structure(
+        &mut self,
+        edit: drawer_core::page_work::Edit,
+    ) -> Result<(), String> {
+        let book = self
+            .page_work
+            .book
+            .as_mut()
+            .ok_or("Open a local project in Page manager first")?;
+        book.edit(edit)?;
+        self.page_work.images.clear();
+        self.page_work.previews.clear();
+        self.page_work.stamps.clear();
+        self.page_work.last_scroll = None;
+        Ok(())
+    }
+    pub(super) fn project_structure_history(&mut self, forward: bool) -> Result<(), String> {
+        let book = self
+            .page_work
+            .book
+            .as_mut()
+            .ok_or("Open a local project first")?;
+        if if forward { book.redo() } else { book.undo() } {
+            self.page_work.images.clear();
+            self.page_work.previews.clear();
+            self.page_work.stamps.clear();
+            self.page_work.last_scroll = None;
+            Ok(())
+        } else {
+            Err("No project page change to undo/redo".into())
+        }
+    }
+    pub(super) fn set_project_structure_work(
+        &mut self,
+        work: drawer_core::story_text::Work,
+    ) -> Result<(), String> {
+        self.page_work.book = Some(drawer_core::page_work::Model::new(work)?);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

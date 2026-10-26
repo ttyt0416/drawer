@@ -98,6 +98,40 @@ pub(super) fn object(ui: &mut egui::Ui, d: &Document, e: &mut Draft) {
                     f.polygon.pop();
                 }
             });
+            for (index, polygon) in f.compound.iter_mut().enumerate() {
+                ui.collapsing(format!("Additional contour {}", index + 2), |ui| {
+                    for p in polygon.iter_mut() {
+                        point(ui, "", p);
+                    }
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add_enabled(polygon.len() < 128, egui::Button::new("Add corner"))
+                            .clicked()
+                        {
+                            let p = *polygon.last().unwrap();
+                            polygon.push([p[0] + 10., p[1] + 10.]);
+                        }
+                        if ui
+                            .add_enabled(polygon.len() > 3, egui::Button::new("Remove last corner"))
+                            .clicked()
+                        {
+                            polygon.pop();
+                        }
+                    });
+                });
+            }
+            for (component, masks) in f.component_masks.iter_mut().enumerate() {
+                for (index, mask) in masks.iter_mut().enumerate() {
+                    ui.collapsing(
+                        format!("Contour {} clipping {}", component + 1, index + 1),
+                        |ui| {
+                            for p in mask {
+                                point(ui, "", p);
+                            }
+                        },
+                    );
+                }
+            }
             value(ui, "Frame gap ", &mut f.gap, 0., 4096.);
             value(ui, "Border width ", &mut f.width, 0., 128.);
             ui.color_edit_button_srgba_unmultiplied(&mut f.ink);

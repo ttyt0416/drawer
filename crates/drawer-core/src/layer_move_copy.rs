@@ -306,6 +306,7 @@ pub(super) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
             data.guides.push(copied);
         }
     }
+    crate::page_parts::duplicate(&mut state.scene, &original.scene, &map);
     let masks = original.scene.comics.masks.clone();
     for mask in masks {
         if let Some(new) = map.get(&mask.target) {

@@ -15,6 +15,8 @@ use crate::{
     scene::Point,
 };
 pub(crate) struct Plan<'a> {
+    export_page: bool,
+    page_parts: Vec<(u64, Renderer<'a>)>,
     comic_clips: bool,
     space: WorkingSpace,
     roots: Vec<Node>,
@@ -60,6 +62,17 @@ impl<'a> Renderer<'a> {
         stroke: Option<&'a crate::painting::Stroke>,
         tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
     ) -> Result<Self, String> {
+        Self::mode(d, stroke, tick, false)
+    }
+    pub fn for_export(d: &'a Document) -> Result<Self, String> {
+        Self::mode(d, None, &mut |_, _| Ok(()), true)
+    }
+    fn mode(
+        d: &'a Document,
+        stroke: Option<&'a crate::painting::Stroke>,
+        tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
+        export: bool,
+    ) -> Result<Self, String> {
         if !d.scene.valid()
             || !d.scene.paper.valid_for(d.layers.len())
             || !d.color.valid_layers(&d.layers)
@@ -74,6 +87,28 @@ impl<'a> Renderer<'a> {
             stroke,
             sampling: Default::default(),
             plan: PlanRef::Owned(Box::new(Plan {
+                export_page: export,
+                page_parts: d
+                    .scene
+                    .page_parts
+                    .entries
+                    .iter()
+                    .filter_map(|p| {
+                        (if export {
+                            p.export_document()
+                        } else {
+                            p.document()
+                        })
+                        .map(|d| {
+                            (if export {
+                                Renderer::for_export(d)
+                            } else {
+                                Renderer::new(d)
+                            })
+                            .map(|r| (p.object, r))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
                 comic_clips: crate::comics::has_clips(&d.scene),
                 geometry: Box::new(crate::render::Renderer::geometry_preview(d)),
                 order: crate::render_order::normalized(&d.scene),
@@ -99,6 +134,17 @@ impl<'a> Renderer<'a> {
         Self::with_effect_progress(d, None, tick).map(|_| ())
     }
     pub fn display_sample(&self, point: Point) -> Result<Sample, String> {
+        if self.plan().export_page {
+            let overlay = self
+                .document
+                .scene
+                .comics
+                .page
+                .output_pixel(self.document, point);
+            if overlay[3] != 0 {
+                return Ok(Sample::from8(overlay));
+            }
+        }
         self.plan().space.to_srgb(self.pixel(point)?)
     }
     fn plan(&self) -> &Plan<'a> {
@@ -112,6 +158,13 @@ impl<'a> Renderer<'a> {
         stroke: Option<&'a crate::painting::Stroke>,
     ) -> Result<Box<Plan<'a>>, String> {
         let renderer = Self::preview(d, stroke)?;
+        match renderer.plan {
+            PlanRef::Owned(p) => Ok(p),
+            PlanRef::Borrowed(_) => unreachable!(),
+        }
+    }
+    pub(crate) fn prepare_export_plan(d: &'a Document) -> Result<Box<Plan<'a>>, String> {
+        let renderer = Self::for_export(d)?;
         match renderer.plan {
             PlanRef::Owned(p) => Ok(p),
             PlanRef::Borrowed(_) => unreachable!(),

@@ -313,7 +313,18 @@ impl Renderer<'_> {
     }
     fn object(&self, n: usize, original: Point) -> Result<Sample, String> {
         match &self.document.scene.objects[n] {
-            PageObject::Material(m) => self.material(m, original),
+            PageObject::Material(m) => {
+                let id = self.document.scene.catalog.objects.id(n);
+                if let Some((_, child)) = self.plan().page_parts.iter().find(|(key, _)| *key == id)
+                {
+                    let Some(p) = m.local(original) else {
+                        return Ok(Sample::default());
+                    };
+                    self.plan().space.from_srgb(child.display_sample(p)?)
+                } else {
+                    self.material(m, original)
+                }
+            }
             PageObject::Shadow {
                 bounds,
                 offset,

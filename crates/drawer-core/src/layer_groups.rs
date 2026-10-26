@@ -382,6 +382,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<DocumentState, String> 
 }
 pub(crate) fn prune(state: &mut DocumentState) -> Result<(), String> {
     crate::comics::prune(state);
+    crate::page_parts::prune(state);
     if state.scene.layer_groups.groups.is_empty() && state.scene.layer_groups.transforms.is_empty()
     {
         return Ok(());
