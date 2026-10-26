@@ -472,4 +472,8 @@ pub mod page_batch;
 
 pub mod page_structure_verify;
 
+pub mod book_production;
+pub mod book_production_verify;
 pub mod page_resources;
+pub mod scan_batch;
+pub mod storyboard;

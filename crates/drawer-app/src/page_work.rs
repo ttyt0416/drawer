@@ -944,7 +944,21 @@ impl Drawer {
         &mut self,
         work: drawer_core::story_text::Work,
     ) -> Result<(), String> {
-        self.page_work.book = Some(drawer_core::page_work::Model::new(work)?);
+        let model = drawer_core::page_work::Model::new(work)?;
+        self.page_work.title = model.work.title.clone();
+        self.page_work.right_binding = model.work.right_binding;
+        self.page_work.first_right = model.work.first_right;
+        self.page_work.manifest = None;
+        self.page_work.number = 1;
+        self.page_work.move_to = 1;
+        self.workspaces.store.current.page_view.project = None;
+        self.workspaces.store.current.page_view.selected = Some(model.selected);
+        self.page_work.book = Some(model);
+        self.page_work.loaded.clear();
+        self.page_work.images.clear();
+        self.page_work.previews.clear();
+        self.page_work.stamps.clear();
+        self.page_work.last_scroll = None;
         Ok(())
     }
 }

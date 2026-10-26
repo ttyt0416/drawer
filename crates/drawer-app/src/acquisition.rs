@@ -208,6 +208,48 @@ struct Job {
     cancel: Arc<AtomicBool>,
     receiver: mpsc::Receiver<Result<Value, String>>,
 }
+/// Explicit user-started book workflow access, through the same isolated broker.
+pub(super) fn book_devices(base: &Path, cancel: &AtomicBool) -> Result<Vec<Device>, String> {
+    match execute(
+        base,
+        &std::env::current_exe().map_err(|e| e.to_string())?,
+        &Request::List,
+        DEFAULT_DOCUMENT_BUDGET,
+        cancel,
+        Duration::from_secs(30),
+    )? {
+        Value::Devices(devices, _) => Ok(devices
+            .into_iter()
+            .filter(|d| d.kind == protocol::Kind::WiaScanner)
+            .collect()),
+        _ => Err("Unexpected scanner list".into()),
+    }
+}
+pub(super) fn book_capture(
+    base: &Path,
+    device: Device,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> Result<drawer_core::scan_batch::Image, String> {
+    if device.kind != protocol::Kind::WiaScanner {
+        return Err("Select a local WIA scanner".into());
+    }
+    match execute(
+        base,
+        &std::env::current_exe().map_err(|e| e.to_string())?,
+        &Request::Capture(device),
+        budget,
+        cancel,
+        Duration::from_secs(300),
+    )? {
+        Value::Image(a) => Ok(drawer_core::scan_batch::Image {
+            image: a.image,
+            original: a.original,
+            filename: a.filename,
+        }),
+        _ => Err("Unexpected scanner response".into()),
+    }
+}
 impl Drop for Job {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Relaxed);

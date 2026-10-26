@@ -1417,3 +1417,16 @@ EPUB 가져오기는 각 XHTML에 전체 페이지 PNG/JPEG 한 장이 있고 �
 **Frame folders**에서는 여러 컷 합치기·2~32등분·일치하는 테두리 구간 숨김/복원을 미리보고 한 그림 Undo로 적용합니다. 합치기는 외곽의 합집합과 원래 잘림 영역/내용 참조를 보존하고 첫 컷의 간격·선폭·색을 사용합니다. 오목한 컷을 등분해 여러 조각이 생겨도 복제한 편집 가능 다각형과 구성별 잘림으로 남깁니다. 합친 다각형과 잘림 꼭짓점은 Comic composition에서도 편집할 수 있습니다. 새 분할/합치기는 이전의 일치 테두리 숨김 구간을 다시 계산할 수 있도록 초기화합니다.
 
 한 프로젝트는512쪽, 합치기 선택은2~16쪽, 내부 페이지 중첩은4단계, 내부 네이티브 소스는64MiB 이내입니다. 컷 합치기는2~32개, 윤곽과 잘림의 교차 계산은2048변/외곽4096구간 이내이며 기존 전체 문서 메모리 한도를 함께 검사합니다. 한 번의 준비가 한도를 넘으면 쪽수나 내용을 줄이라는 안내가 나옵니다. 새 구조는 네이티브v94로 저장하며 이전 앱은 업그레이드 안내를 표시합니다.
+
+
+## Local book production (194)
+
+Open **Local book preview, preflight, storyboard and continuous scan** (`book-production`). In **Book preview / preflight**, prepare a local Page manager project. Closed pages and live unsaved pages appear in a perspective spread with blank unpaired slots. Choose cover IDs, spine millimetres, opening, rotation and tilt. The preview does not edit drawings. Change the project or source content, then prepare again.
+
+Set minimum DPI, bleed/safe margins and optional expected trim (both zero means any size); run preflight. Invalid trim/reference errors block the **Export preflight-checked PDF** action. Review the listed resolution/margin warnings and explicitly acknowledge them before output. That action reruns the check on the prepared snapshot. Save/load the physical setup explicitly as a local `.drawer-book` JSON file; choose a new filename for saving.
+
+**Storyboard exchange** supports Drawer storyboard v1 (`.drawer-storyboard`). Prepare the project preview, then export to a new local file. Its owned folder contains independent editable native pages and local PNG previews; keep that folder with the JSON. IDs/order, binding/start-side, cover/setup, existing frames and dialogue objects are recorded. Import validates every local file/hash/object ID before you confirm **Open storyboard as independent project**. Existing files and open drawings remain. Save the resulting project in Page manager. JSON may edit existing exchanged frame/text objects; missing/duplicate references and unknown versions/external proprietary formats are rejected. No verified external storyboard adapter is currently available.
+
+In **Continuous scan**, explicitly refresh local WIA scanners, choose one, enter slot count and the confirmed acquisition DPI, then start. Each transfer is sequential through the existing isolated helper; the driver may display its scan dialog. A failed slot pauses for **Retry**, **Skip**, or **Abort**. Review the accepted slots, choose a local resource folder and confirm **Add scanned pages as one project edit**. One project Undo/Redo restores the page list and retains native pages, original scan bytes and `scans.json` for Redo. Cancellation removes only newly owned partial resources. A changed project requires restoring/reviewing the intended project before applying. Save the project snapshot explicitly. Scanner verification used generated MOCK results; physical scanner/feeder and paper output remain unverified. Details and limits: [book production](process/book-production.md).
+
+Affine image preflight uses maximum stretch, including shear and cached linked images; non-linear material warps request explicit resolution review. Preview page dimensions are0.01..10000mm with aspect0.05..20.

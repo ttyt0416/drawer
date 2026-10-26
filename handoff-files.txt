@@ -838,3 +838,9 @@ crates/drawer-core/src/page_resources.rs
 crates/drawer-core/src/page_structure_verify.rs
 crates/drawer-app/src/page_structure.rs
 docs/process/page-structure.md
+crates/drawer-app/src/book_workflow.rs
+crates/drawer-core/src/book_production.rs
+crates/drawer-core/src/storyboard.rs
+crates/drawer-core/src/scan_batch.rs
+crates/drawer-core/src/book_production_verify.rs
+docs/process/book-production.md

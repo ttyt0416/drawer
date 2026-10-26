@@ -170,6 +170,7 @@ try {
     if ($smokeResult -notmatch 'effect_source_delete=true') { throw '효과 원본 삭제 검토/보존 검증 실패' }
     if ($smokeResult -notmatch 'text_extensions=true') { throw '앱 글꼴/원형 텍스트 검증 실패' }
     if ($smokeResult -notmatch 'page_management=true') { throw 'Page management verification failed' }
+    if ($smokeResult -notmatch 'book_production=true') { throw 'Book production verification failed' }
     if ($smokeResult -notmatch 'page_structure=true') { throw 'Page structure verification failed' }
     if ($smokeResult -notmatch 'raster_books=true') { throw 'Raster book verification failed' }
     if ($smokeResult -notmatch 'comic_composition=true') { throw 'Comic composition verification failed' }

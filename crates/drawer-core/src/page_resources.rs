@@ -8,12 +8,13 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 pub struct Prepared {
     directory: PathBuf,
     pub paths: Vec<PathBuf>,
+    extra: Vec<PathBuf>,
     keep: bool,
 }
 impl Drop for Prepared {
     fn drop(&mut self) {
         if !self.keep {
-            for p in &self.paths {
+            for p in self.paths.iter().chain(&self.extra) {
                 let _ = std::fs::remove_file(p);
             }
             let _ = std::fs::remove_dir(&self.directory);
@@ -21,6 +22,31 @@ impl Drop for Prepared {
     }
 }
 impl Prepared {
+    /// Additional immutable exchange/scan resources share this guard's ownership.
+    pub fn blob(&mut self, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+        use std::io::Write;
+        if name.is_empty()
+            || name.len() > 128
+            || name.contains(['/', '\\', ':'])
+            || matches!(name, "." | "..")
+            || bytes.is_empty()
+            || bytes.len() > 64 * 1024 * 1024
+            || self.extra.len() >= 1024
+        {
+            return Err("Invalid owned resource name, size or count".into());
+        }
+        let path = self.directory.join(name);
+        let mut file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        self.extra.push(path.clone());
+        file.write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|e| e.to_string())?;
+        Ok(path)
+    }
     pub fn keep(mut self) {
         self.keep = true;
     }
@@ -47,6 +73,7 @@ pub fn prepare(
     let mut stage = Prepared {
         directory,
         paths: vec![],
+        extra: vec![],
         keep: false,
     };
     for (i, d) in pages.iter().enumerate() {

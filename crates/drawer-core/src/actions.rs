@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 218] = [
+pub const EXTRA_COMMANDS: [&str; 219] = [
+    "book-production",
     "page-structure",
     "page-exchange",
     "page-manager",
@@ -521,6 +522,7 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "book-production" => "Local book preview, preflight, storyboard and continuous scan",
             "page-structure" => "Page batches, editable spreads and frame structure",
             "page-exchange" => "PDF, local image EPUB and selected-page printing",
             "gradient-tool" => "Gradient and freeform gradient",
