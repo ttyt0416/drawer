@@ -44,6 +44,9 @@ pub(super) fn remap_field(e: &mut Draft, before: &Settings) {
     } else {
         e.settings.style.remap_text(&before.text, &e.settings.text);
     }
+    if e.settings.style.generation == 2 {
+        e.settings.style.rich.get_or_insert_with(Default::default);
+    }
 }
 pub(super) fn controls(
     ui: &mut egui::Ui,

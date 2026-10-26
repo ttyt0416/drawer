@@ -10,6 +10,8 @@ mod format_ui;
 mod reading_ui;
 #[path = "text_editor_verify.rs"]
 mod verify;
+#[path = "text_version_ui.rs"]
+mod version_ui;
 pub(super) use canvas::CanvasPreview;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::smoke(root)?;
@@ -17,7 +19,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     canvas::smoke()?;
     reading_ui::smoke(root)?;
     format_ui::smoke(root)?;
-    font_ui::smoke(root)
+    font_ui::smoke(root)?;
+    version_ui::smoke(root)
 }
 use super::*;
 use drawer_core::text_format as fmt_text;
@@ -34,6 +37,7 @@ pub(super) struct Panel {
     pub vertical: Option<egui::Rect>,
     format: format_ui::Panel,
     fonts: Box<font_ui::Panel>,
+    version: Box<version_ui::Panel>,
 }
 pub(super) struct Draft {
     pub(super) document: u64,
@@ -56,6 +60,9 @@ struct History {
 }
 impl Drawer {
     pub(super) fn text_save_guard(&self, index: usize) -> Result<(), String> {
+        if self.text_editor.version.open() {
+            return Err("Apply or cancel text layout conversion before saving".into());
+        }
         if self
             .text_editor
             .draft
@@ -68,7 +75,7 @@ impl Drawer {
         }
     }
     pub(super) fn begin_text_editor(&mut self, ctx: &egui::Context) -> Result<(), String> {
-        if self.text_editor.draft.is_some() {
+        if self.text_editor.version.open() || self.text_editor.draft.is_some() {
             return Err("Apply or cancel the existing text edit first".into());
         }
         self.finish_stroke();
@@ -230,7 +237,10 @@ impl Drawer {
         egui::Window::new("Text content and layout")
             .default_width(470.).default_height(620.).max_height(620.)
             .default_pos(egui::pos2(25.,25.)).open(&mut open).show(ctx,|ui|{
-                ui.label(if e.id.is_some(){"Edit selected text object"}else{"Create a new editable text object"});
+                ui.horizontal(|ui|{
+                    ui.label(format!("{} · Drawer layout {}",if e.id.is_some(){"Selected text"}else{"New text"},e.settings.style.generation));
+                    if e.settings.style.generation<drawer_core::text_version::CURRENT && ui.add_enabled(!formatting_blocked,egui::Button::new("Convert layout")).on_hover_text("Explicit conversion can change glyph positions, wrapping and fallback. Prepare and compare the preview before Apply; Cancel preserves the original.").clicked(){match drawer_core::text_version::upgrade(&e.settings.style,&e.settings.text){Ok(style)=>e.settings.style=style,Err(err)=>self.status=Some(err)}}
+                });
                 if !fresh {ui.colored_label(egui::Color32::YELLOW,"Document changed; cancel and reopen.");}
                 let body_height=(ui.available_height()-76.).max(80.);
                 egui::ScrollArea::vertical().id_salt("text-layout-form").max_height(body_height).show(ui,|ui|{

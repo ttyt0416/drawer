@@ -54,7 +54,16 @@ pub fn layers_supported(d: &Document) -> bool {
             .iter()
             .all(|f| !f.paper.hidden && f.paper.blend == crate::brush_composite::Mode::Normal)
 }
-pub const LOSS: &str = "PSD stores rendered RGB8 sRGB pixels; 16-bit document precision is reduced only in this output. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Layer blend settings are baked in rendered-image export; editable blend-mode metadata is not preserved. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
+pub const LOSS: &str = "Editable text (Unicode, fonts, layout and transforms) is rasterized; this exporter has no verified editable-text adapter. PSD stores rendered RGB8 sRGB pixels; 16-bit document precision is reduced only in this output. Paper recipes, file-layer caches and editable folder effects are baked; folders become raster substitutes. Brush history and other Drawer metadata are not included. Layer blend settings are baked in rendered-image export; editable blend-mode metadata is not preserved. Keep the .drawer original. Merged-preview import does not restore PSD layers and uses 300 DPI.";
+pub fn text_loss(d: &Document) -> Option<String> {
+    let count = d
+        .scene
+        .objects
+        .iter()
+        .filter(|o| matches!(o, crate::scene::PageObject::Text { .. }))
+        .count();
+    (count>0).then(||format!("{count} editable text object(s): raster substitutes only. Unicode, fonts, layout generations and text transforms remain editable only in the .drawer original."))
+}
 pub fn export(
     d: &Document,
     path: &Path,

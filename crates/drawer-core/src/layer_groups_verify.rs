@@ -429,6 +429,20 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         &mut unsupported,
         vec![Key::Layer(Target::Raster(1)), Key::Object(4)],
     )?;
+    check(
+        edits::transform(&unsupported, &[Key::Layer(Target::Raster(1))], matrix).is_ok(),
+        "Linked editable text transform rejected",
+    )?;
+    let object =
+        crate::layer_catalog::source_index(&unsupported, Key::Object(4)).ok_or("Linked source")?;
+    unsupported.scene.objects[object] = crate::scene::PageObject::Tone {
+        bounds: Rect {
+            min: [0.; 2],
+            max: [8.; 2],
+        },
+        period_px: 4.,
+        coverage: 0.5,
+    };
     let untouched = unsupported.snapshot();
     check(
         edits::transform(&unsupported, &[Key::Layer(Target::Raster(1))], matrix).is_err()

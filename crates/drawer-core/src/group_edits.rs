@@ -63,10 +63,10 @@ pub fn transform_policy(
                 let n = c::source_index(d, Key::Object(id)).ok_or("Missing object")?;
                 if !matches!(
                     d.scene.objects[n],
-                    PageObject::Material(_) | PageObject::Line { .. }
+                    PageObject::Material(_) | PageObject::Line { .. } | PageObject::Text { .. }
                 ) {
                     return Err(
-                        "Rasterize text/tone/shadow objects before transforming this group".into(),
+                        "Rasterize tone/shadow objects before transforming this group".into(),
                     );
                 }
             }
@@ -253,6 +253,19 @@ pub fn transform_policy(
                             *end = original.map(*end);
                             *width_px *= width_scale;
                         }
+                        PageObject::Text { layout, .. } => {
+                            let style = layout.get_or_insert_with(|| {
+                                Box::new(crate::text_layout::Style::legacy())
+                            });
+                            style.frame = style.frame.then(original);
+                            if !preserve_width && let Some(r) = &mut style.rich {
+                                for span in &mut r.spans {
+                                    if let Some(edge) = &mut span.attr.border {
+                                        edge.width *= width_scale;
+                                    }
+                                }
+                            }
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -329,6 +342,7 @@ pub fn transform_policy(
         }
     }
     tick()?;
+    crate::text_layout::validate_scene(&state.scene)?;
     groups::finish(d, &state)?;
     Ok(state)
 }

@@ -424,3 +424,6 @@ pub mod text_format_verify;
 pub mod font_library;
 
 pub mod font_library_verify;
+
+pub mod text_version;
+pub mod text_version_verify;

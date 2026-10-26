@@ -135,7 +135,7 @@ fn prepare_inner(
         tick,
     );
     if let Ok(state) = attempted {
-        return Ok(Prepared {state,selected:key,notes:vec!["Layers use their stored pixels; linked transforms, masks, texture and rulers follow. Unsupported linked members reject the whole operation. Undo restores the original.".into()]});
+        return Ok(Prepared {state,selected:key,notes:vec!["Editable text retains Unicode, fonts, formatting and its layout generation through an affine transform. Raster layers use their stored pixels; linked masks, texture and rulers follow. Unsupported linked members reject the whole operation. Undo restores the original.".into()]});
     }
     let reason = attempted.err().unwrap();
     tick()?;

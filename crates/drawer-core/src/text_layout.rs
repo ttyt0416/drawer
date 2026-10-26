@@ -42,6 +42,9 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Style {
+    /// 0: original embedded layout, 1: preserved editable layout, 2: current grapheme layout.
+    pub generation: u8,
+    pub frame: crate::scene::Affine,
     pub font: Font,
     pub align: Align,
     pub line_height: f64,
@@ -55,6 +58,8 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Self {
         Self {
+            generation: 1,
+            frame: Default::default(),
             font: Font::Korean,
             align: Align::Left,
             line_height: 1.2,
@@ -83,13 +88,23 @@ impl Style {
     }
     pub fn legacy() -> Self {
         Self {
+            generation: 0,
             font: Font::Ubuntu,
             wrap_width: 0.,
             ..Default::default()
         }
     }
     pub fn valid(&self) -> bool {
-        self.fonts().iter().all(|f| f.valid())
+        self.generation <= 2
+            && self.frame.valid()
+            && (self.generation != 0
+                || (self.font == Font::Ubuntu
+                    && self.align == Align::Left
+                    && self.line_height == 1.2
+                    && self.wrap_width == 0.
+                    && !self.extended()))
+            && (self.generation != 2 || self.rich.is_some())
+            && self.fonts().iter().all(|f| f.valid())
             && (0.5..=8.).contains(&self.line_height)
             && (0. ..=32768.).contains(&self.wrap_width)
             && (-0.5..=4.).contains(&self.tracking)
@@ -139,13 +154,18 @@ impl Style {
         }
     }
     pub fn bounds(&self, baseline: Point, text: &str, size: f64) -> Rect {
-        if self.extended()
+        if (self.extended() || !self.frame.is_identity())
             && let Ok(shape) = layout(baseline, text, size, self)
         {
             let mut bounds = Rect {
                 min: [baseline[0] - size, baseline[1] - size],
                 max: [baseline[0] + size, baseline[1] + size],
             };
+            if !self.frame.is_identity()
+                && let Some(p) = shape.paths.iter().flatten().next()
+            {
+                bounds = Rect { min: *p, max: *p };
+            }
             for p in shape.paths.iter().flatten() {
                 for (axis, value) in p.iter().enumerate() {
                     bounds.min[axis] = bounds.min[axis].min(*value);
@@ -273,6 +293,47 @@ struct Glyph {
     line: usize,
 }
 pub fn layout(baseline: Point, text: &str, size: f64, style: &Style) -> Result<Layout, String> {
+    if !style.text_valid(text)
+        || !(0.1..=4096.).contains(&size)
+        || text.len() > 65536
+        || text.chars().count() > 4096
+        || baseline.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
+    {
+        return Err("Invalid text layout; preserved original layout requires explicit conversion before advanced formatting".into());
+    }
+    let mut shape = if style.generation == 0 {
+        Layout {
+            paths: crate::render::legacy_text_paths(baseline, text, size),
+            paint: vec![],
+            lines: text.split('\n').count(),
+            glyphs: text.chars().filter(|c| *c != '\n').count(),
+            unavailable_fonts: vec![],
+            format_unavailable: vec![],
+            missing: 0,
+            substituted: 0,
+            widths: vec![],
+            requested_available: true,
+            fallback_fonts: vec![],
+            missing_characters: vec![],
+            ligature_unavailable: vec![],
+        }
+    } else {
+        layout_source(baseline, text, size, style)?
+    };
+    for path in &mut shape.paths {
+        for p in path {
+            *p = style.frame.map(*p);
+            if p.iter().any(|v| !v.is_finite() || v.abs() > 1e9) {
+                return Err("Transformed text coordinate limit".into());
+            }
+        }
+    }
+    if shape.paths.iter().map(Vec::len).sum::<usize>() > 1024 * 1024 {
+        return Err("Text outline point budget".into());
+    }
+    Ok(shape)
+}
+fn layout_source(baseline: Point, text: &str, size: f64, style: &Style) -> Result<Layout, String> {
     let mut fonts = Vec::new();
     for font in style.fonts() {
         if !fonts.iter().any(|(f, _)| *f == font)
@@ -556,14 +617,7 @@ pub fn prepare(
         if !matches!(d.scene.objects[n], PageObject::Text { .. }) {
             return Err("Select a text object".into());
         }
-        if matches!(
-            d.scene.objects[n],
-            PageObject::Text {
-                layout: Some(_),
-                ..
-            }
-        ) && Settings::from_object(&d.scene.objects[n]).as_ref() == Some(s)
-        {
+        if Settings::from_object(&d.scene.objects[n]).as_ref() == Some(s) {
             return Ok(Prepared {
                 state,
                 id,

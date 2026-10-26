@@ -227,7 +227,8 @@ impl Drawer {
             let mut open = true;
             let mut choice = None;
             egui::Window::new("PSD rendered export").open(&mut open).show(ctx,|ui|{
-                ui.label(drawer_core::psd::LOSS);if let Some(note)=drawer_core::layer_blend::exchange_notice(d){ui.label(note);}ui.label(e.path.display().to_string());
+                ui.label(drawer_core::psd::LOSS);if let Some(note)=drawer_core::psd::text_loss(d){ui.colored_label(egui::Color32::YELLOW,note);}
+                if let Some(note)=drawer_core::layer_blend::exchange_notice(d){ui.label(note);}ui.label(e.path.display().to_string());
                 if e.path.exists(){ui.checkbox(&mut e.replace,"Replace this existing PSD file");}
                 ui.add_enabled_ui(!e.path.exists() || e.replace,|ui|{
                     if ui.add_enabled(drawer_core::psd::layers_supported(d),egui::Button::new("Export rendered root layers / folders")).clicked(){choice=Some(drawer_core::psd::Choice::RenderedLayers);}

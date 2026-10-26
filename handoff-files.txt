@@ -784,3 +784,8 @@ crates/drawer-core/src/font_library_verify.rs
 crates/drawer-app/src/font_library_ui.rs
 crates/drawer-app/src/font_library_ui_verify.rs
 docs/process/font-library.md
+crates/drawer-core/src/text_version.rs
+crates/drawer-core/src/text_version_verify.rs
+crates/drawer-app/src/text_version_ui.rs
+crates/drawer-app/src/text_version_ui_verify.rs
+docs/process/text-version.md

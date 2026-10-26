@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 89;
+const VERSION: u32 = 90;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -220,6 +220,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
                 "Editable mesh sources and transform frames require native version81",
             ));
         }
+        if version<90 && document.scene.objects.iter().any(|o|matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.generation!=1 || !s.frame.is_identity())) {return Err(invalid("Text layout generations and transforms require native version90"));}
         if version<89 && document.scene.objects.iter().any(|o|matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.fonts().iter().any(|f|matches!(f,crate::text_layout::Font::Local(_))))) {return Err(invalid("Local font references require native version89"));}
         if version<88 && document.scene.objects.iter().any(|o|matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.rich.is_some())) {return Err(invalid("Grapheme formatting requires native version88"));}
         if version < 87

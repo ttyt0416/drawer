@@ -269,17 +269,13 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let tk = Key::Object(text.scene.catalog.objects.id(0));
     let old = text.snapshot();
     check(
-        core::prepare(&text, tk, false, t, false, Filter::Nearest).is_err(),
-        "Unsupported editable source silently rasterized without option",
+        core::prepare(&text, tk, false, t, false, Filter::Nearest).is_ok(),
+        "Editable text transform rejected",
     )?;
     let p = core::prepare(&text, tk, false, t, true, Filter::Nearest)?;
     check(
-        matches!(
-            p.selected,
-            Key::Layer(crate::layer_properties::Target::Raster(_))
-        ) && !p.notes.is_empty()
-            && text.snapshot() == old,
-        "Explicit text conversion transform",
+        p.selected == tk && !p.notes.is_empty() && text.snapshot() == old,
+        "Text remains editable during transform",
     )?;
     text.commit_state(p.state)?;
     check(

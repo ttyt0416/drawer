@@ -488,7 +488,21 @@ pub(crate) fn shift(
                     m.transform.0[4] += delta[0];
                     m.transform.0[5] += delta[1];
                 }
-                PageObject::Text { baseline, .. } => move_point(baseline),
+                PageObject::Text {
+                    baseline,
+                    layout,
+                    text,
+                    size_px,
+                    ..
+                } => {
+                    if let Some(style) = layout.as_mut().filter(|s| !s.frame.is_identity()) {
+                        style.frame.0[4] += delta[0];
+                        style.frame.0[5] += delta[1];
+                        crate::text_layout::layout(*baseline, text, *size_px, style)?;
+                    } else {
+                        move_point(baseline);
+                    }
+                }
                 PageObject::Line { start, end, .. } => {
                     move_point(start);
                     move_point(end);

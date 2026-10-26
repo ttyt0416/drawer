@@ -1028,6 +1028,9 @@ fn glyph_contours(
             crate::text_layout::layout(baseline, text, size, style)?.paths,
         ));
     }
+    Ok(contour_paths(legacy_text_paths(baseline, text, size)))
+}
+pub(crate) fn legacy_text_paths(baseline: Point, text: &str, size: f64) -> Vec<Vec<Point>> {
     let face = ttf_parser::Face::parse(epaint_default_fonts::UBUNTU_LIGHT, 0)
         .expect("Embedded font is tested at build time");
     let scale = size / f64::from(face.units_per_em());
@@ -1050,8 +1053,9 @@ fn glyph_contours(
         outline.origin[0] +=
             f64::from(face.glyph_hor_advance(id).unwrap_or(face.units_per_em())) * scale;
     }
-    Ok(contour_paths(outline.paths))
+    outline.paths
 }
+
 fn contour_paths(paths: Vec<Vec<Point>>) -> Vec<Contour> {
     paths
         .into_iter()
