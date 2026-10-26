@@ -10,12 +10,23 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Work {
     version: u32,
     pub title: String,
     pub pages: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub page_ids: Vec<u64>,
+    #[serde(default)]
+    pub next_page_id: u64,
+    #[serde(default)]
+    pub right_binding: bool,
+    #[serde(default = "first_right")]
+    pub first_right: bool,
+}
+fn first_right() -> bool {
+    true
 }
 fn local(p: &Path) -> bool {
     crate::font_library::local(p)
@@ -27,10 +38,14 @@ impl Work {
         let work = Self {
             version: 1,
             title,
+            page_ids: (1..=pages.len() as u64).collect(),
+            next_page_id: pages.len() as u64 + 1,
+            right_binding: false,
+            first_right: true,
             pages,
         };
         if !work.valid() {
-            return Err("A local work needs a name and 1–128 distinct saved .drawer pages".into());
+            return Err("A local work needs a name and 1–512 distinct saved .drawer pages".into());
         }
         Ok(work)
     }
@@ -40,7 +55,19 @@ impl Work {
             && self.title.chars().count() <= 64
             && !self.title.chars().any(char::is_control)
             && !self.pages.is_empty()
-            && self.pages.len() <= 128
+            && self.pages.len() <= 512
+            && (self.page_ids.is_empty() && self.next_page_id == 0
+                || self.page_ids.len() == self.pages.len()
+                    && self
+                        .page_ids
+                        .iter()
+                        .all(|id| *id > 0 && *id < self.next_page_id)
+                    && self
+                        .page_ids
+                        .iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        == self.pages.len())
             && self.pages.iter().enumerate().all(|(i, p)| {
                 local(p)
                     && p.as_os_str().len() <= 4096
@@ -61,11 +88,11 @@ impl Work {
         let mut bytes = vec![];
         fs::File::open(&path)
             .map_err(|e| e.to_string())?
-            .take(1024 * 1024 + 1)
+            .take(4 * 1024 * 1024 + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
-        if bytes.len() > 1024 * 1024 {
-            return Err("Work manifest limit1MiB".into());
+        if bytes.len() > 4 * 1024 * 1024 {
+            return Err("Work manifest limit4MiB".into());
         }
         let work: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         if !work.valid() {
@@ -89,6 +116,10 @@ impl Work {
         {
             return Err("Save as a local .drawer-work manifest".into());
         }
+        let bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
+        if bytes.len() > 4 * 1024 * 1024 {
+            return Err("Work manifest limit4MiB".into());
+        }
         let temp = path.with_extension("drawer-work-write.tmp");
         let mut f = fs::OpenOptions::new()
             .write(true)
@@ -96,7 +127,7 @@ impl Work {
             .open(&temp)
             .map_err(|e| e.to_string())?;
         let result = (|| -> io::Result<()> {
-            f.write_all(&serde_json::to_vec(self).map_err(io::Error::other)?)?;
+            f.write_all(&bytes)?;
             f.sync_all()?;
             drop(f);
             fs::rename(&temp, path)
@@ -160,7 +191,7 @@ pub fn prepare(documents: &[&Document], query: &Query) -> Result<Prepared, Strin
         return Err("Duplicate work source page".into());
     }
     if documents.is_empty()
-        || documents.len() > 128
+        || documents.len() > 512
         || documents.iter().map(|d| d.resident_bytes()).sum::<usize>() > DEFAULT_DOCUMENT_BUDGET / 8
     {
         return Err("Work page/snapshot budget exceeded".into());

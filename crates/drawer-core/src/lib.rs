@@ -451,3 +451,7 @@ pub mod webtoon_band;
 pub mod comic_view;
 
 pub mod comic_verify;
+
+pub mod page_work;
+
+pub mod page_work_verify;

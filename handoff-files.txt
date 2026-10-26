@@ -817,3 +817,7 @@ crates/drawer-core/src/webtoon_band.rs
 crates/drawer-app/src/comics.rs
 crates/drawer-app/src/comic_controls.rs
 docs/process/comics.md
+crates/drawer-core/src/page_work.rs
+crates/drawer-core/src/page_work_verify.rs
+crates/drawer-app/src/page_work.rs
+docs/process/page-work.md

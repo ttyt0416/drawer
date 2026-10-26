@@ -33,7 +33,7 @@ pub fn rows(documents: &[&Document]) -> Vec<Row> {
 }
 pub fn prepare(documents: &[&Document], rows: &[Row]) -> Result<Prepared, String> {
     if documents.is_empty()
-        || documents.len() > 128
+        || documents.len() > 512
         || rows.len() > 4096
         || documents
             .iter()

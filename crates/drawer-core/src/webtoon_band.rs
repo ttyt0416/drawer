@@ -175,11 +175,21 @@ pub fn prepare(d: &Document, b: Band, confirm_remove: bool) -> Result<DocumentSt
                             *k = *new;
                         }
                     }
-                    if f.family != 0 {
-                        f.family = match map.get(&Key::Object(f.family)) {
-                            Some(Key::Object(id)) => *id,
-                            _ => *id,
-                        };
+                    if f.family == 0 {
+                        f.family = map
+                            .iter()
+                            .find_map(|(old, new)| {
+                                if new == key {
+                                    if let Key::Object(id) = old {
+                                        Some(*id)
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                            .ok_or("Original frame family missing")?;
                     }
                 }
                 Kind::Balloon(b) => {

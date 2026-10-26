@@ -339,6 +339,11 @@ pub struct Snapshot {
     pub comic_view: Box<crate::comic_view::Local>,
     #[serde(
         default,
+        skip_serializing_if = "crate::page_work::Preferences::is_default"
+    )]
+    pub page_view: Box<crate::page_work::Preferences>,
+    #[serde(
+        default,
         skip_serializing_if = "crate::font_library::Settings::is_default"
     )]
     pub font_lists: crate::font_library::Settings,
@@ -451,6 +456,7 @@ impl Default for Snapshot {
             quick_presets: Default::default(),
             text_mix: Default::default(),
             comic_view: Default::default(),
+            page_view: Default::default(),
             font_lists: Default::default(),
             text_tool: Default::default(),
             surface_effects: Default::default(),
@@ -555,7 +561,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.comic_view.valid()
+        if !self.page_view.valid()
+            || !self.comic_view.valid()
             || !self.text_tool.valid()
             || !self.font_lists.valid()
             || !self.text_mix.valid()
@@ -682,6 +689,7 @@ impl Snapshot {
             next.quick_presets = incoming.quick_presets.clone();
             next.text_mix = incoming.text_mix.clone();
             next.comic_view = incoming.comic_view.clone();
+            next.page_view = incoming.page_view.clone();
             next.font_lists = incoming.font_lists.clone();
             next.text_tool = incoming.text_tool.clone();
             next.surface_effects = incoming.surface_effects.clone();

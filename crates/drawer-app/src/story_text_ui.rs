@@ -64,6 +64,12 @@ impl Drawer {
         if self.active.is_none() {
             return Err("Open a page first".into());
         }
+        if self.text_editor.story.work.is_none()
+            && let Some(work) = self.active_page_work()
+        {
+            self.text_editor.story.title = work.title.clone();
+            self.text_editor.story.work = Some(work);
+        }
         self.text_editor.story.open = true;
         self.text_editor.story.prepared = None;
         Ok(())
@@ -115,10 +121,11 @@ impl Drawer {
                     return Err("Two work entries resolve to the same page".into());
                 }
 
+                let project_document = self.page_work_document_id(&path);
                 if let Some(d) = self
                     .documents
                     .iter()
-                    .find(|d| d.path.as_ref() == Some(&path))
+                    .find(|d| d.path.as_ref() == Some(&path) || project_document == Some(d.id))
                 {
                     ids.push(d.id);
                     selected_memory = selected_memory.saturating_add(d.resident_bytes());
@@ -276,6 +283,32 @@ impl Drawer {
         p.open = false;
         self.status=Some("Work text replacement applied. Undo/Redo from any affected page restores the entire operation; source files are saved only when you save the pages.".into());
         Ok(())
+    }
+    pub(crate) fn smoke_project_story_binding(&mut self, expected: u64) -> Result<(), String> {
+        self.begin_story_text()?;
+        let mut panel = std::mem::take(&mut *self.text_editor.story);
+        panel.whole = true;
+        panel.editing = true;
+        panel.rows.clear();
+        let result = self.prepare_story_text(&mut panel).and_then(|_| {
+            if panel
+                .prepared
+                .as_ref()
+                .is_some_and(|p| p.sources.iter().any(|s| s.document == expected))
+            {
+                Ok(())
+            } else {
+                Err(
+                    "Story preview read an obsolete snapshot instead of the live project page"
+                        .into(),
+                )
+            }
+        });
+        panel.prepared = None;
+        panel.open = false;
+        panel.rows.clear();
+        *self.text_editor.story = panel;
+        result
     }
     pub(crate) fn story_text_history(&mut self, redo: bool) -> Result<bool, String> {
         let Some(n) = self.active else {

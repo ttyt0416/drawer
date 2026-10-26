@@ -260,6 +260,23 @@ pub fn tones() -> Result<(), String> {
             Geometry::new(&white, &d.scene).pixel([10.5, 10.5], Affine::default(), 300.)[3] == 0,
             "White luminance became ink",
         )?;
+        let mut gradient = o.clone();
+        if let Kind::Tone(t) = &mut gradient.kind {
+            t.gradient = true;
+            t.density = 0.;
+            t.end_density = 1.;
+        }
+        let g = Geometry::new(&gradient, &d.scene);
+        let band = |range: std::ops::Range<u32>| {
+            range
+                .flat_map(|y| (3..29).map(move |x| [x as f64 + 0.5, y as f64 + 0.5]))
+                .map(|p| u32::from(g.pixel(p, Affine::default(), 300.)[3]))
+                .sum::<u32>()
+        };
+        check(
+            band(48..58) > band(4..14) * 3,
+            "Tone gradient density did not grow",
+        )?;
         let mut scaled = o.clone();
         scaled.transform = Affine([2., 0., 0., 2., 0., 0.]);
         check(
@@ -435,6 +452,12 @@ pub fn bands() -> Result<(), String> {
     )
 }
 pub fn rich_bands() -> Result<(), String> {
+    rich_bands_fixture(false)
+}
+pub fn rich_frame_bands() -> Result<(), String> {
+    rich_bands_fixture(true)
+}
+fn rich_bands_fixture(clipped: bool) -> Result<(), String> {
     let mut d = page();
     d.color = Default::default();
     d.layers[0].precise = Some(vec![[12345, 23456, 34567, 65535]; 32 * 64]);
@@ -495,6 +518,20 @@ pub fn rich_bands() -> Result<(), String> {
         d.scene.valid() && d.color.valid_layers(&d.layers),
         "Rich band fixture invalid",
     )?;
+    if clipped {
+        let mut frame = defaults(rect())[1].clone();
+        let Kind::Frame(f) = &mut frame.kind else {
+            unreachable!()
+        };
+        f.width = 0.;
+        f.children = vec![
+            Key::Layer(crate::layer_properties::raster(&d, 0)),
+            Key::Layer(crate::layer_properties::Target::Vector(1)),
+            Key::World(1),
+            Key::Track(1),
+        ];
+        add(&mut d, frame)?;
+    }
     let before = d.snapshot();
     let original = Renderer::new(&d);
     let pixels: Vec<_> = (0..64)
@@ -765,6 +802,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     effects()?;
     bands()?;
     rich_bands()?;
+    rich_frame_bands()?;
     dialogue()?;
     metadata()?;
     files(root)
@@ -795,6 +833,10 @@ mod tests {
     #[test]
     fn bands_preserve_vector_camera_timeline_and_sixteen_bit_buffers() {
         rich_bands().unwrap();
+    }
+    #[test]
+    fn band_inside_frame_keeps_shared_animation_folder_clip() {
+        rich_frame_bands().unwrap();
     }
     #[test]
     fn ordered_dialogue_duplicate_names_stale_rows_and_linked_undo() {

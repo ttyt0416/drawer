@@ -250,11 +250,16 @@ pub fn frame_contains(d: &Document, parent: Key, key: Key) -> bool {
         false
     }
 }
+fn source_mask(d: &Document, key: Key, p: Point) -> bool {
+    d.scene
+        .comics
+        .masks
+        .iter()
+        .all(|m| m.target != key || contains(&m.polygon, m.space.inverse().map(p)))
+}
 pub fn coverage(d: &Document, key: Key, p: Point) -> f64 {
-    for m in &d.scene.comics.masks {
-        if m.target == key && !contains(&m.polygon, m.space.inverse().map(p)) {
-            return 0.;
-        }
+    if !source_mask(d, key, p) {
+        return 0.;
     }
     let mut families = std::collections::BTreeMap::<u64, bool>::new();
     for (n, o) in d.scene.objects.iter().enumerate() {
@@ -267,6 +272,7 @@ pub fn coverage(d: &Document, key: Key, p: Point) -> f64 {
             let local = o.transform.inverse().map(p);
             let visible = !crate::layer_properties::inherited(d, Target::Object(id)).hidden;
             let inside = visible
+                && source_mask(d, Key::Object(id), p)
                 && contains(&f.polygon, local)
                 && edge_distance(&f.polygon, local) + 1e-9 >= f.gap / 2.;
             *families.entry(family).or_default() |= inside;
