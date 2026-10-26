@@ -25,6 +25,9 @@ impl Renderer<'_> {
             return Err("Nonfinite source sample point".into());
         }
         let original = d.scene.transform.inverse().map(point);
+        if self.plan().comic_clips && crate::comics::coverage(d, key, original) == 0. {
+            return Ok(Sample::default());
+        }
         if matches!(
             key,
             Key::Gradient(_) | Key::Object(_) | Key::World(_) | Key::Layer(Target::Vector(_))
@@ -388,6 +391,12 @@ impl Renderer<'_> {
         }
     }
     fn vector(&self, id: u64, point: Point, original: Point) -> Result<Sample, String> {
+        if self.plan().comic_clips
+            && crate::comics::coverage(self.document, Key::Layer(Target::Vector(id)), original)
+                == 0.
+        {
+            return Ok(Sample::default());
+        }
         let d = self.document;
         let t = Target::Vector(id);
         let Some(index) = d.scene.lines.layers.iter().position(|l| l.id == id) else {
@@ -431,6 +440,9 @@ impl Renderer<'_> {
         raw.coverage(p::factor(d, t) * d.scene.layer_effects.mask(t, original) as f64)
     }
     fn page_source(&self, key: Key, point: Point, original: Point) -> Result<Sample, String> {
+        if self.plan().comic_clips && crate::comics::coverage(self.document, key, original) == 0. {
+            return Ok(Sample::default());
+        }
         let d = self.document;
         let Some(target) = crate::layer_catalog::target(d, key) else {
             return Ok(Sample::default());
@@ -510,6 +522,12 @@ impl Renderer<'_> {
                 track: id,
                 cell: d.scene.catalog.cell_id(id, cell_index),
             };
+            if self.plan().comic_clips
+                && (crate::comics::coverage(d, track_key, original) == 0.
+                    || crate::comics::coverage(d, cell_key, original) == 0.)
+            {
+                continue;
+            }
             let raw = if let Some(cache) = d
                 .scene
                 .file_objects

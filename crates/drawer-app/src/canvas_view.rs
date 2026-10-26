@@ -87,6 +87,7 @@ mod precision_tests {
 
 type ImageKey = (u64, u64, u32, (u64, u64));
 pub struct CanvasView {
+    pub comic_view: drawer_core::comic_view::Viewport,
     pub mask_overlay: bool,
     pub mask_overlay_regions: usize,
     mask_texture: crate::layer_masks::OverlayCache,
@@ -175,6 +176,7 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            comic_view: Default::default(),
             mask_overlay: false,
             mask_overlay_regions: 0,
             mask_texture: None,
@@ -672,6 +674,51 @@ impl CanvasView {
                 egui::Stroke::new(1.5, egui::Color32::YELLOW),
                 egui::StrokeKind::Inside,
             );
+        }
+        if !document.scene.comics.page.eq(&Default::default())
+            && let Ok(guides) = document.scene.comics.page.guides(document)
+        {
+            for r in guides {
+                let points = [
+                    r.min,
+                    [r.max[0], r.min[1]],
+                    r.max,
+                    [r.min[0], r.max[1]],
+                    r.min,
+                ]
+                .map(|p| {
+                    let q = document.view.document_to_screen(p, size, center, ppp);
+                    egui::pos2(q[0] as f32, q[1] as f32)
+                });
+                painter.add(egui::Shape::line(
+                    points.to_vec(),
+                    egui::Stroke::new(1., egui::Color32::from_rgb(80, 150, 210)),
+                ));
+            }
+        }
+        if self.comic_view.enabled {
+            let top = document.view.screen_to_document(
+                [rect.center().x as f64, rect.top() as f64],
+                size,
+                center,
+                ppp,
+            )[1];
+            let r = self.comic_view.region(document.width, document.height, top);
+            let points = [
+                r.min,
+                [r.max[0], r.min[1]],
+                r.max,
+                [r.min[0], r.max[1]],
+                r.min,
+            ]
+            .map(|p| {
+                let q = document.view.document_to_screen(p, size, center, ppp);
+                egui::pos2(q[0] as f32, q[1] as f32)
+            });
+            painter.add(egui::Shape::line(
+                points.to_vec(),
+                egui::Stroke::new(1.5, egui::Color32::LIGHT_GREEN),
+            ));
         }
         if let Some(boundary) = overlay {
             let outline = [

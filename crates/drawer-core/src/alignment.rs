@@ -483,7 +483,16 @@ pub(crate) fn shift(
         Item::Object(n) => {
             let key = crate::layer_search::Key::Object(state.scene.catalog.objects.id(n));
             crate::file_objects::shift(&mut state.scene, key, d);
+            crate::comics::shift_masks(
+                &mut state.scene,
+                key,
+                Affine([1., 0., 0., 1., delta[0], delta[1]]),
+            );
             match &mut state.scene.objects[n] {
+                PageObject::Comic(c) => {
+                    c.transform.0[4] += delta[0];
+                    c.transform.0[5] += delta[1];
+                }
                 PageObject::Material(m) => {
                     m.transform.0[4] += delta[0];
                     m.transform.0[5] += delta[1];

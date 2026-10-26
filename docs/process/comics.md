@@ -1,0 +1,15 @@
+# Comic composition contract
+
+Item183 integrates the detailed comic operations in185–191. Original SAI/CSP code or assets are not used. All resources and exports are local. Physical pen validation remains deferred.
+
+Comic objects are typed parameter objects with stable catalog IDs and independent affine frames. Balloon text references a stable text ID; render-only expansion follows actual glyph bounds in the balloon frame without changing the source text. Frame contents are explicit source references; siblings created by a cut share a family and use union coverage, while distinct frame families intersect. Cutting preserves source references and records both resulting polygons in one snapshot. Moving a frame moves each referenced source once; transforming a frame uses the existing linked transformation service. Split siblings intentionally share their content until independently copied.
+
+Tone parameters use physical frequency (DPI/LPI), transform-aware phase and orientation, fixed-seed noise, luminance-derived monochrome coverage, and original alpha. Reduced output uses4×4 premultiplied box sampling. This is a moiré preview, not a claim to simulate a particular printing device. Effect lines use deterministic parameters and at most2048 lines/object,8192 lines/scene. Linked balloon layout work is limited to65536 source characters across the scene. Rendering indexes line candidates spatially.
+
+Page metadata includes trim, bleed, safe area, binding, initial side, page index/total and work information. Invalid page ranges or guides outside the canvas are rejected by preparation/export. Optional guide/number output uses the same composition path as regular output; viewport guides remain outside the image and Undo.
+
+Webtoon strips partition[0,height) with regular and manual boundaries, sorted and deduplicated. PNG encoding is staged in an exclusively created local directory; hard-link publication never replaces a destination. Failed publication or cancellation removes only files created by that invocation. Export cancellation is checked at every row and publication. A joined worker owns its immutable document snapshot and cleans up before exit. No source file is modified.
+
+Band insertion/removal preserves typed objects, source transforms, precision raster buffers, masks and camera projection. Copies are independently editable; upper/lower masks preserve exact retained rows. Every animation cell is remapped while exposures/FPS remain unchanged. Explicit removal confirmation, lock preflight, canvas/source/mask/snapshot budgets precede application. The operation prepares on copies and has one document Undo. An oversized source cannot be silently flattened.
+
+Dialogue rows are page index + stable object ID + expected full settings. A changed/deleted original rejects the whole edit. The existing story transaction stages all pages and swaps only after every page validates; Undo and Redo remain atomic. Newline mark/list orientation preferences and viewport settings belong to local workspace preferences, never pixel history. Native v93 rejects comic data under older headers.

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-const VERSION: u32 = 92;
+const VERSION: u32 = 93;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,16 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 93
+            && (!document.scene.comics.is_default()
+                || document
+                    .scene
+                    .objects
+                    .iter()
+                    .any(|o| matches!(o, crate::scene::PageObject::Comic(_))))
+        {
+            return Err(invalid("Comic objects require native version93"));
         }
         if version<92 && document.scene.objects.iter().any(|o|matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.circle.is_some()||s.effects.is_some())){return Err(invalid("Circular text and text effects require native version92"));}
         if version<91 && document.scene.objects.iter().any(|o|matches!(o,crate::scene::PageObject::Text{layout:Some(s),..} if s.typeset.is_some())) {return Err(invalid("Advanced typography requires native version91"));}

@@ -169,7 +169,7 @@ pub fn prepare(documents: &[&Document], query: &Query) -> Result<Prepared, Strin
         .case_insensitive(!query.case_sensitive)
         .build()
         .map_err(|e| e.to_string())?;
-    let group = 0xf000_0000_0000_0000 | NEXT.fetch_add(1, Ordering::Relaxed);
+    let group = next_group();
     let mut pages = vec![];
     let mut matches = vec![];
     let mut preview_bytes = 0usize;
@@ -290,6 +290,9 @@ impl Prepared {
     }
 }
 impl Transaction {
+    pub(crate) fn new(id: u64, members: Vec<(u64, u64, u64)>) -> Self {
+        Self { id, members }
+    }
     pub fn contains(&self, id: u64) -> bool {
         self.members.iter().any(|m| m.0 == id)
     }
@@ -317,4 +320,8 @@ impl Transaction {
         }
         Ok(())
     }
+}
+
+pub(crate) fn next_group() -> u64 {
+    0xf000_0000_0000_0000 | NEXT.fetch_add(1, Ordering::Relaxed)
 }

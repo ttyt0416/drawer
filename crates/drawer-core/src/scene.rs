@@ -82,6 +82,7 @@ impl Affine {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum PageObject {
+    Comic(Box<crate::comic_object::Object>),
     Material(Box<crate::material_layer::Layer>),
     Text {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -112,6 +113,7 @@ pub enum PageObject {
 impl PageObject {
     pub fn bounds(&self) -> Rect {
         match self {
+            Self::Comic(c) => c.bounds(),
             Self::Material(m) => m.bounds(),
             Self::Text {
                 baseline,
@@ -171,6 +173,7 @@ impl PageObject {
         let positive = |v: f64| v.is_finite() && v > 0.0 && v <= 1e6;
         self.bounds().valid()
             && match self {
+                Self::Comic(c) => c.valid(),
                 Self::Material(m) => m.valid(missing),
                 Self::Text {
                     text,
@@ -213,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::comics::Data::is_default")]
+    pub comics: Box<crate::comics::Data>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mesh_edit: Option<Box<crate::mesh_edit::Edit>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -368,6 +373,7 @@ impl Scene {
                         .iter()
                         .all(|v| v.is_finite() && v.abs() <= 1e12)
                 })
+            && crate::comics::valid_scene(self)
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
             && self.catalog.worlds.matches(self.worlds.len())
@@ -445,9 +451,19 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.last_quick_filter
-            .as_ref()
-            .map_or(0, |r| std::mem::size_of_val(r.as_ref()))
+        self.comics.bytes()
+            + self
+                .objects
+                .iter()
+                .filter_map(|o| match o {
+                    PageObject::Comic(c) => Some(c.bytes()),
+                    _ => None,
+                })
+                .sum::<usize>()
+            + self
+                .last_quick_filter
+                .as_ref()
+                .map_or(0, |r| std::mem::size_of_val(r.as_ref()))
             + usize::from(self.last_detail_filter.is_some())
                 * std::mem::size_of::<crate::detail_filter::Settings>()
             + usize::from(self.last_spatial_blur.is_some())

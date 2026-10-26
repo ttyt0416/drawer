@@ -445,6 +445,17 @@ impl Drawer {
                 .entry(tab.id)
                 .or_insert_with(|| canvas_view::CanvasView::new(ctx));
             canvas.set_proof(&proof);
+            canvas.comic_view = self
+                .comics_view_session
+                .get(&doc.id)
+                .copied()
+                .unwrap_or_else(|| {
+                    self.workspaces
+                        .store
+                        .current
+                        .comic_view
+                        .get(doc.path.as_deref())
+                });
             canvas.set_checker(self.workspaces.store.current.transparency_colors);
             canvas.filter = self.interpolation.view;
             canvas.simple = true;

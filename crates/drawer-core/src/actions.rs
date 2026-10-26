@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 214] = [
+pub const EXTRA_COMMANDS: [&str; 215] = [
+    "comic-composition",
     "chromatic-aberration",
     "film-effect",
     "pencil-effect",

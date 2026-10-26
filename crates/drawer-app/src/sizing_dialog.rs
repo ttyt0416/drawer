@@ -460,6 +460,14 @@ fn object_sizes(ui: &mut egui::Ui, dialog: &SizingDialog, plan: &sizing::Plan) {
     };
     for (index, object) in dialog.original.scene.objects.iter().enumerate() {
         let (name, size, unit) = match object {
+            PageObject::Comic(c) => {
+                let b = c.bounds();
+                (
+                    "Comic bounds",
+                    [b.max[0] - b.min[0], b.max[1] - b.min[1]],
+                    "px",
+                )
+            }
             PageObject::Material(m) => {
                 let mut material = m.as_ref().clone();
                 material.transform = material.transform.then(scene.transform);

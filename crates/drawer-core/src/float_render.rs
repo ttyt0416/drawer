@@ -15,6 +15,7 @@ use crate::{
     scene::Point,
 };
 pub(crate) struct Plan<'a> {
+    comic_clips: bool,
     space: WorkingSpace,
     roots: Vec<Node>,
     geometry: Box<crate::render::Renderer<'a>>,
@@ -73,6 +74,7 @@ impl<'a> Renderer<'a> {
             stroke,
             sampling: Default::default(),
             plan: PlanRef::Owned(Box::new(Plan {
+                comic_clips: crate::comics::has_clips(&d.scene),
                 geometry: Box::new(crate::render::Renderer::geometry_preview(d)),
                 order: crate::render_order::normalized(&d.scene),
                 space: WorkingSpace::new(&d.color.profile)?,
@@ -197,6 +199,15 @@ impl<'a> Renderer<'a> {
             .unwrap_or_else(|| d.layers[n].sample(d.width, d.height, point[0], point[1])))
     }
     fn raster(&self, n: usize, point: [i64; 2], original: Point) -> Result<Sample, String> {
+        if self.plan().comic_clips
+            && crate::comics::coverage(
+                self.document,
+                crate::layer_search::Key::Layer(p::raster(self.document, n)),
+                original,
+            ) == 0.
+        {
+            return Ok(Sample::default());
+        }
         let d = self.document;
         let t = p::raster(d, n);
         if !self.raster_allowed(n) {

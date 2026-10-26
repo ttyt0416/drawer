@@ -437,3 +437,17 @@ pub mod text_path;
 pub mod story_text;
 
 pub mod text_extensions_verify;
+
+pub mod comic_object;
+pub mod comics;
+
+mod comic_page;
+pub mod comic_split;
+pub mod webtoon;
+
+pub mod comic_dialogue;
+pub mod webtoon_band;
+
+pub mod comic_view;
+
+pub mod comic_verify;

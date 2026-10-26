@@ -63,7 +63,10 @@ pub fn transform_policy(
                 let n = c::source_index(d, Key::Object(id)).ok_or("Missing object")?;
                 if !matches!(
                     d.scene.objects[n],
-                    PageObject::Material(_) | PageObject::Line { .. } | PageObject::Text { .. }
+                    PageObject::Comic(_)
+                        | PageObject::Material(_)
+                        | PageObject::Line { .. }
+                        | PageObject::Text { .. }
                 ) {
                     return Err(
                         "Rasterize tone/shadow objects before transforming this group".into(),
@@ -242,6 +245,7 @@ pub fn transform_policy(
                 Target::Object(id) => {
                     let n = c::source_index(d, Key::Object(id)).unwrap();
                     match &mut state.scene.objects[n] {
+                        PageObject::Comic(c) => c.transform = c.transform.then(original),
                         PageObject::Material(m) => m.transform = m.transform.then(original),
                         PageObject::Line {
                             start,
@@ -273,6 +277,7 @@ pub fn transform_policy(
                 _ => unreachable!(),
             }
         }
+        crate::comics::shift_masks(&mut state.scene, *key, original);
         if !matches!(t, Target::Raster(_)) {
             let prior = crate::transform_policy::frame(d, *key);
             state.scene.layer_groups.set_frame(*key, prior.then(matrix));

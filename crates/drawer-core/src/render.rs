@@ -20,7 +20,10 @@ pub struct Renderer<'a> {
     stroke: Option<&'a crate::painting::Stroke>,
     references: Option<&'a crate::eyedropper::References>,
     text_contours: Vec<text_paint::Text>,
+    comic_geometry: Vec<Option<crate::comic_object::Geometry>>,
     text_error: Option<String>,
+    export_page: bool,
+    comic_clips: bool,
     vector_bounds: Vec<Vec<Rect>>,
     order: Vec<crate::render_order::Entry>,
     deferred: Vec<bool>,
@@ -180,6 +183,18 @@ impl<'a> Renderer<'a> {
         let key = crate::layer_search::Key::Layer(crate::layer_properties::Target::Raster(
             doc.scene.layer_ids.id(n),
         ));
+        if self.comic_clips
+            && crate::comics::coverage(
+                doc,
+                key,
+                doc.scene
+                    .transform
+                    .inverse()
+                    .map(point.map(|v| v as f64 + 0.5)),
+            ) == 0.
+        {
+            return [0; 4];
+        }
         if let Some(c) = doc.scene.file_objects.pixel(
             key,
             doc.scene
@@ -210,6 +225,16 @@ impl<'a> Renderer<'a> {
     pub(crate) fn vector_pixel(&self, n: usize, point: Point) -> [u8; 4] {
         let doc = self.doc();
         if let Some(l) = doc.scene.lines.layers.get(n)
+            && self.comic_clips
+            && crate::comics::coverage(
+                doc,
+                crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(l.id)),
+                doc.scene.transform.inverse().map(point),
+            ) == 0.
+        {
+            return [0; 4];
+        }
+        if let Some(l) = doc.scene.lines.layers.get(n)
             && let Some(c) = doc.scene.file_objects.pixel(
                 crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(l.id)),
                 doc.scene.transform.inverse().map(point),
@@ -233,8 +258,10 @@ impl<'a> Renderer<'a> {
         self.owned.as_deref().unwrap_or(self.document)
     }
     pub fn for_export(document: &'a Document) -> Result<Self, String> {
+        document.scene.comics.page.guides(document)?;
         let mut r = Self::new(document);
         r.owned = crate::layer_roles::output_view(document)?;
+        r.export_page = true;
         Ok(r)
     }
     pub(crate) fn object_pixel(
@@ -243,6 +270,15 @@ impl<'a> Renderer<'a> {
         object: &PageObject,
         original: Point,
     ) -> [u8; 4] {
+        if self.comic_clips
+            && crate::comics::coverage(
+                self.doc(),
+                crate::layer_search::Key::Object(self.doc().scene.catalog.objects.id(index)),
+                original,
+            ) == 0.
+        {
+            return [0; 4];
+        }
         if let Some(c) = self.doc().scene.file_objects.pixel(
             crate::layer_search::Key::Object(self.doc().scene.catalog.objects.id(index)),
             original,
@@ -250,6 +286,13 @@ impl<'a> Renderer<'a> {
             return c;
         }
         match object {
+            PageObject::Comic(_) => self
+                .comic_geometry
+                .get(index)
+                .and_then(|g| g.as_ref())
+                .map_or([0; 4], |g| {
+                    g.pixel(original, self.doc().scene.transform, self.doc().dpi)
+                }),
             PageObject::Material(m) => m.pixel(original),
             PageObject::Text { .. } => self.text_contours[index].pixel(original),
             PageObject::Line {
@@ -309,6 +352,15 @@ impl<'a> Renderer<'a> {
         }
     }
     pub(crate) fn world_pixel(&self, index: usize, original: Point) -> [u8; 4] {
+        if self.comic_clips
+            && crate::comics::coverage(
+                self.doc(),
+                crate::layer_search::Key::World(self.doc().scene.catalog.worlds.id(index)),
+                original,
+            ) == 0.
+        {
+            return [0; 4];
+        }
         if let Some(c) = self.doc().scene.file_objects.pixel(
             crate::layer_search::Key::World(self.doc().scene.catalog.worlds.id(index)),
             original,
@@ -318,7 +370,12 @@ impl<'a> Renderer<'a> {
         let Some(camera) = &self.doc().scene.camera else {
             return [0; 4];
         };
-        if !camera.page_bounds.contains(original) {
+        if !camera.page_bounds.contains(original)
+            && !self.doc().scene.comics.masks.iter().any(|m| {
+                m.target
+                    == crate::layer_search::Key::World(self.doc().scene.catalog.worlds.id(index))
+            })
+        {
             return [0; 4];
         }
         let Some(mesh) = self.doc().scene.worlds.get(index) else {
@@ -364,6 +421,15 @@ impl<'a> Renderer<'a> {
         point: Point,
     ) -> [u8; 4] {
         if self.error().is_some() {
+            return [0; 4];
+        }
+        if self.comic_clips
+            && crate::comics::coverage(
+                self.doc(),
+                key,
+                self.doc().scene.transform.inverse().map(point),
+            ) == 0.
+        {
             return [0; 4];
         }
         if let Ok(Some(renderer)) = self.float_renderer() {
@@ -619,7 +685,20 @@ impl<'a> Renderer<'a> {
             fill: None,
             fill_graph: None,
             text_contours,
+            comic_geometry: document
+                .scene
+                .objects
+                .iter()
+                .map(|o| match o {
+                    PageObject::Comic(c) => {
+                        Some(crate::comic_object::Geometry::new(c, &document.scene))
+                    }
+                    _ => None,
+                })
+                .collect(),
             text_error,
+            export_page: false,
+            comic_clips: crate::comics::has_clips(&document.scene),
             deferred: (0..document.layers.len())
                 .map(|n| {
                     document
@@ -648,6 +727,17 @@ impl<'a> Renderer<'a> {
         }
     }
     pub fn pixel(&self, point: Point) -> [u8; 4] {
+        let pixel = self.raw_pixel(point);
+        if self.export_page {
+            over(
+                pixel,
+                self.doc().scene.comics.page.output_pixel(self.doc(), point),
+            )
+        } else {
+            pixel
+        }
+    }
+    fn raw_pixel(&self, point: Point) -> [u8; 4] {
         if self.error().is_some() {
             return [0; 4];
         }
@@ -869,6 +959,32 @@ impl<'a> Renderer<'a> {
         }
         result
     }
+    /// Premultiplied box sampling for fine comic tones at reduced view/output sizes.
+    pub fn sample_box(&self, point: Point, size: Point) -> [u8; 4] {
+        let mut sum = [0.; 4];
+        for y in 0..4 {
+            for x in 0..4 {
+                let p = self.pixel([
+                    point[0] + ((x as f64 + 0.5) / 4. - 0.5) * size[0],
+                    point[1] + ((y as f64 + 0.5) / 4. - 0.5) * size[1],
+                ]);
+                let a = p[3] as f64 / 255.;
+                for n in 0..3 {
+                    sum[n] += p[n] as f64 * a;
+                }
+                sum[3] += a;
+            }
+        }
+        if sum[3] == 0. {
+            return [0; 4];
+        }
+        [
+            (sum[0] / sum[3]).round() as u8,
+            (sum[1] / sum[3]).round() as u8,
+            (sum[2] / sum[3]).round() as u8,
+            (sum[3] * 255. / 16.).round() as u8,
+        ]
+    }
     /// Output at a requested DPI while preserving the document's physical size.
     /// Returns RGBA pixels; output file codecs are separate checklist features.
     pub fn output(&self, dpi: f64, budget: usize) -> Result<(u32, u32, Vec<[u8; 4]>), String> {
@@ -893,9 +1009,15 @@ impl<'a> Renderer<'a> {
         pixels
             .try_reserve_exact(count)
             .map_err(|_| "Not enough output memory.")?;
+        let tone=ratio<1.&&self.doc().scene.objects.iter().any(|o|matches!(o,PageObject::Comic(c)if matches!(c.kind,crate::comics::Kind::Tone(_))));
         for y in 0..height {
             for x in 0..width {
-                pixels.push(self.pixel([(x as f64 + 0.5) / ratio, (y as f64 + 0.5) / ratio]));
+                let point = [(x as f64 + 0.5) / ratio, (y as f64 + 0.5) / ratio];
+                pixels.push(if tone {
+                    self.sample_box(point, [1. / ratio; 2])
+                } else {
+                    self.pixel(point)
+                });
             }
         }
         Ok((width, height, pixels))

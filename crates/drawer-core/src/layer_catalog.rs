@@ -581,6 +581,21 @@ pub fn rows(d: &Document) -> Result<Vec<Row>, String> {
     for (n, o) in d.scene.objects.iter().enumerate() {
         let key = Key::Object(c.objects.id(n));
         let (name, kind) = match o {
+            PageObject::Comic(c) => (
+                c.name.clone(),
+                match &c.kind {
+                    crate::comics::Kind::Balloon(_) => Kind::Balloon,
+                    crate::comics::Kind::Frame(_) => Kind::PanelFolder,
+                    crate::comics::Kind::Tone(_) => Kind::Tone,
+                    crate::comics::Kind::Effect(e) => {
+                        if e.kind == crate::comics::Lines::Radial {
+                            Kind::Focus
+                        } else {
+                            Kind::Speed
+                        }
+                    }
+                },
+            ),
             PageObject::Text { text, .. } => (
                 format!("Text {}", text.chars().take(40).collect::<String>()),
                 Kind::Text,
@@ -803,7 +818,10 @@ pub fn bounds(d: &Document, key: Key) -> Option<crate::scene::Rect> {
     };
     match key {
         Key::Object(_) => Some(transformed(
-            d.scene.objects.get(source_index(d, key)?)?.bounds(),
+            match d.scene.objects.get(source_index(d, key)?)? {
+                PageObject::Comic(c) => c.resolved(&d.scene).bounds(),
+                o => o.bounds(),
+            },
             d.scene.transform,
         )),
         Key::World(_) => d

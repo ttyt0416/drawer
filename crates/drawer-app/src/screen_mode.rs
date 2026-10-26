@@ -183,6 +183,17 @@ impl Drawer {
                 drawer_core::thumbnail::Target::Raster(n) => Some(n),
                 _ => None,
             };
+            self.canvas_view.comic_view = self
+                .comics_view_session
+                .get(&self.documents[n].id)
+                .copied()
+                .unwrap_or_else(|| {
+                    self.workspaces
+                        .store
+                        .current
+                        .comic_view
+                        .get(self.documents[n].path.as_deref())
+                });
             let changed = self.canvas_view.show(
                 ui,
                 &mut self.documents[n],

@@ -804,3 +804,16 @@ crates/drawer-app/src/text_path_ui_verify.rs
 crates/drawer-app/src/story_text_ui.rs
 crates/drawer-app/src/story_text_ui_verify.rs
 docs/process/text-extensions.md
+crates/drawer-core/src/comic_object.rs
+crates/drawer-core/src/comic_lines.rs
+crates/drawer-core/src/comics.rs
+crates/drawer-core/src/comic_page.rs
+crates/drawer-core/src/comic_split.rs
+crates/drawer-core/src/comic_dialogue.rs
+crates/drawer-core/src/comic_view.rs
+crates/drawer-core/src/comic_verify.rs
+crates/drawer-core/src/webtoon.rs
+crates/drawer-core/src/webtoon_band.rs
+crates/drawer-app/src/comics.rs
+crates/drawer-app/src/comic_controls.rs
+docs/process/comics.md

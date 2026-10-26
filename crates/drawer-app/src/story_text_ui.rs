@@ -4,6 +4,9 @@ use sha2::{Digest, Sha256};
 #[derive(Default)]
 pub(super) struct Panel {
     pub open: bool,
+    editing: bool,
+    rows: Vec<drawer_core::comic_dialogue::Row>,
+    insertion: String,
     work: Option<story::Work>,
     title: String,
     whole: bool,
@@ -165,7 +168,16 @@ impl Drawer {
                 path: d.path.clone(),
             })
             .collect();
-        let plan = story::prepare(&docs, &query)?;
+        let plan = if p.editing {
+            if p.rows.is_empty() {
+                p.rows = drawer_core::comic_dialogue::rows(&docs);
+                drawer_core::comic_dialogue::prepare(&docs, &[])?
+            } else {
+                drawer_core::comic_dialogue::prepare(&docs, &p.rows)?
+            }
+        } else {
+            story::prepare(&docs, &query)?
+        };
         p.prepared = Some(Box::new(Prepared {
             plan,
             closed,
@@ -289,11 +301,12 @@ impl Drawer {
         if !self.text_editor.story.open {
             return;
         }
+        let old_preferences = self.workspaces.store.current.comic_view.clone();
         let mut p = std::mem::take(&mut *self.text_editor.story);
         let mut open = true;
         let (mut prepare, mut apply, mut cancel) = (false, false, false);
         let old = (p.find.clone(), p.replace.clone(), p.sensitive, p.whole);
-        egui::Window::new("Story text find and replace").default_width(650.).open(&mut open).show(ctx,|ui|{
+        egui::Window::new("Story dialogue editor").default_width(650.).open(&mut open).show(ctx,|ui|{
    ui.label("Current page or every page registered in a local work manifest. Closed work pages are previewed without modifying disk files; Apply opens changed pages for saving.");
    ui.horizontal(|ui|{ui.radio_value(&mut p.whole,false,"Current page");ui.add_enabled_ui(p.work.is_some(),|ui|{ui.radio_value(&mut p.whole,true,"Whole local work");});});
    ui.add(egui::TextEdit::singleline(&mut p.title).char_limit(64).hint_text("Local work name"));
@@ -303,19 +316,38 @@ impl Drawer {
     if ui.add_enabled(p.work.is_some(),egui::Button::new("Save work list…")).clicked()&&let Some(file)=rfd::FileDialog::new().add_filter("Drawer work",&["drawer-work"]).save_file()&&let Err(error)=p.work.as_ref().unwrap().save(&file){p.error=Some(error);}
    });
    if let Some(work)=&p.work{ui.label(format!("{} · {} registered pages",work.title,work.pages.len()));}
+   ui.horizontal(|ui|{if ui.radio_value(&mut p.editing,false,"Find and replace").changed()||ui.radio_value(&mut p.editing,true,"Edit ordered dialogues").changed(){p.prepared=None;p.rows.clear();}});
+   if p.editing {
+    let prefs=&mut self.workspaces.store.current.comic_view;
+    ui.horizontal(|ui|{ui.checkbox(&mut prefs.show_breaks,"Show newline marks");ui.checkbox(&mut prefs.vertical_list,"Vertical list view");});
+    egui::ScrollArea::vertical().id_salt("dialogue-rows").max_height(250.).show(ui,|ui|{for row in &mut p.rows{ui.push_id((row.page,row.id),|ui|{ui.label(format!("Page {} · text#{}",row.page+1,row.id));let before=row.after.clone();ui.add(egui::TextEdit::multiline(&mut row.after.text).char_limit(4096).desired_rows(2));if prefs.show_breaks{ui.label(row.after.text.replace('\n',"↵\n"));}
+if prefs.vertical_list{ui.horizontal(|ui|{for line in row.after.text.lines().take(16).collect::<Vec<_>>().into_iter().rev(){ui.vertical(|ui|{for ch in line.chars().take(128){ui.label(ch.to_string());}});}});}ui.add(egui::DragValue::new(&mut row.after.style.line_height).range(0.5..=8.).prefix("Paragraph spacing × "));ui.horizontal(|ui|{ui.radio_value(&mut row.after.style.flow,core::Flow::Horizontal,"Horizontal writing");ui.radio_value(&mut row.after.style.flow,core::Flow::Vertical,"Vertical writing");});if before.text!=row.after.text{row.after.style.remap_text(&before.text,&row.after.text);}
+if before!=row.after{p.prepared=None;}});}});
+    ui.separator();ui.label("Insert dialogue on the current page");ui.add(egui::TextEdit::multiline(&mut p.insertion).char_limit(4096).desired_rows(2));ui.checkbox(&mut prefs.append,"Append to current text layer");ui.checkbox(&mut prefs.inherit,"Inherit current text format (off: text tool defaults)");
+    if ui.button("Reload dialogues (discard list edits)").clicked(){p.rows.clear();p.prepared=None;}
+    if ui.button("Insert dialogue as one Undo").clicked(){let result=(||->Result<(),String>{let n=self.active.ok_or("Open a page")?;let d=&self.documents[n];let source=self.panels.targets.get(&d.id).and_then(|t|if let drawer_core::thumbnail::Target::Source(drawer_core::layer_search::Key::Object(id))=t{Some(*id)}else{None});let edit=drawer_core::comic_dialogue::insert(d,source,&self.workspaces.store.current.text_tool.defaults,&p.insertion,if self.workspaces.store.current.comic_view.append{drawer_core::comic_dialogue::Insertion::Current}else{drawer_core::comic_dialogue::Insertion::New},self.workspaces.store.current.comic_view.inherit)?;let id=edit.id;self.documents[n].commit_state(edit.state)?;let i=self.documents[n].scene.catalog.objects.index(id,self.documents[n].scene.objects.len()).ok_or("Inserted text missing")?;self.panels.targets.insert(self.documents[n].id,drawer_core::thumbnail::Target::Source(drawer_core::layer_search::Key::Object(self.documents[n].scene.catalog.objects.id(i))));p.insertion.clear();p.rows.clear();p.prepared=None;Ok(())})();p.error=result.err();}
+   } else {
    ui.label("Find literal Unicode text");ui.add(egui::TextEdit::multiline(&mut p.find).char_limit(256).desired_rows(2));ui.label("Replace with");ui.add(egui::TextEdit::multiline(&mut p.replace).char_limit(4096).desired_rows(2));ui.checkbox(&mut p.sensitive,"Case sensitive");
-   if old!=(p.find.clone(),p.replace.clone(),p.sensitive,p.whole){p.prepared=None;}
+   }
+   if old!=(p.find.clone(),p.replace.clone(),p.sensitive,p.whole){p.prepared=None;if old.3!=p.whole{p.rows.clear();}}
    if let Some(prepared)=&mut p.prepared{ui.label(format!("{} match(es), {} changed page(s)",prepared.plan.matches.len(),prepared.plan.pages.len()));egui::ScrollArea::vertical().max_height(180.).show(ui,|ui|{for m in &prepared.plan.matches{ui.label(format!("{} · text#{} · {}..{}: {:?} → {:?}",m.page,m.object,m.first,m.last,m.before.chars().take(100).collect::<String>(),m.after.chars().take(100).collect::<String>()));}});ui.checkbox(&mut prepared.ack,"I reviewed all listed replacements; apply as one linked Undo");}
    if let Some(error)=&p.error{ui.colored_label(egui::Color32::YELLOW,error);}
-   ui.horizontal(|ui|{let r=ui.add_enabled(!p.find.is_empty(),egui::Button::new("Prepare replacement list"));prepare=r.clicked();p.prepare=Some(r.rect);let r=ui.add_enabled(p.prepared.as_ref().is_some_and(|x|x.ack&&!x.plan.pages.is_empty()),egui::Button::new("Apply work replacement"));apply=r.clicked();p.apply=Some(r.rect);let r=ui.button("Cancel work change");cancel=r.clicked();p.cancel=Some(r.rect);});
+   ui.horizontal(|ui|{let r=ui.add_enabled(p.editing||!p.find.is_empty(),egui::Button::new(if p.editing{if p.rows.is_empty(){"Load ordered dialogues"}else{"Prepare dialogue edits"}}else{"Prepare replacement list"}));prepare=r.clicked();p.prepare=Some(r.rect);let r=ui.add_enabled(p.prepared.as_ref().is_some_and(|x|x.ack&&!x.plan.pages.is_empty()),egui::Button::new("Apply work replacement"));apply=r.clicked();p.apply=Some(r.rect);let r=ui.button("Cancel work change");cancel=r.clicked();p.cancel=Some(r.rect);});
   });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             p.open = false;
             p.prepared = None;
+            p.rows.clear();
+            p.insertion.clear();
         } else if prepare {
             p.error = self.prepare_story_text(&mut p).err();
         } else if apply {
             p.error = self.apply_story_text(&mut p).err();
+        }
+        if old_preferences != self.workspaces.store.current.comic_view
+            && let Err(error) = self.persist_workspace()
+        {
+            p.error = Some(error);
         }
         *self.text_editor.story = p;
     }

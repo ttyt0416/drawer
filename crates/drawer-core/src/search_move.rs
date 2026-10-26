@@ -11,6 +11,38 @@ pub(crate) fn prepare_single(
     key: Key,
     delta: [i64; 2],
 ) -> Result<DocumentState, String> {
+    if let Key::Object(id) = key
+        && let Some(n) = d.scene.catalog.objects.index(id, d.scene.objects.len())
+        && matches!(&d.scene.objects[n],crate::scene::PageObject::Comic(o)if matches!(o.kind,crate::comics::Kind::Frame(_)))
+    {
+        let members = crate::layer_groups::content_members(d, &[key])?;
+        crate::layer_groups::preflight(d, &[key], crate::layer_groups::Operation::Move)?;
+        let mut state = d.snapshot();
+        for member in members {
+            let current = crate::layer_merge::preview(&state, d.current_frame)?;
+            state = prepare_unlinked(&current, member, delta)?;
+        }
+        return Ok(state);
+    }
+    prepare_unlinked(d, key, delta)
+}
+pub(crate) fn prepare_unlinked(
+    d: &Document,
+    key: Key,
+    delta: [i64; 2],
+) -> Result<DocumentState, String> {
+    let mut state = prepare_body(d, key, delta)?;
+    if !matches!(key, Key::Object(_)) || d.scene.file_objects.get(key).is_some() {
+        let v = d.scene.transform.inverse().vector(delta.map(|v| v as f64));
+        crate::comics::shift_masks(
+            &mut state.scene,
+            key,
+            crate::scene::Affine([1., 0., 0., 1., v[0], v[1]]),
+        );
+    }
+    Ok(state)
+}
+fn prepare_body(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState, String> {
     if c::thumbnail(d, key).is_none() {
         return Err("Movement source was removed".into());
     }

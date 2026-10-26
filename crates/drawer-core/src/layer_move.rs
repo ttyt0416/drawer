@@ -296,3 +296,11 @@ pub fn copy_selected_pixels(d: &Document, n: usize, delta: [i64; 2]) -> Result<P
     groups::finish(d, &state)?;
     Ok(Prepared { state, selected })
 }
+
+pub(crate) fn copy_sources(
+    d: &Document,
+    keys: &[Key],
+) -> Result<(DocumentState, Vec<Key>), String> {
+    let copied = copy::prepare(d, keys)?;
+    Ok((copied.state, copied.keys))
+}

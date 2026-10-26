@@ -171,7 +171,7 @@ pub fn expanded(d: &Document, selected: &[Key], op: Operation) -> Result<Vec<Key
     Ok(ordered)
 }
 fn inside(d: &Document, parent: Key, child: Key) -> bool {
-    if parent == child {
+    if parent == child || crate::comics::frame_contains(d, parent, child) {
         return true;
     }
     if let (Key::Track(a), Key::Cell { track: b, .. }) = (parent, child) {
@@ -381,6 +381,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<DocumentState, String> 
     Ok(state)
 }
 pub(crate) fn prune(state: &mut DocumentState) -> Result<(), String> {
+    crate::comics::prune(state);
     if state.scene.layer_groups.groups.is_empty() && state.scene.layer_groups.transforms.is_empty()
     {
         return Ok(());
