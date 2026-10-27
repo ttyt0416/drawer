@@ -96,6 +96,7 @@ pub(super) struct TimelineOverlay {
 }
 pub struct CanvasView {
     pub(super) timeline_overlay: Option<TimelineOverlay>,
+    pub(super) light_table_overlay: Option<TimelineOverlay>,
     pub comic_view: drawer_core::comic_view::Viewport,
     pub mask_overlay: bool,
     pub mask_overlay_regions: usize,
@@ -187,6 +188,7 @@ impl CanvasView {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
             timeline_overlay: None,
+            light_table_overlay: None,
             comic_view: Default::default(),
             mask_overlay: false,
             mask_overlay_regions: 0,
@@ -1241,8 +1243,11 @@ impl CanvasView {
                 );
             }
         }
-        if let Some(overlay) = &self.timeline_overlay
-            && overlay.document == document.id
+        for overlay in self
+            .timeline_overlay
+            .iter()
+            .chain(self.light_table_overlay.iter())
+            .filter(|o| o.document == document.id)
         {
             let mut mesh = egui::Mesh::with_texture(overlay.texture.id());
             let points = [

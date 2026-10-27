@@ -282,8 +282,11 @@ impl Document {
         self.history_changed();
         Ok(true)
     }
+    pub(crate) fn refresh_dirty(&mut self) {
+        self.dirty = self.history.saved != Some(self.history.current) || self.light_table.dirty();
+    }
     fn history_changed(&mut self) {
-        self.dirty = self.history.saved != Some(self.history.current);
+        self.refresh_dirty();
         self.revision += 1;
     }
     pub fn edit_pixel(&mut self, layer: usize, x: u32, y: u32, after: [u8; 4]) -> bool {

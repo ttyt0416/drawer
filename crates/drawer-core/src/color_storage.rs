@@ -382,6 +382,7 @@ pub(crate) fn write(d: &Document, w: &mut impl Write) -> std::io::Result<()> {
         && d.scene.page_parts.is_default()
         && d.scene.cels.definitions.is_empty()
         && d.scene.timing.originals.is_empty()
+        && d.light_table.data.images.is_empty()
     {
         return Ok(());
     }

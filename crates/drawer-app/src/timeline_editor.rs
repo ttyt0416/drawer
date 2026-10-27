@@ -233,6 +233,42 @@ impl Drawer {
         }
         Ok(())
     }
+    pub(super) fn light_table_context(&self) -> Option<usize> {
+        self.timeline_context()
+    }
+    pub(super) fn light_table_binding(&self, parent: u64) -> Option<(u64, u64, [i64; 2])> {
+        self.timeline_editor
+            .binding
+            .as_ref()
+            .filter(|b| b.parent.id == parent)
+            .map(|b| (b.child, b.source, b.offset))
+    }
+    pub(super) fn light_table_pin(&mut self, source: u64) -> Result<(), String> {
+        self.finish_stroke();
+        let n = self.timeline_context().ok_or("Choose a drawing")?;
+        let parent = self.documents[n].id;
+        if let Some((child, old, _)) = self.light_table_binding(parent) {
+            if old != source {
+                return Err(
+                    "Apply or return from the open cel before pinning a different cel".into(),
+                );
+            }
+            return drawer_core::light_table::pin(&mut self.documents[n], source, Some(child));
+        }
+        drawer_core::light_table::pin(&mut self.documents[n], source, None)?;
+        self.timeline_editor.views.entry(parent).or_default().source = Some(source);
+        if let Err(e) = self.open_timeline_cel() {
+            self.documents[n].light_table.pin = None;
+            return Err(e);
+        }
+        let child = self.light_table_binding(parent).unwrap().0;
+        self.documents[n].light_table.pin = Some(drawer_core::light_table::Pin {
+            source,
+            child: Some(child),
+        });
+        self.stop_timeline_playback(parent);
+        Ok(())
+    }
     fn timeline_context(&self) -> Option<usize> {
         let active = self.active?;
         if let Some(b) = &self.timeline_editor.binding
@@ -382,7 +418,7 @@ impl Drawer {
         );
         Ok(())
     }
-    fn apply_timeline_cel(&mut self) -> Result<(), String> {
+    pub(super) fn apply_timeline_cel(&mut self) -> Result<(), String> {
         self.finish_stroke();
         if self.transform_unconfirmed() || self.text_editor.draft.is_some() {
             return Err("Finish the pending content edit first".into());
@@ -416,6 +452,7 @@ impl Drawer {
         let id = b.parent.id;
         self.documents[parent].commit_state(state)?;
         self.timeline_editor.binding = None;
+        self.documents[parent].light_table.pin = None;
         if let Some(tab) = self.tabs.iter().position(|t| t.document_id == id) {
             self.select_tab(tab);
         }
@@ -423,8 +460,11 @@ impl Drawer {
         self.timeline_editor.notice="Applied editable cel content to every shared reference with one drawing Undo. Independent copies remain unchanged.".into();
         Ok(())
     }
-    fn return_timeline_cel(&mut self) {
+    pub(super) fn return_timeline_cel(&mut self) {
         if let Some(b) = self.timeline_editor.binding.take() {
+            if let Some(parent) = self.documents.iter_mut().find(|d| d.id == b.parent.id) {
+                parent.light_table.pin = None;
+            }
             if let Some(tab) = self.tabs.iter().position(|t| t.document_id == b.parent.id) {
                 self.select_tab(tab);
             }

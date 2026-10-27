@@ -871,3 +871,7 @@ crates/drawer-app/src/keyframes.rs
 docs/process/layer-keyframes.md
 crates/drawer-core/src/onion_verify.rs
 docs/process/onion-skin.md
+crates/drawer-core/src/light_table.rs
+crates/drawer-core/src/light_table_verify.rs
+crates/drawer-app/src/light_table.rs
+docs/process/light-table.md

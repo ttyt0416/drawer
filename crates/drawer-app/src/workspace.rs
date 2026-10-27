@@ -242,6 +242,7 @@ impl Drawer {
         }
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
+        self.light_table_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
         self.text_save_guard(index)?;
@@ -299,6 +300,7 @@ impl Drawer {
         }
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
+        self.light_table_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
         self.text_save_guard(index)?;
@@ -328,6 +330,7 @@ impl Drawer {
     pub(super) fn save_document(&mut self, index: usize) -> Result<bool, String> {
         self.spatial_blur_save_guard(index)?;
         self.detail_filter_save_guard(index)?;
+        self.light_table_save_guard(index)?;
         self.surface_effects_save_guard(index)?;
         self.batch_filters_save_guard(index)?;
         self.text_save_guard(index)?;
@@ -391,6 +394,15 @@ impl Drawer {
         Ok(true)
     }
     pub(super) fn request_close(&mut self, tab: usize) {
+        if let Some(n) = self
+            .tabs
+            .get(tab)
+            .and_then(|t| self.documents.iter().position(|d| d.id == t.document_id))
+            && let Err(e) = self.light_table_save_guard(n)
+        {
+            self.status = Some(e);
+            return;
+        }
         if tab < self.tabs.len()
             && self
                 .tabs

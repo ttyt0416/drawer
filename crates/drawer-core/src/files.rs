@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 99;
+pub(crate) const VERSION: u32 = 100;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -220,6 +220,14 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
                 "Editable mesh sources and transform frames require native version81",
             ));
         }
+        if version < 100 && document.scene.light_table.is_some() {
+            return Err(invalid("Light-table objects require native100"));
+        }
+        let auxiliary = document.scene.light_table.take().unwrap_or_default();
+        if !auxiliary.valid(true) {
+            return Err(invalid("Invalid light-table metadata"));
+        }
+        document.light_table = crate::light_table::Session::loaded(auxiliary);
         if version < 99 && document.scene.onion.is_some() {
             return Err(invalid("Onion preferences require native99"));
         }
@@ -496,6 +504,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if version >= 97 {
         crate::timeline_timing::read(&mut document, &mut reader, budget)?;
     }
+    if version >= 100 {
+        crate::light_table::read(&mut document, &mut reader, budget)?;
+    }
     if !document.scene.valid()
         || !crate::keyframes::valid_document(&document)
         || !crate::timeline_timing::valid_document(&document)
@@ -510,6 +521,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         return Err(invalid("Unexpected document data"));
     }
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
+    crate::light_table::save_destination(&document, path).map_err(invalid)?;
     document.mark_saved(path.into());
     Ok(document)
 }
@@ -537,6 +549,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     } else {
         path
     };
+    crate::light_table::save_destination(document, &path).map_err(invalid)?;
     let scene = native_scene(document)?;
     let mut temp_name = path.file_name().unwrap().to_owned();
     temp_name.push(".drawer-write.tmp");
@@ -631,7 +644,12 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     )
     .map_err(invalid)?;
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
-    if !document.onion.valid() || document.scene.onion.is_some() {
+    if !document.onion.valid()
+        || document.scene.onion.is_some()
+        || document.scene.light_table.is_some()
+        || !document.light_table.data.valid(false)
+        || !document.light_table.data.hashes()
+    {
         return Err(invalid("Invalid view preferences transport"));
     }
     #[derive(serde::Serialize)]
@@ -640,9 +658,13 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
         scene: &'a crate::scene::Scene,
         #[serde(skip_serializing_if = "Option::is_none")]
         onion: Option<crate::timeline_view::Onion>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        light_table: Option<&'a crate::light_table::Data>,
     }
     let scene = serde_json::to_vec(&Metadata {
         scene: &document.scene,
+        light_table: (!document.light_table.data.is_default())
+            .then_some(&document.light_table.data),
         onion: (document.onion.preferences() != crate::timeline_view::Onion::default())
             .then_some(document.onion.preferences()),
     })
@@ -708,6 +730,7 @@ fn write_payload(document: &Document, scene: &[u8], writer: &mut impl Write) -> 
     crate::page_parts::write(&document.scene, writer)?;
     crate::cels::write(&document.scene, writer)?;
     crate::timeline_timing::write(&document.scene, writer)?;
+    crate::light_table::write(document, writer)?;
     Ok(())
 }
 

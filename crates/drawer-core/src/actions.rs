@@ -6,11 +6,12 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 225] = [
+pub const EXTRA_COMMANDS: [&str; 226] = [
     "animation-export",
     "timeline-timing",
     "layer-keyframes",
     "onion-skin",
+    "light-table",
     "animation-timeline",
     "shot-exchange",
     "book-production",
@@ -529,6 +530,7 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "animation-export" => "Animation file output (PNG / APNG)",
+            "light-table" => "Light table references, placement, per-cel lists and editing pin",
             "onion-skin" => "Onion skin colors, opacity, frame counts and repeated cels",
             "layer-keyframes" => "Layer keyframes, interpolation, content editing and labels",
             "timeline-timing" => "Timeline FPS, range, batch exposure and time edits",

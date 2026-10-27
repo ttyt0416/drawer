@@ -486,6 +486,8 @@ pub mod shot_exchange;
 pub mod cels;
 pub mod timeline_editor;
 
+pub mod light_table;
+pub mod light_table_verify;
 pub mod onion_verify;
 pub mod timeline_view;
 

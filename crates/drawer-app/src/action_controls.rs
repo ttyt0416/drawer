@@ -497,6 +497,7 @@ impl Drawer {
                 "timeline-timing" => self.begin_timeline_timing()?,
                 "layer-keyframes" => self.begin_keyframes()?,
                 "onion-skin" => self.begin_onion_skin()?,
+                "light-table" => self.begin_light_table()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "shot-exchange" => self.begin_shot_exchange()?,
                 "book-production" => self.begin_book_workflow()?,

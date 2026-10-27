@@ -175,6 +175,7 @@ pub struct Document {
     pub animation: Option<crate::animation::Timeline>,
     pub current_frame: u32,
     pub onion: crate::timeline_view::Onion,
+    pub light_table: crate::light_table::Session,
     pub keyframe_content: Option<crate::keyframes::Owner>,
     pub(crate) history: crate::history::History,
 }
@@ -230,6 +231,7 @@ impl Document {
             animation: None,
             current_frame: 0,
             onion: Default::default(),
+            light_table: Default::default(),
             keyframe_content: None,
             history: Default::default(),
         })
@@ -240,6 +242,7 @@ impl Document {
             .map(RasterLayer::memory_bytes)
             .sum::<usize>()
             + self.color.memory_bytes()
+            + self.light_table.bytes()
             + self.scene.size_bytes()
             + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
@@ -252,6 +255,7 @@ impl Document {
         self.path = Some(path);
         self.source_path = None;
         self.history.mark_saved();
+        self.light_table.mark_saved();
         self.dirty = false;
     }
     pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
