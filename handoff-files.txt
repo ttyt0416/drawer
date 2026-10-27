@@ -885,3 +885,5 @@ crates/drawer-core/src/audio_verify.rs
 crates/drawer-platform/src/audio.rs
 crates/drawer-app/src/audio.rs
 docs/process/timeline-audio.md
+scripts/test-cleanup.ps1
+docs/process/cache-cleanup.md
