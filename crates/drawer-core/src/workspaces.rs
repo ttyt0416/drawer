@@ -310,6 +310,8 @@ fn selection_outline_default() -> bool {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(default)]
+    pub timeline_patterns: crate::timeline_batch::Presets,
     #[serde(
         default,
         skip_serializing_if = "crate::surface_effects::Presets::is_default"
@@ -451,6 +453,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             version: 1,
+            timeline_patterns: Default::default(),
             spatial_blur: Default::default(),
             finishing_presets: Default::default(),
             quick_presets: Default::default(),
@@ -561,7 +564,8 @@ impl Snapshot {
         reports
     }
     pub fn valid(&self) -> bool {
-        if !self.page_view.valid()
+        if !self.timeline_patterns.valid()
+            || !self.page_view.valid()
             || !self.comic_view.valid()
             || !self.text_tool.valid()
             || !self.font_lists.valid()
@@ -684,6 +688,7 @@ impl Snapshot {
             next.actions.next_id = next.actions.next_id.max(incoming.actions.next_id);
         }
         if scope.other {
+            next.timeline_patterns = incoming.timeline_patterns.clone();
             next.spatial_blur = incoming.spatial_blur.clone();
             next.finishing_presets = incoming.finishing_presets.clone();
             next.quick_presets = incoming.quick_presets.clone();

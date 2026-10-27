@@ -381,6 +381,7 @@ pub(crate) fn write(d: &Document, w: &mut impl Write) -> std::io::Result<()> {
         && d.layers.iter().all(|l| l.precise.is_none())
         && d.scene.page_parts.is_default()
         && d.scene.cels.definitions.is_empty()
+        && d.scene.timing.originals.is_empty()
     {
         return Ok(());
     }

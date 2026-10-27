@@ -330,6 +330,7 @@ impl Document {
         after.scene.layer_ids.append(after.layers.len())?;
         crate::layer_catalog::reconcile(self, &mut after)?;
         crate::cels::reconcile(self, &mut after)?;
+        crate::timeline_timing::reconcile(&mut after);
         crate::render_order::reconcile(&mut after);
         crate::file_objects::prune(&mut after);
         crate::layer_groups::prune(&mut after)?;

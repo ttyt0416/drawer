@@ -171,6 +171,7 @@ try {
     if ($smokeResult -notmatch 'text_extensions=true') { throw '앱 글꼴/원형 텍스트 검증 실패' }
     if ($smokeResult -notmatch 'page_management=true') { throw 'Page management verification failed' }
     if ($smokeResult -notmatch 'animation_export=true') { throw 'Animation output verification failed' }
+    if ($smokeResult -notmatch 'timeline_timing=true') { throw 'Timeline timing verification failed' }
     if ($smokeResult -notmatch 'animation_timeline=true') { throw 'Animation timeline verification failed' }
     if ($smokeResult -notmatch 'shot_exchange=true') { throw 'Shot exchange verification failed' }
     if ($smokeResult -notmatch 'epub_metadata=true') { throw 'EPUB metadata verification failed' }

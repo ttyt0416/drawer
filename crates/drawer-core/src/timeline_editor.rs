@@ -150,7 +150,7 @@ fn blank(d: &Document, name: &str, budget: usize) -> Result<Document, String> {
     child.title = name.into();
     Ok(child)
 }
-fn attach(
+pub(crate) fn attach(
     s: &mut DocumentState,
     track_id: u64,
     source: u64,
@@ -654,6 +654,7 @@ pub fn navigate(d: &Document, track_id: Option<u64>, jump: Jump) -> Result<u32, 
                 .cels
                 .labels
                 .iter()
+                .filter(|l| l.frame < a.frames)
                 .map(|l| l.frame)
                 .collect::<BTreeSet<_>>(),
         ),

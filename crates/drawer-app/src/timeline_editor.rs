@@ -191,6 +191,13 @@ fn usage(d: &Document, source: u64) -> (usize, usize) {
     (frames.iter().filter(|v| **v).count(), tracks.len())
 }
 impl Drawer {
+    pub(super) fn stop_timeline_playback(&mut self, id: u64) {
+        if let Some(v) = self.timeline_editor.views.get_mut(&id) {
+            v.playing = None;
+            v.key = None;
+        }
+    }
+
     pub(super) fn begin_timeline_editor(&mut self) -> Result<(), String> {
         self.finish_stroke();
         if self.transform_unconfirmed()
@@ -488,7 +495,6 @@ impl Drawer {
         let Some(a) = &self.documents[n].animation else {
             return;
         };
-        let frames = a.frames;
         let fps = a.fps;
         let now = ctx.input(|i| i.time);
         let view = self.timeline_editor.views.entry(id).or_default();
@@ -515,8 +521,12 @@ impl Drawer {
                 .map(|p| p.object);
         }
         if let Some((time, start)) = view.playing
-            && let Ok((frame, end)) =
-                core::playback(start, (now - time).max(0.), fps, frames, view.repeat)
+            && let Ok((frame, end)) = drawer_core::timeline_timing::playback(
+                &self.documents[n],
+                start,
+                (now - time).max(0.),
+                view.repeat,
+            )
         {
             self.documents[n].current_frame = frame;
             if end {
@@ -639,7 +649,7 @@ if pending.destructive{ui.checkbox(&mut p.confirm,"I reviewed the affected refer
 if ui.button("Discard prepared edit").clicked(){action=11;}}
             if let Some(a)=&d.animation{
                 ui.horizontal_wrapped(|ui|{for(label,jump)in [("First",Jump::First),("Previous",Jump::Previous),("Next",Jump::Next),("Last",Jump::Last),("Previous cel",Jump::PreviousCel),("Next cel",Jump::NextCel),("Previous key",Jump::PreviousKey),("Next key",Jump::NextKey),("Previous label",Jump::PreviousLabel),("Next label",Jump::NextLabel)]{if ui.button(label).clicked(){navigate=Some(jump);}}});
-                ui.horizontal(|ui|{let mut frame=d.current_frame+1;if ui.add(egui::DragValue::new(&mut frame).range(1..=a.frames)).changed(){navigate=Some(Jump::Number(frame-1));}ui.label(format!("/{} · {}/{} FPS",a.frames,a.fps.numerator,a.fps.denominator));let r=ui.button(if view.playing.is_some(){"Pause"}else{"Play"});p.play=Some(r.rect);if r.clicked(){action=4;}ui.checkbox(&mut view.repeat,"Loop");});
+                ui.horizontal(|ui|{let mut frame=d.current_frame+1;if ui.add(egui::DragValue::new(&mut frame).range(1..=a.frames)).changed(){navigate=Some(Jump::Number(frame-1));}ui.label(format!("/{} · {}/{} FPS",a.frames,a.fps.numerator,a.fps.denominator));let r=ui.button(if view.playing.is_some(){"Pause"}else{"Play"});p.play=Some(r.rect);if r.clicked(){action=4;}ui.add_enabled(d.scene.timing.playback.is_none(),egui::Checkbox::new(&mut view.repeat,"Loop (range settings take priority)"));});
                 ui.collapsing("Onion skin and editing-track view",|ui|{
                 ui.checkbox(&mut view.only,"Show editing track only (view)");ui.checkbox(&mut view.onion.enabled,"Onion skin (view)");ui.horizontal(|ui|{ui.label("Before / after / opacity");ui.add(egui::DragValue::new(&mut view.onion.before).range(0..=8));ui.add(egui::DragValue::new(&mut view.onion.after).range(0..=8));ui.add(egui::Slider::new(&mut view.onion.opacity,0..=100));});ui.horizontal(|ui|{ui.color_edit_button_srgb(&mut view.onion.colors[0]);ui.color_edit_button_srgb(&mut view.onion.colors[1]);});
                 });

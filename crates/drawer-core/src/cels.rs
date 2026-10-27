@@ -137,11 +137,10 @@ pub fn valid_document(d: &Document) -> bool {
                     .is_some_and(|p| p.width == c.width && p.height == c.height)
             })
         })
-        && d.scene
-            .cels
-            .labels
-            .iter()
-            .all(|l| d.animation.as_ref().is_some_and(|a| l.frame < a.frames))
+        && d.scene.cels.labels.iter().all(|l| {
+            !d.scene.timing.labels_linked
+                || d.animation.as_ref().is_some_and(|a| l.frame < a.frames)
+        })
 }
 pub fn slot(d: &Document, track: u64, cell: u64) -> Option<(usize, usize, &Cell)> {
     let a = d.animation.as_ref()?;
@@ -342,7 +341,9 @@ pub(crate) fn reconcile(before: &Document, after: &mut DocumentState) -> Result<
         })
     });
     if let Some(a) = a {
-        after.scene.cels.labels.retain(|l| l.frame < a.frames);
+        if after.scene.timing.labels_linked {
+            after.scene.cels.labels.retain(|l| l.frame < a.frames);
+        }
     } else {
         after.scene.cels.labels.clear();
     }
