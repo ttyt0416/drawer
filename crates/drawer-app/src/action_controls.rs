@@ -493,6 +493,7 @@ impl Drawer {
                 "local-reference-color" => self.begin_local_color(true)?,
                 "local-light-shadow" => self.begin_local_color(false)?,
                 "comic-composition" => self.begin_comics()?,
+                "animation-export" => self.begin_animation_export()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "shot-exchange" => self.begin_shot_exchange()?,
                 "book-production" => self.begin_book_workflow()?,

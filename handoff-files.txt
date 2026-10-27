@@ -855,3 +855,7 @@ crates/drawer-core/src/timeline_view.rs
 crates/drawer-core/src/timeline_verify.rs
 crates/drawer-app/src/timeline_editor.rs
 docs/process/timeline-editor.md
+crates/drawer-core/src/animation_export.rs
+crates/drawer-core/src/animation_export_verify.rs
+crates/drawer-app/src/animation_export.rs
+docs/process/animation-output.md

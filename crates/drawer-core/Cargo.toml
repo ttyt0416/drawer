@@ -10,6 +10,7 @@ icu_casemap = "=1.5.1"
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "bmp"] }
 moxcms = { version = "=0.8.1", features = ["extended_range"] }
 tiff = "=0.11.3"
+png = "=0.18.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }
 ttf-parser = "=0.25.1"

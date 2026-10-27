@@ -489,3 +489,6 @@ pub mod timeline_editor;
 pub mod timeline_view;
 
 pub mod timeline_verify;
+
+pub mod animation_export;
+pub mod animation_export_verify;
