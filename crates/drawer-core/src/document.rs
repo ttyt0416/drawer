@@ -174,6 +174,7 @@ pub struct Document {
     pub scene: crate::scene::Scene,
     pub animation: Option<crate::animation::Timeline>,
     pub current_frame: u32,
+    pub onion: crate::timeline_view::Onion,
     pub keyframe_content: Option<crate::keyframes::Owner>,
     pub(crate) history: crate::history::History,
 }
@@ -228,6 +229,7 @@ impl Document {
             scene: Default::default(),
             animation: None,
             current_frame: 0,
+            onion: Default::default(),
             keyframe_content: None,
             history: Default::default(),
         })

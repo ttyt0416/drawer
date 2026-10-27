@@ -103,9 +103,22 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
     let icc = if floating {
         Some(match &document.color.profile {
             crate::color_profile::RgbProfile::Embedded { bytes, .. } => bytes.clone(),
-            _ => moxcms::ColorProfile::new_srgb()
-                .encode()
-                .map_err(|e| invalid(&e.to_string()))?,
+            _ => {
+                let mut profile = moxcms::ColorProfile::new_srgb()
+                    .encode()
+                    .map_err(|e| invalid(&e.to_string()))?;
+                // ICC encoding stamps wall-clock time. Generated sRGB has no source creation
+                // date: normalize this header so frozen animation frames remain byte stable.
+                for (slot, value) in profile[24..36]
+                    .as_chunks_mut::<2>()
+                    .0
+                    .iter_mut()
+                    .zip([2000u16, 1, 1, 0, 0, 0])
+                {
+                    slot.copy_from_slice(&value.to_be_bytes());
+                }
+                profile
+            }
         })
     } else {
         None
@@ -154,6 +167,33 @@ mod tests {
         test_support::TempDir,
     };
     use std::sync::atomic::AtomicBool;
+    #[test]
+    fn generated_srgb_png_bytes_are_stable_across_clock_boundary() {
+        let root = TempDir::new();
+        let path = root.0.join("stable.png");
+        let d = Document::create_with_color(
+            CanvasSpec {
+                width: 1,
+                height: 1,
+                dpi: 300.,
+                background: Background::Color([120, 60, 30]),
+            },
+            DEFAULT_DOCUMENT_BUDGET,
+            Default::default(),
+        )
+        .unwrap();
+        export(&d, &path, DEFAULT_DOCUMENT_BUDGET).unwrap();
+        let first = fs::read(&path).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        export(&d, &path, DEFAULT_DOCUMENT_BUDGET).unwrap();
+        assert_eq!(first, fs::read(&path).unwrap());
+        let info = png::Decoder::new(std::io::BufReader::new(fs::File::open(&path).unwrap()))
+            .read_info()
+            .unwrap();
+        let icc = info.info().icc_profile.as_ref().unwrap();
+        assert_eq!(&icc[24..36], &[7, 208, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0]);
+        assert!(moxcms::ColorProfile::new_from_slice(icc).is_ok());
+    }
     #[test]
     fn view_mirror_does_not_change_png_but_actual_transforms_change_corner_markers() {
         let root = TempDir::new();

@@ -33,18 +33,23 @@ pub(super) struct Panel {
     pub content_apply: Option<egui::Rect>,
     pub play: Option<egui::Rect>,
     pub overlay_active: bool,
+    onion_show: bool,
+    pub onion_toggle: Option<egui::Rect>,
+    pub onion_repeat: Option<egui::Rect>,
+    pub onion_half: Option<egui::Rect>,
 }
 struct View {
     track: Option<u64>,
     source: Option<u64>,
     target: Option<u64>,
     onion: Onion,
+    onion_loaded: bool,
     only: bool,
     repeat: bool,
     playing: Option<(f64, u32)>,
     image: Option<egui::TextureHandle>,
     overlay: Option<egui::TextureHandle>,
-    key: Option<(u64, u32, Option<u64>, bool, Onion)>,
+    key: Option<(u64, u32, Option<u64>, bool, Onion, bool)>,
 }
 impl Default for View {
     fn default() -> Self {
@@ -53,6 +58,7 @@ impl Default for View {
             source: None,
             target: None,
             onion: Default::default(),
+            onion_loaded: false,
             only: false,
             repeat: true,
             playing: None,
@@ -198,6 +204,18 @@ impl Drawer {
         }
     }
 
+    pub(super) fn begin_onion_skin(&mut self) -> Result<(), String> {
+        let n = self
+            .timeline_context()
+            .ok_or("Choose an animation document")?;
+        self.documents[n]
+            .animation
+            .as_ref()
+            .ok_or("Create a timeline first")?;
+        self.begin_timeline_editor()?;
+        self.timeline_editor.onion_show = true;
+        Ok(())
+    }
     pub(super) fn begin_timeline_editor(&mut self) -> Result<(), String> {
         self.finish_stroke();
         if self.transform_unconfirmed()
@@ -498,6 +516,12 @@ impl Drawer {
         let fps = a.fps;
         let now = ctx.input(|i| i.time);
         let view = self.timeline_editor.views.entry(id).or_default();
+        if !view.onion_loaded {
+            let enabled = view.onion.enabled;
+            view.onion = self.documents[n].onion;
+            view.onion.enabled = enabled;
+            view.onion_loaded = true;
+        }
         if view.track.is_none_or(|t| {
             self.documents[n]
                 .scene
@@ -543,6 +567,7 @@ impl Drawer {
             view.track,
             view.only,
             view.onion,
+            drawer_core::keyframes::content_view(d),
         );
         if view.key != Some(key) {
             match timeline_view::preview(
@@ -650,8 +675,9 @@ if ui.button("Discard prepared edit").clicked(){action=11;}}
             if let Some(a)=&d.animation{
                 ui.horizontal_wrapped(|ui|{for(label,jump)in [("First",Jump::First),("Previous",Jump::Previous),("Next",Jump::Next),("Last",Jump::Last),("Previous cel",Jump::PreviousCel),("Next cel",Jump::NextCel),("Previous key",Jump::PreviousKey),("Next key",Jump::NextKey),("Previous label",Jump::PreviousLabel),("Next label",Jump::NextLabel)]{if ui.button(label).clicked(){navigate=Some(jump);}}});
                 ui.horizontal(|ui|{let mut frame=d.current_frame+1;if ui.add(egui::DragValue::new(&mut frame).range(1..=a.frames)).changed(){navigate=Some(Jump::Number(frame-1));}ui.label(format!("/{} · {}/{} FPS",a.frames,a.fps.numerator,a.fps.denominator));let r=ui.button(if view.playing.is_some(){"Pause"}else{"Play"});p.play=Some(r.rect);if r.clicked(){action=4;}ui.add_enabled(d.scene.timing.playback.is_none(),egui::Checkbox::new(&mut view.repeat,"Loop (range settings take priority)"));});
-                ui.collapsing("Onion skin and editing-track view",|ui|{
-                ui.checkbox(&mut view.only,"Show editing track only (view)");ui.checkbox(&mut view.onion.enabled,"Onion skin (view)");ui.horizontal(|ui|{ui.label("Before / after / opacity");ui.add(egui::DragValue::new(&mut view.onion.before).range(0..=8));ui.add(egui::DragValue::new(&mut view.onion.after).range(0..=8));ui.add(egui::Slider::new(&mut view.onion.opacity,0..=100));});ui.horizontal(|ui|{ui.color_edit_button_srgb(&mut view.onion.colors[0]);ui.color_edit_button_srgb(&mut view.onion.colors[1]);});
+                let force=p.onion_show.then_some(true);p.onion_show=false;
+                egui::CollapsingHeader::new("Onion skin and editing-track view").open(force).show(ui,|ui|{
+                ui.checkbox(&mut view.only,"Show editing track only (view)");let r=ui.checkbox(&mut view.onion.enabled,"Onion skin (view)");p.onion_toggle=Some(r.rect);let r=ui.checkbox(&mut view.onion.skip_repeats,"Exclude repeated held cels (nearest occurrence; keep distinct moving poses)");p.onion_repeat=Some(r.rect);ui.horizontal(|ui|{ui.label("Before / after / opacity");ui.add(egui::DragValue::new(&mut view.onion.before).range(0..=8));ui.add(egui::DragValue::new(&mut view.onion.after).range(0..=8));ui.add(egui::Slider::new(&mut view.onion.opacity,0..=100));ui.label("Fade per frame");ui.add(egui::DragValue::new(&mut view.onion.fade).range(0..=100));});ui.horizontal(|ui|{ui.color_edit_button_srgb(&mut view.onion.colors[0]);ui.color_edit_button_srgb(&mut view.onion.colors[1]);});ui.horizontal(|ui|{for(mode,label)in [(timeline_view::ColorMode::Original,"Original colors"),(timeline_view::ColorMode::Half,"Half tint"),(timeline_view::ColorMode::Solid,"Solid tint")]{let r=ui.selectable_value(&mut view.onion.mode,mode,label);if mode==timeline_view::ColorMode::Half{p.onion_half=Some(r.rect);}}});ui.label("Half tint mixes original and guide colors equally. The first neighbour uses starting opacity; each additional frame subtracts the fade, down to zero. Preferences are included when saving the document; display toggles are session only.");
                 });
                 if let Some(image)=&view.image{ui.collapsing("Timeline preview",|ui|{ui.image((image.id(),image.size_vec2()));});}
                 ui.horizontal(|ui|{ui.selectable_value(&mut p.section,0,"Tracks / exposure table");ui.selectable_value(&mut p.section,1,"Cel definitions / content");ui.selectable_value(&mut p.section,2,"Labels / clipboard");});
@@ -706,7 +732,13 @@ if p.clipboard.is_some(){ui.label("Editable local clipboard ready");}});
             }
             p.staged = None;
         }
+        let preferences = p.views.get(&id).map(|v| v.onion);
         self.timeline_editor = p;
+        if let Some(onion) = preferences
+            && let Err(e) = timeline_view::set_preferences(&mut self.documents[n], onion)
+        {
+            self.timeline_editor.notice = e;
+        }
         if let Some(jump) = navigate {
             self.finish_stroke();
             let selected = self.timeline_editor.views.get(&id).and_then(|v| v.track);
@@ -1159,5 +1191,97 @@ mod tests {
         let result = super::smoke(&root);
         std::fs::remove_dir(&root).unwrap();
         result.unwrap();
+    }
+}
+
+pub(super) fn onion_smoke(root: &Path) -> Result<(), String> {
+    drawer_core::onion_verify::verify(root)?;
+    let ctx = egui::Context::default();
+    let mut app = Drawer::new(&ctx, None);
+    app.simple_view = true;
+    app.add_document(drawer_core::onion_verify::fixture());
+    app.execute_command(&ctx, "onion-skin");
+    let mut time = 0.;
+    let frame = |app: &mut Drawer, time: &mut f64, events| {
+        *time += 0.05;
+        input_replay::frame(&ctx, app, *time, events);
+    };
+    let click = |app: &mut Drawer, time: &mut f64, rect: egui::Rect| {
+        for pressed in [true, false] {
+            frame(
+                app,
+                time,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    egui::Event::PointerButton {
+                        pos: rect.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+    };
+    for _ in 0..4 {
+        frame(&mut app, &mut time, vec![]);
+    }
+    let id = app.documents[0].id;
+    let original = app.documents[0].snapshot();
+    let counts = app.documents[0].history_counts();
+    let dirty = app.documents[0].dirty;
+    let revision = app.documents[0].revision;
+    {
+        let v = app
+            .timeline_editor
+            .views
+            .get_mut(&id)
+            .ok_or("Onion document view missing")?;
+        v.onion.before = 3;
+        v.onion.after = 3;
+        v.onion.opacity = 80;
+        v.onion.fade = 20;
+    }
+    for get in [
+        |p: &Panel| p.onion_toggle,
+        |p: &Panel| p.onion_repeat,
+        |p: &Panel| p.onion_half,
+    ] {
+        let r = get(&app.timeline_editor).ok_or("Onion control missing")?;
+        click(&mut app, &mut time, r);
+    }
+    for _ in 0..3 {
+        frame(&mut app, &mut time, vec![]);
+    }
+    let v = app.timeline_editor.views.get(&id).unwrap();
+    if !v.onion.enabled
+        || !v.onion.skip_repeats
+        || v.onion.mode != timeline_view::ColorMode::Half
+        || app.documents[0].onion != v.onion.preferences()
+        || !app.timeline_editor.overlay_active
+    {
+        return Err(format!(
+            "Pointer onion controls or saved preferences failed: {}",
+            app.timeline_editor.notice
+        ));
+    }
+    if app.documents[0].snapshot() != original
+        || app.documents[0].history_counts() != counts
+        || app.documents[0].dirty != dirty
+        || app.documents[0].revision != revision
+    {
+        return Err("Onion UI changed drawing state/history/dirty".into());
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod onion_tests {
+    #[test]
+    fn pointer_onion_modes_repeats_preferences_and_output() {
+        let root = std::env::temp_dir().join(format!("drawer-onion-ui-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let r = super::onion_smoke(&root);
+        std::fs::remove_dir(&root).unwrap();
+        r.unwrap();
     }
 }

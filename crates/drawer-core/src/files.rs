@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 98;
+pub(crate) const VERSION: u32 = 99;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,18 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 99 && document.scene.onion.is_some() {
+            return Err(invalid("Onion preferences require native99"));
+        }
+        document.onion = document
+            .scene
+            .onion
+            .take()
+            .unwrap_or_default()
+            .preferences();
+        if !document.onion.valid() {
+            return Err(invalid("Invalid onion preferences"));
         }
         if version < 98 && !document.scene.keyframes.is_default() {
             return Err(invalid("Layer animation requires native98"));
@@ -619,7 +631,22 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     )
     .map_err(invalid)?;
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
-    let scene = serde_json::to_vec(&document.scene).map_err(|e| invalid(e.to_string()))?;
+    if !document.onion.valid() || document.scene.onion.is_some() {
+        return Err(invalid("Invalid view preferences transport"));
+    }
+    #[derive(serde::Serialize)]
+    struct Metadata<'a> {
+        #[serde(flatten)]
+        scene: &'a crate::scene::Scene,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        onion: Option<crate::timeline_view::Onion>,
+    }
+    let scene = serde_json::to_vec(&Metadata {
+        scene: &document.scene,
+        onion: (document.onion.preferences() != crate::timeline_view::Onion::default())
+            .then_some(document.onion.preferences()),
+    })
+    .map_err(|e| invalid(e.to_string()))?;
     if scene.len() > MAX_SCENE_BYTES {
         return Err(invalid("Page geometry is too large"));
     }
@@ -884,7 +911,7 @@ mod tests {
             assert!(open(&path, 16).is_err());
         }
         let mut bytes = original.clone();
-        bytes[8..12].copy_from_slice(&99u32.to_le_bytes());
+        bytes[8..12].copy_from_slice(&(VERSION + 1).to_le_bytes());
         fs::write(&path, bytes).unwrap();
         assert!(open(&path, 16).is_err());
         fs::write(&path, original).unwrap();

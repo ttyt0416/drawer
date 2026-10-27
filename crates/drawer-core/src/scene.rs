@@ -223,6 +223,8 @@ pub struct Scene {
     pub timing: Box<crate::timeline_timing::Data>,
     #[serde(default, skip_serializing_if = "crate::keyframes::Data::is_default")]
     pub keyframes: Box<crate::keyframes::Data>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub onion: Option<crate::timeline_view::Onion>,
     #[serde(default, skip_serializing_if = "crate::cels::Data::is_default")]
     pub cels: Box<crate::cels::Data>,
     #[serde(
@@ -393,7 +395,7 @@ impl Scene {
             && crate::comics::valid_scene(self)
             && self.cels.valid(missing)
             && self.timing.valid(missing)
-            && self.keyframes.valid()
+            && self.keyframes.valid() && self.onion.is_none_or(|o|o.valid())
             && self.shots.valid()
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
