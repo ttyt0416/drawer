@@ -14,7 +14,7 @@ use std::{
 };
 #[derive(Default)]
 pub(super) struct Panel {
-    open: bool,
+    pub(super) open: bool,
     views: BTreeMap<u64, View>,
     staged: Option<Staged>,
     job: Option<Job>,
@@ -197,7 +197,24 @@ fn usage(d: &Document, source: u64) -> (usize, usize) {
     (frames.iter().filter(|v| **v).count(), tracks.len())
 }
 impl Drawer {
+    pub(super) fn timeline_audio_context(&self) -> Option<usize> {
+        self.timeline_context()
+    }
+    pub(super) fn timeline_audio_open(&self) -> bool {
+        self.timeline_editor.open
+    }
+    pub(super) fn timeline_audio_mark(&mut self, id: u64, time: f64, start: u32, playing: bool) {
+        self.timeline_editor.views.entry(id).or_default().playing =
+            playing.then_some((time, start));
+    }
+    pub(super) fn timeline_audio_playing(&self, id: u64) -> bool {
+        self.timeline_editor
+            .views
+            .get(&id)
+            .is_some_and(|v| v.playing.is_some())
+    }
     pub(super) fn stop_timeline_playback(&mut self, id: u64) {
+        self.stop_audio_for(id);
         if let Some(v) = self.timeline_editor.views.get_mut(&id) {
             v.playing = None;
             v.key = None;
@@ -278,7 +295,7 @@ impl Drawer {
         }
         Some(active)
     }
-    fn timeline_budget(&self) -> usize {
+    pub(super) fn timeline_budget(&self) -> usize {
         DEFAULT_DOCUMENT_BUDGET.saturating_sub(
             self.documents
                 .iter()
@@ -555,6 +572,7 @@ impl Drawer {
         };
         let fps = a.fps;
         let now = ctx.input(|i| i.time);
+        let audio_master = self.audio_owns(id);
         let view = self.timeline_editor.views.entry(id).or_default();
         if !view.onion_loaded {
             let enabled = view.onion.enabled;
@@ -584,7 +602,8 @@ impl Drawer {
                 .first()
                 .map(|p| p.object);
         }
-        if let Some((time, start)) = view.playing
+        if !audio_master
+            && let Some((time, start)) = view.playing
             && let Ok((frame, end)) = drawer_core::timeline_timing::playback(
                 &self.documents[n],
                 start,
@@ -780,6 +799,7 @@ if p.clipboard.is_some(){ui.label("Editable local clipboard ready");}});
             self.timeline_editor.notice = e;
         }
         if let Some(jump) = navigate {
+            self.stop_audio_for(id);
             self.finish_stroke();
             let selected = self.timeline_editor.views.get(&id).and_then(|v| v.track);
             match core::navigate(&self.documents[n], selected, jump) {
@@ -805,14 +825,8 @@ if p.clipboard.is_some(){ui.label("Editable local clipboard ready");}});
                 2 => self.apply_timeline_cel()?,
                 3 => self.return_timeline_cel(),
                 4 => {
-                    self.finish_stroke();
-                    let view = self.timeline_editor.views.entry(id).or_default();
-                    view.playing = if view.playing.is_some() {
-                        None
-                    } else {
-                        Some((ctx.input(|i| i.time), self.documents[n].current_frame))
-                    };
-                    ctx.request_repaint();
+                    let repeat = self.timeline_editor.views.entry(id).or_default().repeat;
+                    self.toggle_audio_playback(ctx, n, repeat)?;
                 }
                 5 => {
                     let d = &self.documents[self.active.ok_or("Open a static drawing")?];

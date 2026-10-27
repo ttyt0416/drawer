@@ -303,3 +303,7 @@ pub mod book_pdf;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub mod book_print;
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod audio;

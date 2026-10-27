@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 101;
+pub(crate) const VERSION: u32 = 102;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -251,6 +251,18 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         }
         if version < 98 && !document.scene.keyframes.is_default() {
             return Err(invalid("Layer animation requires native98"));
+        }
+        if version < 102
+            && document
+                .scene
+                .timing
+                .audio
+                .iter()
+                .any(|c| !c.sound.is_default())
+        {
+            return Err(invalid(
+                "Audio source and mixing settings require native102",
+            ));
         }
         if version < 97 && !document.scene.timing.is_default() {
             return Err(invalid("Timeline timing requires native97"));

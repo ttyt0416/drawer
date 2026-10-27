@@ -46,6 +46,8 @@ pub struct Span {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AudioClip {
+    #[serde(default, skip_serializing_if = "crate::audio::Sound::is_default")]
+    pub sound: crate::audio::Sound,
     pub id: u64,
     pub index: usize,
     pub source: u64,
@@ -87,7 +89,9 @@ impl Data {
                 + self
                     .audio
                     .iter()
-                    .map(|a| 64 + a.spans.len() * 16)
+                    .map(|a| {
+                        std::mem::size_of::<AudioClip>() + a.spans.len() * 16 + a.sound.bytes()
+                    })
                     .sum::<usize>()
                 + self.originals.len() * 40
                 + self.payload_bytes()
@@ -131,7 +135,8 @@ impl Data {
                     && (missing || s.samples.len() == s.count as usize)
             })
             && self.audio.iter().all(|a| {
-                a.index < 32
+                a.sound.valid()
+                    && a.index < 32
                     && a.end > 0
                     && a.spans.len() <= 4096
                     && !a.spans.is_empty()
@@ -350,6 +355,7 @@ pub(crate) fn populate(state: &mut DocumentState) -> Result<(), String> {
                 samples: audio.samples.clone(),
             });
             state.scene.timing.audio.push(AudioClip {
+                sound: Default::default(),
                 id,
                 index,
                 source,

@@ -879,3 +879,9 @@ crates/drawer-core/src/camera2d.rs
 crates/drawer-core/src/camera2d_verify.rs
 crates/drawer-app/src/camera2d.rs
 docs/process/camera-2d.md
+crates/drawer-core/src/audio.rs
+crates/drawer-core/src/audio_mix.rs
+crates/drawer-core/src/audio_verify.rs
+crates/drawer-platform/src/audio.rs
+crates/drawer-app/src/audio.rs
+docs/process/timeline-audio.md

@@ -505,3 +505,7 @@ pub mod timeline_timing_verify;
 
 pub mod camera2d;
 pub mod camera2d_verify;
+
+pub mod audio;
+pub mod audio_mix;
+pub mod audio_verify;

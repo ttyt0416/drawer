@@ -384,6 +384,7 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     drawer_core::timeline_timing_verify::verify(root)?;
     let ctx = egui::Context::default();
     let mut app = Drawer::new(&ctx, None);
+    app.audio.mock_fail = true; // This fixture verifies visual playback without an output device.
     app.simple_view = true;
     app.storage = Some(UserStorage::at(root.join("timing-settings")).map_err(|e| e.to_string())?);
     let result = (|| {
