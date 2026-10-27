@@ -16,6 +16,7 @@ use crate::{
 };
 pub(crate) struct Plan<'a> {
     cels: Vec<(u64, Renderer<'a>)>,
+    animation: std::collections::BTreeMap<crate::layer_search::Key, (crate::scene::Affine, f64)>,
     export_page: bool,
     page_parts: Vec<(u64, Renderer<'a>)>,
     comic_clips: bool,
@@ -74,7 +75,8 @@ impl<'a> Renderer<'a> {
         tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
         export: bool,
     ) -> Result<Self, String> {
-        if !d.scene.valid()
+        if !crate::keyframes::valid_document(d)
+            || !d.scene.valid()
             || !d.scene.paper.valid_for(d.layers.len())
             || !d.color.valid_layers(&d.layers)
             || !(1..=256).contains(&d.layers.len())
@@ -109,6 +111,7 @@ impl<'a> Renderer<'a> {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                animation: Default::default(),
                 export_page: export,
                 page_parts: d
                     .scene
@@ -147,6 +150,27 @@ impl<'a> Renderer<'a> {
         }
         renderer.build_display_caches()?;
         renderer.build_surface_caches(tick)?;
+        // Generated display/effect caches stay in base coordinates. Install animation afterwards.
+        let mut animation = std::collections::BTreeMap::new();
+        for key in if d.scene.keyframes.is_default() {
+            Default::default()
+        } else {
+            crate::layer_groups::live(d)?
+        }
+        .into_keys()
+        {
+            let pair = if matches!(key, crate::layer_search::Key::Cell { .. }) {
+                crate::keyframes::combined(d, key, export)
+            } else {
+                crate::keyframes::local(d, key, export)
+            };
+            if !pair.0.is_identity() || pair.1 != 1. {
+                animation.insert(key, (pair.0.inverse(), pair.1));
+            }
+        }
+        if let PlanRef::Owned(p) = &mut renderer.plan {
+            p.animation = animation;
+        }
         Ok(renderer)
     }
     pub fn effect_check(
@@ -350,17 +374,34 @@ impl<'a> Renderer<'a> {
         }
         Ok(sample)
     }
+    pub(super) fn animated(
+        &self,
+        key: crate::layer_search::Key,
+        point: Point,
+    ) -> (Point, Point, f64) {
+        let (p, a) = self
+            .plan()
+            .animation
+            .get(&key)
+            .map_or((point, 1.), |(m, a)| (m.map(point), *a));
+        (p, self.document.scene.transform.inverse().map(p), a)
+    }
     fn source(
         &self,
         node: Node,
         point: [i64; 2],
-        original: Point,
+        _original: Point,
         depth: usize,
     ) -> Result<Sample, String> {
         if depth > 16 {
             return Err("Float folder nesting limit".into());
         }
         let d = self.document;
+        let (mapped, original, alpha) = self.animated(
+            crate::layer_search::Key::Layer(self.target(node)),
+            point.map(|v| v as f64 + 0.5),
+        );
+        let point = mapped.map(|v| v.floor() as i64);
         let paper = self.paper(node);
         if let Node::Folder(n) = node
             && self.graph().folders[n].through
@@ -393,7 +434,7 @@ impl<'a> Renderer<'a> {
         {
             return self
                 .shade(paper, Sample::from8(cache), original)?
-                .coverage(self.weight(node, original));
+                .coverage(alpha * self.weight(node, original));
         }
         if !self.sampling.pre_effects
             && let Node::Raster(n) = node
@@ -401,7 +442,7 @@ impl<'a> Renderer<'a> {
         {
             return cache
                 .sample(point)
-                .coverage(p::properties(d, self.target(node)).opacity as f64 / 100.);
+                .coverage(alpha * p::properties(d, self.target(node)).opacity as f64 / 100.);
         }
         let raw = match node {
             Node::Raster(n) => {
@@ -425,7 +466,7 @@ impl<'a> Renderer<'a> {
             )?,
         };
         self.shade(paper, raw, original)?
-            .coverage(self.weight(node, original))
+            .coverage(alpha * self.weight(node, original))
     }
     fn correction(
         &self,
@@ -434,6 +475,10 @@ impl<'a> Renderer<'a> {
         original: Point,
     ) -> Result<Option<Sample>, String> {
         let target = self.target(node);
+        let (_, original, alpha) = self.animated(
+            crate::layer_search::Key::Layer(target),
+            self.document.scene.transform.map(original),
+        );
         let Some(adjustment) = crate::layer_effects::adjustment(self.document, target) else {
             return Ok(None);
         };
@@ -447,7 +492,7 @@ impl<'a> Renderer<'a> {
             back,
             corrected,
             crate::layer_blend::mode(self.document, target),
-            self.weight(node, original),
+            alpha * self.weight(node, original),
         )?))
     }
     fn put(
@@ -546,17 +591,21 @@ impl<'a> Renderer<'a> {
                     .is_none()
             {
                 if !self.paper(node).hidden {
+                    let (mapped, mapped_original, alpha) = self.animated(
+                        crate::layer_search::Key::Layer(key),
+                        point.map(|v| v as f64 + 0.5),
+                    );
                     let result = self.nodes(
                         &self.graph().folders[n].children,
                         back,
-                        point,
-                        original,
+                        mapped.map(|v| v.floor() as i64),
+                        mapped_original,
                         depth + 1,
                     )?;
                     back = self.plan().space.mix(
                         back,
                         result,
-                        self.weight(node, original),
+                        alpha * self.weight(node, mapped_original),
                         crate::color_mix::Space::Standard,
                         0.,
                     )?;

@@ -308,6 +308,7 @@ pub(crate) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
     }
     crate::page_parts::duplicate(&mut state.scene, &original.scene, &map);
     crate::cels::duplicate(&mut state.scene, &original.scene, &map);
+    crate::keyframes::duplicate(&mut state.scene, &original.scene, &map);
     crate::timeline_timing::duplicate(&mut state.scene, &original.scene, &map)?;
     let masks = original.scene.comics.masks.clone();
     for mask in masks {

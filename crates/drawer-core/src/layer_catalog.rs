@@ -345,6 +345,7 @@ pub fn reconcile(before: &Document, after: &mut DocumentState) -> Result<(), Str
 pub fn clear_rendered(d: &Document, state: &mut DocumentState) -> Result<(), String> {
     *state.scene.cels = Default::default();
     *state.scene.timing = Default::default();
+    *state.scene.keyframes = Default::default();
     state.scene.page_parts = Default::default();
     state.scene.shots = Default::default();
     let c = &mut state.scene.catalog;
@@ -807,6 +808,50 @@ pub fn source_index(d: &Document, key: Key) -> Option<usize> {
 }
 
 pub fn bounds(d: &Document, key: Key) -> Option<crate::scene::Rect> {
+    if let Key::Track(id) = key {
+        let n = d
+            .scene
+            .catalog
+            .tracks
+            .index(id, d.animation.as_ref()?.tracks.len())?;
+        if let Some((_, cell, _)) = d
+            .animation
+            .as_ref()?
+            .indexed_visible_cells(d.current_frame)
+            .find(|(t, _, _)| *t == n)
+        {
+            return bounds(
+                d,
+                Key::Cell {
+                    track: id,
+                    cell: d.scene.catalog.cell_id(id, cell),
+                },
+            );
+        }
+    }
+    let bounds = bounds_base(d, key)?;
+    let (matrix, _) = crate::keyframes::combined(d, key, false);
+    if matrix.is_identity() {
+        return Some(bounds);
+    }
+    let corners = [
+        bounds.min,
+        [bounds.max[0], bounds.min[1]],
+        bounds.max,
+        [bounds.min[0], bounds.max[1]],
+    ]
+    .map(|p| matrix.map(p));
+    Some(crate::scene::Rect {
+        min: [0, 1].map(|i| corners.iter().map(|p| p[i]).fold(f64::INFINITY, f64::min)),
+        max: [0, 1].map(|i| {
+            corners
+                .iter()
+                .map(|p| p[i])
+                .fold(f64::NEG_INFINITY, f64::max)
+        }),
+    })
+}
+pub fn bounds_base(d: &Document, key: Key) -> Option<crate::scene::Rect> {
     use crate::scene::{Affine, Rect};
     if let Some(l) = d.scene.file_objects.get(key) {
         let m = crate::material_layer::Layer {

@@ -24,6 +24,7 @@ pub(super) struct Panel {
     count: u32,
     all: bool,
     globals: bool,
+    keyed: std::collections::BTreeSet<drawer_core::keyframes::Owner>,
     inventory: Option<(u64, u64, timing::Data)>,
     split: bool,
     tracks: BTreeSet<u64>,
@@ -53,6 +54,7 @@ impl Default for Panel {
             count: 1,
             all: true,
             globals: false,
+            keyed: Default::default(),
             inventory: None,
             split: true,
             tracks: BTreeSet::new(),
@@ -294,11 +296,12 @@ impl Drawer {
                     ui.checkbox(&mut p.all,"All cel/audio tracks and global timing");ui.checkbox(&mut p.split,"Split clips crossing the boundary (off: retain/resize clip)");ui.checkbox(&mut p.linked,"Link labels");
                     if !p.all{
                         ui.checkbox(&mut p.globals,"Global output keys, linked labels and playback range");
+                        for t in &d.scene.keyframes.tracks {if matches!(t.owner,drawer_core::keyframes::Owner::Layer(k)if !matches!(k,drawer_core::layer_search::Key::Track(_)|drawer_core::layer_search::Key::Cell{..})){let mut on=p.keyed.contains(&t.owner);if ui.checkbox(&mut on,format!("Layer keys: {:?}",t.owner)).changed(){if on{p.keyed.insert(t.owner);}else{p.keyed.remove(&t.owner);}}}}
                         for(i,t)in a.tracks.iter().enumerate(){let id=d.scene.catalog.tracks.id(i);let mut on=p.tracks.contains(&id);if ui.checkbox(&mut on,format!("Cel track{id}: {}",t.name)).changed(){if on{p.tracks.insert(id);}else{p.tracks.remove(&id);}}}
                         if let Some(data)=&inventory{for c in &data.audio{let mut on=p.audio.contains(&c.id);ui.horizontal(|ui|{if ui.checkbox(&mut on,format!("Audio{}: {} (original{})",c.id,a.audio[c.index].name,c.source)).changed(){if on{p.audio.insert(c.id);}else{p.audio.remove(&c.id);}}
 if ui.button(if c.locked{"Prepare unlock"}else{"Prepare lock"}).clicked(){request=Some(Request::AudioLock{id:c.id,locked:!c.locked});}});}}
                     }
-                    ui.horizontal(|ui|{for(remove,label)in [(false,"Prepare frame insertion"),(true,"Prepare frame deletion")]{if ui.button(label).clicked(){request=Some(Request::Splice{at:p.at-1,count:p.count,remove,scope:Scope{all:p.all,tracks:p.tracks.iter().copied().collect(),audio:p.audio.iter().copied().collect(),globals:p.globals},split:p.split,labels_linked:p.linked});}}});
+                    ui.horizontal(|ui|{for(remove,label)in [(false,"Prepare frame insertion"),(true,"Prepare frame deletion")]{if ui.button(label).clicked(){request=Some(Request::Splice{at:p.at-1,count:p.count,remove,scope:Scope{all:p.all,tracks:p.tracks.iter().copied().collect(),audio:p.audio.iter().copied().collect(),globals:p.globals,keyed:p.keyed.iter().copied().collect()},split:p.split,labels_linked:p.linked});}}});
                 }else{
                     egui::ComboBox::from_label("Target cel track").selected_text(format!("Track{}",p.pattern.track)).show_ui(ui,|ui|{for(i,t)in a.tracks.iter().enumerate(){ui.selectable_value(&mut p.pattern.track,d.scene.catalog.tracks.id(i),&t.name);}});
                     ui.horizontal(|ui|{if ui.selectable_label(matches!(p.pattern.selector,Selector::Ids{..}),"Cel ID range").clicked(){p.pattern.selector=Selector::Ids{first:1,last:1};}

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 97;
+pub(crate) const VERSION: u32 = 98;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 98 && !document.scene.keyframes.is_default() {
+            return Err(invalid("Layer animation requires native98"));
         }
         if version < 97 && !document.scene.timing.is_default() {
             return Err(invalid("Timeline timing requires native97"));
@@ -482,6 +485,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         crate::timeline_timing::read(&mut document, &mut reader, budget)?;
     }
     if !document.scene.valid()
+        || !crate::keyframes::valid_document(&document)
         || !crate::timeline_timing::valid_document(&document)
         || !crate::cels::valid_document(&document)
         || !crate::shot_exchange::valid_document(&document)
@@ -546,7 +550,8 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
-    if !crate::timeline_timing::valid_document(document)
+    if !crate::keyframes::valid_document(document)
+        || !crate::timeline_timing::valid_document(document)
         || !crate::timeline_timing::original_hashes(document)
     {
         return Err(invalid("Invalid timeline clip/PCM backing"));

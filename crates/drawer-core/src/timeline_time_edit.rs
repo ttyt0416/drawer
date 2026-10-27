@@ -25,6 +25,8 @@ pub struct Scope {
     pub tracks: Vec<u64>,
     pub audio: Vec<u64>,
     pub globals: bool,
+    #[serde(default)]
+    pub keyed: Vec<crate::keyframes::Owner>,
 }
 #[derive(Clone, Debug)]
 pub enum Request {
@@ -75,7 +77,7 @@ impl Prepared {
         crate::layer_merge::preview(&self.state, 0)
     }
 }
-fn issue(
+pub(crate) fn issue(
     issues: &mut Vec<Issue>,
     choices: &Choices,
     id: String,
@@ -355,6 +357,14 @@ fn retime(
             keys.push(key);
         }
         s.scene.animation_output.keys = keys;
+        crate::keyframes::retime(
+            &mut s.scene.keyframes,
+            &map,
+            choices,
+            issues,
+            rows,
+            &mut frames,
+        )?;
         let mut clips = vec![];
         let mut original_clips = s.scene.timing.clips.clone();
         original_clips.sort_by_key(|c| (c.track, c.first));
@@ -529,7 +539,7 @@ fn splice(
         scope.audio.clone()
     };
     let globals = scope.all || scope.globals;
-    if tracks.is_empty() && audio_ids.is_empty() && !globals {
+    if tracks.is_empty() && audio_ids.is_empty() && scope.keyed.is_empty() && !globals {
         return Err("Select at least one cel/audio track or global timing row".into());
     }
     let mut frames = if scope.all {
@@ -784,6 +794,15 @@ fn splice(
             p.end = p.end.min(frames).max(p.first + 1);
         }
     }
+    crate::keyframes::splice(
+        &mut s.scene.keyframes,
+        scope,
+        at,
+        count,
+        remove,
+        rows,
+        &mut frames,
+    )?;
     if frames > 10000 {
         return Err("Edited timeline exceeds10000 frames".into());
     }
@@ -859,6 +878,26 @@ pub fn prepare(
         _ => (vec![], vec![]),
     };
     writable(d, &tracks, &audio, &s)?;
+    for track in &d.scene.keyframes.tracks {
+        let selected = match &request {
+            Request::Fps { .. } => true,
+            Request::Splice { scope, .. } => crate::keyframes::selected(track.owner, scope),
+            _ => false,
+        };
+        if selected && !track.keys.is_empty() {
+            crate::keyframes::writable(d, track.owner)?;
+        }
+    }
+    if let Request::Splice { scope, .. } = &request {
+        let unique = scope.keyed.iter().collect::<BTreeSet<_>>();
+        if unique.len() != scope.keyed.len() {
+            return Err("Duplicate keyed owners".into());
+        }
+        for o in &scope.keyed {
+            crate::keyframes::writable(d, *o)?;
+        }
+    }
+
     match &request {
         Request::Playback(p) => {
             if p.first >= p.end || p.end > s.animation.as_ref().unwrap().frames {

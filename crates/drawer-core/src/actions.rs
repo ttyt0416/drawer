@@ -6,9 +6,10 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 223] = [
+pub const EXTRA_COMMANDS: [&str; 224] = [
     "animation-export",
     "timeline-timing",
+    "layer-keyframes",
     "animation-timeline",
     "shot-exchange",
     "book-production",
@@ -527,6 +528,7 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "animation-export" => "Animation file output (PNG / APNG)",
+            "layer-keyframes" => "Layer keyframes, interpolation, content editing and labels",
             "timeline-timing" => "Timeline FPS, range, batch exposure and time edits",
             "animation-timeline" => "Animation timeline, editable cels, onion skin and playback",
             "shot-exchange" => "Local shot and dialogue JSON / CSV exchange",

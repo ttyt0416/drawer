@@ -513,6 +513,21 @@ pub fn prepare(d: &Document, edit: Edit, budget: usize) -> Result<Prepared, Stri
                     .insert(new_cell, info);
             }
 
+            if let Some(mut keys) = d
+                .scene
+                .keyframes
+                .get(crate::keyframes::Owner::Layer(Key::Cell {
+                    track: from,
+                    cell,
+                }))
+                .cloned()
+            {
+                keys.owner = crate::keyframes::Owner::Layer(Key::Cell {
+                    track: to,
+                    cell: new_cell,
+                });
+                s.scene.keyframes.tracks.push(keys);
+            }
             selected = Some(to);
             source = Some(cel);
             format!(
@@ -666,6 +681,20 @@ pub fn navigate(d: &Document, track_id: Option<u64>, jump: Jump) -> Result<u32, 
                 .iter()
                 .filter(|k| k.frame < a.frames)
                 .map(|k| k.frame)
+                .chain(
+                    d.scene
+                        .keyframes
+                        .tracks
+                        .iter()
+                        .filter(|t| match t.owner {
+                            crate::keyframes::Owner::Layer(
+                                Key::Track(id) | Key::Cell { track: id, .. },
+                            ) => track_id.is_none_or(|selected| selected == id),
+                            _ => true,
+                        })
+                        .flat_map(|t| t.keys.iter().map(|k| k.frame))
+                        .filter(|f| *f < a.frames),
+                )
                 .collect(),
         ),
         Jump::PreviousCel | Jump::NextCel => {

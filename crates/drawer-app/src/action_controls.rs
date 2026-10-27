@@ -495,6 +495,7 @@ impl Drawer {
                 "comic-composition" => self.begin_comics()?,
                 "animation-export" => self.begin_animation_export()?,
                 "timeline-timing" => self.begin_timeline_timing()?,
+                "layer-keyframes" => self.begin_keyframes()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "shot-exchange" => self.begin_shot_exchange()?,
                 "book-production" => self.begin_book_workflow()?,

@@ -290,6 +290,7 @@ pub fn inherited(doc: &Document, t: Target) -> Properties {
     p
 }
 pub fn paintable(doc: &Document, n: usize) -> Result<(), String> {
+    crate::keyframes::guard(doc, crate::layer_search::Key::Layer(raster(doc, n)))?;
     if n >= doc.layers.len() {
         return Err("Raster layer is missing".into());
     }
@@ -602,6 +603,7 @@ impl Default for Display {
 
 /// Guards every document-state path, including edits prepared outside the pointer engine.
 pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String> {
+    crate::keyframes::validate_edit(doc, after)?;
     crate::appearance::limits(after.width, after.height, &after.layers, &after.scene)?;
     for (n, old) in doc.layers.iter().enumerate() {
         let p = crate::file_objects::validation_flags(doc, &after.scene, raster(doc, n));

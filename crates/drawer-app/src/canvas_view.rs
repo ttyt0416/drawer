@@ -85,7 +85,7 @@ mod precision_tests {
     }
 }
 
-type ImageKey = (u64, u64, u32, (u64, u64));
+type ImageKey = (u64, u64, u32, bool, (u64, u64));
 #[derive(Clone)]
 pub(super) struct TimelineOverlay {
     pub document: u64,
@@ -163,6 +163,7 @@ struct ScreenKey {
     id: u64,
     revision: u64,
     frame: u32,
+    base_content: bool,
     view: drawer_core::view::View,
     size: [usize; 2],
     ppp: f64,
@@ -995,6 +996,7 @@ impl CanvasView {
                 document.id,
                 document.revision,
                 document.current_frame,
+                drawer_core::keyframes::content_view(document),
                 stroke.map_or((0, 0), |s| s.preview_key()),
             ))
         {
@@ -1043,6 +1045,7 @@ impl CanvasView {
                     document.id,
                     document.revision,
                     document.current_frame,
+                    drawer_core::keyframes::content_view(document),
                     stroke.map_or((0, 0), |s| s.preview_key()),
                 ),
                 texture,
@@ -1099,6 +1102,7 @@ impl CanvasView {
                 id: document.id,
                 revision: document.revision,
                 frame: document.current_frame,
+                base_content: drawer_core::keyframes::content_view(document),
                 view,
                 size: dimensions,
                 ppp,
@@ -1336,7 +1340,7 @@ impl CanvasView {
     }
     #[cfg(test)]
     pub fn rendered_stroke(&self) -> (u64, u64) {
-        self.image.as_ref().map_or((0, 0), |(key, _)| key.3)
+        self.image.as_ref().map_or((0, 0), |(key, _)| key.4)
     }
     #[cfg(test)]
     pub fn rendered_revision(&self) -> Option<(u64, u64)> {

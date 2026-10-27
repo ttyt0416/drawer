@@ -221,6 +221,8 @@ pub struct Scene {
         skip_serializing_if = "crate::timeline_timing::Data::is_default"
     )]
     pub timing: Box<crate::timeline_timing::Data>,
+    #[serde(default, skip_serializing_if = "crate::keyframes::Data::is_default")]
+    pub keyframes: Box<crate::keyframes::Data>,
     #[serde(default, skip_serializing_if = "crate::cels::Data::is_default")]
     pub cels: Box<crate::cels::Data>,
     #[serde(
@@ -391,6 +393,7 @@ impl Scene {
             && crate::comics::valid_scene(self)
             && self.cels.valid(missing)
             && self.timing.valid(missing)
+            && self.keyframes.valid()
             && self.shots.valid()
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
@@ -469,7 +472,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.timing.bytes()
+        self.keyframes.bytes()
+            + self.timing.bytes()
             + self.cels.bytes()
             + self.shots.bytes()
             + self.page_parts.bytes()

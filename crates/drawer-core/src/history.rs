@@ -122,6 +122,10 @@ impl Document {
             {
                 return Err("Duplicate, hidden or locked raster target".into());
             }
+            crate::keyframes::guard(
+                self,
+                crate::layer_search::Key::Layer(crate::layer_properties::raster(self, *n)),
+            )?;
             changes.sort_by_key(|p| p.offset);
             if changes.windows(2).any(|p| p[0].offset == p[1].offset)
                 || changes
@@ -254,6 +258,9 @@ impl Document {
     }
     pub fn edit_scene(&mut self, mut after: crate::scene::Scene) -> Result<bool, String> {
         crate::layer_catalog::reconcile_scene(&self.scene, &mut after)?;
+        let mut source_check = self.snapshot();
+        source_check.scene = after.clone();
+        crate::keyframes::validate_edit(self, &source_check)?;
         crate::layer_properties::validate_scene(self, &after)?;
         crate::appearance::limits(self.width, self.height, &self.layers, &after)?;
         if !after.valid()
@@ -337,6 +344,19 @@ impl Document {
         crate::paper_background::prune(&mut after);
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
+        if !after.scene.keyframes.is_default()
+            && after.animation.as_ref().is_none_or(|a| {
+                after
+                    .scene
+                    .keyframes
+                    .tracks
+                    .iter()
+                    .flat_map(|t| &t.keys)
+                    .any(|k| k.frame >= a.frames)
+            })
+        {
+            return Err("Layer keys require a timeline containing every key".into());
+        }
         if !(1..=crate::document::MAX_DIMENSION).contains(&after.width)
             || !(1..=crate::document::MAX_DIMENSION).contains(&after.height)
             || !after.dpi.is_finite()

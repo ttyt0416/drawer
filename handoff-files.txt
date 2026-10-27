@@ -865,3 +865,7 @@ crates/drawer-core/src/timeline_batch.rs
 crates/drawer-core/src/timeline_timing_verify.rs
 crates/drawer-app/src/timeline_timing.rs
 docs/process/timeline-timing.md
+crates/drawer-core/src/keyframes.rs
+crates/drawer-core/src/keyframes_verify.rs
+crates/drawer-app/src/keyframes.rs
+docs/process/layer-keyframes.md

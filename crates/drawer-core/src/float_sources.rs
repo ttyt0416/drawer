@@ -42,6 +42,20 @@ impl Renderer<'_> {
         Ok(group)
     }
     pub(crate) fn source_pixel(&self, key: Key, point: Point) -> Result<Sample, String> {
+        let (mut point, mut alpha) = (point, 1.);
+        if matches!(key, Key::Layer(Target::Raster(_) | Target::Folder(_))) {
+            for parent in crate::keyframes::ancestors(self.document, key)
+                .into_iter()
+                .rev()
+            {
+                let (mapped, _, a) = self.animated(parent, point);
+                point = mapped;
+                alpha *= a;
+            }
+        }
+        self.source_pixel_inner(key, point)?.coverage(alpha)
+    }
+    fn source_pixel_inner(&self, key: Key, point: Point) -> Result<Sample, String> {
         let d = self.document;
         if point.iter().any(|v| !v.is_finite()) {
             return Err("Nonfinite source sample point".into());
@@ -64,14 +78,6 @@ impl Renderer<'_> {
         match crate::layer_catalog::target(d, key) {
             Some(target @ (Target::Raster(_) | Target::Folder(_))) => {
                 let node = crate::clipping::node(d, target).ok_or("Missing raster source")?;
-                if let Target::Raster(id) = target
-                    && self.plan().surfaces.contains_key(&id)
-                {
-                    return self.surface_contribution(
-                        crate::layers::index(d, id).ok_or("Missing surface source")?,
-                        point.map(|v| v.floor() as i64),
-                    );
-                }
                 if let Some(base) = d.scene.clipping.binding(target) {
                     if !crate::clipping::active(d, target) {
                         return Ok(Sample::default());
@@ -137,6 +143,7 @@ impl Renderer<'_> {
                 else {
                     return Ok(Sample::default());
                 };
+                let (point, original, alpha) = self.animated(key, point);
                 let t = Target::Track(track);
                 let id = d.scene.catalog.tracks.id(track as usize);
                 let track_key = Key::Track(id);
@@ -150,7 +157,8 @@ impl Renderer<'_> {
                 } else {
                     self.cel_sample(id, d.scene.catalog.cell_id(id, cell as usize), c, point)?
                 };
-                let weight = p::factor(d, t)
+                let weight = alpha
+                    * p::factor(d, t)
                     * if d.scene.file_objects.get(track_key).is_some() {
                         1.
                     } else {
@@ -423,7 +431,8 @@ impl Renderer<'_> {
             Ok(raw)
         }
     }
-    fn vector(&self, id: u64, point: Point, original: Point) -> Result<Sample, String> {
+    fn vector(&self, id: u64, point: Point, _original: Point) -> Result<Sample, String> {
+        let (point, original, alpha) = self.animated(Key::Layer(Target::Vector(id)), point);
         if self.plan().comic_clips
             && crate::comics::coverage(self.document, Key::Layer(Target::Vector(id)), original)
                 == 0.
@@ -448,9 +457,9 @@ impl Renderer<'_> {
             .is_some_and(|(_, s)| s.advanced.vector_centerline)
             && d.scene.file_objects.get(Key::Layer(t)).is_none()
         {
-            return self
-                .vector_raw(id, original)?
-                .coverage(p::factor(d, t) * d.scene.layer_effects.mask(t, original) as f64);
+            return self.vector_raw(id, original)?.coverage(
+                alpha * p::factor(d, t) * d.scene.layer_effects.mask(t, original) as f64,
+            );
         }
         let raw = if let Some(sample) = self.cached_display(t, point) {
             sample
@@ -470,9 +479,10 @@ impl Renderer<'_> {
                 )?
             }
         };
-        raw.coverage(p::factor(d, t) * d.scene.layer_effects.mask(t, original) as f64)
+        raw.coverage(alpha * p::factor(d, t) * d.scene.layer_effects.mask(t, original) as f64)
     }
-    fn page_source(&self, key: Key, point: Point, original: Point) -> Result<Sample, String> {
+    fn page_source(&self, key: Key, point: Point, _original: Point) -> Result<Sample, String> {
+        let (point, original, alpha) = self.animated(key, point);
         if self.plan().comic_clips && crate::comics::coverage(self.document, key, original) == 0. {
             return Ok(Sample::default());
         }
@@ -486,7 +496,8 @@ impl Renderer<'_> {
             if self.plan().surfaces.contains_key(&id) {
                 return self.put(
                     Sample::default(),
-                    self.surface_contribution(n, point.map(|v| v.floor() as i64))?,
+                    self.surface_contribution(n, point.map(|v| v.floor() as i64))?
+                        .coverage(alpha)?,
                     node,
                     original,
                 );
@@ -497,7 +508,7 @@ impl Renderer<'_> {
                     self.raster(n, point.map(|v| v.floor() as i64), original)?,
                     original,
                 )?
-                .coverage(self.weight(node, original))?;
+                .coverage(alpha * self.weight(node, original))?;
             return self.put(Sample::default(), source, node, original);
         }
         let raw = if let Some(cache) = d.scene.file_objects.pixel(key, original) {
@@ -524,13 +535,13 @@ impl Renderer<'_> {
                 _ => return Ok(Sample::default()),
             }
         };
-        raw.coverage(p::factor(d, target))
+        raw.coverage(alpha * p::factor(d, target))
     }
     pub(super) fn timeline(
         &self,
         mut back: Sample,
         pixel: [i64; 2],
-        original: Point,
+        _original: Point,
     ) -> Result<Sample, String> {
         let d = self.document;
         if self.sampling.references.is_some_and(|r| !r.animation)
@@ -555,6 +566,7 @@ impl Renderer<'_> {
                 track: id,
                 cell: d.scene.catalog.cell_id(id, cell_index),
             };
+            let (point, original, alpha) = self.animated(cell_key, pixel.map(|v| v as f64 + 0.5));
             if self.plan().comic_clips
                 && (crate::comics::coverage(d, track_key, original) == 0.
                     || crate::comics::coverage(d, cell_key, original) == 0.)
@@ -569,14 +581,10 @@ impl Renderer<'_> {
             {
                 self.plan().space.from_srgb(Sample::from8(cache))?
             } else {
-                self.cel_sample(
-                    id,
-                    d.scene.catalog.cell_id(id, cell_index),
-                    cell,
-                    [pixel[0] as f64 + 0.5, pixel[1] as f64 + 0.5],
-                )?
+                self.cel_sample(id, d.scene.catalog.cell_id(id, cell_index), cell, point)?
             };
-            let weight = p::factor(d, target)
+            let weight = alpha
+                * p::factor(d, target)
                 * if d.scene.file_objects.get(track_key).is_some() {
                     1.
                 } else {

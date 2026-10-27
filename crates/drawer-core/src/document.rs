@@ -174,6 +174,7 @@ pub struct Document {
     pub scene: crate::scene::Scene,
     pub animation: Option<crate::animation::Timeline>,
     pub current_frame: u32,
+    pub keyframe_content: Option<crate::keyframes::Owner>,
     pub(crate) history: crate::history::History,
 }
 
@@ -227,6 +228,7 @@ impl Document {
             scene: Default::default(),
             animation: None,
             current_frame: 0,
+            keyframe_content: None,
             history: Default::default(),
         })
     }
@@ -251,6 +253,9 @@ impl Document {
         self.dirty = false;
     }
     pub fn composite_pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        if !self.scene.keyframes.is_default() {
+            return crate::render::Renderer::new(self).pixel([x as f64 + 0.5, y as f64 + 0.5]);
+        }
         self.composite_pixel_with(x, y, |_, layer| {
             layer.pixel(self.width, self.height, x as i64, y as i64)
         })

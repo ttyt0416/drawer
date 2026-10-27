@@ -273,7 +273,8 @@ impl<'a> Renderer<'a> {
                     .map(|d| Self::for_export(d).map(|r| (p.object, Box::new(r))))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if !document.scene.cels.is_default()
+        if !document.scene.keyframes.is_default()
+            || !document.scene.cels.is_default()
             || document.color != crate::color_storage::Config::legacy()
             || !document.scene.surface_effects.rasters.is_empty()
             || crate::local_color::active(&document.scene)
@@ -640,7 +641,8 @@ impl<'a> Renderer<'a> {
         r
     }
     pub fn preview(document: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
-        if !document.scene.cels.is_default()
+        if !document.scene.keyframes.is_default()
+            || !document.scene.cels.is_default()
             || document.color != crate::color_storage::Config::legacy()
             || !document.scene.surface_effects.rasters.is_empty()
             || crate::local_color::active(&document.scene)
