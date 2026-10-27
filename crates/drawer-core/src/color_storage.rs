@@ -377,7 +377,11 @@ fn byte(r: &mut impl Read) -> std::io::Result<u8> {
     Ok(b[0])
 }
 pub(crate) fn write(d: &Document, w: &mut impl Write) -> std::io::Result<()> {
-    if d.color == Config::legacy() && d.layers.iter().all(|l| l.precise.is_none()) {
+    if d.color == Config::legacy()
+        && d.layers.iter().all(|l| l.precise.is_none())
+        && d.scene.page_parts.is_default()
+        && d.scene.cels.definitions.is_empty()
+    {
         return Ok(());
     }
     if !d.color.valid_layers(&d.layers) {

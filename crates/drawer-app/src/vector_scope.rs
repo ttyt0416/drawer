@@ -691,6 +691,11 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     BYTES.with(|v| v.borrow_mut().clear());
     Ok(())
 }
+
+pub(super) fn read_timeline_packet(ctx: &egui::Context) -> Result<Packet, String> {
+    Packet::decode(&(clipboard(ctx).read)()?)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

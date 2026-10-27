@@ -283,12 +283,12 @@ fn animation(
                 cell_ids.push(id);
             }
         }
-        if cell_values.is_empty() {
+        if cell_values.is_empty() && s.scene.cels.is_default() {
             return Err("Keep at least one cell in an animation folder".into());
         }
         if drop_exposures {
             track_value.exposures.retain(|e| map[e.cell].is_some());
-            if track_value.exposures.is_empty() {
+            if track_value.exposures.is_empty() && s.scene.cels.is_default() {
                 return Err("Keep at least one exposure in a retained animation folder".into());
             }
         }

@@ -389,6 +389,9 @@ pub fn from_tracks(d: &Document) -> Result<crate::sizing::DocumentState, String>
         .unwrap_or(0)
         .checked_add(1);
     for (n, t) in a.tracks.iter().enumerate() {
+        if t.exposures.is_empty() {
+            continue;
+        }
         let track = state.scene.catalog.tracks.id(n);
         let ids = state.scene.catalog.cells.entry(track).or_default();
         ids.initialize(t.cells.len())?;
@@ -708,6 +711,9 @@ pub fn export(
             .index(b.track, timeline.tracks.len())
             .unwrap();
         let t = &timeline.tracks[n];
+        if t.exposures.is_empty() {
+            return Err("Assign an exposure before exporting this shot".into());
+        }
         let mut shot = b.shot.clone();
         shot.name = t.name.clone();
         shot.start = t.exposures[0].frame;

@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 95;
+pub(crate) const VERSION: u32 = 96;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 96 && !document.scene.cels.is_default() {
+            return Err(invalid("Editable cels require native96"));
         }
         if version < 95 && !document.scene.shots.is_default() {
             return Err(invalid("Shot metadata requires native95"));
@@ -469,7 +472,11 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if version >= 94 {
         crate::page_parts::read(&mut document, &mut reader, budget)?;
     }
+    if version >= 96 {
+        crate::cels::read(&mut document, &mut reader, budget)?;
+    }
     if !document.scene.valid()
+        || !crate::cels::valid_document(&document)
         || !crate::shot_exchange::valid_document(&document)
         || document.memory_bytes() > budget
     {
@@ -532,6 +539,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
+    if !crate::cels::valid_document(document) {
+        return Err(invalid("Invalid cel definitions/references"));
+    }
     if !crate::shot_exchange::valid_document(document) {
         return Err(invalid("Invalid shot source identities"));
     }
@@ -563,6 +573,7 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
             .scene
             .size_bytes()
             .saturating_sub(document.scene.page_parts.payload_bytes())
+            .saturating_sub(document.scene.cels.payload_bytes())
             > MAX_SCENE_BYTES
     {
         return Err(invalid("Invalid or oversized page geometry"));
@@ -650,6 +661,7 @@ fn write_payload(document: &Document, scene: &[u8], writer: &mut impl Write) -> 
     crate::mesh_edit::write(&document.scene, writer)?;
     crate::color_storage::write(document, writer)?;
     crate::page_parts::write(&document.scene, writer)?;
+    crate::cels::write(&document.scene, writer)?;
     Ok(())
 }
 

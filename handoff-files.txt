@@ -849,3 +849,9 @@ crates/drawer-core/src/shot_exchange.rs
 crates/drawer-core/src/publication_verify.rs
 crates/drawer-app/src/shot_exchange.rs
 docs/process/publication-exchange.md
+crates/drawer-core/src/cels.rs
+crates/drawer-core/src/timeline_editor.rs
+crates/drawer-core/src/timeline_view.rs
+crates/drawer-core/src/timeline_verify.rs
+crates/drawer-app/src/timeline_editor.rs
+docs/process/timeline-editor.md

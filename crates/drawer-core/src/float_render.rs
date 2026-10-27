@@ -15,6 +15,7 @@ use crate::{
     scene::Point,
 };
 pub(crate) struct Plan<'a> {
+    cels: Vec<(u64, Renderer<'a>)>,
     export_page: bool,
     page_parts: Vec<(u64, Renderer<'a>)>,
     comic_clips: bool,
@@ -87,6 +88,27 @@ impl<'a> Renderer<'a> {
             stroke,
             sampling: Default::default(),
             plan: PlanRef::Owned(Box::new(Plan {
+                cels: d
+                    .scene
+                    .cels
+                    .definitions
+                    .iter()
+                    .filter_map(|p| {
+                        (if export {
+                            p.export_document()
+                        } else {
+                            p.document()
+                        })
+                        .map(|d| {
+                            (if export {
+                                Renderer::for_export(d)
+                            } else {
+                                Renderer::new(d)
+                            })
+                            .map(|r| (p.object, r))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
                 export_page: export,
                 page_parts: d
                     .scene
@@ -132,6 +154,13 @@ impl<'a> Renderer<'a> {
         tick: &mut impl FnMut(usize, usize) -> Result<(), String>,
     ) -> Result<(), String> {
         Self::with_effect_progress(d, None, tick).map(|_| ())
+    }
+    pub fn display_source(
+        &self,
+        key: crate::layer_search::Key,
+        point: Point,
+    ) -> Result<Sample, String> {
+        self.plan().space.to_srgb(self.source_pixel(key, point)?)
     }
     pub fn display_sample(&self, point: Point) -> Result<Sample, String> {
         if self.plan().export_page {

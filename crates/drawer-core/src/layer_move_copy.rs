@@ -7,7 +7,7 @@ use crate::{
     sizing::DocumentState,
 };
 use std::collections::BTreeMap;
-pub(super) struct Copied {
+pub(crate) struct Copied {
     pub state: DocumentState,
     pub keys: Vec<Key>,
 }
@@ -222,7 +222,7 @@ fn one(
     groups::finish(&d, state)?;
     Ok(new)
 }
-pub(super) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
+pub(crate) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
     let mut state = d.snapshot();
     state.scene.layer_ids.initialize(d.layers.len())?;
     c::reconcile(d, &mut state)?;
@@ -307,6 +307,7 @@ pub(super) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
         }
     }
     crate::page_parts::duplicate(&mut state.scene, &original.scene, &map);
+    crate::cels::duplicate(&mut state.scene, &original.scene, &map);
     let masks = original.scene.comics.masks.clone();
     for mask in masks {
         if let Some(new) = map.get(&mask.target) {

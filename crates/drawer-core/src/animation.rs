@@ -111,9 +111,7 @@ impl Timeline {
             && self.tracks.iter().all(|t| {
                 !t.name.is_empty()
                     && t.name.len() <= 4096
-                    && !t.cells.is_empty()
                     && t.cells.iter().all(Cell::metadata_valid)
-                    && !t.exposures.is_empty()
                     && t.exposures.len() <= MAX_FRAMES as usize
                     && t.end <= self.frames
                     && t.exposures

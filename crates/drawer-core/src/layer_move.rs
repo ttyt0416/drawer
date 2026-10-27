@@ -1,6 +1,6 @@
 //! Movement tool targeting and persistent local exclusions, independent of selection pixel drags.
 #[path = "layer_move_copy.rs"]
-mod copy;
+pub(crate) mod copy;
 use crate::{
     document::{DEFAULT_DOCUMENT_BUDGET, Document},
     layer_catalog as c,

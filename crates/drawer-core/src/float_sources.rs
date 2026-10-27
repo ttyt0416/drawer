@@ -1,6 +1,28 @@
 use super::*;
 use crate::{layer_search::Key, scene::PageObject};
 impl Renderer<'_> {
+    fn cel_sample(
+        &self,
+        track: u64,
+        cell: u64,
+        c: &crate::animation::Cell,
+        point: Point,
+    ) -> Result<Sample, String> {
+        if let Some(id) = self.document.scene.cels.source(track, cell)
+            && let Some((_, renderer)) = self.plan().cels.iter().find(|(key, _)| *key == id)
+        {
+            return self.plan().space.from_srgb(
+                renderer.display_sample([
+                    point[0] - c.offset[0] as f64,
+                    point[1] - c.offset[1] as f64,
+                ])?,
+            );
+        }
+        Ok(Sample::from8(
+            c.pixel(point[0].floor() as i64, point[1].floor() as i64),
+        ))
+    }
+
     pub(crate) fn vector_run(&self, keys: &[Key], point: Point) -> Result<Sample, String> {
         let original = self.document.scene.transform.inverse().map(point);
         let Some(Key::Layer(Target::Vector(base))) = keys.first() else {
@@ -126,7 +148,7 @@ impl Renderer<'_> {
                 {
                     self.plan().space.from_srgb(Sample::from8(cache))?
                 } else {
-                    Sample::from8(c.pixel(point[0].floor() as i64, point[1].floor() as i64))
+                    self.cel_sample(id, d.scene.catalog.cell_id(id, cell as usize), c, point)?
                 };
                 let weight = p::factor(d, t)
                     * if d.scene.file_objects.get(track_key).is_some() {
@@ -547,7 +569,12 @@ impl Renderer<'_> {
             {
                 self.plan().space.from_srgb(Sample::from8(cache))?
             } else {
-                Sample::from8(cell.pixel(pixel[0], pixel[1]))
+                self.cel_sample(
+                    id,
+                    d.scene.catalog.cell_id(id, cell_index),
+                    cell,
+                    [pixel[0] as f64 + 0.5, pixel[1] as f64 + 0.5],
+                )?
             };
             let weight = p::factor(d, target)
                 * if d.scene.file_objects.get(track_key).is_some() {

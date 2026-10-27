@@ -13,6 +13,9 @@ use std::{
 };
 const MAX_SOURCE: usize = 64 * 1024 * 1024;
 const MAX_DEPTH: u32 = 4;
+pub(crate) fn nested_depth(s: &Scene) -> u32 {
+    s.page_parts.depth().max(s.cels.depth())
+}
 thread_local! {static DEPTH:Cell<u32>=const{Cell::new(0)};}
 struct Depth;
 impl Depth {
@@ -66,6 +69,47 @@ pub struct Part {
     source: Option<Arc<Source>>,
 }
 impl Part {
+    pub(crate) fn valid_source(&self, missing: bool) -> bool {
+        self.object > 0
+            && self.original_page > 0
+            && !self.name.trim().is_empty()
+            && self.name.len() <= 256
+            && !self.name.chars().any(char::is_control)
+            && (1..=32768).contains(&self.width)
+            && (1..=32768).contains(&self.height)
+            && self.dpi.is_finite()
+            && self.dpi > 0.
+            && (1..=MAX_DEPTH).contains(&self.depth)
+            && self.length > 0
+            && self.length <= MAX_SOURCE
+            && (missing || self.document().is_some())
+    }
+    pub(crate) fn write_source(&self, w: &mut impl Write) -> io::Result<()> {
+        let source = self
+            .source
+            .as_ref()
+            .ok_or_else(|| invalid("Missing native source"))?;
+        w.write_all(&(source.bytes.len() as u64).to_le_bytes())?;
+        w.write_all(&source.bytes)
+    }
+    pub(crate) fn read_source(&self, r: &mut impl Read, budget: usize) -> io::Result<Self> {
+        let mut size = [0; 8];
+        r.read_exact(&mut size)?;
+        let len = u64::from_le_bytes(size);
+        if len != self.length as u64 || len > MAX_SOURCE as u64 || len > budget as u64 / 2 {
+            return Err(invalid("Native source allocation limit"));
+        }
+        let mut bytes = vec![0; len as usize];
+        r.read_exact(&mut bytes)?;
+        self.clone().hydrate_payload(bytes, budget).map_err(invalid)
+    }
+    pub(crate) fn payload_bytes(&self) -> usize {
+        self.source.as_ref().map_or(0, |s| {
+            s.bytes.len()
+                + s.document.memory_bytes()
+                + s.export.as_ref().map_or(0, |d| d.memory_bytes())
+        })
+    }
     pub fn document(&self) -> Option<&Document> {
         self.source.as_ref().map(|s| &s.document)
     }
@@ -80,7 +124,7 @@ impl Part {
         opened.title = self.name.clone();
         Ok(opened)
     }
-    fn hydrate_payload(mut self, bytes: Vec<u8>, budget: usize) -> Result<Self, String> {
+    pub(crate) fn hydrate_payload(mut self, bytes: Vec<u8>, budget: usize) -> Result<Self, String> {
         let _depth = Depth::enter()?;
         if bytes.len() != self.length
             || bytes.len() > MAX_SOURCE
@@ -97,7 +141,7 @@ impl Part {
         if d.width != self.width
             || d.height != self.height
             || d.dpi != self.dpi
-            || self.depth != 1 + d.scene.page_parts.depth()
+            || self.depth != 1 + nested_depth(&d.scene)
             || self.frame >= d.animation.as_ref().map_or(1, |a| a.frames)
         {
             return Err("Embedded page dimensions, frame or nesting mismatch".into());
@@ -114,7 +158,7 @@ impl Part {
         }));
         Ok(self)
     }
-    fn create(
+    pub(crate) fn create(
         object: u64,
         original_page: u64,
         name: String,
@@ -130,7 +174,7 @@ impl Part {
             height: d.height,
             dpi: d.dpi,
             frame: d.current_frame,
-            depth: 1 + d.scene.page_parts.depth(),
+            depth: 1 + nested_depth(&d.scene),
             length: bytes.len(),
             hash: Sha256::digest(&bytes).into(),
             source: None,

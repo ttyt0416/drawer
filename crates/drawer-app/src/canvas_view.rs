@@ -86,7 +86,16 @@ mod precision_tests {
 }
 
 type ImageKey = (u64, u64, u32, (u64, u64));
+#[derive(Clone)]
+pub(super) struct TimelineOverlay {
+    pub document: u64,
+    pub texture: egui::TextureHandle,
+    pub replace: bool,
+    pub origin: [f64; 2],
+    pub size: [f64; 2],
+}
 pub struct CanvasView {
+    pub(super) timeline_overlay: Option<TimelineOverlay>,
     pub comic_view: drawer_core::comic_view::Viewport,
     pub mask_overlay: bool,
     pub mask_overlay_regions: usize,
@@ -176,6 +185,7 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            timeline_overlay: None,
             comic_view: Default::default(),
             mask_overlay: false,
             mask_overlay_regions: 0,
@@ -1214,12 +1224,45 @@ impl CanvasView {
                     ),
                 ));
             }
-            painter.image(
-                self.screen_image.as_ref().unwrap().1.id(),
-                rect,
-                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
+            if !self
+                .timeline_overlay
+                .as_ref()
+                .is_some_and(|o| o.document == document.id && o.replace)
+            {
+                painter.image(
+                    self.screen_image.as_ref().unwrap().1.id(),
+                    rect,
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+            }
+        }
+        if let Some(overlay) = &self.timeline_overlay
+            && overlay.document == document.id
+        {
+            let mut mesh = egui::Mesh::with_texture(overlay.texture.id());
+            let points = [
+                [overlay.origin[0], overlay.origin[1]],
+                [overlay.origin[0] + overlay.size[0], overlay.origin[1]],
+                [
+                    overlay.origin[0] + overlay.size[0],
+                    overlay.origin[1] + overlay.size[1],
+                ],
+                [overlay.origin[0], overlay.origin[1] + overlay.size[1]],
+            ];
+            for (point, uv) in points
+                .into_iter()
+                .zip([[0., 0.], [1., 0.], [1., 1.], [0., 1.]])
+            {
+                let p = view.document_to_screen(point, size, center, ppp);
+                mesh.vertices.push(egui::epaint::Vertex {
+                    pos: egui::pos2(p[0] as f32, p[1] as f32),
+                    uv: egui::pos2(uv[0], uv[1]),
+                    color: egui::Color32::WHITE,
+                });
+            }
+            mesh.indices = vec![0, 1, 2, 0, 2, 3];
+            painter.add(egui::Shape::mesh(mesh));
         }
         crate::extended_fill::paint_frame(&painter, document, view, rect, ppp);
         (self.selection_edges, self.vector_selection_marks) = crate::layer_selection::paint(

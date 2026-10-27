@@ -216,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::cels::Data::is_default")]
+    pub cels: Box<crate::cels::Data>,
     #[serde(
         default,
         skip_serializing_if = "crate::shot_exchange::Data::is_default"
@@ -382,6 +384,7 @@ impl Scene {
                         .all(|v| v.is_finite() && v.abs() <= 1e12)
                 })
             && crate::comics::valid_scene(self)
+            && self.cels.valid(missing)
             && self.shots.valid()
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())
@@ -460,7 +463,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.shots.bytes()
+        self.cels.bytes()
+            + self.shots.bytes()
             + self.page_parts.bytes()
             + self.comics.bytes()
             + self
