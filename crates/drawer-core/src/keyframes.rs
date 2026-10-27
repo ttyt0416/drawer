@@ -160,11 +160,13 @@ impl Track {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Data {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub camera_output: bool,
     pub tracks: Vec<Track>,
 }
 impl Data {
     pub fn is_default(&self) -> bool {
-        self.tracks.is_empty()
+        !self.camera_output && self.tracks.is_empty()
     }
     pub fn get(&self, owner: Owner) -> Option<&Track> {
         self.tracks.iter().find(|t| t.owner == owner)
@@ -179,7 +181,8 @@ impl Data {
     }
     pub fn valid(&self) -> bool {
         let mut owners = BTreeSet::new();
-        self.tracks.len() <= 1024
+        (!self.camera_output || self.get(Owner::Camera).is_some())
+            && self.tracks.len() <= 1024
             && self.tracks.iter().map(|t| t.keys.len()).sum::<usize>() <= 10000
             && self.tracks.iter().all(|t| {
                 owners.insert(t.owner)
@@ -254,6 +257,9 @@ fn inside(d: &Document, parent: Key, child: Key) -> bool {
         }
 }
 pub fn guard(d: &Document, key: Key) -> Result<(), String> {
+    if d.scene.keyframes.camera_output && !content_view(d) {
+        return Err("Enter base content editing before changing sources in camera view".into());
+    }
     let allowed = d
         .keyframe_content
         .is_some_and(|o| matches!(o,Owner::Layer(k)if inside(d,k,key)));
@@ -409,11 +415,14 @@ pub fn prepare(d: &Document, owner: Owner, edit: Edit) -> Result<DocumentState, 
 }
 /// Local matrix includes one explicit camera. Folder/track parents are composed by the renderer.
 pub fn local(d: &Document, key: Key, export: bool) -> (Affine, f64) {
+    local_at(d, key, export, d.current_frame)
+}
+pub fn local_at(d: &Document, key: Key, export: bool, frame: u32) -> (Affine, f64) {
     if !export && content_view(d) {
         return (Affine::default(), 1.);
     }
     let t = d.scene.keyframes.get(Owner::Layer(key));
-    let pose = t.map_or(Pose::default(), |t| t.at(d.current_frame));
+    let pose = t.map_or(Pose::default(), |t| t.at(frame));
     let mut matrix = pose.matrix();
     let mut opacity = pose.opacity;
     if t.is_some_and(|t| t.parent_camera)
@@ -425,7 +434,7 @@ pub fn local(d: &Document, key: Key, export: bool) -> (Affine, f64) {
         })
         && let Some(camera) = d.scene.keyframes.get(Owner::Camera)
     {
-        let p = camera.at(d.current_frame);
+        let p = camera.at(frame);
         matrix = matrix.then(p.matrix());
         opacity *= p.opacity;
     }
@@ -459,9 +468,12 @@ pub fn ancestors(d: &Document, key: Key) -> Vec<Key> {
     out
 }
 pub fn combined(d: &Document, key: Key, export: bool) -> (Affine, f64) {
-    let (mut m, mut a) = local(d, key, export);
+    combined_at(d, key, export, d.current_frame)
+}
+pub fn combined_at(d: &Document, key: Key, export: bool, frame: u32) -> (Affine, f64) {
+    let (mut m, mut a) = local_at(d, key, export, frame);
     for parent in ancestors(d, key) {
-        let (p, b) = local(d, parent, export);
+        let (p, b) = local_at(d, parent, export, frame);
         m = m.then(p);
         a *= b;
     }
@@ -476,6 +488,9 @@ pub(crate) fn prune(s: &mut DocumentState) -> Result<(), String> {
         Owner::Camera => s.animation.is_some(),
         Owner::Layer(k) => exists(&d, k),
     });
+    if s.scene.keyframes.get(Owner::Camera).is_none() {
+        s.scene.keyframes.camera_output = false;
+    }
     Ok(())
 }
 pub(crate) fn duplicate(s: &mut Scene, old: &Scene, map: &BTreeMap<Key, Key>) {
@@ -491,6 +506,7 @@ pub(crate) fn duplicate(s: &mut Scene, old: &Scene, map: &BTreeMap<Key, Key>) {
 }
 /// Compare source content, ignoring animation metadata and display names/locks.
 pub(crate) fn validate_edit(d: &Document, s: &DocumentState) -> Result<(), String> {
+    crate::camera2d::validate_source_edit(d, s)?;
     for old in &d.scene.keyframes.tracks {
         if s.scene
             .keyframes

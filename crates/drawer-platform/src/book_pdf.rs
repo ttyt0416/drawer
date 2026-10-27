@@ -101,9 +101,13 @@ fn render_mta(
             reader.ReadBytes(&mut png)?;
             let image =
                 book_io::decode(&png, remaining.saturating_sub(png.len())).map_err(os_error)?;
-            if image.width != w as u32 || image.height != h as u32 {
-                return Err(os_error("PDF raster size mismatch"));
-            }
+            let image = book_io::pdf_pixel_grid(
+                image,
+                w as u32,
+                h as u32,
+                remaining.saturating_sub(png.len()),
+            )
+            .map_err(os_error)?;
             used = used.saturating_add(image.memory_bytes());
             out.push(Page { image, dpi });
         }

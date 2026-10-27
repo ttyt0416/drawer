@@ -502,3 +502,6 @@ pub mod timeline_batch;
 pub mod timeline_time_edit;
 pub mod timeline_timing;
 pub mod timeline_timing_verify;
+
+pub mod camera2d;
+pub mod camera2d_verify;

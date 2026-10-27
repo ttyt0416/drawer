@@ -226,6 +226,8 @@ pub struct Scene {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub onion: Option<crate::timeline_view::Onion>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_guides: Option<crate::camera2d::Guides>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub light_table: Option<crate::light_table::Data>,
     #[serde(default, skip_serializing_if = "crate::cels::Data::is_default")]
     pub cels: Box<crate::cels::Data>,
@@ -397,7 +399,7 @@ impl Scene {
             && crate::comics::valid_scene(self)
             && self.cels.valid(missing)
             && self.timing.valid(missing)
-            && self.keyframes.valid() && self.onion.is_none_or(|o|o.valid()) && self.light_table.as_ref().is_none_or(|d|d.valid(missing))
+            && self.camera_guides.is_none_or(|v|v.valid()) && self.keyframes.valid() && self.onion.is_none_or(|o|o.valid()) && self.light_table.as_ref().is_none_or(|d|d.valid(missing))
             && self.shots.valid()
             && self.catalog.valid()
             && self.catalog.objects.matches(self.objects.len())

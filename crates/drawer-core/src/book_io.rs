@@ -253,3 +253,80 @@ pub fn print(pages: &[Page], sink: &mut impl PrintSink, cancel: &AtomicBool) -> 
     }
     result
 }
+
+/// WinRT PDF destinations are DIPs; normalize the physical raster to the requested DPI grid.
+pub fn pdf_pixel_grid(
+    source: LocalImage,
+    width: u32,
+    height: u32,
+    budget: usize,
+) -> Result<LocalImage, String> {
+    if !source.valid()
+        || source.memory_bytes() > budget.min(MAX_BYTES)
+        || width == 0
+        || height == 0
+        || width > 32768
+        || height > 32768
+    {
+        return Err("Invalid PDF raster grid".into());
+    }
+    if source.width == width && source.height == height {
+        return Ok(source);
+    }
+    // Permit only a uniform display scale, with up to one physical pixel of rounding per axis.
+    let sx = source.width as f64 / width as f64;
+    let sy = source.height as f64 / height as f64;
+    if !(1.0..=8.).contains(&sx)
+        || !(1.0..=8.).contains(&sy)
+        || (source.width as i64 * height as i64 - source.height as i64 * width as i64)
+            .unsigned_abs()
+            > width as u64 + height as u64
+    {
+        return Err("Unexpected PDF raster aspect / scale".into());
+    }
+    let needed = source
+        .memory_bytes()
+        .saturating_mul(8)
+        .saturating_add(width as usize * height as usize * 16);
+    if needed > budget.min(MAX_BYTES) {
+        return Err("PDF DPI normalization exceeds memory budget".into());
+    }
+    let flat = source.pixels.into_iter().flatten().collect();
+    let image = image::RgbaImage::from_raw(source.width, source.height, flat)
+        .ok_or("Invalid PDF raster bytes")?;
+    let image =
+        image::imageops::resize(&image, width, height, image::imageops::FilterType::Lanczos3);
+    Ok(LocalImage {
+        width,
+        height,
+        pixels: image.pixels().map(|p| p.0).collect(),
+    })
+}
+#[cfg(test)]
+mod dpi_tests {
+    use super::*;
+    #[test]
+    fn pdf_grid_handles_display_scaling_and_keeps_physical_dpi_dimensions() {
+        for percent in [100, 125, 140, 150, 175, 200, 300, 500] {
+            let source = LocalImage {
+                width: (16. * percent as f64 / 100.).round() as u32,
+                height: (24. * percent as f64 / 100.).round() as u32,
+                pixels: vec![
+                    [40, 80, 120, 255];
+                    ((16. * percent as f64 / 100.).round() * (24. * percent as f64 / 100.).round())
+                        as usize
+                ],
+            };
+            let image = pdf_pixel_grid(source, 16, 24, MAX_BYTES).unwrap();
+            assert_eq!((image.width, image.height), (16, 24));
+            assert!(image.pixels.iter().all(|p| *p == [40, 80, 120, 255]));
+        }
+        let source = LocalImage {
+            width: 22,
+            height: 34,
+            pixels: vec![[1, 2, 3, 255]; 22 * 34],
+        };
+        assert!(pdf_pixel_grid(source.clone(), 16, 24, 10).is_err());
+        assert!(pdf_pixel_grid(source, 16, 12, MAX_BYTES).is_err());
+    }
+}

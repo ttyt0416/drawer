@@ -17,6 +17,7 @@ use crate::{
 pub(crate) struct Plan<'a> {
     cels: Vec<(u64, Renderer<'a>)>,
     animation: std::collections::BTreeMap<crate::layer_search::Key, (crate::scene::Affine, f64)>,
+    camera: crate::scene::Affine,
     export_page: bool,
     page_parts: Vec<(u64, Renderer<'a>)>,
     comic_clips: bool,
@@ -111,6 +112,7 @@ impl<'a> Renderer<'a> {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                camera: Default::default(),
                 animation: Default::default(),
                 export_page: export,
                 page_parts: d
@@ -170,6 +172,7 @@ impl<'a> Renderer<'a> {
         }
         if let PlanRef::Owned(p) = &mut renderer.plan {
             p.animation = animation;
+            p.camera = crate::camera2d::to_world(d, export);
         }
         Ok(renderer)
     }
@@ -184,7 +187,9 @@ impl<'a> Renderer<'a> {
         key: crate::layer_search::Key,
         point: Point,
     ) -> Result<Sample, String> {
-        self.plan().space.to_srgb(self.source_pixel(key, point)?)
+        self.plan()
+            .space
+            .to_srgb(self.source_pixel(key, self.plan().camera.map(point))?)
     }
     pub fn display_sample(&self, point: Point) -> Result<Sample, String> {
         if self.plan().export_page {
@@ -684,6 +689,7 @@ impl<'a> Renderer<'a> {
         {
             return Ok(Sample::default());
         }
+        let point = self.plan().camera.map(point);
         let pixel = point.map(|v| v.floor() as i64);
         let original = d
             .scene

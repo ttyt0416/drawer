@@ -5,8 +5,8 @@ use drawer_core::{
 };
 use std::path::Path;
 pub(super) struct Panel {
-    open: bool,
-    owner: Owner,
+    pub(super) open: bool,
+    pub(super) owner: Owner,
     frame: u32,
     move_to: u32,
     pose: Pose,
@@ -47,6 +47,12 @@ impl Default for Panel {
     }
 }
 impl Drawer {
+    pub(super) fn begin_camera_keyframes(&mut self) -> Result<(), String> {
+        self.begin_keyframes()?;
+        self.keyframes.owner = Owner::Camera;
+        self.keyframes.stamp = None;
+        Ok(())
+    }
     pub(super) fn begin_keyframes(&mut self) -> Result<(), String> {
         self.finish_stroke();
         if self.transform_unconfirmed()
@@ -116,7 +122,7 @@ impl Drawer {
             .into_iter()
             .enumerate()
             .map(|(i, r)| (Owner::Layer(r.key), format!("Layer {}: {}", i + 1, r.name)))
-            .chain([(Owner::Camera, "2D parent camera".into())])
+            .chain([(Owner::Camera, "2D camera (parent / final)".into())])
             .collect::<std::collections::BTreeMap<_, _>>();
         let owner_name = names
             .get(&p.owner)
@@ -133,7 +139,7 @@ impl Drawer {
    ui.label(&p.notice);
    ui.horizontal(|ui|{let r=ui.button(if active{"Disable keyframes (keep current pose)"}else{"Enable / resume retained keys"});p.toggle=Some(r.rect);if r.clicked(){edit=Some(Edit::Enable(!active));}let r=ui.button(if d.keyframe_content==Some(p.owner){"Finish base content editing"}else{"Edit base content"});p.content=Some(r.rect);if r.clicked(){content=Some(if d.keyframe_content==Some(p.owner){None}else{Some(p.owner)});}});
    ui.horizontal(|ui|{let r=ui.button("Add / replace key");p.apply=Some(r.rect);if r.clicked(){edit=Some(Edit::Put{key:Keyframe{frame:p.frame-1,pose:p.pose,curve:p.curve},replace:p.replace});}ui.checkbox(&mut p.replace,"Confirm replacement at occupied time");});
-   egui::ComboBox::from_label("Animated owner").selected_text(&owner_name).show_ui(ui,|ui|{ui.selectable_value(&mut p.owner,Owner::Camera,"2D parent camera");if let Ok(keys)=drawer_core::layer_groups::live(d){for k in keys.into_keys(){ui.selectable_value(&mut p.owner,Owner::Layer(k),names.get(&Owner::Layer(k)).cloned().unwrap_or_else(||"Layer".into()));}}});
+   egui::ComboBox::from_label("Animated owner").selected_text(&owner_name).show_ui(ui,|ui|{ui.selectable_value(&mut p.owner,Owner::Camera,"2D camera (parent / final)");if let Ok(keys)=drawer_core::layer_groups::live(d){for k in keys.into_keys(){ui.selectable_value(&mut p.owner,Owner::Layer(k),names.get(&Owner::Layer(k)).cloned().unwrap_or_else(||"Layer".into()));}}});
    if p.owner!=stamp.3 {p.stamp=None;return}
    ui.horizontal(|ui|{ui.label(format!("Current frame {current} / {}",a.frames));if ui.button("Previous key").clicked(){seek=d.scene.keyframes.get(p.owner).and_then(|t|t.keys.iter().rev().find(|k|k.frame<d.current_frame)).map(|k|k.frame);}
 if ui.button("Next key").clicked(){seek=d.scene.keyframes.get(p.owner).and_then(|t|t.keys.iter().find(|k|k.frame>d.current_frame)).map(|k|k.frame);}});

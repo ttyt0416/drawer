@@ -157,7 +157,7 @@ fn animation(
 ) -> Result<[u8; 4], String> {
     let mut out = [0; 4];
     for source in keys {
-        let mut p = point;
+        let mut p = crate::camera2d::to_world(d, false).map(point);
         let mut weight = 1.;
         for parent in &source.parents {
             p = parent.inverse.map(p);
@@ -194,13 +194,13 @@ fn signature(d: &Document, key: Key) -> Option<Vec<u64>> {
         out.push(d.scene.cels.source(id, cell).unwrap_or(cell));
         out.extend(c.offset.map(|v| v as u64));
         out.extend([c.width as u64, c.height as u64]);
-        let (m, alpha) = crate::keyframes::combined(d, Key::Cell { track: id, cell }, false);
+        let (m, alpha) = crate::camera2d::display_matrix(d, Key::Cell { track: id, cell }, false);
         out.extend(m.0.map(f64::to_bits));
         out.push(alpha.to_bits());
     } else {
         let members = crate::layer_groups::content_members(d, &[key]).ok()?;
         for member in members {
-            let (m, alpha) = crate::keyframes::combined(d, member, false);
+            let (m, alpha) = crate::camera2d::display_matrix(d, member, false);
             out.extend(m.0.map(f64::to_bits));
             out.push(alpha.to_bits());
         }

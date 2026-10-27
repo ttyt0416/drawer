@@ -97,6 +97,7 @@ pub(super) struct TimelineOverlay {
 pub struct CanvasView {
     pub(super) timeline_overlay: Option<TimelineOverlay>,
     pub(super) light_table_overlay: Option<TimelineOverlay>,
+    camera_paths: crate::camera2d::Paths,
     pub comic_view: drawer_core::comic_view::Viewport,
     pub mask_overlay: bool,
     pub mask_overlay_regions: usize,
@@ -189,6 +190,7 @@ impl CanvasView {
         Self {
             timeline_overlay: None,
             light_table_overlay: None,
+            camera_paths: Default::default(),
             comic_view: Default::default(),
             mask_overlay: false,
             mask_overlay_regions: 0,
@@ -491,9 +493,12 @@ impl CanvasView {
         } else {
             self.pan_drag = None;
         }
+        let camera_editable = !document.scene.keyframes.camera_output
+            || drawer_core::keyframes::content_view(document);
         self.working = (paint.drawing.active_view() == Some(paint.view)
             || ui.input(|i| i.pointer.primary_pressed()))
             && !self.measurement_mode
+            && camera_editable
             && input_active
             && !self.area_zoom
             && !ui.input(|i| i.key_down(egui::Key::Space))
@@ -565,6 +570,7 @@ impl CanvasView {
             paint.layer,
             style,
             input_active
+                && camera_editable
                 && paint.drawing.text_document != Some(document.id)
                 && !self.measurement_mode
                 && !self.area_zoom
@@ -1272,6 +1278,9 @@ impl CanvasView {
             }
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
             painter.add(egui::Shape::mesh(mesh));
+        }
+        if let Err(e) = self.camera_paths.paint(&painter, document, view, rect, ppp) {
+            self.view_notice = Some(e);
         }
         crate::extended_fill::paint_frame(&painter, document, view, rect, ppp);
         (self.selection_edges, self.vector_selection_marks) = crate::layer_selection::paint(

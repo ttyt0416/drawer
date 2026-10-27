@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 100;
+pub(crate) const VERSION: u32 = 101;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -219,6 +219,15 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             return Err(invalid(
                 "Editable mesh sources and transform frames require native version81",
             ));
+        }
+        if version < 101
+            && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
+        {
+            return Err(invalid("Final camera and path guides require native101"));
+        }
+        document.camera_guides = document.scene.camera_guides.take().unwrap_or_default();
+        if !document.camera_guides.valid() {
+            return Err(invalid("Invalid camera guide preferences"));
         }
         if version < 100 && document.scene.light_table.is_some() {
             return Err(invalid("Light-table objects require native100"));
@@ -644,7 +653,9 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     )
     .map_err(invalid)?;
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
-    if !document.onion.valid()
+    if !document.camera_guides.valid()
+        || document.scene.camera_guides.is_some()
+        || !document.onion.valid()
         || document.scene.onion.is_some()
         || document.scene.light_table.is_some()
         || !document.light_table.data.valid(false)
@@ -659,10 +670,14 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
         #[serde(skip_serializing_if = "Option::is_none")]
         onion: Option<crate::timeline_view::Onion>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        camera_guides: Option<crate::camera2d::Guides>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         light_table: Option<&'a crate::light_table::Data>,
     }
     let scene = serde_json::to_vec(&Metadata {
         scene: &document.scene,
+        camera_guides: (document.camera_guides != Default::default())
+            .then_some(document.camera_guides),
         light_table: (!document.light_table.data.is_default())
             .then_some(&document.light_table.data),
         onion: (document.onion.preferences() != crate::timeline_view::Onion::default())

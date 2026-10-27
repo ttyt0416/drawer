@@ -830,7 +830,7 @@ pub fn bounds(d: &Document, key: Key) -> Option<crate::scene::Rect> {
         }
     }
     let bounds = bounds_base(d, key)?;
-    let (matrix, _) = crate::keyframes::combined(d, key, false);
+    let (matrix, _) = crate::camera2d::display_matrix(d, key, false);
     if matrix.is_identity() {
         return Some(bounds);
     }

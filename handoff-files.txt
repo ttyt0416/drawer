@@ -875,3 +875,7 @@ crates/drawer-core/src/light_table.rs
 crates/drawer-core/src/light_table_verify.rs
 crates/drawer-app/src/light_table.rs
 docs/process/light-table.md
+crates/drawer-core/src/camera2d.rs
+crates/drawer-core/src/camera2d_verify.rs
+crates/drawer-app/src/camera2d.rs
+docs/process/camera-2d.md
