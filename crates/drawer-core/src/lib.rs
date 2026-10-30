@@ -520,3 +520,5 @@ pub mod timesheet_csv;
 pub mod timesheet_verify;
 
 pub mod timelapse;
+
+pub mod work_time;

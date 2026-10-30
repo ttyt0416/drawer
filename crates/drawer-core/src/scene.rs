@@ -216,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_time: Option<crate::work_time::Snapshot>,
     #[serde(
         default,
         skip_serializing_if = "crate::timeline_timing::Data::is_default"
@@ -344,6 +346,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.work_time.as_ref().is_some_and(|s| !s.valid()) {
+            return false;
+        }
         if self.last_color_deepen.as_ref().is_some_and(|r| !r.valid()) {
             return false;
         }

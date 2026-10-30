@@ -1511,3 +1511,9 @@ Open **Local timelapse recording** (`timelapse`). Start in a new local folder or
 Set a storage limit (default512MiB, maximum2GiB). Reaching the limit or a write failure pauses recording while preserving committed frames. Increase the limit or choose a new folder; old frames are never automatically deleted. Existing recording files are verified before resume. The folder is portable local data, not a build cache.
 
 Choose a recorded frame range and output FPS, then **Prepare frozen timelapse animation output**. The animation output window supports PNG sequence/GIF/APNG/WebP and verified local movies. Output duration is selected frame count divided by FPS. Changes in canvas size are centered on the largest selected canvas without resampling. Later recording/drawing changes are excluded from the frozen cutoff. Use an output outside the recording folder. Source canvases and committed recording files remain available after canceling output. Details: [timelapse recording](process/timelapse.md).
+## work-time | 문서별 작업시간 | 작업시간 시간 집계 일시정지 초기화 복구 로컬 내보내기 work time
+
+`work-time`에서 현재 문서의 시간·일시정지·초기화 확인/취소·시간 초기화 되돌리기·로컬 JSON 내보내기와 미저장 문서의 시간 복구 목록을 연다. 편집 입력 뒤5분 유휴까지 활성 편집 세션으로 집계하며 단순 마우스 이동·백그라운드·수동 일시정지·수면/5초 넘는 앱 정지를 제외한다. 여러 보기는 같은 문서를 중복 집계하지 않는다. 재개/포커스 복귀 뒤에는 새 편집 입력을 기다린다.
+
+시간 자동 갱신은 그림의 변경 표시나 그림 Undo에 영향을 주지 않는다. 정상 Save는 최신 시간을 자체문서에 넣고 로컬 기록은 저장 뒤 추가된 시간을 복구한다. 강제 종료 전 마지막 성공한 체크포인트 뒤의 시간은 복구할 수 없다. 초기화 되돌리기는 그림 Undo와 별도이며 재시작 뒤에도 남는다. 미저장 그림은 로컬 목록에서 시간만 명시적으로 연결할 수 있다. 기록 충돌/쓰기 실패는 안내하며 기존 파일을 덮어쓰지 않는다. JSON 출력에는 새 파일명을 선택한다.
+

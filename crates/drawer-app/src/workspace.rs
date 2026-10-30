@@ -82,6 +82,7 @@ impl Drawer {
             .controller
             .persisted_tool()
             .unwrap_or(self.selected);
+        self.work_time.attach(&mut document, self.storage.as_ref());
         let id = document.id;
         let view = document.view;
         self.documents.push(document);
@@ -120,6 +121,7 @@ impl Drawer {
         {
             self.finish_stroke();
         }
+        self.settle_work_time();
         self.sync_tool_properties();
         self.sync_active_view();
         if self
@@ -279,6 +281,7 @@ impl Drawer {
         if self.protected_sources.contains(&target) {
             return Err("Choose another path to keep the imported source unchanged.".into());
         }
+        self.settle_work_time();
         drawer_core::files::save(&mut self.documents[index], &target).map_err(|e| e.to_string())?;
         self.remember_file(&target);
         Ok(())
@@ -444,6 +447,7 @@ impl Drawer {
         }
     }
     fn remove_tab(&mut self, index: usize) {
+        self.settle_work_time();
         self.sync_active_view();
         let selected = self.active_tab.map(|tab| self.tabs[tab].id);
         let removed = self.tabs.remove(index);

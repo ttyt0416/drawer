@@ -12,6 +12,7 @@ impl Drawer {
         let budget = DEFAULT_DOCUMENT_BUDGET
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         let mut loaded = drawer_core::files::open(&path, budget).map_err(|e| e.to_string())?;
+        loaded.work_time = current.work_time.clone();
         loaded.id = current.id;
         loaded.view = current.view;
         loaded.tool = current.tool;

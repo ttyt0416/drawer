@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 102;
+pub(crate) const VERSION: u32 = 103;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -225,7 +225,16 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
         {
             return Err(invalid("Final camera and path guides require native101"));
         }
+        if version < 103 && document.scene.work_time.is_some() {
+            return Err(invalid("Work time identity requires native103"));
+        }
+        document.work_time = document.scene.work_time.take();
         document.camera_guides = document.scene.camera_guides.take().unwrap_or_default();
+        if document.scene.work_time.is_some()
+            || document.work_time.as_ref().is_some_and(|s| !s.valid())
+        {
+            return Err(invalid("Invalid work time metadata transport"));
+        }
         if !document.camera_guides.valid() {
             return Err(invalid("Invalid camera guide preferences"));
         }
@@ -596,6 +605,10 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
+    if document.scene.work_time.is_some() || document.work_time.as_ref().is_some_and(|s| !s.valid())
+    {
+        return Err(invalid("Invalid work time metadata transport"));
+    }
     if !crate::keyframes::valid_document(document)
         || !crate::timeline_timing::valid_document(document)
         || !crate::timeline_timing::original_hashes(document)
@@ -680,6 +693,8 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
         #[serde(flatten)]
         scene: &'a crate::scene::Scene,
         #[serde(skip_serializing_if = "Option::is_none")]
+        work_time: Option<&'a crate::work_time::Snapshot>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         onion: Option<crate::timeline_view::Onion>,
         #[serde(skip_serializing_if = "Option::is_none")]
         camera_guides: Option<crate::camera2d::Guides>,
@@ -688,6 +703,7 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     }
     let scene = serde_json::to_vec(&Metadata {
         scene: &document.scene,
+        work_time: document.work_time.as_ref(),
         camera_guides: (document.camera_guides != Default::default())
             .then_some(document.camera_guides),
         light_table: (!document.light_table.data.is_default())

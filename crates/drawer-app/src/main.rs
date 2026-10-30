@@ -156,6 +156,7 @@ mod vector_scope;
 mod velocity_pressure;
 mod view_commands;
 mod warp_filters;
+mod work_time;
 mod workspace;
 mod workspaces;
 use new_canvas::NewCanvas;
@@ -255,6 +256,7 @@ struct Drawer {
     animation_export: Box<animation_export::Panel>,
     timesheet: Box<timesheet::Panel>,
     timelapse: Box<timelapse::Panel>,
+    work_time: Box<work_time::Panel>,
     page_work: Box<page_work::Panel>,
     page_structure: Box<page_structure::Panel>,
     comics_view_session: std::collections::BTreeMap<u64, drawer_core::comic_view::Viewport>,
@@ -444,6 +446,7 @@ impl Drawer {
             animation_export: Default::default(),
             timesheet: Default::default(),
             timelapse: Default::default(),
+            work_time: Default::default(),
             page_work: Default::default(),
             page_structure: Default::default(),
             comics_view_session: Default::default(),
@@ -930,6 +933,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
         self.timesheet_window(ui.ctx());
         self.timelapse_tick(ui.ctx());
         self.timelapse_window(ui.ctx());
+        self.work_time_window(ui.ctx());
         self.timeline_window(ui.ctx());
         self.light_table_window(ui.ctx());
         self.timing_window(ui.ctx());
@@ -1004,6 +1008,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
             self.status = Some(e);
             ui.ctx().request_repaint();
         }
+        self.work_time_tick(ui.ctx());
         self.update_power();
         if let Err(e) = self.persist_workspace() {
             self.status = Some(e);
@@ -1018,6 +1023,7 @@ impl eframe::App for Drawer {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.finish_stroke();
         self.stop_timelapse();
+        self.settle_work_time();
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
@@ -2154,6 +2160,10 @@ impl eframe::App for Drawer {
                     eprintln!("Page work verification: {error}");
                     fail_smoke();
                 }
+                if let Err(error) = work_time::smoke(&acquisition_work) {
+                    eprintln!("Work time smoke failed: {error}");
+                    std::process::exit(1);
+                }
                 if let Err(error) = timelapse::smoke(&acquisition_work) {
                     eprintln!("Timelapse: {error}");
                     std::process::exit(1);
@@ -2277,7 +2287,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\ncolor_deepen=true\nlocal_inference=true\nmetallic_material=true\ntransform_handles=true\ntransform_policy=true\nfinishing_filters=true\nfilter_options=true\ncleanup_filters=true\ntext_layout=true\ntext_ime=true\ntext_reading=true\ntext_format=true\nfont_library=true\ntext_version=true\ntext_typeset=true\ntext_extensions=true\nstory_text=true\ncomic_composition=true\nraster_books=true\npage_structure=true\nbook_production=true\nshot_exchange=true\nanimation_timeline=true\ntimeline_timing=true\nlayer_keyframes=true\nonion_skin=true\nlight_table=true\ncamera_2d=true\ntimeline_audio=true\nanimation_export=true\nanimation_delivery=true\ntimesheet_exchange=true\ntimelapse=true\nepub_metadata=true\npage_management=true\nquick_filters=true\neffect_source_delete=true\ntransform_review=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\naudio_device={audio_device_report}\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\ncolor_deepen=true\nlocal_inference=true\nmetallic_material=true\ntransform_handles=true\ntransform_policy=true\nfinishing_filters=true\nfilter_options=true\ncleanup_filters=true\ntext_layout=true\ntext_ime=true\ntext_reading=true\ntext_format=true\nfont_library=true\ntext_version=true\ntext_typeset=true\ntext_extensions=true\nstory_text=true\ncomic_composition=true\nraster_books=true\npage_structure=true\nbook_production=true\nshot_exchange=true\nanimation_timeline=true\ntimeline_timing=true\nlayer_keyframes=true\nonion_skin=true\nlight_table=true\ncamera_2d=true\ntimeline_audio=true\nanimation_export=true\nanimation_delivery=true\ntimesheet_exchange=true\ntimelapse=true\nwork_time=true\nepub_metadata=true\npage_management=true\nquick_filters=true\neffect_source_delete=true\ntransform_review=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\naudio_device={audio_device_report}\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

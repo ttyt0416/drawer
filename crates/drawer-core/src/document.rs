@@ -158,6 +158,7 @@ impl RasterLayer {
 }
 #[derive(Clone)]
 pub struct Document {
+    pub work_time: Option<crate::work_time::Snapshot>,
     pub id: u64,
     pub color: crate::color_storage::Config,
     pub title: String,
@@ -209,6 +210,7 @@ impl Document {
         static NEXT_ID: AtomicU64 = AtomicU64::new(1);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
+            work_time: None,
             id,
             color: crate::color_storage::Config::legacy(),
             title: format!("Untitled {id}"),

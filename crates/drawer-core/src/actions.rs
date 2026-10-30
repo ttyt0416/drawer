@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 230] = [
+pub const EXTRA_COMMANDS: [&str; 231] = [
+    "work-time",
     "timelapse",
     "timesheet-exchange",
     "animation-export",
@@ -533,6 +534,7 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "work-time" => "Document work time, pause, reset, local recovery and export",
             "timelapse" => "Local timelapse recording, pause, resume and animation output",
             "timesheet-exchange" => "Local JSON / CSV timesheet and shared cel exchange",
             "animation-export" => "Animation file output (PNG / APNG / GIF / WebP / local movie)",

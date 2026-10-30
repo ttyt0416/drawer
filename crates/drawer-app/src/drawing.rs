@@ -114,6 +114,7 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub work_input: Option<u64>,
     pub text_tool_active: bool,
     pub text_tool_request: Option<text_tool::Request>,
     text_capture: Option<Box<text_tool::Capture>>,
@@ -297,6 +298,7 @@ impl Drawing {
         self.ownership.clear();
     }
     pub fn prepare(&mut self, ctx: &egui::Context) {
+        self.work_input = None;
         self.edit_path_points = ctx.input(|i| i.modifiers.alt);
 
         let rect = ctx.content_rect();
@@ -1200,6 +1202,16 @@ impl Drawing {
                     continue;
                 }
             };
+            let work_pos = egui::pos2(event.position[0] as f32, event.position[1] as f32);
+            if enabled
+                && ((event.phase == Phase::Down
+                    && rect.contains(work_pos)
+                    && ui.clip_rect().contains(work_pos)
+                    && ui.ctx().layer_id_at(work_pos) == Some(response.layer_id))
+                    || (event.phase == Phase::Move && self.active_view() == Some(view)))
+            {
+                self.work_input = Some(doc.id);
+            }
             if self.mode == super::precision::Mode::Eyedropper
                 && let Some(p) = self.sample_pending
                 && p.document == doc.id

@@ -902,3 +902,8 @@ crates/drawer-core/src/timelapse.rs
 crates/drawer-core/src/timelapse_tests.rs
 crates/drawer-app/src/timelapse.rs
 docs/process/timelapse.md
+crates/drawer-core/src/work_time.rs
+crates/drawer-core/src/work_time_tests.rs
+crates/drawer-app/src/work_time.rs
+docs/process/work-time.md
+crates/drawer-platform/src/work_clock.rs
