@@ -1502,3 +1502,12 @@ Open **Local timesheet and shared cel exchange** (`timesheet-exchange`). Capture
 Import either sheet through **Import own JSON / CSV**. Review, confirm, then add an independent document. Exact rational FPS, track/cel order, exposure IDs, offsets, visibility/opacity and shared editable raster cel references are restored. One Undo removes the import; Redo restores it. Missing or modified PNGs, invalid frames/IDs, unsupported versions and proprietary formats are rejected. Source files are preserved. Save the result as `.drawer` for embedded pixels and cel sharing. Source layers/vectors/text, masks, keyframes, audio and higher precision are outside this raster interchange; the original native document is unchanged.
 
 Save/load output presets locally. Loading a preset requires a fresh capture and confirmation. Details and schema: [timesheet exchange](process/timesheet.md).
+
+
+## Local timelapse recording (206)
+
+Open **Local timelapse recording** (`timelapse`). Start in a new local folder or resume a folder containing Drawer `timelapse.json`. Recording is bound to the chosen canvas and observes changed committed states at most twice per second. Unchanged pixels are not duplicated. Pause/Stop and application exit also flush the latest committed state; closing only this panel keeps recording. Paused time is excluded. Captures are independent8-bit sRGB PNGs including visible paper/drafts; source precision, drawing Undo and normal document saving remain independent.
+
+Set a storage limit (default512MiB, maximum2GiB). Reaching the limit or a write failure pauses recording while preserving committed frames. Increase the limit or choose a new folder; old frames are never automatically deleted. Existing recording files are verified before resume. The folder is portable local data, not a build cache.
+
+Choose a recorded frame range and output FPS, then **Prepare frozen timelapse animation output**. The animation output window supports PNG sequence/GIF/APNG/WebP and verified local movies. Output duration is selected frame count divided by FPS. Changes in canvas size are centered on the largest selected canvas without resampling. Later recording/drawing changes are excluded from the frozen cutoff. Use an output outside the recording folder. Source canvases and committed recording files remain available after canceling output. Details: [timelapse recording](process/timelapse.md).

@@ -9,6 +9,8 @@ use std::{
 };
 pub(super) struct Panel {
     open: bool,
+    external: Option<Box<Document>>,
+    external_root: Option<PathBuf>,
     path: String,
     options: Options,
     overwrite: bool,
@@ -33,6 +35,8 @@ impl Default for Panel {
     fn default() -> Self {
         Self {
             open: false,
+            external: None,
+            external_root: None,
             path: String::new(),
             options: Options {
                 first: 0,
@@ -109,6 +113,34 @@ impl Drop for PreviewJob {
     }
 }
 impl Drawer {
+    pub(super) fn begin_recorded_animation_export(
+        &mut self,
+        document: Document,
+        root: PathBuf,
+    ) -> Result<(), String> {
+        if self.animation_export.job.is_some() {
+            return Err("Finish or cancel the current animation output first".into());
+        }
+        let p = &mut self.animation_export;
+        p.options.first = 0;
+        p.options.last = document
+            .animation
+            .as_ref()
+            .ok_or("Recording output timeline missing")?
+            .frames
+            - 1;
+        p.external = Some(Box::new(document));
+        p.external_root = Some(root);
+        p.snapshot = None;
+        p.preview = None;
+        p.preview_job = None;
+        p.path.clear();
+        p.options.audio = false;
+        p.ack = false;
+        p.open = true;
+        p.notice="Frozen committed timelapse frames. Later recording and drawing changes will not affect this output. Choose format/range and capture; use an output outside the recording folder.".into();
+        Ok(())
+    }
     pub(super) fn begin_animation_export(&mut self) -> Result<(), String> {
         self.finish_stroke();
         if self.transform_unconfirmed()
@@ -123,6 +155,8 @@ impl Drawer {
             self.animation_export.open = true;
             return Ok(());
         }
+        self.animation_export.external = None;
+        self.animation_export.external_root = None;
         self.animation_export.options.first = 0;
         self.animation_export.options.last = a.frames - 1;
         self.animation_export.snapshot = None;
@@ -133,35 +167,43 @@ impl Drawer {
         Ok(())
     }
     fn prepare_animation_export(&mut self) -> Result<(), String> {
-        self.finish_stroke();
-        if self.transform_unconfirmed()
-            || self.inference_unconfirmed()
-            || self.text_editor.draft.is_some()
-        {
-            return Err("Finish pending drawing edits first".into());
+        if self.animation_export.external.is_none() {
+            self.finish_stroke();
+            if self.transform_unconfirmed()
+                || self.inference_unconfirmed()
+                || self.text_editor.draft.is_some()
+            {
+                return Err("Finish pending drawing edits first".into());
+            }
         }
         if self.animation_export.job.is_some() {
             return Err("Wait for or cancel the current output".into());
         }
-        let d = &self.documents[self.active.ok_or("Choose an animation")?];
+        let d = if let Some(d) = &self.animation_export.external {
+            d.as_ref()
+        } else {
+            &self.documents[self.active.ok_or("Choose an animation")?]
+        };
         let budget = DEFAULT_DOCUMENT_BUDGET.saturating_sub(
             self.documents
                 .iter()
                 .map(Document::resident_bytes)
                 .sum::<usize>(),
         );
-        let p = &mut self.animation_export;
-        p.snapshot = Some(core::prepare_with(
+        let snapshot = core::prepare_with(
             d,
-            p.options,
+            self.animation_export.options,
             budget,
-            if p.watermark.trim().is_empty() {
+            if self.animation_export.watermark.trim().is_empty() {
                 None
             } else {
-                Some(Path::new(&p.watermark))
+                Some(Path::new(&self.animation_export.watermark))
             },
-            p.encoder.as_ref(),
-        )?);
+            self.animation_export.encoder.as_ref(),
+        )?;
+        let source = d.title.clone();
+        let p = &mut self.animation_export;
+        p.snapshot = Some(snapshot);
         let mut captured = p.snapshot.as_ref().unwrap().clone();
         // The display preview converts embedded working profiles to display sRGB.
         captured.options.view.icc = false;
@@ -177,7 +219,7 @@ impl Drawer {
             let _ = tx.send(result);
         });
         p.preview_job = Some(PreviewJob { cancel, receiver });
-        self.animation_export.source = d.title.clone();
+        self.animation_export.source = source;
         self.animation_export.ack = false;
         self.animation_export.notice =
             "Snapshot captured. Later edits and playback changes will not affect this output."
@@ -190,6 +232,18 @@ impl Drawer {
         }
         if self.animation_export.path.trim().is_empty() {
             return Err("Choose a local output filename or new sequence folder".into());
+        }
+        if let Some(root) = &self.animation_export.external_root {
+            let path = Path::new(self.animation_export.path.trim());
+            let parent = path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."))
+                .canonicalize()
+                .map_err(|e| e.to_string())?;
+            if parent.starts_with(root) {
+                return Err("Choose an output outside the recording folder to preserve its journal and frames".into());
+            }
         }
         let snapshot = self
             .animation_export
@@ -412,6 +466,8 @@ impl Drawer {
         });
         p.open = open;
         if !open {
+            p.external = None;
+            p.external_root = None;
             p.snapshot = None;
             p.preview = None;
             p.preview_job = None;
@@ -576,6 +632,59 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
 fn png_decoder(path: &Path) -> Result<drawer_core::animation_export_verify::PngReader, String> {
     drawer_core::animation_export_verify::reader(path)
 }
+/// Installed smoke bridge exercises the external committed-record source without switching canvases.
+pub(super) fn smoke_recorded_source(
+    app: &mut Drawer,
+    ctx: &egui::Context,
+    root: &Path,
+) -> Result<u32, String> {
+    let source = app.animation_export.external_root.clone().ok_or_else(|| {
+        format!(
+            "Timelapse did not prepare frozen output: {}",
+            app.timelapse.notice
+        )
+    })?;
+    let frames = app
+        .animation_export
+        .external
+        .as_ref()
+        .unwrap()
+        .animation
+        .as_ref()
+        .unwrap()
+        .frames;
+    app.animation_export.options.format = Format::Apng;
+    app.prepare_animation_export()?;
+    app.animation_export.ack = true;
+    app.animation_export.path = source.join("preserve.apng").to_string_lossy().into_owned();
+    if app.start_animation_export(ctx).is_ok() {
+        return Err("Recording source folder overwrite guard failed".into());
+    }
+    app.animation_export.options.format = Format::PngSequence;
+    app.prepare_animation_export()?;
+    app.animation_export.ack = true;
+    let folder = root.join("recorded-output");
+    app.animation_export.path = folder.to_string_lossy().into_owned();
+    app.start_animation_export(ctx)?;
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut t = 5000.;
+    while app.animation_export.job.is_some() {
+        t += 0.05;
+        input_replay::frame(ctx, app, t, vec![]);
+        if std::time::Instant::now() > until {
+            return Err("Recorded frame output timeout".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    if !folder.join("animation.json").is_file() {
+        return Err(format!(
+            "Recorded output failed: {}",
+            app.animation_export.notice
+        ));
+    }
+    Ok(frames)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

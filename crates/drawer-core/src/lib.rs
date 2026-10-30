@@ -518,3 +518,5 @@ pub mod movie_export;
 pub mod timesheet;
 pub mod timesheet_csv;
 pub mod timesheet_verify;
+
+pub mod timelapse;

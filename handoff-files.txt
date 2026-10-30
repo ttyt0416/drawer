@@ -898,3 +898,7 @@ crates/drawer-core/src/timesheet_verify.rs
 crates/drawer-core/src/timesheet_tests.rs
 crates/drawer-app/src/timesheet.rs
 docs/process/timesheet.md
+crates/drawer-core/src/timelapse.rs
+crates/drawer-core/src/timelapse_tests.rs
+crates/drawer-app/src/timelapse.rs
+docs/process/timelapse.md
