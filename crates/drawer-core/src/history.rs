@@ -260,6 +260,7 @@ impl Document {
         crate::layer_catalog::reconcile_scene(&self.scene, &mut after)?;
         let mut source_check = self.snapshot();
         source_check.scene = after.clone();
+        crate::clip_edit::reconcile(self, &mut source_check)?;
         crate::timelines::reconcile(self, &mut source_check)?;
         after = source_check.scene.clone();
         crate::keyframes::validate_edit(self, &source_check)?;
@@ -347,6 +348,7 @@ impl Document {
         crate::file_objects::prune(&mut after);
         crate::layer_groups::prune(&mut after)?;
         crate::paper_background::prune(&mut after);
+        crate::clip_edit::reconcile(self, &mut after)?;
         crate::timelines::reconcile(self, &mut after)?;
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;

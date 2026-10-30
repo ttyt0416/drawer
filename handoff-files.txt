@@ -914,3 +914,8 @@ crates/drawer-core/src/timeline_playback.rs
 crates/drawer-core/src/timeline_playback_tests.rs
 crates/drawer-app/src/timelines.rs
 docs/process/timelines-playback.md
+crates/drawer-core/src/clip_edit.rs
+crates/drawer-core/src/clip_edit_tests.rs
+crates/drawer-app/src/clip_edit.rs
+crates/drawer-app/src/clip_edit_verify.rs
+docs/process/timeline-clips.md

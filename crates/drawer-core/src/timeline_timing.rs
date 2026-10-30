@@ -58,6 +58,8 @@ pub struct AudioClip {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Data {
+    #[serde(default, skip_serializing_if = "crate::clip_edit::Data::is_default")]
+    pub edit: Box<crate::clip_edit::Data>,
     pub next: u64,
     pub playback: Option<Playback>,
     pub labels_linked: bool,
@@ -68,6 +70,7 @@ pub struct Data {
 impl Default for Data {
     fn default() -> Self {
         Self {
+            edit: Default::default(),
             next: 1,
             playback: None,
             labels_linked: true,
@@ -85,7 +88,8 @@ impl Data {
         if self.is_default() {
             0
         } else {
-            256 + self.clips.len() * 40
+            256 + self.edit.bytes()
+                + self.clips.len() * 40
                 + self
                     .audio
                     .iter()
@@ -110,7 +114,8 @@ impl Data {
             .collect::<Vec<_>>();
         let mut clips = self.clips.iter().collect::<Vec<_>>();
         clips.sort_by_key(|c| (c.track, c.first));
-        self.next > 0
+        self.edit.valid(&self.clips)
+            && self.next > 0
             && clips
                 .windows(2)
                 .all(|c| c[0].track != c[1].track || c[0].end <= c[1].first)
@@ -419,6 +424,7 @@ pub(crate) fn reconcile(s: &mut DocumentState) {
         s.scene.timing.clips.clear();
         s.scene.timing.audio.clear();
         s.scene.timing.playback = None;
+        crate::clip_edit::prune(&mut s.scene.timing);
         return;
     };
     s.scene.timing.clips.retain_mut(|c| {
@@ -441,6 +447,7 @@ pub(crate) fn reconcile(s: &mut DocumentState) {
         p.end = p.end.min(a.frames);
         p.first = p.first.min(p.end - 1);
     }
+    crate::clip_edit::prune(&mut s.scene.timing);
 }
 pub fn playback(
     d: &Document,

@@ -1024,6 +1024,7 @@ pub(crate) fn reconcile(before: &Document, s: &mut DocumentState) -> Result<(), 
         a.timing
             .clips
             .retain(|c| a.tracks.iter().any(|t| t.track == c.track));
+        crate::clip_edit::prune(&mut a.timing);
         a.shots.entries.retain(|b| {
             live.contains(&Key::Track(b.track))
                 && b.cells.iter().all(|c| {

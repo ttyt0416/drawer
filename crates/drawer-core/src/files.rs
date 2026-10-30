@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 104;
+pub(crate) const VERSION: u32 = 105;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -224,6 +224,18 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
         {
             return Err(invalid("Final camera and path guides require native101"));
+        }
+        if version < 105
+            && (!document.scene.timing.edit.is_default()
+                || document.scene.timelines.entries.iter().any(|e| {
+                    e.saved
+                        .as_ref()
+                        .is_some_and(|a| !a.timing.edit.is_default())
+                }))
+        {
+            return Err(invalid(
+                "Clip folders and range labels require document version105",
+            ));
         }
         if version < 104 && !document.scene.timelines.is_default() {
             return Err(invalid("Multiple timelines require native104"));

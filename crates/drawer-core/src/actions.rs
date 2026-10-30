@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 232] = [
+pub const EXTRA_COMMANDS: [&str; 233] = [
+    "timeline-clips",
     "timelines-playback",
     "work-time",
     "timelapse",
@@ -535,6 +536,9 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "timeline-clips" => {
+                "Cel flip, clip editing, track split / merge and split timeline view"
+            }
             "timelines-playback" => "Multiple timelines / shots, timecode, playback and precompute",
             "work-time" => "Document work time, pause, reset, local recovery and export",
             "timelapse" => "Local timelapse recording, pause, resume and animation output",

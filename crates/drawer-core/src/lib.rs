@@ -526,3 +526,5 @@ pub mod work_time;
 pub mod timelines;
 
 pub mod timeline_playback;
+
+pub mod clip_edit;
