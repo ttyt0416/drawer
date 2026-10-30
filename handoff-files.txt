@@ -907,3 +907,4 @@ crates/drawer-core/src/work_time_tests.rs
 crates/drawer-app/src/work_time.rs
 docs/process/work-time.md
 crates/drawer-platform/src/work_clock.rs
+crates/drawer-app/src/work_time_report.rs

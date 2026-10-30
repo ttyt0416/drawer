@@ -26,6 +26,9 @@ impl Entry {
 }
 pub(super) struct Panel {
     pub open: bool,
+    pub(super) report: Option<super::work_time_report::Report>,
+    pub report_current: Option<egui::Rect>,
+    pub report_open: Option<egui::Rect>,
     entries: HashMap<u64, Entry>,
     clock: core::Clock,
     awake_base: u64,
@@ -45,6 +48,9 @@ impl Default for Panel {
     fn default() -> Self {
         Self {
             open: false,
+            report: None,
+            report_current: None,
+            report_open: None,
             entries: HashMap::new(),
             clock: Default::default(),
             awake_base: drawer_platform::work_clock::milliseconds().unwrap_or(0),
@@ -245,6 +251,26 @@ impl Drawer {
         }
         Ok(())
     }
+    pub(super) fn work_time_records(&mut self, all: bool) -> Result<Vec<Record>, String> {
+        self.settle_work_time();
+        if all {
+            Ok(self
+                .documents
+                .iter()
+                .filter_map(|d| self.work_time.entries.get(&d.id).map(|e| e.record.clone()))
+                .collect())
+        } else {
+            let n = self.active.ok_or("Choose a drawing")?;
+            Ok(vec![
+                self.work_time
+                    .entries
+                    .get(&self.documents[n].id)
+                    .ok_or("Time record unavailable")?
+                    .record
+                    .clone(),
+            ])
+        }
+    }
     fn export_work_time(&mut self, path: &Path) -> Result<(), String> {
         self.settle_work_time();
         let n = self.active.ok_or("Choose a drawing")?;
@@ -329,6 +355,10 @@ impl Drawer {
                     let b=ui.button("Cancel time reset");self.work_time.cancel=Some(b.rect);if b.clicked(){self.work_time.confirm_reset=None;}
                 });}else{self.work_time.confirm_reset=None;}
                 if ui.button("Export local time JSON…").clicked(){action=4;}
+                ui.horizontal(|ui|{
+                    let r=ui.button("Prepare current document CSV");self.work_time.report_current=Some(r.rect);if r.clicked(){action=7;}
+                    let r=ui.button("Prepare open documents CSV");self.work_time.report_open=Some(r.rect);if r.clicked(){action=8;}
+                });
                 ui.label("Normal native save includes the latest time snapshot. Local work-time journals recover newer time without changing the saved drawing. Save As keeps the identity. An independently opened copy receives a separate identity.");
             }else{ui.label("Choose a drawing to view its work time.");}
             ui.separator();if ui.button("Find local time records for unsaved/recovered drawings").clicked(){action=5;}
@@ -365,6 +395,8 @@ if ui.button("Cancel recovery").clicked(){action=6;}});}
                     Err(e) => Err(e),
                 }
             }
+            7 => self.prepare_work_time_report(false),
+            8 => self.prepare_work_time_report(true),
             6 => {
                 self.work_time.recover_choice = None;
                 Ok(())
