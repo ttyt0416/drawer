@@ -528,3 +528,7 @@ pub mod timelines;
 pub mod timeline_playback;
 
 pub mod clip_edit;
+
+pub mod graph_edit;
+
+pub mod graph_verify;

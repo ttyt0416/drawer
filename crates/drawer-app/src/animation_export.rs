@@ -449,14 +449,13 @@ impl Drawer {
                     let fps=s.fps();
                     ui.label(format!("Captured {} · revision{} · {}×{} · origin {:?} · {} frames ({}–{}) · {}/{} FPS · camera {}",p.source,s.revision,s.layout.width,s.layout.height,s.layout.origin,s.count(),s.options.first+1,s.options.last+1,fps.numerator,fps.denominator,s.options.view.camera));
                     ui.label(s.warnings());
+                    let r=ui.button("Discard captured snapshot / change settings");p.discard=Some(r.rect);if r.clicked(){action=6;}
                     if let Some(image)=&p.preview {ui.add(egui::Image::new(image).max_size(egui::vec2(420.,220.)));ui.label("Captured first frame; transparency uses the panel background. Camera / include policy above is already applied.");}
                     if p.preview_job.is_some(){ui.label("Preparing captured first-frame preview…");}
                     ui.label("Destination for this captured job");ui.text_edit_singleline(&mut p.path);
                     if s.options.format!=Format::PngSequence {ui.checkbox(&mut p.overwrite,"Allow replacement of the existing output file");}
                     ui.checkbox(&mut p.ack,"I reviewed the output preview, format losses, timing and replacement policy");
                     let r=ui.add_enabled(p.ack && p.preview.is_some(),egui::Button::new("Export captured animation"));p.start=Some(r.rect);if r.clicked(){action=2;}
-                    let r=ui.button("Discard captured snapshot / change settings");p.discard=Some(r.rect);
-                    if r.clicked(){p.snapshot=None;p.preview=None;p.preview_job=None;p.ack=false;}
                 }
             });
             if let Some(job)=&p.job {
@@ -483,6 +482,13 @@ impl Drawer {
             3 => self.verify_animation_encoder(),
             4 => self.animation_preset(false),
             5 => self.animation_preset(true),
+            6 => {
+                self.animation_export.snapshot = None;
+                self.animation_export.preview = None;
+                self.animation_export.preview_job = None;
+                self.animation_export.ack = false;
+                Ok(())
+            }
             _ => Ok(()),
         };
         if let Err(e) = result {
@@ -748,7 +754,22 @@ mod tests {
         }
         assert!(app.animation_export.formats.is_empty());
         assert!(app.animation_export.camera.is_none());
+        // Preview arrival must not move the cancel target between pointer down/up.
+        app.animation_export.preview_job = None;
+        app.animation_export.preview = None;
+        for _ in 0..3 {
+            frame(&mut app, &mut time, vec![]);
+        }
         let discard = app.animation_export.discard.unwrap();
+        app.animation_export.preview = Some(ctx.load_texture(
+            "preview-arrival-test",
+            egui::ColorImage::from_rgba_unmultiplied([64, 64], &vec![0; 64 * 64 * 4]),
+            egui::TextureOptions::NEAREST,
+        ));
+        for _ in 0..3 {
+            frame(&mut app, &mut time, vec![]);
+        }
+        assert_eq!(app.animation_export.discard, Some(discard));
         click(&mut app, &mut time, discard);
         assert!(app.animation_export.snapshot.is_none());
         assert!(!app.animation_export.ack);
