@@ -480,7 +480,7 @@ pub fn properties(
     Ok(state)
 }
 const HEADER: &str = "format,version,width,height,dpi,shot_id,name,start,end,fps_num,fps_den,dialogue,cell_frame,cell_path,x,y,cell_name";
-fn quote(s: &str) -> String {
+pub(crate) fn quote(s: &str) -> String {
     if s.contains([',', '\"', '\n', '\r']) {
         format!("\"{}\"", s.replace('\"', "\"\""))
     } else {
@@ -523,7 +523,14 @@ pub fn csv(file: &File) -> Result<Vec<u8>, String> {
     }
     Ok(text.into_bytes())
 }
-fn rows(text: &str) -> Result<Vec<Vec<String>>, String> {
+pub(crate) fn rows(text: &str) -> Result<Vec<Vec<String>>, String> {
+    csv_rows(text, 17, 10001)
+}
+pub(crate) fn csv_rows(
+    text: &str,
+    max_columns: usize,
+    max_rows: usize,
+) -> Result<Vec<Vec<String>>, String> {
     if text.len() > LIMIT {
         return Err("Shot CSV limit4MiB".into());
     }
@@ -565,7 +572,7 @@ fn rows(text: &str) -> Result<Vec<Vec<String>>, String> {
             _ if ended || c == '\"' => return Err("Malformed quoted shot CSV".into()),
             _ => field.push(c),
         }
-        if rows.len() > 10001 || row.len() > 17 {
+        if rows.len() > max_rows || row.len() > max_columns {
             return Err("Shot CSV row/column limit".into());
         }
     }

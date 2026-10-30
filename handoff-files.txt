@@ -892,3 +892,9 @@ crates/drawer-core/src/animation_codecs.rs
 crates/drawer-core/src/movie_export.rs
 crates/drawer-core/src/animation_delivery_verify.rs
 crates/drawer-core/src/animation_delivery_tests.rs
+crates/drawer-core/src/timesheet.rs
+crates/drawer-core/src/timesheet_csv.rs
+crates/drawer-core/src/timesheet_verify.rs
+crates/drawer-core/src/timesheet_tests.rs
+crates/drawer-app/src/timesheet.rs
+docs/process/timesheet.md

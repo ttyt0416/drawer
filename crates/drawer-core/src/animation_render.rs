@@ -23,6 +23,10 @@ pub struct View {
     pub drafts: bool,
     pub frame_lines: bool,
     pub transparent: bool,
+    /// Cel interchange preserves actual paper layers without adding an opaque matte.
+    /// This internal policy is deliberately absent from user image-output presets.
+    #[serde(skip)]
+    pub preserve_paper: bool,
     pub shadows: bool,
     pub icc: bool,
     pub matte: [u8; 3],
@@ -39,6 +43,7 @@ impl Default for View {
             drafts: false,
             frame_lines: true,
             transparent: true,
+            preserve_paper: false,
             shadows: true,
             icc: true,
             matte: [255; 3],
@@ -148,6 +153,7 @@ pub(crate) fn apply(d: &mut Document, v: View, top: bool) -> Result<(), String> 
         d.scene.keyframes.camera_output = false;
     }
     if v.transparent
+        && !v.preserve_paper
         && let Some(id) = d.scene.paper_background
     {
         let n = crate::layers::index(d, id).ok_or("Paper layer missing")?;

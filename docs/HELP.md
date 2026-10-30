@@ -1493,3 +1493,12 @@ Light table (201): open `light-table` to register a common or per-cel live layer
 
 
 Timeline audio (203): open `timeline-audio` for local WAV or explicit raw PCM16LE. Prepare a source snapshot, review16-bit conversion when needed, then insert it at a frame. Clips / volume edits name, start frame, volume0..400% and mute with one Undo. Linked originals keep saved PCM and report missing/changed files; refresh requires confirmation for all shared clips. Play with timeline uses the Windows device sample clock; missing devices retain visual playback and WAV export. Scrub current frame plays at most100ms and can follow frame changes. WAV output fixes the included range, sample rate, mono/stereo and mixing snapshot; later edits do not change the job. Confirm replacement of existing WAV files; original files and drawings are protected. Cancel leaves existing outputs intact and removes only owned incomplete files. See `docs/process/timeline-audio.md` for supported formats, limits and clock measurements.
+
+
+## Timesheet and shared cel exchange (205)
+
+Open **Local timesheet and shared cel exchange** (`timesheet-exchange`). Capture the active animation, choose cel name / serial / folder+cel / folder+serial filenames, drafts, full source canvas or overflow, and unexposed/unassigned cel inclusion. Review the frozen8-bit sRGB raster conversion before exporting into a new local folder. The folder contains both own JSON and CSV sheets plus one PNG per unique cel source. Common outside layers can be included as one separate background PNG captured at the current frame, preserving fixed background placement when shared cels use different offsets. Existing folders are preserved. Cancel removes owned private output and keeps the drawing unchanged.
+
+Import either sheet through **Import own JSON / CSV**. Review, confirm, then add an independent document. Exact rational FPS, track/cel order, exposure IDs, offsets, visibility/opacity and shared editable raster cel references are restored. One Undo removes the import; Redo restores it. Missing or modified PNGs, invalid frames/IDs, unsupported versions and proprietary formats are rejected. Source files are preserved. Save the result as `.drawer` for embedded pixels and cel sharing. Source layers/vectors/text, masks, keyframes, audio and higher precision are outside this raster interchange; the original native document is unchanged.
+
+Save/load output presets locally. Loading a preset requires a fresh capture and confirmation. Details and schema: [timesheet exchange](process/timesheet.md).

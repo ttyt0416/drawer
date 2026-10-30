@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 228] = [
+pub const EXTRA_COMMANDS: [&str; 229] = [
+    "timesheet-exchange",
     "animation-export",
     "timeline-timing",
     "layer-keyframes",
@@ -531,7 +532,8 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
-            "animation-export" => "Animation file output (PNG / APNG)",
+            "timesheet-exchange" => "Local JSON / CSV timesheet and shared cel exchange",
+            "animation-export" => "Animation file output (PNG / APNG / GIF / WebP / local movie)",
             "timeline-audio" => "Local WAV / PCM, synchronized audio, scrub and WAV export",
             "camera-2d" => "2D final camera, interpolation curves and path guides",
             "light-table" => "Light table references, placement, per-cel lists and editing pin",

@@ -549,7 +549,7 @@ fn protected(s: &Snapshot, path: &Path) -> bool {
         .iter()
         .any(|p| p.canonicalize().unwrap_or_else(|_| p.clone()) == candidate)
 }
-fn write_png(s: &Snapshot, path: &Path, pixels: &[u8]) -> Result<(), String> {
+pub(crate) fn write_png(s: &Snapshot, path: &Path, pixels: &[u8]) -> Result<(), String> {
     let file = fs::OpenOptions::new()
         .create_new(true)
         .write(true)

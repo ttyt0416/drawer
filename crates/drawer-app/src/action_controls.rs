@@ -501,6 +501,7 @@ impl Drawer {
                 "camera-2d" => self.begin_camera2d()?,
                 "light-table" => self.begin_light_table()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
+                "timesheet-exchange" => self.begin_timesheet()?,
                 "shot-exchange" => self.begin_shot_exchange()?,
                 "book-production" => self.begin_book_workflow()?,
                 "page-structure" => self.begin_page_structure()?,
