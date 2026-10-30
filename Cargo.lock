@@ -841,8 +841,10 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "epaint_default_fonts",
+ "gif",
  "icu_casemap",
  "image",
+ "image-webp",
  "lopdf",
  "moxcms",
  "png",

@@ -509,3 +509,8 @@ pub mod camera2d_verify;
 pub mod audio;
 pub mod audio_mix;
 pub mod audio_verify;
+
+pub mod animation_codecs;
+pub mod animation_delivery_verify;
+pub mod animation_render;
+pub mod movie_export;

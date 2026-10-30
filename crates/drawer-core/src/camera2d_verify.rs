@@ -313,6 +313,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
                 last: 4,
                 format: Default::default(),
                 plays: 1,
+                ..Default::default()
             },
             B,
         )?;

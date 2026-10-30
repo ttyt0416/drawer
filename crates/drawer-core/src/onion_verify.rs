@@ -247,6 +247,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
                 last: 3,
                 format: Default::default(),
                 plays: 1,
+                ..Default::default()
             },
             B,
         )?;

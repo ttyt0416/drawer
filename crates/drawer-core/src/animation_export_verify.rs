@@ -80,6 +80,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             last: 2,
             format: Format::PngSequence,
             plays: 0,
+            ..Default::default()
         };
         check(
             output::prepare(&d, Options { last: 3, ..opts }, B).is_err()
@@ -206,6 +207,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
                 last: 2,
                 format: Format::Apng,
                 plays: 1,
+                ..Default::default()
             },
             B,
         )?;

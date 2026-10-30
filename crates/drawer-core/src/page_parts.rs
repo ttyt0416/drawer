@@ -113,10 +113,27 @@ impl Part {
     pub fn document(&self) -> Option<&Document> {
         self.source.as_ref().map(|s| &s.document)
     }
+    pub fn source_hash(&self) -> [u8; 32] {
+        self.hash
+    }
     pub fn export_document(&self) -> Option<&Document> {
         self.source
             .as_ref()
             .map(|s| s.export.as_deref().unwrap_or(&s.document))
+    }
+    pub(crate) fn output_policy(
+        &mut self,
+        view: crate::animation_render::View,
+    ) -> Result<(), String> {
+        if let Some(source) = &self.source {
+            let mut source = (**source).clone();
+            let mut document =
+                crate::layer_merge::preview(&source.document.snapshot(), self.frame)?;
+            crate::animation_render::apply(&mut document, view, false)?;
+            source.export = Some(Box::new(document));
+            self.source = Some(Arc::new(source));
+        }
+        Ok(())
     }
     pub fn open(&self) -> Result<Document, String> {
         let d = self.document().ok_or("Missing embedded page")?;

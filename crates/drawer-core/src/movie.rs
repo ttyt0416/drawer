@@ -491,7 +491,11 @@ pub fn decode(
         audio,
     })
 }
-fn run(command: &mut Command, limit: usize, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
+pub(crate) fn run(
+    command: &mut Command,
+    limit: usize,
+    cancel: &AtomicBool,
+) -> Result<Vec<u8>, String> {
     if cancel.load(Ordering::Relaxed) {
         return Err("Movie import canceled".into());
     }

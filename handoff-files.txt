@@ -887,3 +887,8 @@ crates/drawer-app/src/audio.rs
 docs/process/timeline-audio.md
 scripts/test-cleanup.ps1
 docs/process/cache-cleanup.md
+crates/drawer-core/src/animation_render.rs
+crates/drawer-core/src/animation_codecs.rs
+crates/drawer-core/src/movie_export.rs
+crates/drawer-core/src/animation_delivery_verify.rs
+crates/drawer-core/src/animation_delivery_tests.rs

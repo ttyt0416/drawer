@@ -689,6 +689,15 @@ impl<'a> Renderer<'a> {
         {
             return Ok(Sample::default());
         }
+        self.output_sample(point)
+    }
+    /// The output rectangle is validated by the animation snapshot. Unlike viewport sampling,
+    /// this also renders preserved content beyond the original canvas.
+    pub(crate) fn output_sample(&self, point: Point) -> Result<Sample, String> {
+        let d = self.document;
+        if point.iter().any(|v| !v.is_finite()) {
+            return Err("Nonfinite output point".into());
+        }
         let point = self.plan().camera.map(point);
         let pixel = point.map(|v| v.floor() as i64);
         let original = d
