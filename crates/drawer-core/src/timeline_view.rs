@@ -221,6 +221,26 @@ pub fn preview(
     side: u32,
     budget: usize,
 ) -> Result<Preview, String> {
+    preview_cancellable(
+        d,
+        track,
+        only,
+        onion,
+        side,
+        budget,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+pub fn preview_cancellable(
+    d: &Document,
+    track: Option<u64>,
+    only: bool,
+    onion: Onion,
+    side: u32,
+    budget: usize,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Preview, String> {
+    crate::book_io::check_cancel(cancel)?;
     let a = d.animation.as_ref().ok_or("Choose an animation document")?;
     if d.current_frame >= a.frames
         || side == 0
@@ -330,6 +350,7 @@ pub fn preview(
     let mut pixels = Vec::with_capacity((width * height) as usize);
     let mut overlay = Vec::with_capacity((width * height) as usize);
     for y in 0..height {
+        crate::book_io::check_cancel(cancel)?;
         for x in 0..width {
             let point = [
                 (x as f64 + 0.5) * d.width as f64 / width as f64,

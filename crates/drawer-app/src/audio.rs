@@ -299,14 +299,16 @@ impl Drawer {
         }
         let start = self.documents[n].current_frame;
         self.begin_timeline_editor()?;
-        if self.documents[n]
-            .animation
-            .as_ref()
-            .is_some_and(|a| !a.audio.is_empty())
+        if !self.timeline_silent_preview(n)
+            && self.documents[n]
+                .animation
+                .as_ref()
+                .is_some_and(|a| !a.audio.is_empty())
             && let Err(e) = self.start_audio(n, start, repeat, false)
         {
             self.audio.notice = format!("{e}; continuing visual playback only");
         }
+        self.timeline_set_repeat(id, repeat);
         self.timeline_audio_mark(id, ctx.input(|i| i.time), start, true);
         ctx.request_repaint();
         Ok(())
@@ -410,6 +412,7 @@ impl Drawer {
             && self.audio.scrub
             && self.audio_player.is_none()
             && let Some(n) = context
+            && !self.timeline_silent_preview(n)
         {
             let key = (self.documents[n].id, self.documents[n].current_frame);
             if self.audio.scrub_frame != Some(key) {

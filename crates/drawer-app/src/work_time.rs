@@ -206,10 +206,11 @@ impl Drawer {
                 && self.canvas_view.viewport_layer() == ctx.layer_id_at(p)
         });
         let canvas_input = ctx.input(|i| {
-            over && i.events.iter().any(|e| {
-                matches!(e, egui::Event::PointerButton { pressed: true, .. })
-                    || (matches!(e, egui::Event::PointerMoved(_)) && i.pointer.primary_down())
-            })
+            over && !self.canvas_view.timeline_read_only
+                && i.events.iter().any(|e| {
+                    matches!(e, egui::Event::PointerButton { pressed: true, .. })
+                        || (matches!(e, egui::Event::PointerMoved(_)) && i.pointer.primary_down())
+                })
         });
         let now = self.work_time.now();
         self.work_time.step(

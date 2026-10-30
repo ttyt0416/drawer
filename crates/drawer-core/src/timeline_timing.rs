@@ -275,7 +275,7 @@ pub fn resize(data: &Data, clip: &AudioClip, count: u32) -> Result<Vec<Span>, St
     }
     Ok(out)
 }
-fn matches(data: &Data, c: &AudioClip, a: &Audio) -> bool {
+pub(crate) fn matches(data: &Data, c: &AudioClip, a: &Audio) -> bool {
     let Some(s) = data.originals.iter().find(|s| s.id == c.source) else {
         return false;
     };

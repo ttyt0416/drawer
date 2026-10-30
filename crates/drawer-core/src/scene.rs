@@ -216,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "crate::timelines::Data::is_default")]
+    pub timelines: Box<crate::timelines::Data>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_time: Option<crate::work_time::Snapshot>,
     #[serde(
@@ -346,6 +348,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if !self.timelines.valid(missing) {
+            return false;
+        }
         if self.work_time.as_ref().is_some_and(|s| !s.valid()) {
             return false;
         }
@@ -483,7 +488,8 @@ impl Scene {
             })
     }
     pub fn size_bytes(&self) -> usize {
-        self.keyframes.bytes()
+        self.timelines.bytes()
+            + self.keyframes.bytes()
             + self.timing.bytes()
             + self.cels.bytes()
             + self.shots.bytes()

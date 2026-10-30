@@ -506,6 +506,9 @@ pub(crate) fn duplicate(s: &mut Scene, old: &Scene, map: &BTreeMap<Key, Key>) {
 }
 /// Compare source content, ignoring animation metadata and display names/locks.
 pub(crate) fn validate_edit(d: &Document, s: &DocumentState) -> Result<(), String> {
+    if crate::timelines::switch_only(d, s) || crate::timelines::inactive_copy_only(d, s) {
+        return Ok(());
+    }
     crate::camera2d::validate_source_edit(d, s)?;
     for old in &d.scene.keyframes.tracks {
         if s.scene

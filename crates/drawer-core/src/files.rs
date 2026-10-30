@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 103;
+pub(crate) const VERSION: u32 = 104;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -224,6 +224,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
         {
             return Err(invalid("Final camera and path guides require native101"));
+        }
+        if version < 104 && !document.scene.timelines.is_default() {
+            return Err(invalid("Multiple timelines require native104"));
         }
         if version < 103 && document.scene.work_time.is_some() {
             return Err(invalid("Work time identity requires native103"));
@@ -537,11 +540,15 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     if version >= 100 {
         crate::light_table::read(&mut document, &mut reader, budget)?;
     }
+    if version >= 104 {
+        crate::timelines::read(&mut document, &mut reader, budget)?;
+    }
     if !document.scene.valid()
         || !crate::keyframes::valid_document(&document)
         || !crate::timeline_timing::valid_document(&document)
         || !crate::cels::valid_document(&document)
         || !crate::shot_exchange::valid_document(&document)
+        || !crate::timelines::valid_document(&document)
         || document.memory_bytes() > budget
     {
         return Err(invalid("Invalid embedded page sources or memory budget"));
@@ -605,6 +612,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
+    if !crate::timelines::valid_document(document) || !crate::timelines::hashes(document) {
+        return Err(invalid("Invalid saved timeline arrangements or PCM hashes"));
+    }
     if document.scene.work_time.is_some() || document.work_time.as_ref().is_some_and(|s| !s.valid())
     {
         return Err(invalid("Invalid work time metadata transport"));
@@ -651,6 +661,7 @@ fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
             .saturating_sub(document.scene.page_parts.payload_bytes())
             .saturating_sub(document.scene.cels.payload_bytes())
             .saturating_sub(document.scene.timing.payload_bytes())
+            .saturating_sub(document.scene.timelines.payload_bytes())
             > MAX_SCENE_BYTES
     {
         return Err(invalid("Invalid or oversized page geometry"));
@@ -774,6 +785,7 @@ fn write_payload(document: &Document, scene: &[u8], writer: &mut impl Write) -> 
     crate::cels::write(&document.scene, writer)?;
     crate::timeline_timing::write(&document.scene, writer)?;
     crate::light_table::write(document, writer)?;
+    crate::timelines::write(&document.scene, writer)?;
     Ok(())
 }
 

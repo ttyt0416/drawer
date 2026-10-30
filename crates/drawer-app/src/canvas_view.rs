@@ -95,6 +95,7 @@ pub(super) struct TimelineOverlay {
     pub size: [f64; 2],
 }
 pub struct CanvasView {
+    pub(super) timeline_read_only: bool,
     pub(super) timeline_overlay: Option<TimelineOverlay>,
     pub(super) light_table_overlay: Option<TimelineOverlay>,
     camera_paths: crate::camera2d::Paths,
@@ -188,6 +189,7 @@ impl CanvasView {
     pub fn new(ctx: &egui::Context) -> Self {
         let gray = |v| egui::Color32::from_gray(v);
         Self {
+            timeline_read_only: false,
             timeline_overlay: None,
             light_table_overlay: None,
             camera_paths: Default::default(),
@@ -570,6 +572,7 @@ impl CanvasView {
             paint.layer,
             style,
             input_active
+                && !self.timeline_read_only
                 && camera_editable
                 && paint.drawing.text_document != Some(document.id)
                 && !self.measurement_mode

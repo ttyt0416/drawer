@@ -47,9 +47,25 @@ struct View {
     only: bool,
     repeat: bool,
     playing: Option<(f64, u32)>,
+    cursor: Option<drawer_core::timeline_playback::Cursor>,
+    clock_key: Option<(
+        u64,
+        f64,
+        u32,
+        drawer_core::timeline_playback::Preferences,
+        drawer_core::timeline_playback::Range,
+    )>,
     image: Option<egui::TextureHandle>,
     overlay: Option<egui::TextureHandle>,
-    key: Option<(u64, u32, Option<u64>, bool, Onion, bool)>,
+    key: Option<PreviewKey>,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct PreviewKey {
+    revision: u64,
+    frame: u32,
+    view: drawer_core::timeline_playback::View,
+    content: Option<drawer_core::keyframes::Owner>,
+    preferences: drawer_core::timeline_playback::Preferences,
 }
 impl Default for View {
     fn default() -> Self {
@@ -62,6 +78,8 @@ impl Default for View {
             only: false,
             repeat: true,
             playing: None,
+            cursor: None,
+            clock_key: None,
             image: None,
             overlay: None,
             key: None,
@@ -197,6 +215,59 @@ fn usage(d: &Document, source: u64) -> (usize, usize) {
     (frames.iter().filter(|v| **v).count(), tracks.len())
 }
 impl Drawer {
+    pub(super) fn timeline_has_cel_binding(&self) -> bool {
+        self.timeline_editor.binding.is_some()
+    }
+    pub(super) fn reset_timeline_view(&mut self, id: u64) {
+        if let Some(v) = self.timeline_editor.views.get_mut(&id) {
+            v.key = None;
+            v.cursor = None;
+            v.clock_key = None;
+            v.playing = None;
+        }
+    }
+    pub(super) fn timeline_preview_repeat(&self, id: u64) -> bool {
+        self.timeline_editor.views.get(&id).is_none_or(|v| v.repeat)
+    }
+    pub(super) fn timeline_preview_settings(
+        &self,
+        n: usize,
+    ) -> drawer_core::timeline_playback::View {
+        let d = &self.documents[n];
+        let v = self.timeline_editor.views.get(&d.id);
+        let mut onion = v.map_or(d.onion, |v| {
+            if v.onion_loaded {
+                v.onion
+            } else {
+                let mut o = d.onion;
+                o.enabled = v.onion.enabled;
+                o
+            }
+        });
+        if v.is_none() {
+            onion.enabled = false;
+        }
+        let track = v
+            .and_then(|v| v.track)
+            .filter(|t| {
+                d.animation
+                    .as_ref()
+                    .is_some_and(|a| d.scene.catalog.tracks.index(*t, a.tracks.len()).is_some())
+            })
+            .or_else(|| {
+                d.animation
+                    .as_ref()
+                    .and_then(|a| (!a.tracks.is_empty()).then(|| d.scene.catalog.tracks.id(0)))
+            });
+        drawer_core::timeline_playback::View {
+            track,
+            only: v.is_some_and(|v| v.only),
+            onion,
+        }
+    }
+    pub(super) fn timeline_set_repeat(&mut self, id: u64, repeat: bool) {
+        self.timeline_editor.views.entry(id).or_default().repeat = repeat;
+    }
     pub(super) fn timeline_audio_context(&self) -> Option<usize> {
         self.timeline_context()
     }
@@ -217,6 +288,8 @@ impl Drawer {
         self.stop_audio_for(id);
         if let Some(v) = self.timeline_editor.views.get_mut(&id) {
             v.playing = None;
+            v.cursor = None;
+            v.clock_key = None;
             v.key = None;
         }
     }
@@ -557,6 +630,9 @@ impl Drawer {
         Ok(child)
     }
     pub(super) fn timeline_tick(&mut self, ctx: &egui::Context) {
+        self.poll_timeline_cache(ctx);
+        self.canvas_view.timeline_read_only = false;
+        self.display.canvas.timeline_read_only = false;
         self.canvas_view.timeline_overlay = None;
         self.display.canvas.timeline_overlay = None;
         self.timeline_editor.overlay_active = false;
@@ -570,7 +646,9 @@ impl Drawer {
         let Some(a) = &self.documents[n].animation else {
             return;
         };
-        let fps = a.fps;
+        let preferences = self.timeline_manager.preferences;
+        let fps = preferences.rate(&self.documents[n]).unwrap_or(a.fps);
+        let pass = ctx.cumulative_frame_nr();
         let now = ctx.input(|i| i.time);
         let audio_master = self.audio_owns(id);
         let view = self.timeline_editor.views.entry(id).or_default();
@@ -602,52 +680,109 @@ impl Drawer {
                 .first()
                 .map(|p| p.object);
         }
-        if !audio_master
-            && let Some((time, start)) = view.playing
-            && let Ok((frame, end)) = drawer_core::timeline_timing::playback(
-                &self.documents[n],
-                start,
-                (now - time).max(0.),
-                view.repeat,
-            )
+        if view
+            .clock_key
+            .is_some_and(|k| k.0 != self.documents[n].revision)
         {
-            self.documents[n].current_frame = frame;
-            if end {
-                view.playing = None;
+            view.playing = None;
+        }
+        if let Some((time, start)) = view.playing {
+            if let Ok(range) =
+                drawer_core::timeline_playback::Range::of(&self.documents[n], view.repeat)
+            {
+                let token = (self.documents[n].revision, time, start, preferences, range);
+                if view.clock_key != Some(token) {
+                    view.cursor = drawer_core::timeline_playback::Cursor::new(
+                        range,
+                        start,
+                        fps,
+                        preferences.mode,
+                        time,
+                    )
+                    .ok();
+                    view.clock_key = Some(token);
+                }
+                if !audio_master && let Some(cursor) = &mut view.cursor {
+                    let (frame, end) = cursor.step(now, pass);
+                    self.documents[n].current_frame = frame;
+                    if end {
+                        view.playing = None;
+                    }
+                }
+                ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                    (1. / fps.value()).min(0.1),
+                ));
             }
-            ctx.request_repaint_after(std::time::Duration::from_secs_f64(
-                (1. / fps.value()).min(0.1),
-            ));
+        } else {
+            view.cursor = None;
+            view.clock_key = None;
         }
         let d = &self.documents[n];
-        let key = (
-            d.revision,
-            d.current_frame,
-            view.track,
-            view.only,
-            view.onion,
-            drawer_core::keyframes::content_view(d),
-        );
+        let key = PreviewKey {
+            revision: d.revision,
+            frame: d.current_frame,
+            view: drawer_core::timeline_playback::View {
+                track: view.track,
+                only: view.only,
+                onion: view.onion,
+            },
+            content: d.keyframe_content,
+            preferences,
+        };
         if view.key != Some(key) {
-            match timeline_view::preview(
-                d,
-                view.track,
-                view.only,
-                view.onion,
-                256,
-                DEFAULT_DOCUMENT_BUDGET,
-            ) {
-                Ok(p) => {
-                    view.image = Some(upload(ctx, &p.image, "timeline-view"));
-                    view.overlay = Some(upload(ctx, &p.overlay, "timeline-onion"));
-                    view.key = Some(key);
-                }
-                Err(e) => {
-                    view.image = None;
-                    view.overlay = None;
-                    self.timeline_editor.notice = e;
+            let settings = drawer_core::timeline_playback::View {
+                track: view.track,
+                only: view.only,
+                onion: view.onion,
+            };
+            let stamp =
+                drawer_core::timeline_playback::Stamp::of(d, settings, preferences, view.repeat)
+                    .ok();
+            let cached = self
+                .timeline_manager
+                .cache
+                .as_ref()
+                .filter(|c| Some(&c.stamp) == stamp.as_ref())
+                .and_then(|c| c.get(d.current_frame));
+            if let Some(p) = cached {
+                view.image = Some(upload(ctx, &p.image, "timeline-cached-view"));
+                view.overlay = Some(upload(ctx, &p.overlay, "timeline-cached-onion"));
+                view.key = Some(key);
+            } else {
+                match drawer_core::timeline_playback::preview(
+                    d,
+                    settings,
+                    preferences,
+                    DEFAULT_DOCUMENT_BUDGET,
+                    &AtomicBool::new(false),
+                ) {
+                    Ok(p) => {
+                        view.image = Some(upload(ctx, &p.image, "timeline-view"));
+                        view.overlay = Some(upload(ctx, &p.overlay, "timeline-onion"));
+                        view.key = Some(key);
+                    }
+                    Err(e) => {
+                        view.image = None;
+                        view.overlay = None;
+                        self.timeline_editor.notice = e;
+                    }
                 }
             }
+        }
+        if view.image.is_some()
+            && let Some(cursor) = &mut view.cursor
+        {
+            cursor.presented(pass);
+        }
+        let custom = !preferences.camera
+            || preferences.quality == drawer_core::timeline_playback::Quality::Speed
+            || view.playing.is_some()
+                && preferences.mode == drawer_core::timeline_playback::Mode::EveryFrame;
+        let readonly =
+            view.playing.is_some() || !preferences.camera && d.scene.keyframes.camera_output;
+        if self.active.is_some_and(|n| self.documents[n].id == id) {
+            self.canvas_view.timeline_read_only = readonly;
+            self.display.canvas.timeline_read_only = readonly;
         }
         if let (Some(active), Some(binding)) = (self.active, self.timeline_editor.binding.as_ref())
             && self.documents[active].id == binding.child
@@ -665,8 +800,8 @@ impl Drawer {
         }
         if let Some(active) = self.active
             && self.documents[active].id == id
-            && (view.only || view.onion.enabled)
-            && let Some(texture) = if view.only {
+            && (view.only || view.onion.enabled || custom)
+            && let Some(texture) = if view.only || custom {
                 view.image.as_ref()
             } else {
                 view.overlay.as_ref()
@@ -675,7 +810,7 @@ impl Drawer {
             let overlay = crate::canvas_view::TimelineOverlay {
                 document: id,
                 texture: texture.clone(),
-                replace: view.only,
+                replace: view.only || custom,
                 origin: [0., 0.],
                 size: [d.width as f64, d.height as f64],
             };
@@ -732,6 +867,8 @@ if let Some(image)=&pending.image{ui.collapsing("Change preview",|ui|{ui.image((
 if pending.destructive{ui.checkbox(&mut p.confirm,"I reviewed the affected references and confirm this removal / move");}let r=ui.add_enabled(!pending.destructive || p.confirm,egui::Button::new("Apply reviewed timeline edit"));p.apply=Some(r.rect);if r.clicked(){action=10;}
 if ui.button("Discard prepared edit").clicked(){action=11;}}
             if let Some(a)=&d.animation{
+                if ui.button("Timelines / shots, timecode and playback options…").clicked(){self.timeline_manager.open=true;}
+                ui.label(drawer_core::timelines::timecode(d.current_frame as u64,a.fps,d.scene.timelines.active_entry().is_some_and(|p|p.drop_frame)).unwrap_or_default());
                 ui.horizontal_wrapped(|ui|{for(label,jump)in [("First",Jump::First),("Previous",Jump::Previous),("Next",Jump::Next),("Last",Jump::Last),("Previous cel",Jump::PreviousCel),("Next cel",Jump::NextCel),("Previous key",Jump::PreviousKey),("Next key",Jump::NextKey),("Previous label",Jump::PreviousLabel),("Next label",Jump::NextLabel)]{if ui.button(label).clicked(){navigate=Some(jump);}}});
                 ui.horizontal(|ui|{let mut frame=d.current_frame+1;if ui.add(egui::DragValue::new(&mut frame).range(1..=a.frames)).changed(){navigate=Some(Jump::Number(frame-1));}ui.label(format!("/{} · {}/{} FPS",a.frames,a.fps.numerator,a.fps.denominator));let r=ui.button(if view.playing.is_some(){"Pause"}else{"Play"});p.play=Some(r.rect);if r.clicked(){action=4;}ui.add_enabled(d.scene.timing.playback.is_none(),egui::Checkbox::new(&mut view.repeat,"Loop (range settings take priority)"));});
                 let force=p.onion_show.then_some(true);p.onion_show=false;

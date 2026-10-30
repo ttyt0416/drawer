@@ -908,3 +908,9 @@ crates/drawer-app/src/work_time.rs
 docs/process/work-time.md
 crates/drawer-platform/src/work_clock.rs
 crates/drawer-app/src/work_time_report.rs
+crates/drawer-core/src/timelines.rs
+crates/drawer-core/src/timelines_tests.rs
+crates/drawer-core/src/timeline_playback.rs
+crates/drawer-core/src/timeline_playback_tests.rs
+crates/drawer-app/src/timelines.rs
+docs/process/timelines-playback.md
