@@ -38,14 +38,20 @@ impl Frame {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Data {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::animation_finish::Settings::is_default"
+    )]
+    pub settings: crate::animation_finish::Settings,
     pub keys: Vec<Frame>,
 }
 impl Data {
     pub fn is_default(&self) -> bool {
-        self.keys.is_empty()
+        self.keys.is_empty() && self.settings.is_default()
     }
     pub fn valid(&self) -> bool {
-        self.keys.len() <= crate::animation::MAX_FRAMES as usize
+        self.settings.valid()
+            && self.keys.len() <= crate::animation::MAX_FRAMES as usize
             && self.keys.iter().all(|f| f.valid())
             && self.keys.windows(2).all(|k| k[0].frame < k[1].frame)
     }
@@ -55,6 +61,7 @@ impl Data {
     }
     pub fn bytes(&self) -> usize {
         self.keys.len() * std::mem::size_of::<Frame>()
+            + if self.settings.is_default() { 0 } else { 32 }
     }
 }
 pub fn prepare(doc: &Document, bounds: Rect) -> Result<Scene, String> {

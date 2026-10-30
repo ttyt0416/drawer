@@ -48,6 +48,16 @@ impl Default for Data {
     }
 }
 impl Data {
+    pub(crate) fn same_sources(&self, other: &Self) -> bool {
+        self.links == other.links
+            && self.definitions.len() == other.definitions.len()
+            && self
+                .definitions
+                .iter()
+                .zip(&other.definitions)
+                .all(|(a, b)| a.same_content(b))
+    }
+
     pub fn is_default(&self) -> bool {
         *self == Self::default()
     }

@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 234] = [
+pub const EXTRA_COMMANDS: [&str; 235] = [
+    "animation-finish",
     "animation-graph",
     "timeline-clips",
     "timelines-playback",
@@ -537,6 +538,9 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "animation-finish" => {
+                "Animation title-safe / overflow guides, output defaults, audio and naming rules"
+            }
             "animation-graph" => {
                 "Animation graph, axis snap, split handles, key scaling and label movement"
             }

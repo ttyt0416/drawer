@@ -69,6 +69,12 @@ pub struct Part {
     source: Option<Arc<Source>>,
 }
 impl Part {
+    pub(crate) fn same_content(&self, other: &Self) -> bool {
+        let mut value = self.clone();
+        value.name = other.name.clone();
+        value == *other
+    }
+
     pub(crate) fn valid_source(&self, missing: bool) -> bool {
         self.object > 0
             && self.original_page > 0

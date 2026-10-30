@@ -722,7 +722,8 @@ pub fn export(
             return Err("Assign an exposure before exporting this shot".into());
         }
         let mut shot = b.shot.clone();
-        shot.name = t.name.clone();
+        // Shot labels are timeline-specific; shared track names may differ.
+
         shot.start = t.exposures[0].frame;
         shot.end = t.end;
         shot.fps = timeline.fps;

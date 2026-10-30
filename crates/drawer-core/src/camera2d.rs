@@ -125,16 +125,24 @@ pub(crate) fn validate_source_edit(d: &Document, s: &DocumentState) -> Result<()
         || d.scene.objects != s.scene.objects
         || d.scene.gradients != s.scene.gradients
         || d.scene.worlds != s.scene.worlds
-        || d.scene.cels != s.scene.cels
+        || !d.scene.cels.same_sources(&s.scene.cels)
         || d.scene.layer_effects != s.scene.layer_effects
         || d.scene.transform != s.scene.transform
         || d.scene.layer_groups.transforms != s.scene.layer_groups.transforms
-        || d.animation
-            .as_ref()
-            .map(|a| a.tracks.iter().map(|t| &t.cells).collect::<Vec<_>>())
-            != s.animation
-                .as_ref()
-                .map(|a| a.tracks.iter().map(|t| &t.cells).collect::<Vec<_>>());
+        || match (&d.animation, &s.animation) {
+            (Some(a), Some(b)) => {
+                a.tracks.len() != b.tracks.len()
+                    || a.tracks.iter().zip(&b.tracks).any(|(a, b)| {
+                        a.cells.len() != b.cells.len()
+                            || a.cells
+                                .iter()
+                                .zip(&b.cells)
+                                .any(|(a, b)| !a.same_content(b))
+                    })
+            }
+            (None, None) => false,
+            _ => true,
+        };
     if changed {
         Err("Enter base content editing before changing sources in camera view".into())
     } else {

@@ -214,6 +214,12 @@ impl Drawer {
             self.audio.import_at = d.current_frame + 1;
             self.audio.first = 1;
             self.audio.last = a.frames;
+            if d.scene.animation_output.settings.area.is_some()
+                && let Some(range) = d.scene.timing.playback
+            {
+                self.audio.first = range.first + 1;
+                self.audio.last = range.end;
+            }
         }
         self.audio.open = true;
         Ok(())
@@ -958,5 +964,21 @@ mod tests {
         let result = super::smoke(&p);
         std::fs::remove_dir(&p).unwrap();
         result.unwrap();
+    }
+    #[test]
+    fn finishing_defaults_set_new_wav_export_range() {
+        use super::*;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        let (mut d, _) = drawer_core::animation_finish_verify::fixture().unwrap();
+        d.scene.animation_output.settings.area = Some(drawer_core::animation_render::Area::Canvas);
+        d.scene.timing.playback = Some(drawer_core::timeline_timing::Playback {
+            first: 3,
+            end: 8,
+            repeat: false,
+        });
+        app.add_document(d);
+        app.begin_audio().unwrap();
+        assert_eq!((app.audio.first, app.audio.last), (4, 8));
     }
 }

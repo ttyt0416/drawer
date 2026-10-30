@@ -159,6 +159,13 @@ impl Drawer {
         self.animation_export.external_root = None;
         self.animation_export.options.first = 0;
         self.animation_export.options.last = a.frames - 1;
+        if let Some(area) = d.scene.animation_output.settings.area {
+            self.animation_export.options.view.area = area;
+            if let Some(range) = d.scene.timing.playback {
+                self.animation_export.options.first = range.first;
+                self.animation_export.options.last = range.end - 1;
+            }
+        }
         self.animation_export.snapshot = None;
         self.animation_export.preview = None;
         self.animation_export.preview_job = None;
@@ -788,5 +795,27 @@ mod tests {
         assert_eq!(app.documents[0].dirty, dirty);
         let (w, h, b) = thumbnail(2000, 1000, &vec![255; 2000 * 1000 * 4]);
         assert_eq!((w, h, b.len()), (512, 256, 512 * 256 * 4));
+    }
+    #[test]
+    fn finishing_defaults_set_capture_area_and_frame_range() {
+        use super::*;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        let (mut d, _) = drawer_core::animation_finish_verify::fixture().unwrap();
+        d.scene.animation_output.settings.area =
+            Some(drawer_core::animation_render::Area::Overflow);
+        d.scene.timing.playback = Some(drawer_core::timeline_timing::Playback {
+            first: 3,
+            end: 8,
+            repeat: false,
+        });
+        app.add_document(d);
+        app.begin_animation_export().unwrap();
+        assert_eq!(app.animation_export.options.first, 3);
+        assert_eq!(app.animation_export.options.last, 7);
+        assert_eq!(
+            app.animation_export.options.view.area,
+            drawer_core::animation_render::Area::Overflow
+        );
     }
 }

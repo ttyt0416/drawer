@@ -45,6 +45,12 @@ pub struct Cell {
     pub pixels: Arc<Vec<[u8; 4]>>,
 }
 impl Cell {
+    pub(crate) fn same_content(&self, other: &Self) -> bool {
+        let mut value = self.clone();
+        value.name = other.name.clone();
+        value == *other
+    }
+
     fn metadata_valid(&self) -> bool {
         (1..=MAX_DIMENSION).contains(&self.width)
             && (1..=MAX_DIMENSION).contains(&self.height)

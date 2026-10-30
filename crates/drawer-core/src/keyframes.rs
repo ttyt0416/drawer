@@ -613,7 +613,7 @@ pub(crate) fn validate_edit(d: &Document, s: &DocumentState) -> Result<(), Strin
                         .cels
                         .get(l.source)
                         .zip(s.scene.cels.get(l.source))
-                        .is_some_and(|(a, b)| a != b)
+                        .is_some_and(|(a, b)| !a.same_content(b))
                 }),
             _ => false,
         };

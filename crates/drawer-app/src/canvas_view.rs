@@ -99,6 +99,8 @@ pub struct CanvasView {
     pub(super) timeline_overlay: Option<TimelineOverlay>,
     pub(super) light_table_overlay: Option<TimelineOverlay>,
     camera_paths: crate::camera2d::Paths,
+    finish_paths: crate::animation_finish::Paths,
+    pub(super) finish_view: drawer_core::animation_finish::View,
     pub comic_view: drawer_core::comic_view::Viewport,
     pub mask_overlay: bool,
     pub mask_overlay_regions: usize,
@@ -193,6 +195,8 @@ impl CanvasView {
             timeline_overlay: None,
             light_table_overlay: None,
             camera_paths: Default::default(),
+            finish_paths: Default::default(),
+            finish_view: Default::default(),
             comic_view: Default::default(),
             mask_overlay: false,
             mask_overlay_regions: 0,
@@ -1283,6 +1287,12 @@ impl CanvasView {
             painter.add(egui::Shape::mesh(mesh));
         }
         if let Err(e) = self.camera_paths.paint(&painter, document, view, rect, ppp) {
+            self.view_notice = Some(e);
+        }
+        if let Err(e) =
+            self.finish_paths
+                .paint(&painter, document, view, rect, ppp, self.finish_view)
+        {
             self.view_notice = Some(e);
         }
         crate::extended_fill::paint_frame(&painter, document, view, rect, ppp);

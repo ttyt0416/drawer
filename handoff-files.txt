@@ -925,3 +925,9 @@ crates/drawer-core/src/graph_edit_tests.rs
 crates/drawer-app/src/graph_edit.rs
 crates/drawer-app/src/graph_edit_verify.rs
 docs/process/animation-graph.md
+crates/drawer-core/src/animation_finish.rs
+crates/drawer-core/src/animation_finish_verify.rs
+crates/drawer-core/src/animation_finish_tests.rs
+crates/drawer-app/src/animation_finish.rs
+crates/drawer-app/src/animation_finish_verify.rs
+docs/process/animation-finishing.md

@@ -532,3 +532,7 @@ pub mod clip_edit;
 pub mod graph_edit;
 
 pub mod graph_verify;
+
+pub mod animation_finish;
+
+pub mod animation_finish_verify;

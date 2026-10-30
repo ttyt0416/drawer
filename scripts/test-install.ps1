@@ -234,6 +234,7 @@ try {
     if ($smokeResult -notmatch 'color_modes=true') { throw '주색·보조색·투명색 지우기·동시 해제 검증 실패' }
     if ($smokeResult -notmatch 'brush_color=true') { throw 'CIELAB·밝기·두 잉크 합성 시험 실패' }
     if ($smokeResult -notmatch 'brush_behavior=true') { throw '화면 크기·간격 농도·연속 분사 시험 실패' }
+    if ($smokeResult -notmatch 'animation_finish=true') { throw '안전영역·출력범위·오디오·셀/샷 이름 검증 실패' }
     if ($smokeResult -notmatch 'animation_graph=true') { throw '그래프 편집·축 스냅·핸들·키/라벨 검증 실패' }
     if ($smokeResult -notmatch 'clip_editing=true') { throw '셀 플립·클립 편집·분할 보기 검증 실패' }
     if ($smokeResult -notmatch 'multiple_timelines=true') { throw '복수 타임라인·드롭프레임·재생/캐시 검증 실패' }
