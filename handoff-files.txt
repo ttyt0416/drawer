@@ -982,3 +982,9 @@ crates/drawer-core/src/model_gltf.rs
 crates/drawer-core/src/model_buffers.rs
 crates/drawer-core/src/model_import_verify.rs
 docs/process/local-model-import.md
+
+crates/drawer-app/src/world_views.rs
+crates/drawer-app/src/world_views_verify.rs
+crates/drawer-core/src/world_views.rs
+crates/drawer-core/src/world_views_verify.rs
+docs/process/world-camera-views.md

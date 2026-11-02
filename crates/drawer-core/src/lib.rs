@@ -569,3 +569,6 @@ mod model_buffers;
 mod model_gltf;
 pub mod model_import;
 pub mod model_import_verify;
+
+pub mod world_views;
+pub mod world_views_verify;

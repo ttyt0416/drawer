@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 243] = [
+pub const EXTRA_COMMANDS: [&str; 244] = [
+    "world-views",
     "line-tones",
     "uv-paint",
     "world-physics",
@@ -546,7 +547,10 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
-            "model-library" => "Local3D model library, primitives, OBJ, duplicate and align",
+            "model-library" => {
+                "Local3D model library, OBJ/glTF/GLB, primitives, duplicate and align"
+            }
+            "world-views" => "Multiple3D scene views / independent or linked editing cameras",
             "line-tones" => "Image /3D contours and stepped-tone snapshot layers",
             "uv-paint" => "Projected UV surface painting / texture tile and local PNG",
             "world-physics" => "3D floor / polygon snap, grid copies, colliders and gravity settle",
