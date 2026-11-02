@@ -219,12 +219,12 @@ impl Drawer {
         egui::Window::new("Local models / primitives, props and background").default_pos(egui::pos2(20.,20.)).default_width(740.).max_height(640.).vscroll(false).open(&mut open).show(ctx,|ui|{
             ui.add_sized([700.,20.],egui::Label::new(&p.notice).truncate()).on_hover_text(&p.notice);
             if let Some(job)=&p.job{ui.spinner();let r=ui.button("Cancel model preparation");p.controls.insert("cancel",r.rect);if r.clicked(){job.cancel.store(true,Ordering::Relaxed);}}
-            ui.add_enabled_ui(!busy,|ui|{ui.horizontal_wrapped(|ui|{for(key,label,value)in[("primitive","Preview primitive",1),("import","Preview OBJ",3),("duplicate","Duplicate models",4),("align","Align models",5)]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){action=value;}}});});
+            ui.add_enabled_ui(!busy,|ui|{ui.horizontal_wrapped(|ui|{for(key,label,value)in[("primitive","Preview primitive",1),("import","Preview local model",3),("duplicate","Duplicate models",4),("align","Align models",5)]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){action=value;}}});});
             egui::ScrollArea::vertical().id_salt("model-library-settings").max_height(540.).show(ui,|ui|{ui.add_enabled_ui(!busy,|ui|{
-                ui.label("Original built-in geometry; local polygon OBJ models. Preview first, then apply in the 3D window. Materials and missing references are listed before adoption.");
+                ui.label("Original built-in geometry; local OBJ/glTF2/GLB models. Preview first, then apply in the 3D window. Materials and missing references are listed before adoption.");
                 ui.horizontal_wrapped(|ui|{for shape in Shape::ALL{ui.selectable_value(&mut p.shape,shape,shape.label());}});
                 ui.horizontal(|ui|{ui.label("Round detail");ui.add(egui::DragValue::new(&mut p.detail).range(3..=64))});
-                ui.horizontal(|ui|{ui.label("OBJ file");ui.text_edit_singleline(&mut p.path);if ui.button("Browse local file…").clicked(){action=2;}});
+                ui.horizontal(|ui|{ui.label("Model file");ui.text_edit_singleline(&mut p.path);if ui.button("Browse local file…").clicked(){action=2;}});
                 ui.horizontal(|ui|{ui.label("Center X / Y / Z");for v in &mut p.placement.position{ui.add(egui::DragValue::new(v).speed(0.1));}ui.checkbox(&mut p.placement.hidden,"Place hidden");});
                 ui.horizontal(|ui|{ui.label("Rotation X / Y / Z");for v in &mut p.placement.angles{ui.add(egui::DragValue::new(v));}ui.checkbox(&mut p.fit,"Fit longest side");ui.add(egui::DragValue::new(&mut p.size).range(0.001..=10000.));});
                 ui.horizontal(|ui|{ui.label("Scale X / Y / Z (negative mirrors)");for v in &mut p.placement.scale{ui.add(egui::DragValue::new(v).speed(0.01));}});
@@ -233,7 +233,7 @@ impl Drawer {
                     if ui.button("Clear models").clicked(){p.ids.clear();}});for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let info=d.scene.catalog.world_info.get(&id);let name=info.and_then(|i|i.name.as_deref()).unwrap_or("Model");let hidden=info.is_some_and(|i|i.properties.hidden);let mut selected=p.ids.contains(&id);if ui.checkbox(&mut selected,format!("{id}: {name}{}",if hidden{" (hidden)"}else{""})).changed(){if selected{p.ids.push(id);}else{p.ids.retain(|n|*n!=id);}}}});
                 ui.horizontal(|ui|{ui.label("Duplicate offset X/Y/Z");for v in &mut p.offset{ui.add(egui::DragValue::new(v).speed(0.1));}});
                 ui.horizontal_wrapped(|ui|{for i in 0..3{ui.selectable_value(&mut p.axis,i,["X","Y","Z"][i]);}for(a,label)in [(Anchor::Min,"Minimum"),(Anchor::Center,"Center"),(Anchor::Max,"Maximum")]{ui.selectable_value(&mut p.anchor,a,label);}ui.selectable_value(&mut p.target,AlignTarget::First,"First selected tree");ui.selectable_value(&mut p.target,AlignTarget::Selection,"Selection bounds");});
-                if let Some(id)=p.ids.first()&&let Some(s)=d.scene.world3d.surfaces.get(id){ui.small(format!("{}: {} triangles, {} UV coordinates, {} normals",s.source,s.triangles.len(),s.texcoords.len(),s.normals.len()));for reference in &s.references{ui.small(format!("{} — {} at import",reference.name,if reference.present{"available"}else{"missing"}));}}
+                if let Some(id)=p.ids.first()&&let Some(s)=d.scene.world3d.surfaces.get(id){ui.small(format!("{}: {} triangles, {} UV coordinates, {} normals",s.source,s.triangles.len(),s.texcoords.len(),s.normals.len()));if let Some(a)=&s.imported{ui.small(format!("{} imported material slots; {} retained skin joints (frozen default pose)",a.materials.len(),a.skin.as_ref().map_or(0,|r|r.names.len())));if let Some(r)=&a.skin{for (i,n) in r.names.iter().enumerate(){ui.small(format!("Joint {i}: {n}; parent {:?}",r.parents[i]));}}}for reference in &s.references{ui.small(format!("{} — {} at import",reference.name,if reference.present{"available"}else{"missing"}));}}
             });});
         });
         p.open = open;
@@ -255,7 +255,7 @@ impl Drawer {
                 }
                 2 => {
                     if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Polygon OBJ", &["obj"])
+                        .add_filter("Local OBJ / glTF2 / GLB", &["obj", "gltf", "glb"])
                         .pick_file()
                     {
                         self.world_models.path = path.display().to_string();
@@ -293,16 +293,28 @@ impl Drawer {
         }
     }
 }
+#[path = "model_import_verify.rs"]
+mod import_verify;
 #[path = "world_models_verify.rs"]
 mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
-    verify::run(root)
+    verify::run(root)?;
+    import_verify::run(root)
 }
 #[cfg(test)]
 mod tests {
     #[test]
     fn pointer_primitive_obj_review_duplicate_align_cancel_stale_and_close() {
         let t = crate::tests::TestDirectory::new();
-        super::smoke(&t.0).unwrap();
+        super::verify::run(&t.0).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod import_tests {
+    #[test]
+    fn pointer_gltf_review_apply_undo_cancel_stale_close_and_source_preservation() {
+        let t = crate::tests::TestDirectory::new();
+        super::import_verify::run(&t.0).unwrap();
     }
 }

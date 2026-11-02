@@ -56,7 +56,15 @@ struct Triangle {
     uv: Option<[V; 3]>,
     face: usize,
     opaque: bool,
+    material: u16,
     bounds: Bounds,
+}
+struct ImportedMaterial {
+    pixels: Option<(usize, usize, Vec<u8>)>,
+    wrap: [crate::model_import::Wrap; 2],
+    flip_v: bool,
+    alpha: crate::model_import::Alpha,
+    cutoff: f64,
 }
 struct Node {
     bounds: Bounds,
@@ -67,6 +75,8 @@ struct Node {
 pub(crate) struct Trace {
     triangles: Vec<Triangle>,
     textures: Vec<Option<(usize, Vec<u8>)>>,
+    imported: Vec<std::collections::BTreeMap<u16, ImportedMaterial>>,
+    physical: bool,
     object_bounds: Vec<Option<Bounds>>,
     rotation: Matrix,
     center: Point,
@@ -131,6 +141,10 @@ impl Trace {
                 camera.pixels_per_unit
             },
             textures: vec![None; d.scene.worlds.len()],
+            imported: (0..d.scene.worlds.len())
+                .map(|_| Default::default())
+                .collect(),
+            physical,
             triangles: vec![],
             nodes: vec![],
             settings: settings.clone(),
@@ -152,6 +166,25 @@ impl Trace {
             };
             let frame = crate::world3d::node(&d.scene, id).map_or(Matrix::default(), |n| n.frame);
             let inv = frame.inverse();
+            if !physical && let Some(attributes) = &s.imported {
+                for (index, m) in &attributes.materials {
+                    let pixels = m.image.as_ref().and_then(|i| {
+                        i.decode()
+                            .ok()
+                            .map(|p| (i.width as usize, i.height as usize, p))
+                    });
+                    t.imported[object].insert(
+                        *index,
+                        ImportedMaterial {
+                            pixels,
+                            wrap: m.wrap,
+                            flip_v: m.flip_v,
+                            alpha: m.alpha,
+                            cutoff: m.cutoff,
+                        },
+                    );
+                }
+            }
             if !physical
                 && let Some(paint) = &s.paint
                 && let Ok(pixels) = paint.decode()
@@ -188,7 +221,15 @@ impl Trace {
                         .t
                         .map(|indices| indices.map(|i| s.texcoords[i as usize])),
                     face: face_index,
-                    opaque: physical || color[3] >= 1. && props.opacity == 100,
+                    opaque: physical
+                        || props.opacity == 100
+                            && s.imported
+                                .as_ref()
+                                .and_then(|a| a.materials.get(&face.material))
+                                .map_or(color[3] >= 1., |m| {
+                                    m.alpha != crate::model_import::Alpha::Blend
+                                }),
+                    material: face.material,
                     bounds: Bounds::of(p),
                 });
             }
@@ -287,6 +328,7 @@ impl Trace {
                     let t = &self.triangles[i];
                     if accept(t)
                         && let Some((depth, u, v)) = intersect(t, ray, lo, limit)
+                        && (self.physical || self.imported_sample(t, u, v)[3] > 0.)
                     {
                         limit = depth;
                         best = Some(Hit {
@@ -444,7 +486,8 @@ impl Trace {
                 }
             }
         }
-        let mut texture = [1.; 3];
+        let imported = self.imported_sample(t, h.u, h.v);
+        let mut texture = [imported[0], imported[1], imported[2]];
         if let Some((size, pixels)) = &self.textures[t.object]
             && let Some(uv) = t.uv
         {
@@ -475,8 +518,45 @@ impl Trace {
             encode(linear(t.color[0]) * linear(texture[0]) * light[0]),
             encode(linear(t.color[1]) * linear(texture[1]) * light[1]),
             encode(linear(t.color[2]) * linear(texture[2]) * light[2]),
-            (t.color[3] * 255.).round() as u8,
+            (imported[3] * 255.).round() as u8,
         ]
+    }
+    fn imported_sample(&self, t: &Triangle, u: f64, v: f64) -> [f64; 4] {
+        use crate::model_import::{Alpha, Wrap};
+        let Some(m) = self.imported[t.object].get(&t.material) else {
+            return [1., 1., 1., t.color[3]];
+        };
+        let mut color = [1.; 4];
+        if let (Some((w, h, pixels)), Some(uv)) = (&m.pixels, t.uv) {
+            let p: [f64; 2] =
+                std::array::from_fn(|i| uv[0][i] * (1. - u - v) + uv[1][i] * u + uv[2][i] * v);
+            let wrap = |x: f64, mode: Wrap| match mode {
+                Wrap::Repeat => x.rem_euclid(1.),
+                Wrap::Clamp => x.clamp(0., 1.),
+                Wrap::Mirror => {
+                    let x = x.rem_euclid(2.);
+                    if x > 1. { 2. - x } else { x }
+                }
+            };
+            let x = wrap(p[0], m.wrap[0]);
+            let y = wrap(if m.flip_v { 1. - p[1] } else { p[1] }, m.wrap[1]);
+            let x = ((x * *w as f64).floor() as usize).min(*w - 1);
+            let y = ((y * *h as f64).floor() as usize).min(*h - 1);
+            color = std::array::from_fn(|i| pixels[(y * *w + x) * 4 + i] as f64 / 255.);
+        }
+        let alpha = color[3] * t.color[3];
+        color[3] = match m.alpha {
+            Alpha::Opaque => 1.,
+            Alpha::Mask => {
+                if alpha >= m.cutoff {
+                    1.
+                } else {
+                    0.
+                }
+            }
+            Alpha::Blend => alpha,
+        };
+        color
     }
     #[cfg(test)]
     pub(crate) fn compare_queries(&self) -> bool {

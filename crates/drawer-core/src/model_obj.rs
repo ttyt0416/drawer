@@ -368,6 +368,7 @@ pub fn decode(bytes: &[u8], source: &str, cancel: &AtomicBool) -> Result<Parsed,
                 references: vec![],
                 source: name(source)?,
                 paint: None,
+                imported: None,
             },
         });
     }
@@ -514,7 +515,8 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
                     let texture = args.join(" ").replace('\\', "/");
                     if texture.starts_with('-') {
                         asset.warning(
-                            "Texture map options are not applied to wireframe materials".into(),
+                            "Texture map options are not applied; the diffuse factor is retained"
+                                .into(),
                         );
                         continue;
                     }

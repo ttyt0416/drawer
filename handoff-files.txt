@@ -975,3 +975,10 @@ crates/drawer-core/src/line_tones_verify.rs
 crates/drawer-app/src/line_tones.rs
 crates/drawer-app/src/line_tones_verify.rs
 docs/process/line-tone-extraction.md
+
+crates/drawer-app/src/model_import_verify.rs
+crates/drawer-core/src/model_import.rs
+crates/drawer-core/src/model_gltf.rs
+crates/drawer-core/src/model_buffers.rs
+crates/drawer-core/src/model_import_verify.rs
+docs/process/local-model-import.md

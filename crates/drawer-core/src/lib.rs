@@ -564,3 +564,8 @@ pub mod uv_paint_verify;
 
 pub mod line_tones;
 pub mod line_tones_verify;
+
+mod model_buffers;
+mod model_gltf;
+pub mod model_import;
+pub mod model_import_verify;

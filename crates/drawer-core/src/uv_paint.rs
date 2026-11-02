@@ -273,7 +273,14 @@ pub fn prepare(
     {
         return Err("Texture / projected geometry memory budget exceeded".into());
     }
-    let warnings = inspect(surface)?;
+    let mut warnings = inspect(surface)?;
+    if surface
+        .imported
+        .as_ref()
+        .is_some_and(|a| a.materials.values().any(|m| m.image.is_some()))
+    {
+        warnings.push("RGB painting replaces imported diffuse RGB maps for this model; original embedded maps and imported alpha coverage are retained".into());
+    }
     if brush.opacity == 0. {
         return world3d::prepared(
             d,

@@ -477,17 +477,30 @@ pub fn prepare(
             (s, ids, w, format!("Place original {} model", shape.label()))
         }
         Edit::Import { path, placement } => {
-            let asset = crate::model_obj::load(
+            let asset = crate::model_import::load(
                 &path,
                 budget.saturating_sub(d.memory_bytes().saturating_mul(3)),
                 cancel,
             )?;
-            let (s, ids, w) = place(d, asset, placement, cancel)?;
+            let textured = asset.models.iter().any(|m| m.surface.imported.is_some());
+            let (mut s, ids, mut w) = place(d, asset, placement, cancel)?;
+            if textured
+                && s.scene
+                    .world3d
+                    .lighting
+                    .as_ref()
+                    .is_none_or(|v| v.style == crate::lighting::Style::Wire)
+            {
+                let mut settings = s.scene.world3d.lighting.clone().unwrap_or_default();
+                settings.style = crate::lighting::Style::Unlit;
+                s.scene.world3d.lighting = Some(settings);
+                w.push("Import adopts an Unlit surface view so diffuse textures are visible; existing lit styles are retained".into());
+            }
             (
                 s,
                 ids,
                 w,
-                "Place frozen local OBJ geometry / topology / attributes".into(),
+                "Place frozen local OBJ/glTF/GLB geometry, textures and skin".into(),
             )
         }
         Edit::Duplicate { ids, offset } => {
@@ -576,5 +589,8 @@ pub fn prepare(
     if state.memory_bytes().saturating_mul(3) > budget {
         return Err("Prepared model / attributes exceed remaining working memory".into());
     }
+    let frozen = crate::layer_merge::preview(&state, d.current_frame)?;
+    crate::files::native_scene(&frozen)
+        .map_err(|e| format!("Model attributes exceed native scene capacity: {e}"))?;
     world3d::prepared(d, state, summary, ids, warnings)
 }

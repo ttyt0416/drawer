@@ -1608,3 +1608,11 @@ Vanishing guides는 카메라에 맞는 소실점/평행 방향을 캔버스 보
 `line-tones`에서 이미지 층 또는3D 면 렌더를 선택하고 명도·깊이·법선/실루엣 경계와 톤 단계를 설정한다. Prepare preview로 결과를 확인하고 Apply new layers로 별도 윤곽/단계톤 층을 한 번에 만든다. 원본은 유지한다. 선이 과다하면 경고를 확인하거나 임계값/반경을 바꾸어 다시 준비한다. 강도0은 새 층과 이력을 만들지 않는다.
 
 취소·원본/프레임 변경·닫기는 준비 결과를 버리고, 한 Undo로 생성 층 전체를 제거한다. 결과는 현재 프레임의 고정 스냅샷이다.3D Wire는 원본을 바꾸지 않는 Unlit 표본으로 처리하고 가려진 뒷면 경계를 제외한다. 지원 범위·프로파일·표본/메모리 한도는 `process/line-tone-extraction.md`를 참조한다.
+
+## 로컬 OBJ·glTF2·GLB 가져오기
+
+`model-library` → Model file → Preview local model은 OBJ(+MTL), glTF2와 GLB2를 로컬에서 읽는다. 기존3D 창의 경고/손실 목록·미리보기를 확인한 후 Apply한다. 메시·UV·법선·diffuse 색/PNG·JPEG 맵과 기본 skin pose를 문서에 내장한다. Scale과 회전으로 축/단위를 바꾸고 Fit을 켜면 상대 길이를 다시 맞춘다. glTF의 +Y 위/미터 입력과 아래 원점 UV 변환을 안내한다. 소스 파일은 변경하지 않고 한 Undo/Redo로 가져온 자산 전체를 복원한다.
+
+가져온 스킨은 관절/가중치/역바인드·기본 행렬을 보존하고 기본 linear-blend 포즈를 형상으로 반영한다. 내장 mannequin 포즈 창으로 재편집하지 않으며 애니메이션·모프·추가 가중치·고급 재질/필터와 모든 원본 확장을 지원한다고 주장하지 않는다. 미지원 속성과 선택하지 않은 장면은 목록으로 안내하고 필수 확장·사용된 sparse 접근자·잘못된 데이터는 거절한다. diffuse 재질별 nearest/repeat·clamp·mirror와 alpha OPAQUE/MASK/BLEND를 사용한다. 한 개체 내부의 겹치는 반투명 면 전체 합성은 지원하지 않는다. 조명 없음/Wire는 같은 Apply에서 Unlit으로 바꿔 텍스처를 표시하며 기존 lit 스타일은 유지한다.
+
+외부 URL/절대경로·모델 폴더 탈출·인코딩된 탈출·폴더 밖 링크를 거절하며 다운로드하지 않는다. 이미지 변1024, 노드512·primitive128·관절128·정점65536/모델과 메모리/native 장면4MiB 제한을 검사한다. native113 문서는 원본이 없어도 다시 열리며 복제의 텍스처/스킨은 독립이다. 상세 지원 범위는 소스 문서 `docs/process/local-model-import.md`에 기록했다.
