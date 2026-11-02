@@ -13,6 +13,7 @@ mod text_paint;
 pub struct Renderer<'a> {
     world_geometry: Vec<text_contour_tree::Set>,
     world_shading: Option<crate::world_render::Trace>,
+    environment: Result<Option<crate::environment::Sampler>, String>,
     page_parts: Vec<(u64, Box<Renderer<'a>>)>,
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -48,7 +49,14 @@ impl<'a> Renderer<'a> {
                     crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
                 )
             });
+        let mut environment_done = false;
         while i < self.order.len() {
+            if !environment_done && self.order[i].group == crate::render_order::Group::World {
+                if self.environment_enabled() {
+                    result = over(result, self.environment_at(original).rgba8());
+                }
+                environment_done = true;
+            }
             let key = self.order[i].key;
             if matches!(key, Key::Layer(Target::Vector(_))) {
                 let mut end = i + 1;
@@ -130,13 +138,44 @@ impl<'a> Renderer<'a> {
             }
             i += 1;
         }
+        if !environment_done && self.environment_enabled() {
+            result = over(result, self.environment_at(original).rgba8());
+        }
         result
+    }
+    pub(crate) fn environment_at(&self, original: Point) -> crate::color_precision::Sample {
+        if self.doc().scene.clipping.solo.is_some()
+            || self.doc().scene.clips.iter().any(|c| !inside(c, original))
+        {
+            return Default::default();
+        }
+        self.environment
+            .as_ref()
+            .ok()
+            .and_then(|e| e.as_ref())
+            .map_or_else(Default::default, |e| e.background(self.doc(), original))
+    }
+    pub fn environment_sample(&self, point: Point) -> crate::color_precision::Sample {
+        let original = self
+            .doc()
+            .scene
+            .transform
+            .inverse()
+            .map(crate::camera2d::to_world(self.doc(), self.export_page).map(point));
+        self.environment_at(original)
+    }
+    fn environment_enabled(&self) -> bool {
+        self.references.is_none_or(|r| r.objects)
+            && self
+                .fill
+                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
     }
     pub fn error(&self) -> Option<&str> {
         self.float_plan
             .as_ref()
             .err()
             .map(String::as_str)
+            .or_else(|| self.environment.as_ref().err().map(String::as_str))
             .or_else(|| self.appearance.as_ref().err().map(String::as_str))
             .or(self.text_error.as_deref())
             .or_else(|| self.page_parts.iter().find_map(|(_, r)| r.error()))
@@ -723,6 +762,13 @@ impl<'a> Renderer<'a> {
             .collect();
         Self {
             world_shading: crate::world_render::Trace::new(document),
+            environment: document
+                .scene
+                .world3d
+                .environment
+                .as_ref()
+                .map(crate::environment::Sampler::new)
+                .transpose(),
             world_geometry: (0..document.scene.worlds.len())
                 .map(|i| {
                     text_contour_tree::Set::new(
@@ -1029,6 +1075,9 @@ impl<'a> Renderer<'a> {
                 )
             })
         {
+            if self.environment_enabled() {
+                result = over(result, self.environment_at(original).rgba8());
+            }
             for index in 0..scene.worlds.len() {
                 result = crate::layer_catalog::compose(
                     doc,

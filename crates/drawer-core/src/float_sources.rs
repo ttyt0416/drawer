@@ -605,6 +605,25 @@ impl Renderer<'_> {
         }
         Ok(back)
     }
+    fn environment(&self, back: Sample, original: Point) -> Result<Sample, String> {
+        if self.sampling.references.is_none_or(|r| r.objects)
+            && self
+                .sampling
+                .fill
+                .is_none_or(|(_, s)| s.reference == crate::bucket::Reference::Composite)
+        {
+            let sample = self.plan().geometry.environment_at(original);
+            if sample.alpha() == 0. {
+                return Ok(back);
+            }
+            let sample = self.plan().space.from_srgb(sample)?;
+            self.plan()
+                .space
+                .compose(back, sample, crate::layer_blend::Mode::Normal, 1.)
+        } else {
+            Ok(back)
+        }
+    }
     pub(super) fn ordered(
         &self,
         mut back: Sample,
@@ -621,7 +640,13 @@ impl Renderer<'_> {
             return Ok(back);
         }
         let mut i = 0;
+        let mut environment_done = false;
         while i < self.plan().order.len() {
+            if !environment_done && self.plan().order[i].group == crate::render_order::Group::World
+            {
+                back = self.environment(back, original)?;
+                environment_done = true;
+            }
             let key = self.plan().order[i].key;
             if let Key::Layer(Target::Vector(id)) = key {
                 let target = Target::Vector(id);
@@ -679,6 +704,9 @@ impl Renderer<'_> {
                 }
                 i += 1;
             }
+        }
+        if !environment_done {
+            back = self.environment(back, original)?;
         }
         Ok(back)
     }

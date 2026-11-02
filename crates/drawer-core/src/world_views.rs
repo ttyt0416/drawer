@@ -371,6 +371,7 @@ pub fn render(
                         + (y as f64 + 0.5) / frame.height as f64 * size[1],
                 ];
                 let mut color = crate::paper::Color::default();
+                color.add(renderer.environment_sample(point).rgba8());
                 for key in &keys {
                     let mut source = crate::paper::Color::default();
                     source.add(renderer.source_pixel(*key, point));

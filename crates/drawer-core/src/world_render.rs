@@ -77,6 +77,7 @@ pub(crate) struct Trace {
     textures: Vec<Option<(usize, Vec<u8>)>>,
     imported: Vec<std::collections::BTreeMap<u16, ImportedMaterial>>,
     physical: bool,
+    environment: Option<crate::environment::Light>,
     object_bounds: Vec<Option<Bounds>>,
     rotation: Matrix,
     center: Point,
@@ -120,7 +121,16 @@ impl Trace {
         if settings.style == Style::Wire {
             return None;
         }
-        Self::build_geometry(d, settings.clone(), false)
+        let mut trace = Self::build_geometry(d, settings.clone(), false)?;
+        trace.environment = d
+            .scene
+            .world3d
+            .environment
+            .as_ref()
+            .filter(|e| e.settings.illumination && e.settings.strength > 0.)
+            .and_then(|e| crate::environment::Sampler::new(e).ok())
+            .map(|s| s.light());
+        Some(trace)
     }
     pub(crate) fn surfaces(d: &Document) -> Self {
         Self::build_geometry(d, Settings::default(), true).unwrap()
@@ -145,6 +155,7 @@ impl Trace {
                 .map(|_| Default::default())
                 .collect(),
             physical,
+            environment: None,
             triangles: vec![],
             nodes: vec![],
             settings: settings.clone(),
@@ -434,6 +445,12 @@ impl Trace {
         if self.settings.style == Style::Unlit {
             light = [1.; 3];
         } else {
+            if let Some(environment) = &self.environment {
+                let color = environment.diffuse(n);
+                for i in 0..3 {
+                    light[i] += color[i];
+                }
+            }
             for lamp in &self.settings.lights {
                 if lamp.intensity == 0. {
                     continue;

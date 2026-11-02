@@ -27,6 +27,10 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_model_presets(&mut self) -> Result<(), String> {
+        if self.environment_pending() {
+            return Err("Apply/discard the environment preview first".into());
+        }
+        self.environment.open = false;
         if self.line_tones_pending() {
             return Err("Apply / discard contour and tone preview first".into());
         }

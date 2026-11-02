@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 244] = [
+pub const EXTRA_COMMANDS: [&str; 245] = [
+    "scene-environment",
     "world-views",
     "line-tones",
     "uv-paint",
@@ -550,6 +551,7 @@ impl Settings {
             "model-library" => {
                 "Local3D model library, OBJ/glTF/GLB, primitives, duplicate and align"
             }
+            "scene-environment" => "Local panorama background / diffuse environment light",
             "world-views" => "Multiple3D scene views / independent or linked editing cameras",
             "line-tones" => "Image /3D contours and stepped-tone snapshot layers",
             "uv-paint" => "Projected UV surface painting / texture tile and local PNG",

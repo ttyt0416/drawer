@@ -162,6 +162,7 @@ fn frame(d: &Document, input: Input, cancel: &AtomicBool) -> Result<Frame, Strin
                     .push(r.source_pixel(Key::Layer(Target::Raster(id)), p)),
                 Input::Scene => {
                     let mut color = crate::paper::Color::default();
+                    color.add(r.environment_sample(p).rgba8());
                     let mut geometry: Option<Geometry> = None;
                     for e in &order {
                         let Key::World(id) = e.key else {
@@ -266,6 +267,12 @@ fn analyze(
                         None
                     };
                     let b = other.map_or([0; 4], |i| f.rgba[i]);
+                    if s.silhouette
+                        && f.geometry.get(i).is_some_and(|g| g.is_some())
+                        && other.is_some_and(|j| f.geometry.get(j).is_some_and(|g| g.is_none()))
+                    {
+                        edge = true;
+                    }
                     if s.silhouette && (b[3] == 0 || c[3].abs_diff(b[3]) > 16) {
                         edge = true;
                     }
@@ -372,7 +379,13 @@ pub fn prepare(
                 .world3d
                 .surfaces
                 .values()
-                .any(|s| !s.triangles.is_empty()))
+                .any(|s| !s.triangles.is_empty())
+                && !d
+                    .scene
+                    .world3d
+                    .environment
+                    .as_ref()
+                    .is_some_and(|e| e.settings.background))
     {
         return Err("The3D scene needs a camera and polygon faces".into());
     }

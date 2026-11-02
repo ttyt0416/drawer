@@ -988,3 +988,9 @@ crates/drawer-app/src/world_views_verify.rs
 crates/drawer-core/src/world_views.rs
 crates/drawer-core/src/world_views_verify.rs
 docs/process/world-camera-views.md
+
+crates/drawer-core/src/environment.rs
+crates/drawer-core/src/environment_verify.rs
+crates/drawer-app/src/environment.rs
+crates/drawer-app/src/environment_verify.rs
+docs/process/local-environment.md

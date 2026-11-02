@@ -133,6 +133,8 @@ pub struct Data {
     pub lighting: Option<crate::lighting::Settings>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub colliders: BTreeSet<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<crate::environment::Data>,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -163,7 +165,8 @@ impl Data {
         *self == Self::default()
     }
     pub fn bytes(&self) -> usize {
-        self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
+        self.environment.as_ref().map_or(0, |e| e.bytes())
+            + self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
             + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
             + self.lighting.as_ref().map_or(0, |s| s.bytes())
             + self.colliders.len() * 32
@@ -171,6 +174,13 @@ impl Data {
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
+        if self
+            .environment
+            .as_ref()
+            .is_some_and(|e| e.pixels().is_err() || self.lens.is_none())
+        {
+            return false;
+        }
         if self.lighting.as_ref().is_some_and(|v| {
             !v.valid()
                 || self.lens.is_none()

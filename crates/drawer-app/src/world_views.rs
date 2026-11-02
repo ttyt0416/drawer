@@ -199,6 +199,9 @@ impl Drawer {
         }
     }
     fn copy_view_to_scene(&mut self) -> Result<(), String> {
+        if self.environment_pending() {
+            return Err("Apply/discard environment preview first".into());
+        }
         if self.has_world_preview()
             || self.models_busy()
             || self.rig_pending()
