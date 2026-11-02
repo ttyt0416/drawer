@@ -502,6 +502,7 @@ impl Drawer {
                 "light-table" => self.begin_light_table()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "model-library" => self.begin_model_library()?,
+                "line-tones" => self.begin_line_tones()?,
                 "uv-paint" => self.begin_uv_paint()?,
                 "world-physics" => self.begin_world_physics()?,
                 "scene-lighting" => self.begin_lighting()?,

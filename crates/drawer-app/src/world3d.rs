@@ -288,6 +288,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.line_tones_pending() {
+            return Err("Apply / discard contour and tone preview first".into());
+        }
+        self.line_tones.open = false;
         if self.uv_pending() {
             return Err("Apply or discard the UV stroke first".into());
         }

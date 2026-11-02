@@ -339,24 +339,55 @@ impl Trace {
         }
         self.shade(ray, h)
     }
-    fn shade(&self, r: Ray, h: Hit) -> [u8; 4] {
-        let t = &self.triangles[h.index];
-        let p = add(r.o, mul(r.d, h.t));
-        let mut n = unit(cross(sub(t.p[1], t.p[0]), sub(t.p[2], t.p[0])));
-        if matches!(self.settings.style, Style::Smooth | Style::Toon)
-            && let Some(normals) = t.n
+    pub(crate) fn finish_view(d: &Document) -> Self {
+        let mut settings = d.scene.world3d.lighting.clone().unwrap_or_default();
+        if d.scene.world3d.lighting.is_none() || settings.style == Style::Wire {
+            settings.style = Style::Unlit;
+        }
+        Self::build_geometry(d, settings, false).unwrap()
+    }
+    pub(crate) fn detail(&self, object: usize, point: Point) -> Option<(f64, V)> {
+        let r = self.ray(point);
+        let b = self.object_bounds.get(object).and_then(|v| *v)?;
+        if !b.hit(r, self.lens.near, self.lens.far) {
+            return None;
+        }
+        let h = self.nearest(r, self.lens.near, self.lens.far, |t| t.object == object)?;
+        if self
+            .nearest(r, self.lens.near, h.t - 1e-7, |t| {
+                t.object != object && t.opaque
+            })
+            .is_some()
         {
-            let normal = add(
+            return None;
+        }
+        Some((h.t, self.normal(r, h, true)))
+    }
+    fn normal(&self, r: Ray, h: Hit, smooth: bool) -> V {
+        let t = &self.triangles[h.index];
+        let mut n = unit(cross(sub(t.p[1], t.p[0]), sub(t.p[2], t.p[0])));
+        if smooth && let Some(normals) = t.n {
+            let v = add(
                 add(mul(normals[0], 1. - h.u - h.v), mul(normals[1], h.u)),
                 mul(normals[2], h.v),
             );
-            if dot(normal, normal) > 1e-20 {
-                n = unit(normal);
+            if dot(v, v) > 1e-20 {
+                n = unit(v);
             }
         }
         if dot(n, r.d) > 0. {
             n = mul(n, -1.);
         }
+        n
+    }
+    fn shade(&self, r: Ray, h: Hit) -> [u8; 4] {
+        let t = &self.triangles[h.index];
+        let p = add(r.o, mul(r.d, h.t));
+        let n = self.normal(
+            r,
+            h,
+            matches!(self.settings.style, Style::Smooth | Style::Toon),
+        );
         let mut light = [self.settings.ambient; 3];
         if self.settings.style == Style::Unlit {
             light = [1.; 3];

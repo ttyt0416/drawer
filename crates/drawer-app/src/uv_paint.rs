@@ -76,6 +76,10 @@ impl Drawer {
         self.uv_paint.staged.is_some() || self.uv_paint.stroke.is_some()
     }
     pub(super) fn begin_uv_paint(&mut self) -> Result<(), String> {
+        if self.line_tones_pending() {
+            return Err("Apply / discard contour and tone preview first".into());
+        }
+        self.line_tones.open = false;
         self.finish_stroke();
         if self.models_busy()
             || self.has_world_preview()
