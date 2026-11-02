@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 235] = [
+pub const EXTRA_COMMANDS: [&str; 236] = [
+    "world3d",
     "animation-finish",
     "animation-graph",
     "timeline-clips",
@@ -538,6 +539,7 @@ impl Settings {
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
+            "world3d" => "3D model placement, articulated pose, axes / pivots and camera",
             "animation-finish" => {
                 "Animation title-safe / overflow guides, output defaults, audio and naming rules"
             }

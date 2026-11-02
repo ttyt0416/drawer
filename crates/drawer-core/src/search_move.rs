@@ -143,19 +143,15 @@ fn prepare_body(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState
                 .index(id, d.scene.worlds.len())
                 .ok_or("Missing 3D source")?;
             let inv = d.scene.transform.inverse();
-            let scale = d
-                .scene
-                .camera
-                .as_ref()
-                .ok_or("Missing 3D camera")?
-                .pixels_per_unit;
-            let v = [
-                (inv.0[0] * dp[0] + inv.0[2] * dp[1]) / scale,
-                -(inv.0[1] * dp[0] + inv.0[3] * dp[1]) / scale,
-            ];
+            let original = inv.vector(dp);
+            let v = crate::world3d::page_delta(&d.scene, id, original)?;
             for p in &mut s.scene.worlds[n].vertices {
-                p[0] += v[0];
-                p[1] += v[1];
+                for i in 0..3 {
+                    p[i] += v[i];
+                }
+            }
+            if let Some(node) = s.scene.world3d.nodes.get_mut(&id) {
+                node.frame = node.frame.then(crate::world_math::Matrix::translation(v));
             }
         }
         p::Target::Folder(n) => {

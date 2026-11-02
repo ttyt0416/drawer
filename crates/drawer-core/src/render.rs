@@ -11,6 +11,7 @@ mod text_contour_tree;
 #[path = "text_paint.rs"]
 mod text_paint;
 pub struct Renderer<'a> {
+    world_geometry: Vec<Vec<[Point; 2]>>,
     page_parts: Vec<(u64, Box<Renderer<'a>>)>,
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -408,6 +409,17 @@ impl<'a> Renderer<'a> {
         let Some(mesh) = self.doc().scene.worlds.get(index) else {
             return [0; 4];
         };
+        if self.doc().scene.world3d.lens.is_some() {
+            return if self.world_geometry.get(index).is_some_and(|lines| {
+                lines
+                    .iter()
+                    .any(|line| distance(original, line[0], line[1]) <= 0.5)
+            }) {
+                mesh.color
+            } else {
+                [0; 4]
+            };
+        }
         let center = [
             (camera.page_bounds.min[0] + camera.page_bounds.max[0]) / 2.,
             (camera.page_bounds.min[1] + camera.page_bounds.max[1]) / 2.,
@@ -698,6 +710,9 @@ impl<'a> Renderer<'a> {
             })
             .collect();
         Self {
+            world_geometry: (0..document.scene.worlds.len())
+                .map(|i| crate::world3d::segments(&document.scene, i))
+                .collect(),
             page_parts: if caches {
                 document
                     .scene

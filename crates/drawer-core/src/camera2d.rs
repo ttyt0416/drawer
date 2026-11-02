@@ -125,6 +125,8 @@ pub(crate) fn validate_source_edit(d: &Document, s: &DocumentState) -> Result<()
         || d.scene.objects != s.scene.objects
         || d.scene.gradients != s.scene.gradients
         || d.scene.worlds != s.scene.worlds
+        || d.scene.camera != s.scene.camera
+        || d.scene.world3d != s.scene.world3d
         || !d.scene.cels.same_sources(&s.scene.cels)
         || d.scene.layer_effects != s.scene.layer_effects
         || d.scene.transform != s.scene.transform

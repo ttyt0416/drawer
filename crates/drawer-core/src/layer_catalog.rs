@@ -293,6 +293,7 @@ pub fn reconcile_scene(before: &Scene, after: &mut Scene) -> Result<(), String> 
         before.worlds.len(),
         after.worlds.len(),
     )?;
+    crate::world3d::reconcile(after);
     crate::render_order::reconcile_scene(after);
     Ok(())
 }

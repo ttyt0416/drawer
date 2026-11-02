@@ -306,6 +306,7 @@ pub(crate) fn prepare(d: &Document, keys: &[Key]) -> Result<Copied, String> {
             data.guides.push(copied);
         }
     }
+    crate::world3d::duplicate(&mut state.scene, &original.scene, &map);
     crate::page_parts::duplicate(&mut state.scene, &original.scene, &map);
     crate::cels::duplicate(&mut state.scene, &original.scene, &map);
     crate::keyframes::duplicate(&mut state.scene, &original.scene, &map);

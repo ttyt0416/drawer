@@ -931,3 +931,9 @@ crates/drawer-core/src/animation_finish_tests.rs
 crates/drawer-app/src/animation_finish.rs
 crates/drawer-app/src/animation_finish_verify.rs
 docs/process/animation-finishing.md
+crates/drawer-core/src/world_math.rs
+crates/drawer-core/src/world3d.rs
+crates/drawer-core/src/world3d_verify.rs
+crates/drawer-app/src/world3d.rs
+crates/drawer-app/src/world3d_verify.rs
+docs/process/world3d.md

@@ -718,6 +718,7 @@ pub fn validate_edit(doc: &Document, after: &DocumentState) -> Result<(), String
 }
 
 pub fn validate_scene(doc: &Document, after: &crate::scene::Scene) -> Result<(), String> {
+    crate::world3d::validate_edit(doc, after)?;
     crate::catalog_guard::validate(doc, after)?;
     for old in &doc.scene.lines.layers {
         let p = crate::file_objects::validation_flags(doc, after, Target::Vector(old.id));
