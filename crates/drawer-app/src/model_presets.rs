@@ -27,6 +27,10 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_model_presets(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.cameras_pending() {
             return Err("Apply/discard scene camera preview first".into());
         }

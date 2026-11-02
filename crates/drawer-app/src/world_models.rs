@@ -67,6 +67,10 @@ impl Drawer {
         self.world_models.job.is_some()
     }
     pub(super) fn begin_model_library(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.cameras_pending() {
             return Err("Apply/discard scene camera preview first".into());
         }

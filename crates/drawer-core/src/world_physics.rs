@@ -212,6 +212,7 @@ pub fn prepare(
                             continue;
                         }
                         crate::book_io::check_cancel(cancel)?;
+                        crate::model_edit::sync(d, &mut state.scene)?;
                         let mut frozen = crate::layer_merge::preview(&state, d.current_frame)?;
                         frozen.keyframe_content = d.keyframe_content;
                         let (mut next, new) = crate::layer_move::copy_sources(&frozen, &keys)?;

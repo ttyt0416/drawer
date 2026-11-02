@@ -153,6 +153,11 @@ impl Trace {
         } else {
             crate::pose_sequence::meshes(d).unwrap_or_default()
         };
+        let frames = if physical {
+            Default::default()
+        } else {
+            crate::model_edit::sampled_frames(d).unwrap_or_default()
+        };
         for (object, m) in d.scene.worlds.iter().enumerate() {
             let m = poses.get(&d.scene.catalog.worlds.id(object)).unwrap_or(m);
             let id = d.scene.catalog.worlds.id(object);
@@ -167,7 +172,9 @@ impl Trace {
             let Some(s) = d.scene.world3d.surfaces.get(&id) else {
                 continue;
             };
-            let frame = crate::world3d::node(&d.scene, id).map_or(Matrix::default(), |n| n.frame);
+            let frame = frames.get(&id).copied().unwrap_or_else(|| {
+                crate::world3d::node(&d.scene, id).map_or(Matrix::default(), |n| n.frame)
+            });
             let inv = frame.inverse();
             if !physical && let Some(attributes) = &s.imported {
                 for (index, m) in &attributes.materials {

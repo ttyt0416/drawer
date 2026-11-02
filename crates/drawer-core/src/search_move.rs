@@ -224,6 +224,7 @@ fn prepare_body(d: &Document, key: Key, delta: [i64; 2]) -> Result<DocumentState
     if !matches!(t, p::Target::Object(_) | p::Target::Gradient(_)) {
         crate::file_objects::shift(&mut s.scene, key, dp);
     }
+    crate::model_edit::sync(d, &mut s.scene)?;
     if !s.scene.valid() || !s.scene.catalog.valid_animation(s.animation.as_ref()) {
         return Err("Moved source exceeds limits".into());
     }

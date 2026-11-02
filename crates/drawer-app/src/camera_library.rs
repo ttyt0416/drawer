@@ -78,6 +78,10 @@ impl Drawer {
         self.scene_cameras.job.is_some() || self.scene_cameras.staged.is_some()
     }
     pub(super) fn begin_scene_cameras(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.has_world_preview()
             || self.models_busy()
             || self.rig_pending()

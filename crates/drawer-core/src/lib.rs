@@ -581,3 +581,6 @@ pub mod pose_sequence_verify;
 
 pub mod camera_library;
 pub mod camera_library_verify;
+
+pub mod model_edit;
+pub mod model_edit_verify;

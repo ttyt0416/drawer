@@ -1006,3 +1006,9 @@ crates/drawer-core/src/camera_library_verify.rs
 crates/drawer-app/src/camera_library.rs
 crates/drawer-app/src/camera_library_verify.rs
 docs/process/scene-cameras.md
+
+crates/drawer-core/src/model_edit.rs
+crates/drawer-core/src/model_edit_verify.rs
+crates/drawer-app/src/model_edit.rs
+crates/drawer-app/src/model_edit_verify.rs
+docs/process/model-controls.md

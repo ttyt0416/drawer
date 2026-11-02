@@ -130,6 +130,10 @@ impl Drawer {
         self.human_rig.staged.is_some()
     }
     pub(super) fn begin_human_rig(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.cameras_pending() {
             return Err("Apply/discard scene camera preview first".into());
         }
@@ -234,7 +238,7 @@ impl Drawer {
    if let Some(rig)=&mut p.draft {
     let joints=rig.joints();p.joint=p.joint.min(joints.len()-1);
     egui::ComboBox::from_id_salt("mannequin-joint").selected_text(&joints[p.joint].name).show_ui(ui,|ui|{for(i,j)in joints.iter().enumerate(){ui.selectable_value(&mut p.joint,i,&j.name);}});
-    ui.horizontal(|ui|{for axis in 0..3{let j=&joints[p.joint];let r=ui.add(egui::Slider::new(&mut rig.angles[p.joint][axis],j.min[axis]..=j.max[axis]).text(["X","Y","Z"][axis]));p.controls.insert(format!("angle-{axis}"),r.rect);changed|=r.changed();}});
+    let limits=drawer_core::model_edit::controls(rig);ui.horizontal(|ui|{for axis in 0..3{let j=&limits[p.joint];let r=ui.add_enabled(!j.locked[axis],egui::Slider::new(&mut rig.angles[p.joint][axis],j.min[axis]..=j.max[axis]).text(["X","Y","Z"][axis]));p.controls.insert(format!("angle-{axis}"),r.rect);changed|=r.changed();}});
    }else if p.actor.is_some(){ui.label("This model has no rig; joint pose editing is unavailable.");}
    p.preview(ui,d);
    egui::ScrollArea::vertical().id_salt("mannequin-shape").max_height(200.).show(ui,|ui|{if let Some(r)=&mut p.draft {

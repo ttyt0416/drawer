@@ -135,6 +135,10 @@ impl Drawer {
             || self.pose_sequences.job.as_ref().is_some_and(|j| !j.view)
     }
     pub(super) fn begin_pose_sequences(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.cameras_pending() {
             return Err("Apply/discard scene camera preview first".into());
         }

@@ -69,6 +69,13 @@ pub struct Rig {
     pub shape: Shape,
     pub angles: Vec<V>,
     pub mirrored: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<crate::model_edit::Control>,
+    #[serde(default, skip_serializing_if = "zero_expression")]
+    pub expressions: [f64; 3],
+}
+fn zero_expression(v: &[f64; 3]) -> bool {
+    *v == [0.; 3]
 }
 #[derive(Clone, Debug)]
 pub struct Joint {
@@ -266,7 +273,7 @@ fn definition(r: &Rig) -> Definition {
                 [0., 0.035 * h, 0.],
                 false,
             );
-            head(&mut d, neck, s, h);
+            head(&mut d, neck, s, h, r.expressions);
             for (prefix, left) in [("R/", false), ("L/", true)] {
                 let shoulder = d.joint(
                     format!("{prefix}Shoulder"),
@@ -393,7 +400,7 @@ fn definition(r: &Rig) -> Definition {
                 [0., 0.04 * h, 0.],
                 false,
             );
-            head(&mut d, root, s, h);
+            head(&mut d, root, s, h, r.expressions);
         }
         Kind::Hand => d.fingers(root, "", h * s.hands, s.palm, s.fingers, false),
     }
@@ -407,7 +414,7 @@ fn definition(r: &Rig) -> Definition {
     }
     d
 }
-fn head(d: &mut Definition, parent: usize, s: Shape, h: f64) {
+fn head(d: &mut Definition, parent: usize, s: Shape, h: f64, e: [f64; 3]) {
     let k = h * s.head;
     let j = d.joint(
         "Head".into(),
@@ -421,7 +428,7 @@ fn head(d: &mut Definition, parent: usize, s: Shape, h: f64) {
     d.piece(
         j,
         true,
-        [0.09 * k * s.face, 0.12 * k, 0.095 * k],
+        [0.09 * k * s.face * (1. + 0.12 * e[2]), 0.12 * k, 0.095 * k],
         [0., 0.11 * k, 0.],
         false,
     );
@@ -430,7 +437,11 @@ fn head(d: &mut Definition, parent: usize, s: Shape, h: f64) {
         d.piece(
             j,
             true,
-            [0.013 * k, 0.009 * k, 0.012 * k],
+            [
+                0.013 * k,
+                0.009 * k * (1. - 0.9 * e[0]) * (1. + 0.6 * e[1]),
+                0.012 * k,
+            ],
             [x * 0.035 * k * s.face, 0.13 * k, 0.086 * k],
             false,
         );
@@ -454,8 +465,12 @@ fn head(d: &mut Definition, parent: usize, s: Shape, h: f64) {
     d.piece(
         jaw,
         true,
-        [0.07 * k * s.jaw, 0.04 * k, 0.075 * k],
-        [0., -0.005 * k, 0.025 * k],
+        [
+            0.07 * k * s.jaw * (1. + 0.15 * e[2]),
+            0.04 * k * (1. + 0.3 * e[1]),
+            0.075 * k,
+        ],
+        [0., -0.005 * k - 0.025 * k * e[1], 0.025 * k],
         false,
     );
 }
@@ -467,6 +482,8 @@ impl Rig {
             shape: Shape::default(),
             angles: vec![],
             mirrored: false,
+            controls: vec![],
+            expressions: [0.; 3],
         };
         r.angles = vec![[0.; 3]; definition(&r).joints.len()];
         r
@@ -475,13 +492,22 @@ impl Rig {
         definition(self).joints
     }
     pub fn valid(&self) -> bool {
-        self.version == 1 && self.shape.valid() && (self.kind == Kind::Hand || !self.mirrored) && {
-            let j = self.joints();
-            j.len() == self.angles.len()
-                && j.iter().zip(&self.angles).all(|(j, a)| {
-                    (0..3).all(|i| a[i].is_finite() && a[i] >= j.min[i] && a[i] <= j.max[i])
-                })
-        }
+        self.version == 1
+            && self.shape.valid()
+            && (self.kind == Kind::Hand || !self.mirrored)
+            && self
+                .expressions
+                .into_iter()
+                .all(|w| w.is_finite() && (0. ..=1.).contains(&w))
+            && (self.kind != Kind::Hand || self.expressions == [0.; 3])
+            && crate::model_edit::valid_controls(self)
+            && {
+                let j = self.joints();
+                j.len() == self.angles.len()
+                    && j.iter().zip(&self.angles).all(|(j, a)| {
+                        (0..3).all(|i| a[i].is_finite() && a[i] >= j.min[i] && a[i] <= j.max[i])
+                    })
+            }
     }
     pub fn reset_pose(&mut self) {
         self.angles.fill([0.; 3]);
@@ -514,7 +540,9 @@ impl Rig {
         out
     }
     pub fn bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.angles.len() * std::mem::size_of::<V>()
+        std::mem::size_of::<Self>()
+            + self.angles.len() * std::mem::size_of::<V>()
+            + self.controls.len() * std::mem::size_of::<crate::model_edit::Control>()
     }
 }
 pub(crate) fn generate(r: &Rig, cancel: &AtomicBool) -> Result<(WorldMesh, Surface), String> {

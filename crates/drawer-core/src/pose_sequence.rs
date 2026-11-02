@@ -231,11 +231,10 @@ impl Data {
             && self.bindings.iter().all(|b| {
                 self.assets.get(&b.asset).is_some_and(|a| {
                     b.valid(&a.clip)
-                        && scene
-                            .world3d
-                            .rigs
-                            .get(&b.rig)
-                            .is_some_and(|r| Skeleton::of(r) == a.clip.skeleton)
+                        && scene.world3d.rigs.get(&b.rig).is_some_and(|r| {
+                            Skeleton::of(r) == a.clip.skeleton
+                                && a.clip.poses.iter().all(|p| p.rig(r).valid())
+                        })
                 }) && scene.timelines.entries.iter().any(|e| e.id == b.timeline)
             })
     }
@@ -366,37 +365,9 @@ pub fn sampled_rig(d: &Document, id: u64) -> Result<Rig, String> {
     Ok(r)
 }
 pub(crate) fn meshes(d: &Document) -> Result<BTreeMap<u64, crate::scene::WorldMesh>, String> {
-    let mut out = BTreeMap::new();
-    if d.animation.is_none() {
-        return Ok(out);
-    }
-    for b in d
-        .scene
-        .world3d
-        .sequences
-        .bindings
-        .iter()
-        .filter(|b| b.timeline == d.scene.timelines.active)
-    {
-        let r = sampled_rig(d, b.rig)?;
-        let (mut mesh, _) = crate::human_rig::generate(&r, &AtomicBool::new(false))?;
-        let i = d
-            .scene
-            .catalog
-            .worlds
-            .index(b.rig, d.scene.worlds.len())
-            .ok_or("Pose rig removed")?;
-        let frame = world3d::node(&d.scene, b.rig)
-            .ok_or("Pose frame missing")?
-            .frame;
-        for v in &mut mesh.vertices {
-            *v = frame.map(*v);
-        }
-        mesh.color = d.scene.worlds[i].color;
-        out.insert(b.rig, mesh);
-    }
-    Ok(out)
+    crate::model_edit::meshes(d)
 }
+
 fn apply_pose(
     scene: &mut crate::scene::Scene,
     id: u64,

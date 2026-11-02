@@ -76,6 +76,10 @@ impl Drawer {
         self.uv_paint.staged.is_some() || self.uv_paint.stroke.is_some()
     }
     pub(super) fn begin_uv_paint(&mut self) -> Result<(), String> {
+        if self.model_edit_pending() {
+            return Err("Apply/discard model controls preview first".into());
+        }
+        self.model_controls.open = false;
         if self.cameras_pending() {
             return Err("Apply/discard scene camera preview first".into());
         }

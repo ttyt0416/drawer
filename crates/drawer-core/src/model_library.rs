@@ -467,7 +467,7 @@ pub fn prepare(
     {
         return Err("Primitive geometry / topology reservation exceeds available memory".into());
     }
-    let (state, ids, warnings, summary) = match edit {
+    let (mut state, ids, warnings, summary) = match edit {
         Edit::Primitive {
             shape,
             detail,
@@ -589,6 +589,7 @@ pub fn prepare(
     if state.memory_bytes().saturating_mul(3) > budget {
         return Err("Prepared model / attributes exceed remaining working memory".into());
     }
+    crate::model_edit::sync(d, &mut state.scene)?;
     let frozen = crate::layer_merge::preview(&state, d.current_frame)?;
     crate::files::native_scene(&frozen)
         .map_err(|e| format!("Model attributes exceed native scene capacity: {e}"))?;

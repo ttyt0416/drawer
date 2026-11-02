@@ -275,6 +275,8 @@ pub struct Data {
         skip_serializing_if = "crate::camera_library::Data::is_default"
     )]
     pub cameras: crate::camera_library::Data,
+    #[serde(default, skip_serializing_if = "crate::model_edit::Data::is_default")]
+    pub editing: crate::model_edit::Data,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -305,7 +307,8 @@ impl Data {
         *self == Self::default()
     }
     pub fn bytes(&self) -> usize {
-        self.cameras.bytes()
+        self.editing.bytes()
+            + self.cameras.bytes()
             + self.sequences.bytes()
             + self.environment.as_ref().map_or(0, |e| e.bytes())
             + self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
@@ -316,7 +319,7 @@ impl Data {
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
-        if !self.cameras.valid(s) || !self.sequences.valid(s) {
+        if !self.editing.valid(s) || !self.cameras.valid(s) || !self.sequences.valid(s) {
             return false;
         }
         if self
@@ -403,6 +406,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
     s.world3d.rigs.retain(|id, _| ids.contains(id));
     s.world3d.colliders.retain(|id| ids.contains(id));
     crate::pose_sequence::prune(s);
+    crate::model_edit::prune(s);
     for n in s.world3d.nodes.values_mut() {
         if n.parent.is_some_and(|p| !ids.contains(&p)) {
             n.parent = None;
@@ -451,6 +455,7 @@ pub(crate) fn duplicate(
         }
     }
     crate::pose_sequence::duplicate(s, original, map)?;
+    crate::model_edit::duplicate(s, original, map);
     Ok(())
 }
 /// Page-layer movement is parallel to the camera image plane at the joint's
@@ -790,6 +795,14 @@ pub fn prepare(
             "Edit document 3D camera; one Undo restores projection".into()
         }
         Edit::Parent { ids, parent } => {
+            if ids
+                .iter()
+                .any(|id| s.world3d.editing.attachments.contains_key(id))
+            {
+                return Err(
+                    "Use model-controls for world/local-preserving bone parent changes".into(),
+                );
+            }
             if ids.is_empty()
                 || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
                 || parent.is_some_and(|p| index(s, p).is_none())
@@ -902,6 +915,7 @@ pub(crate) fn prepared(
     affected: Vec<u64>,
     warnings: Vec<String>,
 ) -> Result<Prepared, String> {
+    crate::model_edit::sync(d, &mut state.scene)?;
     if !state.scene.world3d.valid(&state.scene) {
         return Err("3D transform / surface is singular, cyclic or outside limits".into());
     }
