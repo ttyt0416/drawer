@@ -245,6 +245,7 @@ fn guide_lines(d: &Document, view: &View, cameras: bool, edges: bool) -> Vec<(Po
         })
     };
     if edges {
+        let poses = crate::pose_sequence::meshes(d).unwrap_or_default();
         for (i, _) in d.scene.worlds.iter().enumerate() {
             let key = crate::layer_search::Key::World(d.scene.catalog.worlds.id(i));
             if crate::layer_catalog::properties(d, key).hidden {
@@ -254,7 +255,12 @@ fn guide_lines(d: &Document, view: &View, cameras: bool, edges: bool) -> Vec<(Po
                 .scene
                 .transform
                 .then(crate::camera2d::display_matrix(d, key, false).0);
-            for line in world3d::segments(&d.scene, i) {
+            for line in world3d::segments_mesh(
+                &d.scene,
+                poses
+                    .get(&d.scene.catalog.worlds.id(i))
+                    .unwrap_or(&d.scene.worlds[i]),
+            ) {
                 lines.push((
                     normalized(transform.map(line[0])),
                     normalized(transform.map(line[1])),

@@ -162,7 +162,13 @@ impl Trace {
             camera,
             lens,
         };
+        let poses = if physical {
+            Default::default()
+        } else {
+            crate::pose_sequence::meshes(d).unwrap_or_default()
+        };
         for (object, m) in d.scene.worlds.iter().enumerate() {
+            let m = poses.get(&d.scene.catalog.worlds.id(object)).unwrap_or(m);
             let id = d.scene.catalog.worlds.id(object);
             let key = crate::layer_search::Key::World(id);
             let props = crate::layer_catalog::properties(d, key);
@@ -202,7 +208,26 @@ impl Trace {
             {
                 t.textures[object] = Some((paint.size as usize, pixels));
             }
+            let flip = poses.contains_key(&id)
+                && crate::pose_sequence::sampled_rig(d, id).is_ok_and(|r| {
+                    d.scene
+                        .world3d
+                        .rigs
+                        .get(&id)
+                        .is_some_and(|base| r.mirrored != base.mirrored)
+                });
             for (face_index, face) in s.triangles.iter().enumerate() {
+                let mut reflected;
+                let face = if flip {
+                    reflected = face.clone();
+                    reflected.v.swap(1, 2);
+                    if let Some(uv) = &mut reflected.t {
+                        uv.swap(1, 2);
+                    }
+                    &reflected
+                } else {
+                    face
+                };
                 let p = face.v.map(|i| m.vertices[i as usize]);
                 let area = cross(sub(p[1], p[0]), sub(p[2], p[0]));
                 if dot(area, area) < 1e-24 {

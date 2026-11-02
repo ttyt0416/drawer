@@ -503,6 +503,7 @@ impl Drawer {
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "model-library" => self.begin_model_library()?,
                 "scene-environment" => self.begin_environment()?,
+                "pose-sequences" => self.begin_pose_sequences()?,
                 "world-views" => self.begin_world_views()?,
                 "line-tones" => self.begin_line_tones()?,
                 "uv-paint" => self.begin_uv_paint()?,

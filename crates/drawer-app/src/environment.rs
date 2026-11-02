@@ -49,6 +49,10 @@ impl Drawer {
         self.environment.job.is_some() || self.environment.staged.is_some()
     }
     pub(super) fn begin_environment(&mut self) -> Result<(), String> {
+        if self.sequence_pending() {
+            return Err("Apply/discard pose sequence preview first".into());
+        }
+        self.pose_sequences.open = false;
         self.finish_stroke();
         if self.models_busy()
             || self.has_world_preview()
@@ -93,7 +97,8 @@ impl Drawer {
         if self.environment.job.is_some() {
             return Err("Cancel the current panorama operation first".into());
         }
-        if self.has_world_preview()
+        if self.sequence_pending()
+            || self.has_world_preview()
             || self.models_busy()
             || self.rig_pending()
             || self.lighting_pending()

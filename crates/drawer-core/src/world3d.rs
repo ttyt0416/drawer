@@ -135,6 +135,11 @@ pub struct Data {
     pub colliders: BTreeSet<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<crate::environment::Data>,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::pose_sequence::Data::is_default"
+    )]
+    pub sequences: crate::pose_sequence::Data,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -165,7 +170,8 @@ impl Data {
         *self == Self::default()
     }
     pub fn bytes(&self) -> usize {
-        self.environment.as_ref().map_or(0, |e| e.bytes())
+        self.sequences.bytes()
+            + self.environment.as_ref().map_or(0, |e| e.bytes())
             + self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
             + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
             + self.lighting.as_ref().map_or(0, |s| s.bytes())
@@ -174,6 +180,9 @@ impl Data {
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
+        if !self.sequences.valid(s) {
+            return false;
+        }
         if self
             .environment
             .as_ref()
@@ -257,6 +266,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
     s.world3d.surfaces.retain(|id, _| ids.contains(id));
     s.world3d.rigs.retain(|id, _| ids.contains(id));
     s.world3d.colliders.retain(|id| ids.contains(id));
+    crate::pose_sequence::prune(s);
     for n in s.world3d.nodes.values_mut() {
         if n.parent.is_some_and(|p| !ids.contains(&p)) {
             n.parent = None;
@@ -267,7 +277,11 @@ pub(crate) fn reconcile(s: &mut Scene) {
         s.world3d.lighting = None;
     }
 }
-pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key>) {
+pub(crate) fn duplicate(
+    s: &mut Scene,
+    original: &Scene,
+    map: &BTreeMap<Key, Key>,
+) -> Result<(), String> {
     for (old, new) in map {
         if let (Key::World(old), Key::World(new)) = (old, new)
             && original.world3d.colliders.contains(old)
@@ -300,6 +314,8 @@ pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key
             s.world3d.nodes.insert(*new, node);
         }
     }
+    crate::pose_sequence::duplicate(s, original, map)?;
+    Ok(())
 }
 /// Page-layer movement is parallel to the camera image plane at the joint's
 /// depth. It also carries the retained frame, without moving unselected layers.
@@ -474,6 +490,7 @@ pub struct Prepared {
     pub summary: String,
     pub affected: Vec<u64>,
     pub warnings: Vec<String>,
+    history_label: Option<String>,
 }
 impl Prepared {
     pub fn scene(&self) -> &Scene {
@@ -482,11 +499,19 @@ impl Prepared {
     pub fn matches(&self, d: &Document) -> bool {
         d.id == self.id && d.revision == self.revision
     }
+    pub(crate) fn named(mut self, label: &str) -> Self {
+        self.history_label = Some(label.into());
+        self
+    }
     pub fn commit(self, d: &mut Document) -> Result<bool, String> {
         if !self.matches(d) {
             return Err("3D preview is stale; prepare again".into());
         }
-        d.commit_state(self.state)
+        if let Some(label) = self.history_label {
+            d.commit_state_named(self.state, &label)
+        } else {
+            d.commit_state(self.state)
+        }
     }
 }
 fn camera(d: &Document) -> Camera {
@@ -754,18 +779,22 @@ pub(crate) fn prepared(
         summary,
         affected,
         warnings,
+        history_label: None,
     })
 }
 
 pub fn segments(s: &Scene, index: usize) -> Vec<[Point; 2]> {
+    let Some(mesh) = s.worlds.get(index) else {
+        return vec![];
+    };
+    segments_mesh(s, mesh)
+}
+pub(crate) fn segments_mesh(s: &Scene, mesh: &WorldMesh) -> Vec<[Point; 2]> {
     let (Some(c), Some(l)) = (&s.camera, s.world3d.lens) else {
         return vec![];
     };
-    let Some(m) = s.worlds.get(index) else {
-        return vec![];
-    };
-    m.edges
+    mesh.edges
         .iter()
-        .filter_map(|e| l.segment(c, *m.vertices.get(e[0])?, *m.vertices.get(e[1])?))
+        .filter_map(|e| l.segment(c, *mesh.vertices.get(e[0])?, *mesh.vertices.get(e[1])?))
         .collect()
 }

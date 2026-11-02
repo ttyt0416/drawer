@@ -602,7 +602,7 @@ pub struct Prepared {
     pub state: DocumentState,
     pub summary: String,
 }
-fn initialize(s: &mut DocumentState) -> Result<(), String> {
+pub(crate) fn initialize(s: &mut DocumentState) -> Result<(), String> {
     let a = s.animation.as_ref().ok_or("Create a timeline first")?;
     s.scene.catalog.tracks.initialize(a.tracks.len())?;
     for (n, t) in a.tracks.iter().enumerate() {
@@ -751,14 +751,30 @@ pub fn prepare(
             if independent {
                 independent_cells(&mut s, &mut a, budget, cancel)?;
             }
+            let original = s.scene.timelines.active;
+            let bindings = s
+                .scene
+                .world3d
+                .sequences
+                .bindings
+                .iter()
+                .filter(|b| b.timeline == original)
+                .cloned()
+                .collect::<Vec<_>>();
+            let next = s.scene.timelines.next;
             let drop = s.scene.timelines.active_entry().unwrap().drop_frame;
             add(&mut s, n, a, drop)?;
+            for mut b in bindings {
+                b.timeline = next;
+                s.scene.world3d.sequences.bindings.push(b);
+            }
             format!(
                 "Duplicate time placement, keys, labels, audio and shots with {} cel sources; the original time arrangement remains independent",
                 if independent { "independent" } else { "shared" }
             )
         }
     };
+    crate::pose_sequence::prune(&mut s.scene);
     reconcile(d, &mut s)?;
     crate::book_io::check_cancel(cancel)?;
     if !valid_state(&s) {

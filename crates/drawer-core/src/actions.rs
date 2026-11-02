@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 245] = [
+pub const EXTRA_COMMANDS: [&str; 246] = [
+    "pose-sequences",
     "scene-environment",
     "world-views",
     "line-tones",
@@ -551,6 +552,7 @@ impl Settings {
             "model-library" => {
                 "Local3D model library, OBJ/glTF/GLB, primitives, duplicate and align"
             }
+            "pose-sequences" => "Local pose sequence snapshots / explicit timeline links",
             "scene-environment" => "Local panorama background / diffuse environment light",
             "world-views" => "Multiple3D scene views / independent or linked editing cameras",
             "line-tones" => "Image /3D contours and stepped-tone snapshot layers",

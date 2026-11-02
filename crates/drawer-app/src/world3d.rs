@@ -288,6 +288,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.sequence_pending() {
+            return Err("Apply/discard pose sequence preview first".into());
+        }
+        self.pose_sequences.open = false;
         if self.environment_pending() {
             return Err("Apply/discard the environment preview first".into());
         }

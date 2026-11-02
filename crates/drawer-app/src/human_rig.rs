@@ -8,6 +8,7 @@ use std::{collections::BTreeMap, sync::atomic::AtomicBool};
 pub(super) struct Panel {
     pub open: bool,
     actor: Option<u64>,
+    base_scope: bool,
     draft: Option<Rig>,
     staged: Option<Box<world3d::Prepared>>,
     stamp: Option<(u64, u64)>,
@@ -18,6 +19,7 @@ pub(super) struct Panel {
 impl Panel {
     fn load(&mut self, d: &Document, id: Option<u64>) {
         self.actor = id;
+        self.base_scope = false;
         self.draft = id.and_then(|id| d.scene.world3d.rigs.get(&id).cloned());
         self.staged = None;
         self.joint = 0;
@@ -32,7 +34,11 @@ impl Panel {
         self.staged = None;
         let rig = self.draft.clone().ok_or("Select a rigged mannequin")?;
         let e = if let Some(id) = self.actor {
-            Edit::Replace { id, rig }
+            if self.base_scope {
+                Edit::ReplaceBase { id, rig }
+            } else {
+                Edit::Replace { id, rig }
+            }
         } else {
             Edit::Create {
                 rig,
@@ -124,6 +130,10 @@ impl Drawer {
         self.human_rig.staged.is_some()
     }
     pub(super) fn begin_human_rig(&mut self) -> Result<(), String> {
+        if self.sequence_pending() {
+            return Err("Apply/discard pose sequence preview first".into());
+        }
+        self.pose_sequences.open = false;
         if self.environment_pending() {
             return Err("Apply/discard the environment preview first".into());
         }
@@ -212,6 +222,7 @@ impl Drawer {
         p.controls.clear();
         egui::Window::new("Mannequins / body, head and hand joints").default_pos(egui::pos2(15.,15.)).default_width(680.).max_height(650.).vscroll(false).open(&mut open).show(ctx,|ui|{
    ui.add_sized([650.,20.],egui::Label::new(&p.notice).truncate()).on_hover_text(&p.notice);
+   if p.actor.is_some_and(|id|drawer_core::pose_sequence::active(&d.scene,id).is_some()){ui.small("Sequence bound: pose-sequences edits saved poses. This window needs explicit base-scene scope.");let r=ui.checkbox(&mut p.base_scope,"Explicitly edit base scene (sequence snapshots remain)");p.controls.insert("base-scope".into(),r.rect);if r.changed(){p.staged=None;changed=true;}}
    ui.horizontal_wrapped(|ui|{for(key,label,kind)in[("body","New body",Kind::Body),("head","New head",Kind::Head),("hand","New hand",Kind::Hand)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){p.actor=None;p.draft=Some(Rig::new(kind));p.joint=0;changed=true;}}
     for(key,label,a)in[("apply","Apply",1),("discard","Discard",2),("mirror","Mirror pose",3),("reset","Reset pose",4),("detach","Detach rig",5)]{let enabled=if a==1{p.staged.is_some()}else if a==5{p.actor.is_some()&&p.draft.is_some()}else{p.draft.is_some()};let r=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}
    });

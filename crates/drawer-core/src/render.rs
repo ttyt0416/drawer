@@ -733,6 +733,13 @@ impl<'a> Renderer<'a> {
         caches: bool,
     ) -> Self {
         let mut text_error = None;
+        let poses = match crate::pose_sequence::meshes(document) {
+            Ok(p) => p,
+            Err(e) => {
+                text_error = Some(e);
+                Default::default()
+            }
+        };
         let text_contours = document
             .scene
             .objects
@@ -772,16 +779,21 @@ impl<'a> Renderer<'a> {
             world_geometry: (0..document.scene.worlds.len())
                 .map(|i| {
                     text_contour_tree::Set::new(
-                        crate::world3d::segments(&document.scene, i)
-                            .into_iter()
-                            .map(|line| Contour {
-                                points: line.to_vec(),
-                                bounds: Rect {
-                                    min: std::array::from_fn(|i| line[0][i].min(line[1][i])),
-                                    max: std::array::from_fn(|i| line[0][i].max(line[1][i])),
-                                },
-                            })
-                            .collect(),
+                        crate::world3d::segments_mesh(
+                            &document.scene,
+                            poses
+                                .get(&document.scene.catalog.worlds.id(i))
+                                .unwrap_or(&document.scene.worlds[i]),
+                        )
+                        .into_iter()
+                        .map(|line| Contour {
+                            points: line.to_vec(),
+                            bounds: Rect {
+                                min: std::array::from_fn(|i| line[0][i].min(line[1][i])),
+                                max: std::array::from_fn(|i| line[0][i].max(line[1][i])),
+                            },
+                        })
+                        .collect(),
                     )
                 })
                 .collect(),

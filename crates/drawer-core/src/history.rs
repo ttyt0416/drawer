@@ -34,6 +34,7 @@ enum EditKind {
 }
 #[derive(Clone)]
 struct Edit {
+    label: Option<String>,
     group: Option<u64>,
     kind: EditKind,
     from: u64,
@@ -41,30 +42,31 @@ struct Edit {
 }
 impl Edit {
     fn bytes(&self) -> usize {
-        match &self.kind {
-            EditKind::Multi { layers, scene } => {
-                layers
-                    .iter()
-                    .map(|(_, p)| p.len() * std::mem::size_of::<PixelChange>())
-                    .sum::<usize>()
-                    + std::mem::size_of::<Self>()
-                    + scene
-                        .as_ref()
-                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
+        self.label.as_ref().map_or(0, String::len)
+            + match &self.kind {
+                EditKind::Multi { layers, scene } => {
+                    layers
+                        .iter()
+                        .map(|(_, p)| p.len() * std::mem::size_of::<PixelChange>())
+                        .sum::<usize>()
+                        + std::mem::size_of::<Self>()
+                        + scene
+                            .as_ref()
+                            .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
+                }
+                EditKind::Pixels { changes, scene, .. } => {
+                    changes.len() * std::mem::size_of::<PixelChange>()
+                        + std::mem::size_of::<Self>()
+                        + scene
+                            .as_ref()
+                            .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
+                }
+                EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
+                EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
+                EditKind::Scene { before, after } => {
+                    before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
+                }
             }
-            EditKind::Pixels { changes, scene, .. } => {
-                changes.len() * std::mem::size_of::<PixelChange>()
-                    + std::mem::size_of::<Self>()
-                    + scene
-                        .as_ref()
-                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
-            }
-            EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
-            EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
-            EditKind::Scene { before, after } => {
-                before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
-            }
-        }
     }
 }
 #[derive(Default, Clone)]
@@ -82,6 +84,7 @@ impl History {
     fn push(&mut self, kind: EditKind) {
         self.next += 1;
         let edit = Edit {
+            label: None,
             group: None,
             kind,
             from: self.current,
@@ -150,6 +153,7 @@ impl Document {
         }
         let kind = EditKind::Multi { layers, scene };
         let bytes = Edit {
+            label: None,
             group: None,
             kind,
             from: 0,
@@ -331,6 +335,26 @@ impl Document {
         });
         self.history_changed();
         true
+    }
+    pub fn undo_label(&self) -> Option<&str> {
+        self.history.undo.last().and_then(|e| e.label.as_deref())
+    }
+    pub fn redo_label(&self) -> Option<&str> {
+        self.history.redo.last().and_then(|e| e.label.as_deref())
+    }
+    pub fn commit_state_named(
+        &mut self,
+        after: DocumentState,
+        label: &str,
+    ) -> Result<bool, String> {
+        if label.is_empty() || label.len() > 256 || label.chars().any(char::is_control) {
+            return Err("Invalid history label".into());
+        }
+        let changed = self.commit_state(after)?;
+        if changed && let Some(edit) = self.history.undo.last_mut() {
+            edit.label = Some(label.into());
+        }
+        Ok(changed)
     }
     pub fn commit_state(&mut self, after: DocumentState) -> Result<bool, String> {
         self.commit_state_group(after, None)

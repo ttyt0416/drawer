@@ -517,7 +517,7 @@ impl Rig {
         std::mem::size_of::<Self>() + self.angles.len() * std::mem::size_of::<V>()
     }
 }
-fn generate(r: &Rig, cancel: &AtomicBool) -> Result<(WorldMesh, Surface), String> {
+pub(crate) fn generate(r: &Rig, cancel: &AtomicBool) -> Result<(WorldMesh, Surface), String> {
     use crate::model_library::{Shape, primitive};
     let sphere = primitive(Shape::Sphere, 6, cancel)?.models.remove(0);
     let cube = primitive(Shape::Box, 6, cancel)?.models.remove(0);
@@ -573,6 +573,7 @@ pub(crate) fn binding_valid(r: &Rig, mesh: &WorldMesh, frame: Matrix) -> bool {
 pub enum Edit {
     Create { rig: Rig, position: V },
     Replace { id: u64, rig: Rig },
+    ReplaceBase { id: u64, rig: Rig },
     Detach { id: u64 },
 }
 pub fn prepare(
@@ -581,7 +582,16 @@ pub fn prepare(
     budget: usize,
     cancel: &AtomicBool,
 ) -> Result<world3d::Prepared, String> {
+    let base_scope = matches!(&edit, Edit::ReplaceBase { .. });
     crate::book_io::check_cancel(cancel)?;
+    if let Edit::Replace { id, .. } = &edit
+        && crate::pose_sequence::active(&d.scene, *id).is_some()
+    {
+        return Err(
+            "Pose sequence bound: explicitly edit base scene, or edit the selected sequence pose"
+                .into(),
+        );
+    }
     if d.memory_bytes()
         .saturating_mul(3)
         .saturating_add(2 * 1024 * 1024)
@@ -589,7 +599,7 @@ pub fn prepare(
     {
         return Err("Rig preparation exceeds available memory".into());
     }
-    if let Edit::Replace { id, .. } | Edit::Detach { id } = &edit {
+    if let Edit::Replace { id, .. } | Edit::ReplaceBase { id, .. } | Edit::Detach { id } = &edit {
         let p = crate::layer_catalog::properties(d, crate::layer_search::Key::World(*id));
         if p.hidden || p.locked || p.position_locked || p.pixels_locked {
             return Err("Mannequin is hidden / locked".into());
@@ -652,7 +662,7 @@ pub fn prepare(
             s.world3d.lens = Some(lens);
             (id, Some(rig))
         }
-        Edit::Replace { id, rig } => {
+        Edit::Replace { id, rig } | Edit::ReplaceBase { id, rig } => {
             if !s.world3d.rigs.contains_key(&id) {
                 return Err("This model has no rig; joint pose editing is unavailable".into());
             }
@@ -662,6 +672,7 @@ pub fn prepare(
             (id, Some(rig))
         }
         Edit::Detach { id } => {
+            s.world3d.sequences.bindings.retain(|b| b.rig != id);
             if s.world3d.rigs.remove(&id).is_none() {
                 return Err("This model has no rig".into());
             }
@@ -674,6 +685,11 @@ pub fn prepare(
             .worlds
             .index(id, s.worlds.len())
             .ok_or("Missing rig model")?;
+        let flip = s
+            .world3d
+            .rigs
+            .get(&id)
+            .is_some_and(|old| old.mirrored != rig.mirrored);
         let (mut mesh, mut surface) = generate(&rig, cancel)?;
         let frame = s.world3d.nodes[&id].frame;
         for v in &mut mesh.vertices {
@@ -687,7 +703,12 @@ pub fn prepare(
             for (t, old) in surface.triangles.iter_mut().zip(&old.triangles) {
                 t.material = old.material;
                 t.smoothing = old.smoothing;
-                t.t = old.t;
+                t.t = old.t.map(|mut uv| {
+                    if flip {
+                        uv.swap(1, 2);
+                    }
+                    uv
+                });
             }
             mesh.color = s.worlds[i].color;
         }
@@ -706,4 +727,11 @@ pub fn prepare(
         vec![id],
         vec![],
     )
+    .map(|p| {
+        if base_scope {
+            p.named("Edit base scene pose / shape; sequence poses unchanged")
+        } else {
+            p
+        }
+    })
 }

@@ -47,6 +47,10 @@ impl Drawer {
         self.line_tones.job.is_some() || self.line_tones.staged.is_some()
     }
     pub(super) fn begin_line_tones(&mut self) -> Result<(), String> {
+        if self.sequence_pending() {
+            return Err("Apply/discard pose sequence preview first".into());
+        }
+        self.pose_sequences.open = false;
         if self.environment_pending() {
             return Err("Apply/discard the environment preview first".into());
         }

@@ -575,3 +575,6 @@ pub mod world_views_verify;
 
 pub mod environment;
 pub mod environment_verify;
+
+pub mod pose_sequence;
+pub mod pose_sequence_verify;

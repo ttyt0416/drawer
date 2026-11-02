@@ -994,3 +994,9 @@ crates/drawer-core/src/environment_verify.rs
 crates/drawer-app/src/environment.rs
 crates/drawer-app/src/environment_verify.rs
 docs/process/local-environment.md
+
+crates/drawer-core/src/pose_sequence.rs
+crates/drawer-core/src/pose_sequence_verify.rs
+crates/drawer-app/src/pose_sequence.rs
+crates/drawer-app/src/pose_sequence_verify.rs
+docs/process/pose-sequences.md

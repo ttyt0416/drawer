@@ -199,6 +199,10 @@ impl Drawer {
         }
     }
     fn copy_view_to_scene(&mut self) -> Result<(), String> {
+        if self.sequence_pending() {
+            return Err("Apply/discard pose sequence preview first".into());
+        }
+        self.pose_sequences.open = false;
         if self.environment_pending() {
             return Err("Apply/discard environment preview first".into());
         }
