@@ -26,6 +26,7 @@ pub(super) struct Panel {
     staged: Option<Box<core::Prepared>>,
     drag: Option<Box<Drag>>,
     notice: String,
+    review_models: bool,
     pub controls: BTreeMap<String, egui::Rect>,
 }
 impl Default for Panel {
@@ -43,6 +44,7 @@ impl Default for Panel {
             staged: None,
             drag: None,
             notice: String::new(),
+            review_models: false,
             controls: BTreeMap::new(),
         }
     }
@@ -67,6 +69,7 @@ impl Panel {
         match core::prepare(d, e, budget, &std::sync::atomic::AtomicBool::new(false)) {
             Ok(p) => {
                 self.notice = p.summary.clone();
+                self.review_models = false;
                 self.staged = Some(Box::new(p));
             }
             Err(e) => {
@@ -91,11 +94,11 @@ impl Panel {
         if let Some(c) = &scene.camera {
             for (i, m) in scene.worlds.iter().enumerate() {
                 let id = scene.catalog.worlds.id(i);
-                if drawer_core::layer_catalog::properties(
-                    d,
-                    drawer_core::layer_search::Key::World(id),
-                )
-                .hidden
+                if scene
+                    .catalog
+                    .world_info
+                    .get(&id)
+                    .is_some_and(|i| i.properties.hidden)
                 {
                     continue;
                 }
@@ -257,7 +260,37 @@ impl Drawer {
             Err(e) => self.world3d.notice = e,
         }
     }
+    pub(super) fn has_world_preview(&self) -> bool {
+        self.world3d.staged.is_some() || self.world3d.drag.is_some()
+    }
+    pub(super) fn hide_world_for_models(&mut self) {
+        self.world3d.open = false;
+    }
+    pub(super) fn adopt_model_preview(&mut self, p: Box<core::Prepared>) -> Result<(), String> {
+        let n = self.active.ok_or("Model document closed")?;
+        if !p.matches(&self.documents[n]) {
+            return Err("Model preview became stale; prepare again".into());
+        }
+        if self.has_world_preview() {
+            return Err("Another3D preview is open; prepare models again".into());
+        }
+        self.world3d.ids = p
+            .affected
+            .iter()
+            .copied()
+            .filter(|id| core::node(&self.documents[n].scene, *id).is_some())
+            .collect();
+        self.world3d.notice = p.summary.clone();
+        self.world3d.staged = Some(p);
+        self.world3d.review_models = false;
+        self.world3d.open = true;
+        self.world3d.stamp = None;
+        Ok(())
+    }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.models_busy() {
+            return Err("Wait for or cancel model preparation first".into());
+        }
         self.finish_stroke();
         if self.active.is_none() {
             return Err("Choose a document".into());
@@ -283,6 +316,15 @@ impl Drawer {
         Ok(())
     }
     fn apply_world3d(&mut self) -> Result<(), String> {
+        if self
+            .world3d
+            .staged
+            .as_ref()
+            .is_some_and(|p| !p.warnings.is_empty())
+            && !self.world3d.review_models
+        {
+            return Err("Review model import notices before applying".into());
+        }
         if self.world3d.drag.is_some() {
             return Err("Release the 3D gesture before applying".into());
         }
@@ -356,10 +398,14 @@ impl Drawer {
         let mut open = true;
         egui::Window::new("3D objects / articulated pose and camera").default_pos(egui::pos2(25.,20.)).default_width(730.).max_height(640.).vscroll(true).open(&mut open).show(ctx,|ui|{
             ui.add_sized([690.,20.],egui::Label::new(&p.notice).truncate()).on_hover_text(&p.notice);
-            ui.horizontal(|ui|{for(key,label,a,enabled)in [("reference","Place local reference model",1,true),("apply","Apply 3D preview",2,p.staged.is_some()),("discard","Discard 3D preview",3,true),("save","Save gizmo defaults",4,true)]{let r=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+            ui.horizontal(|ui|{for(key,label,a,enabled)in [("reference","Place local reference model",1,true),("apply","Apply 3D preview",2,p.staged.as_ref().is_some_and(|s|s.warnings.is_empty()||p.review_models)),("discard","Discard 3D preview",3,true),("save","Save gizmo defaults",4,true)]{let r=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+            if let Some(staged)=&p.staged && !staged.warnings.is_empty(){
+                egui::ScrollArea::vertical().id_salt("model-import-notices").max_height(85.).show(ui,|ui|{for warning in &staged.warnings{ui.add(egui::Label::new(warning).truncate()).on_hover_text(warning);}});
+                let r=ui.checkbox(&mut p.review_models,"I reviewed missing files / unsupported data and the wireframe result");p.controls.insert("model-review".into(),r.rect);
+            }
             ui.horizontal(|ui|{ui.label("Relative X / Y / Z");for v in &mut p.value{ui.add(egui::DragValue::new(v).speed(0.1));}let r=ui.button("Preview transform / pose");p.controls.insert("transform".into(),r.rect);if r.clicked(){edit=Some(Edit::Transform{ids:p.ids.clone(),options:p.preferences,value:p.value});}});
             p.pad(ui,d,budget);
-            ui.small("Drag a colored axis (or choose X/Y/Z below). Release keeps a preview; Apply commits one Undo. Esc / close discards. Models use the shared wireframe output style; lighting and surface styles are separate checklist items.");
+            ui.small("Drag a colored axis (or choose X/Y/Z below). Release keeps a preview; Apply commits one Undo. Esc / close discards. Preview and output use wireframe lines.");
             egui::ScrollArea::vertical().id_salt("world-objects").max_height(65.).show(ui,|ui|{ui.horizontal(|ui|{if ui.button("Select all").clicked(){p.ids=(0..d.scene.worlds.len()).map(|i|d.scene.catalog.worlds.id(i)).collect();p.staged=None;}
 if ui.button("Clear selection").clicked(){p.ids.clear();p.staged=None;}ui.label(format!("Selection order: {:?}",p.ids));});for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let name=d.scene.catalog.world_info.get(&id).and_then(|i|i.name.as_deref()).unwrap_or("3D model");let mut selected=p.ids.contains(&id);let r=ui.checkbox(&mut selected,format!("{id}: {name} (parent {:?})",core::node(&d.scene,id).and_then(|n|n.parent)));p.controls.insert(format!("select-{id}"),r.rect);if r.changed(){if selected{p.ids.push(id);}else{p.ids.retain(|n|*n!=id);}p.staged=None;}}});
             let old_mode=p.preferences.mode;

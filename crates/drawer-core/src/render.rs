@@ -11,7 +11,7 @@ mod text_contour_tree;
 #[path = "text_paint.rs"]
 mod text_paint;
 pub struct Renderer<'a> {
-    world_geometry: Vec<Vec<[Point; 2]>>,
+    world_geometry: Vec<text_contour_tree::Set>,
     page_parts: Vec<(u64, Box<Renderer<'a>>)>,
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -410,11 +410,11 @@ impl<'a> Renderer<'a> {
             return [0; 4];
         };
         if self.doc().scene.world3d.lens.is_some() {
-            return if self.world_geometry.get(index).is_some_and(|lines| {
-                lines
-                    .iter()
-                    .any(|line| distance(original, line[0], line[1]) <= 0.5)
-            }) {
+            return if self
+                .world_geometry
+                .get(index)
+                .is_some_and(|lines| lines.near(original, 0.5))
+            {
                 mesh.color
             } else {
                 [0; 4]
@@ -711,7 +711,20 @@ impl<'a> Renderer<'a> {
             .collect();
         Self {
             world_geometry: (0..document.scene.worlds.len())
-                .map(|i| crate::world3d::segments(&document.scene, i))
+                .map(|i| {
+                    text_contour_tree::Set::new(
+                        crate::world3d::segments(&document.scene, i)
+                            .into_iter()
+                            .map(|line| Contour {
+                                points: line.to_vec(),
+                                bounds: Rect {
+                                    min: std::array::from_fn(|i| line[0][i].min(line[1][i])),
+                                    max: std::array::from_fn(|i| line[0][i].max(line[1][i])),
+                                },
+                            })
+                            .collect(),
+                    )
+                })
                 .collect(),
             page_parts: if caches {
                 document

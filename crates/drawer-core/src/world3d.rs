@@ -125,6 +125,8 @@ pub struct Node {
 pub struct Data {
     pub nodes: BTreeMap<u64, Node>,
     pub lens: Option<Lens>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub surfaces: BTreeMap<u64, crate::model_mesh::Surface>,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -155,7 +157,8 @@ impl Data {
         *self == Self::default()
     }
     pub fn bytes(&self) -> usize {
-        self.nodes.len() * std::mem::size_of::<(u64, Node)>()
+        self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
+            + self.nodes.len() * std::mem::size_of::<(u64, Node)>()
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
@@ -169,6 +172,14 @@ impl Data {
                     .map(|m| m.vertices.len() + m.edges.len())
                     .sum::<usize>()
                     > 524288)
+        {
+            return false;
+        }
+        if self.surfaces.len() > 256
+            || self
+                .surfaces
+                .iter()
+                .any(|(id, surface)| index(s, *id).is_none_or(|i| !surface.valid(&s.worlds[i])))
         {
             return false;
         }
@@ -197,6 +208,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
         .map(|i| s.catalog.worlds.id(i))
         .collect::<BTreeSet<_>>();
     s.world3d.nodes.retain(|id, _| ids.contains(id));
+    s.world3d.surfaces.retain(|id, _| ids.contains(id));
     for n in s.world3d.nodes.values_mut() {
         if n.parent.is_some_and(|p| !ids.contains(&p)) {
             n.parent = None;
@@ -207,6 +219,13 @@ pub(crate) fn reconcile(s: &mut Scene) {
     }
 }
 pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key>) {
+    for (old, new) in map {
+        if let (Key::World(old), Key::World(new)) = (old, new)
+            && let Some(surface) = original.world3d.surfaces.get(old)
+        {
+            s.world3d.surfaces.insert(*new, surface.clone());
+        }
+    }
     for (old, new) in map {
         if let (Key::World(old), Key::World(new)) = (old, new)
             && let Some(mut node) = original.world3d.nodes.get(old).copied()
@@ -258,6 +277,11 @@ pub(crate) fn validate_edit(d: &Document, s: &Scene) -> Result<(), String> {
         let a = node(&d.scene, id);
         let b = node(s, id);
         let changed = b != a;
+        if d.scene.world3d.surfaces.get(&id) != s.world3d.surfaces.get(&id)
+            && (p.locked || p.hidden || p.pixels_locked)
+        {
+            return Err("3D surface is hidden / locked".into());
+        }
         if changed && (p.locked || p.hidden || p.position_locked || p.pixels_locked) {
             return Err(format!("3D object{id} or a descendant is hidden / locked"));
         }
@@ -385,6 +409,7 @@ pub struct Prepared {
     revision: u64,
     pub summary: String,
     pub affected: Vec<u64>,
+    pub warnings: Vec<String>,
 }
 impl Prepared {
     pub fn scene(&self) -> &Scene {
@@ -643,10 +668,19 @@ pub fn prepare(
         }
     };
     crate::book_io::check_cancel(cancel)?;
-    if !s.world3d.valid(s) {
-        return Err("3D transform is singular, cyclic or outside bounds".into());
+    prepared(d, state, summary, affected, vec![])
+}
+pub(crate) fn prepared(
+    d: &Document,
+    mut state: DocumentState,
+    summary: String,
+    affected: Vec<u64>,
+    warnings: Vec<String>,
+) -> Result<Prepared, String> {
+    if !state.scene.world3d.valid(&state.scene) {
+        return Err("3D transform / surface is singular, cyclic or outside limits".into());
     }
-    validate_edit(d, s)?;
+    validate_edit(d, &state.scene)?;
     crate::layer_catalog::reconcile(d, &mut state)?;
     crate::layer_groups::finish(d, &state)?;
     Ok(Prepared {
@@ -655,8 +689,10 @@ pub fn prepare(
         revision: d.revision,
         summary,
         affected,
+        warnings,
     })
 }
+
 pub fn segments(s: &Scene, index: usize) -> Vec<[Point; 2]> {
     let (Some(c), Some(l)) = (&s.camera, s.world3d.lens) else {
         return vec![];

@@ -937,3 +937,10 @@ crates/drawer-core/src/world3d_verify.rs
 crates/drawer-app/src/world3d.rs
 crates/drawer-app/src/world3d_verify.rs
 docs/process/world3d.md
+crates/drawer-core/src/model_mesh.rs
+crates/drawer-core/src/model_obj.rs
+crates/drawer-core/src/model_library.rs
+crates/drawer-core/src/model_library_verify.rs
+crates/drawer-app/src/world_models.rs
+crates/drawer-app/src/world_models_verify.rs
+docs/process/model-library-3d.md
