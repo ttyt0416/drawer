@@ -288,6 +288,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.rig_pending() {
+            return Err("Apply or discard the mannequin preview first".into());
+        }
+        self.human_rig.open = false;
         if self.models_busy() {
             return Err("Wait for or cancel model preparation first".into());
         }

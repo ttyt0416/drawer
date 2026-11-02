@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 237] = [
+pub const EXTRA_COMMANDS: [&str; 238] = [
+    "human-rig",
     "model-library",
     "world3d",
     "animation-finish",
@@ -541,6 +542,7 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "model-library" => "Local3D model library, primitives, OBJ, duplicate and align",
+            "human-rig" => "Mannequin body / head / hand shape and joint pose",
             "world3d" => "3D model placement, articulated pose, axes / pivots and camera",
             "animation-finish" => {
                 "Animation title-safe / overflow guides, output defaults, audio and naming rules"

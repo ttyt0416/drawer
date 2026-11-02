@@ -127,6 +127,8 @@ pub struct Data {
     pub lens: Option<Lens>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub surfaces: BTreeMap<u64, crate::model_mesh::Surface>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub rigs: BTreeMap<u64, crate::human_rig::Rig>,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -158,6 +160,7 @@ impl Data {
     }
     pub fn bytes(&self) -> usize {
         self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
+            + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
             + self.nodes.len() * std::mem::size_of::<(u64, Node)>()
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
@@ -180,6 +183,18 @@ impl Data {
                 .surfaces
                 .iter()
                 .any(|(id, surface)| index(s, *id).is_none_or(|i| !surface.valid(&s.worlds[i])))
+        {
+            return false;
+        }
+        if self.rigs.len() > 32
+            || self.rigs.iter().any(|(id, r)| {
+                index(s, *id).is_none_or(|i| {
+                    self.nodes.get(id).is_none_or(|n| {
+                        !self.surfaces.contains_key(id)
+                            || !crate::human_rig::binding_valid(r, &s.worlds[i], n.frame)
+                    })
+                })
+            })
         {
             return false;
         }
@@ -209,6 +224,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
         .collect::<BTreeSet<_>>();
     s.world3d.nodes.retain(|id, _| ids.contains(id));
     s.world3d.surfaces.retain(|id, _| ids.contains(id));
+    s.world3d.rigs.retain(|id, _| ids.contains(id));
     for n in s.world3d.nodes.values_mut() {
         if n.parent.is_some_and(|p| !ids.contains(&p)) {
             n.parent = None;
@@ -219,6 +235,13 @@ pub(crate) fn reconcile(s: &mut Scene) {
     }
 }
 pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key>) {
+    for (old, new) in map {
+        if let (Key::World(old), Key::World(new)) = (old, new)
+            && let Some(r) = original.world3d.rigs.get(old)
+        {
+            s.world3d.rigs.insert(*new, r.clone());
+        }
+    }
     for (old, new) in map {
         if let (Key::World(old), Key::World(new)) = (old, new)
             && let Some(surface) = original.world3d.surfaces.get(old)
@@ -277,7 +300,8 @@ pub(crate) fn validate_edit(d: &Document, s: &Scene) -> Result<(), String> {
         let a = node(&d.scene, id);
         let b = node(s, id);
         let changed = b != a;
-        if d.scene.world3d.surfaces.get(&id) != s.world3d.surfaces.get(&id)
+        if (d.scene.world3d.surfaces.get(&id) != s.world3d.surfaces.get(&id)
+            || d.scene.world3d.rigs.get(&id) != s.world3d.rigs.get(&id))
             && (p.locked || p.hidden || p.pixels_locked)
         {
             return Err("3D surface is hidden / locked".into());

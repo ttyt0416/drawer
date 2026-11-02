@@ -944,3 +944,8 @@ crates/drawer-core/src/model_library_verify.rs
 crates/drawer-app/src/world_models.rs
 crates/drawer-app/src/world_models_verify.rs
 docs/process/model-library-3d.md
+crates/drawer-core/src/human_rig.rs
+crates/drawer-core/src/human_rig_verify.rs
+crates/drawer-app/src/human_rig.rs
+crates/drawer-app/src/human_rig_verify.rs
+docs/process/human-rig.md

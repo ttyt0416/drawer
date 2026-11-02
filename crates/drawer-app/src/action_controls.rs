@@ -502,6 +502,7 @@ impl Drawer {
                 "light-table" => self.begin_light_table()?,
                 "animation-timeline" => self.begin_timeline_editor()?,
                 "model-library" => self.begin_model_library()?,
+                "human-rig" => self.begin_human_rig()?,
                 "world3d" => self.begin_world3d()?,
                 "animation-finish" => self.begin_animation_finish()?,
                 "animation-graph" => self.begin_graph_editor()?,

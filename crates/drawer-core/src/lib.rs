@@ -545,3 +545,6 @@ pub mod model_library;
 pub mod model_library_verify;
 pub mod model_mesh;
 pub mod model_obj;
+
+pub mod human_rig;
+pub mod human_rig_verify;
