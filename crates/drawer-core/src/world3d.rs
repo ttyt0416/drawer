@@ -131,6 +131,8 @@ pub struct Data {
     pub rigs: BTreeMap<u64, crate::human_rig::Rig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lighting: Option<crate::lighting::Settings>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub colliders: BTreeSet<u64>,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -164,6 +166,7 @@ impl Data {
         self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
             + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
             + self.lighting.as_ref().map_or(0, |s| s.bytes())
+            + self.colliders.len() * 32
             + self.nodes.len() * std::mem::size_of::<(u64, Node)>()
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
@@ -178,6 +181,9 @@ impl Data {
                     .sum::<usize>()
                     > 262144
         }) {
+            return false;
+        }
+        if self.colliders.len() > 256 || self.colliders.iter().any(|id| index(s, *id).is_none()) {
             return false;
         }
         if self.nodes.len() > 256
@@ -240,6 +246,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
     s.world3d.nodes.retain(|id, _| ids.contains(id));
     s.world3d.surfaces.retain(|id, _| ids.contains(id));
     s.world3d.rigs.retain(|id, _| ids.contains(id));
+    s.world3d.colliders.retain(|id| ids.contains(id));
     for n in s.world3d.nodes.values_mut() {
         if n.parent.is_some_and(|p| !ids.contains(&p)) {
             n.parent = None;
@@ -251,6 +258,13 @@ pub(crate) fn reconcile(s: &mut Scene) {
     }
 }
 pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key>) {
+    for (old, new) in map {
+        if let (Key::World(old), Key::World(new)) = (old, new)
+            && original.world3d.colliders.contains(old)
+        {
+            s.world3d.colliders.insert(*new);
+        }
+    }
     for (old, new) in map {
         if let (Key::World(old), Key::World(new)) = (old, new)
             && let Some(r) = original.world3d.rigs.get(old)

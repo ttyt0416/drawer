@@ -20,6 +20,7 @@ impl Drawer {
         self.lighting.staged.is_some()
     }
     pub(super) fn begin_lighting(&mut self) -> Result<(), String> {
+        self.world_physics.open = false;
         self.finish_stroke();
         if self.models_busy() || self.has_world_preview() || self.rig_pending() {
             return Err("Finish the current3D preview first".into());

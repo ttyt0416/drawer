@@ -67,6 +67,7 @@ impl Drawer {
         self.world_models.job.is_some()
     }
     pub(super) fn begin_model_library(&mut self) -> Result<(), String> {
+        self.world_physics.open = false;
         if self.lighting_pending() {
             return Err("Apply or discard lighting preview first".into());
         }

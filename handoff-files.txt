@@ -960,3 +960,8 @@ crates/drawer-core/src/world_render.rs
 crates/drawer-app/src/lighting.rs
 crates/drawer-app/src/lighting_verify.rs
 docs/process/scene-lighting.md
+crates/drawer-core/src/world_physics.rs
+crates/drawer-core/src/world_physics_verify.rs
+crates/drawer-app/src/world_physics.rs
+crates/drawer-app/src/world_physics_verify.rs
+docs/process/world-placement.md

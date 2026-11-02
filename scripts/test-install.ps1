@@ -234,6 +234,7 @@ try {
     if ($smokeResult -notmatch 'color_modes=true') { throw '주색·보조색·투명색 지우기·동시 해제 검증 실패' }
     if ($smokeResult -notmatch 'brush_color=true') { throw 'CIELAB·밝기·두 잉크 합성 시험 실패' }
     if ($smokeResult -notmatch 'brush_behavior=true') { throw '화면 크기·간격 농도·연속 분사 시험 실패' }
+    if ($smokeResult -notmatch 'world_physics=true') { throw 'World placement physics verification failed' }
     if ($smokeResult -notmatch 'lighting=true') { throw 'Scene lighting verification failed' }
     if ($smokeResult -notmatch 'model_presets=true') { throw 'Model presets verification failed' }
     if ($smokeResult -notmatch 'human_rig=true') { throw 'Mannequin verification failed' }

@@ -107,8 +107,13 @@ impl Trace {
         if settings.style == Style::Wire {
             return None;
         }
-        let camera = d.scene.camera.clone()?;
-        let lens = d.scene.world3d.lens?;
+        Self::build_geometry(d, settings.clone(), false)
+    }
+    pub(crate) fn surfaces(d: &Document) -> Self {
+        Self::build_geometry(d, Settings::default(), true).unwrap()
+    }
+    fn build_geometry(d: &Document, settings: Settings, physical: bool) -> Option<Self> {
+        let (camera, lens) = crate::world3d::default_camera(d);
         let mut t = Self {
             object_bounds: vec![None; d.scene.worlds.len()],
             rotation: Matrix::euler(lens.angles),
@@ -132,7 +137,10 @@ impl Trace {
             let id = d.scene.catalog.worlds.id(object);
             let key = crate::layer_search::Key::World(id);
             let props = crate::layer_catalog::properties(d, key);
-            if props.hidden || props.opacity == 0 || d.scene.file_objects.get(key).is_some() {
+            if props.hidden
+                || (!physical && props.opacity == 0)
+                || d.scene.file_objects.get(key).is_some()
+            {
                 continue;
             }
             let Some(s) = d.scene.world3d.surfaces.get(&id) else {
@@ -147,7 +155,7 @@ impl Trace {
                     continue;
                 }
                 let color = s.materials[face.material as usize].rgba.map(|v| v as f64);
-                if color[3] <= 0. {
+                if !physical && color[3] <= 0. {
                     continue;
                 }
                 let n = face.n.map(|indices| {
@@ -166,7 +174,7 @@ impl Trace {
                     n,
                     color,
                     object,
-                    opaque: color[3] >= 1. && props.opacity == 100,
+                    opaque: physical || color[3] >= 1. && props.opacity == 100,
                     bounds: Bounds::of(p),
                 });
             }
@@ -175,6 +183,20 @@ impl Trace {
             t.build(0, t.triangles.len());
         }
         Some(t)
+    }
+    pub(crate) fn cast(
+        &self,
+        origin: V,
+        direction: V,
+        maximum: f64,
+        objects: &std::collections::BTreeSet<usize>,
+    ) -> Option<V> {
+        let ray = Ray {
+            o: origin,
+            d: direction,
+        };
+        self.nearest(ray, 0., maximum, |t| objects.contains(&t.object))
+            .map(|h| add(origin, mul(direction, h.t)))
     }
     fn build(&mut self, start: usize, end: usize) -> usize {
         let bounds = self.triangles[start..end]

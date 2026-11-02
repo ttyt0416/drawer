@@ -288,6 +288,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        self.world_physics.open = false;
         if self.lighting_pending() {
             return Err("Apply or discard lighting preview first".into());
         }
@@ -410,7 +411,7 @@ impl Drawer {
             ui.horizontal(|ui|{for(key,label,a,enabled)in [("reference","Place local reference model",1,true),("apply","Apply 3D preview",2,p.staged.as_ref().is_some_and(|s|s.warnings.is_empty()||p.review_models)),("discard","Discard 3D preview",3,true),("save","Save gizmo defaults",4,true)]{let r=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
             if let Some(staged)=&p.staged && !staged.warnings.is_empty(){
                 egui::ScrollArea::vertical().id_salt("model-import-notices").max_height(85.).show(ui,|ui|{for warning in &staged.warnings{ui.add(egui::Label::new(warning).truncate()).on_hover_text(warning);}});
-                let r=ui.checkbox(&mut p.review_models,"I reviewed missing files / unsupported data and the wireframe result");p.controls.insert("model-review".into(),r.rect);
+                let r=ui.checkbox(&mut p.review_models,"I reviewed the notices and preview result");p.controls.insert("model-review".into(),r.rect);
             }
             ui.horizontal(|ui|{ui.label("Relative X / Y / Z");for v in &mut p.value{ui.add(egui::DragValue::new(v).speed(0.1));}let r=ui.button("Preview transform / pose");p.controls.insert("transform".into(),r.rect);if r.clicked(){edit=Some(Edit::Transform{ids:p.ids.clone(),options:p.preferences,value:p.value});}});
             p.pad(ui,d,budget);

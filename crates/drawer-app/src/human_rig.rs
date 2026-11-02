@@ -124,6 +124,7 @@ impl Drawer {
         self.human_rig.staged.is_some()
     }
     pub(super) fn begin_human_rig(&mut self) -> Result<(), String> {
+        self.world_physics.open = false;
         if self.lighting_pending() {
             return Err("Apply or discard lighting preview first".into());
         }

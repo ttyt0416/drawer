@@ -281,7 +281,7 @@ fn idx(s: &crate::scene::Scene, id: u64) -> Result<usize, String> {
         .index(id, s.worlds.len())
         .ok_or_else(|| "Model selection was removed".into())
 }
-fn tree(s: &crate::scene::Scene, id: u64) -> BTreeSet<u64> {
+pub(crate) fn tree(s: &crate::scene::Scene, id: u64) -> BTreeSet<u64> {
     let mut set = BTreeSet::from([id]);
     loop {
         let n = set.len();
@@ -295,7 +295,7 @@ fn tree(s: &crate::scene::Scene, id: u64) -> BTreeSet<u64> {
         }
     }
 }
-fn roots(s: &crate::scene::Scene, ids: &[u64]) -> Result<Vec<u64>, String> {
+pub(crate) fn roots(s: &crate::scene::Scene, ids: &[u64]) -> Result<Vec<u64>, String> {
     if ids.is_empty() || ids.iter().collect::<BTreeSet<_>>().len() != ids.len() {
         return Err("Select unique 3D models".into());
     }
@@ -317,7 +317,7 @@ fn roots(s: &crate::scene::Scene, ids: &[u64]) -> Result<Vec<u64>, String> {
     }
     Ok(order)
 }
-fn editable(d: &Document, ids: &BTreeSet<u64>) -> Result<(), String> {
+pub(crate) fn editable(d: &Document, ids: &BTreeSet<u64>) -> Result<(), String> {
     for id in ids {
         let f = crate::layer_catalog::properties(d, Key::World(*id));
         if f.hidden || f.locked || f.position_locked || f.pixels_locked {
@@ -329,7 +329,11 @@ fn editable(d: &Document, ids: &BTreeSet<u64>) -> Result<(), String> {
     }
     Ok(())
 }
-fn shift(s: &mut crate::scene::Scene, ids: &BTreeSet<u64>, delta: V) -> Result<(), String> {
+pub(crate) fn shift(
+    s: &mut crate::scene::Scene,
+    ids: &BTreeSet<u64>,
+    delta: V,
+) -> Result<(), String> {
     for id in ids {
         let i = idx(s, *id)?;
         let node = world3d::node(s, *id).unwrap();
@@ -346,7 +350,7 @@ fn shift(s: &mut crate::scene::Scene, ids: &BTreeSet<u64>, delta: V) -> Result<(
     }
     Ok(())
 }
-fn bounds(s: &crate::scene::Scene, ids: &BTreeSet<u64>) -> Result<(V, V), String> {
+pub(crate) fn bounds(s: &crate::scene::Scene, ids: &BTreeSet<u64>) -> Result<(V, V), String> {
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
     for id in ids {

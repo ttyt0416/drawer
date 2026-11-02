@@ -27,6 +27,7 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_model_presets(&mut self) -> Result<(), String> {
+        self.world_physics.open = false;
         if self.lighting_pending() {
             return Err("Apply or discard lighting preview first".into());
         }

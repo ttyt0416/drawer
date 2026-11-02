@@ -555,3 +555,6 @@ pub mod model_presets_verify;
 pub mod lighting;
 pub mod lighting_verify;
 mod world_render;
+
+pub mod world_physics;
+pub mod world_physics_verify;
