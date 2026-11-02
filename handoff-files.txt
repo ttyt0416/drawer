@@ -949,3 +949,8 @@ crates/drawer-core/src/human_rig_verify.rs
 crates/drawer-app/src/human_rig.rs
 crates/drawer-app/src/human_rig_verify.rs
 docs/process/human-rig.md
+crates/drawer-core/src/model_presets.rs
+crates/drawer-core/src/model_presets_verify.rs
+crates/drawer-app/src/model_presets.rs
+crates/drawer-app/src/model_presets_verify.rs
+docs/process/model-presets.md

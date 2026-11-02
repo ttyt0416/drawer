@@ -288,6 +288,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        self.model_presets.open = false;
         if self.rig_pending() {
             return Err("Apply or discard the mannequin preview first".into());
         }

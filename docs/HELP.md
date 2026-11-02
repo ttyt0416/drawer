@@ -1573,3 +1573,10 @@ Choose a recorded frame range and output FPS, then **Prepare frozen timelapse an
 `human-rig` 명령에서 New body/head/hand로 독자 마네킹을 미리 본다. 인체 52개, 머리 3개, 손 16개 관절과 손가락 각 세 마디를 개별 선택해 X/Y/Z 각도 한계 안에서 조절한다. 체형·얼굴/턱 폭·손바닥/손가락 비율을 조절하고 Mirror pose로 좌우 반전, Reset pose로 관절을 초기화한다. 각 부분이 한 관절을 따르는 그림용 rigid skin 모델이다.
 
 Apply는 한 Undo로 확정하고 Discard/Esc/포커스 상실·창/문서 닫기·원본 변경은 준비 결과를 버린다. 기존 3D 이동·회전·축척·복제 이후에도 포즈를 조절할 수 있다. Detach rig는 현재 형상을 유지하며 리그만 제거한다. 일반 도형/OBJ 등 리그가 없는 모델은 포즈 편집 불가 안내를 표시한다. 리그·체형·포즈는 문서에 저장한다. 자세한 범위는 `process/human-rig.md`를 참조한다.
+
+
+## 포즈·체형·카메라 프리셋
+
+`3d-presets` 명령에서 Pose / Shape / Camera를 고르고 이름을 입력한 뒤 Capture / save preset으로 현재 확정 상태를 로컬 목록에 저장한다. 프리셋 저장/삭제는 그림의 실행 취소 이력과 분리되어 있다. 목록의 Preview selected preset으로 기존 3D 창에서 미리 본 뒤 Apply 또는 Discard를 선택한다.
+
+Pose는 관절 각도와 손 방향을, Shape는 체형 비율을 적용하며 개체 배치와 다른 종류의 값을 유지한다. 뼈 구조가 다른 모델과 리그가 없는 모델에는 포즈/체형을 적용할 수 없다. Camera는 저장된 페이지 프레임을 포함하므로 구도를 미리 확인한다. 목록은 로컬 저장 후 재시작에도 복원한다. 상세 범위는 `process/model-presets.md`에 기록했다.

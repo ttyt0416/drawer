@@ -548,3 +548,6 @@ pub mod model_obj;
 
 pub mod human_rig;
 pub mod human_rig_verify;
+
+pub mod model_presets;
+pub mod model_presets_verify;

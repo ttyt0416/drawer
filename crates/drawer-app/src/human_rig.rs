@@ -124,6 +124,7 @@ impl Drawer {
         self.human_rig.staged.is_some()
     }
     pub(super) fn begin_human_rig(&mut self) -> Result<(), String> {
+        self.model_presets.open = false;
         self.finish_stroke();
         if self.models_busy() || self.has_world_preview() {
             return Err("Apply / discard 3D preview or cancel model preparation first".into());

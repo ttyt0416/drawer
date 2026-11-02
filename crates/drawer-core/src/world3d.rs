@@ -39,7 +39,7 @@ impl Default for Lens {
         }
     }
 }
-fn camera_valid(c: &Camera) -> bool {
+pub(crate) fn camera_valid(c: &Camera) -> bool {
     c.page_bounds.valid()
         && (0..2).all(|i| c.page_bounds.min[i] < c.page_bounds.max[i])
         && c.page_bounds
