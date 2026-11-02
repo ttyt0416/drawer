@@ -558,3 +558,6 @@ mod world_render;
 
 pub mod world_physics;
 pub mod world_physics_verify;
+
+pub mod uv_paint;
+pub mod uv_paint_verify;

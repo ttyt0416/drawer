@@ -20,6 +20,10 @@ impl Drawer {
         self.lighting.staged.is_some()
     }
     pub(super) fn begin_lighting(&mut self) -> Result<(), String> {
+        if self.uv_pending() {
+            return Err("Apply or discard the UV stroke first".into());
+        }
+        self.uv_paint.open = false;
         self.world_physics.open = false;
         self.finish_stroke();
         if self.models_busy() || self.has_world_preview() || self.rig_pending() {

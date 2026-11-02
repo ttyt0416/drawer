@@ -47,6 +47,8 @@ pub struct Surface {
     pub materials: Vec<Material>,
     pub references: Vec<Reference>,
     pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paint: Option<crate::uv_paint::Texture>,
 }
 impl Default for Surface {
     fn default() -> Self {
@@ -57,6 +59,7 @@ impl Default for Surface {
             materials: vec![Material::default()],
             references: vec![],
             source: "Original primitive".into(),
+            paint: None,
         }
     }
 }
@@ -73,7 +76,8 @@ fn label(name: &str) -> bool {
 }
 impl Surface {
     pub fn valid(&self, m: &WorldMesh) -> bool {
-        self.triangles.len() <= 131072
+        self.paint.as_ref().is_none_or(|t| t.decode().is_ok())
+            && self.triangles.len() <= 131072
             && self.texcoords.len() <= 65536
             && self.normals.len() <= 65536
             && self.materials.len() <= 256
@@ -109,7 +113,8 @@ impl Surface {
             })
     }
     pub fn bytes(&self) -> usize {
-        self.triangles.len() * std::mem::size_of::<Triangle>()
+        self.paint.as_ref().map_or(0, |t| t.bytes())
+            + self.triangles.len() * std::mem::size_of::<Triangle>()
             + (self.texcoords.len() + self.normals.len()) * 24
             + self
                 .materials

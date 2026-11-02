@@ -367,6 +367,7 @@ pub fn decode(bytes: &[u8], source: &str, cancel: &AtomicBool) -> Result<Parsed,
                     .collect(),
                 references: vec![],
                 source: name(source)?,
+                paint: None,
             },
         });
     }

@@ -965,3 +965,8 @@ crates/drawer-core/src/world_physics_verify.rs
 crates/drawer-app/src/world_physics.rs
 crates/drawer-app/src/world_physics_verify.rs
 docs/process/world-placement.md
+crates/drawer-core/src/uv_paint.rs
+crates/drawer-core/src/uv_paint_verify.rs
+crates/drawer-app/src/uv_paint.rs
+crates/drawer-app/src/uv_paint_verify.rs
+docs/process/uv-painting.md

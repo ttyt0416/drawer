@@ -27,6 +27,10 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_model_presets(&mut self) -> Result<(), String> {
+        if self.uv_pending() {
+            return Err("Apply or discard the UV stroke first".into());
+        }
+        self.uv_paint.open = false;
         self.world_physics.open = false;
         if self.lighting_pending() {
             return Err("Apply or discard lighting preview first".into());

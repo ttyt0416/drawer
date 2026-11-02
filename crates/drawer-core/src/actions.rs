@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 241] = [
+pub const EXTRA_COMMANDS: [&str; 242] = [
+    "uv-paint",
     "world-physics",
     "scene-lighting",
     "3d-presets",
@@ -545,6 +546,7 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "model-library" => "Local3D model library, primitives, OBJ, duplicate and align",
+            "uv-paint" => "Projected UV surface painting / texture tile and local PNG",
             "world-physics" => "3D floor / polygon snap, grid copies, colliders and gravity settle",
             "scene-lighting" => "Scene lights, surface rendering and vanishing guides",
             "3d-presets" => "Local pose / body shape / camera presets",

@@ -53,6 +53,8 @@ struct Triangle {
     n: Option<[V; 3]>,
     color: [f64; 4],
     object: usize,
+    uv: Option<[V; 3]>,
+    face: usize,
     opaque: bool,
     bounds: Bounds,
 }
@@ -64,6 +66,7 @@ struct Node {
 }
 pub(crate) struct Trace {
     triangles: Vec<Triangle>,
+    textures: Vec<Option<(usize, Vec<u8>)>>,
     object_bounds: Vec<Option<Bounds>>,
     rotation: Matrix,
     center: Point,
@@ -127,6 +130,7 @@ impl Trace {
             } else {
                 camera.pixels_per_unit
             },
+            textures: vec![None; d.scene.worlds.len()],
             triangles: vec![],
             nodes: vec![],
             settings: settings.clone(),
@@ -148,7 +152,13 @@ impl Trace {
             };
             let frame = crate::world3d::node(&d.scene, id).map_or(Matrix::default(), |n| n.frame);
             let inv = frame.inverse();
-            for face in &s.triangles {
+            if !physical
+                && let Some(paint) = &s.paint
+                && let Ok(pixels) = paint.decode()
+            {
+                t.textures[object] = Some((paint.size as usize, pixels));
+            }
+            for (face_index, face) in s.triangles.iter().enumerate() {
                 let p = face.v.map(|i| m.vertices[i as usize]);
                 let area = cross(sub(p[1], p[0]), sub(p[2], p[0]));
                 if dot(area, area) < 1e-24 {
@@ -174,6 +184,10 @@ impl Trace {
                     n,
                     color,
                     object,
+                    uv: face
+                        .t
+                        .map(|indices| indices.map(|i| s.texcoords[i as usize])),
+                    face: face_index,
                     opaque: physical || color[3] >= 1. && props.opacity == 100,
                     bounds: Bounds::of(p),
                 });
@@ -183,6 +197,21 @@ impl Trace {
             t.build(0, t.triangles.len());
         }
         Some(t)
+    }
+    pub(crate) fn paint_view(d: &Document) -> Self {
+        Self::build_geometry(d, Settings::default(), false).unwrap()
+    }
+    pub(crate) fn uv(&self, object: usize, point: Point) -> Option<(Point, usize)> {
+        let h = self.nearest(self.ray(point), self.lens.near, self.lens.far, |_| true)?;
+        let t = &self.triangles[h.index];
+        if t.object != object {
+            return None;
+        }
+        let uv = t.uv?;
+        Some((
+            std::array::from_fn(|i| uv[0][i] * (1. - h.u - h.v) + uv[1][i] * h.u + uv[2][i] * h.v),
+            t.face,
+        ))
     }
     pub(crate) fn cast(
         &self,
@@ -384,6 +413,17 @@ impl Trace {
                 }
             }
         }
+        let mut texture = [1.; 3];
+        if let Some((size, pixels)) = &self.textures[t.object]
+            && let Some(uv) = t.uv
+        {
+            let u = uv[0][0] * (1. - h.u - h.v) + uv[1][0] * h.u + uv[2][0] * h.v;
+            let v = uv[0][1] * (1. - h.u - h.v) + uv[1][1] * h.u + uv[2][1] * h.v;
+            let x = (u.rem_euclid(1.) * *size as f64).floor() as usize;
+            let y = ((1. - v.rem_euclid(1.)) * *size as f64).floor() as usize;
+            let i = (y.min(*size - 1) * *size + x.min(*size - 1)) * 4;
+            texture = std::array::from_fn(|c| pixels[i + c] as f64 / 255.);
+        }
         let linear = |v: f64| {
             if v <= 0.04045 {
                 v / 12.92
@@ -401,9 +441,9 @@ impl Trace {
             (s.clamp(0., 1.) * 255.).round() as u8
         };
         [
-            encode(linear(t.color[0]) * light[0]),
-            encode(linear(t.color[1]) * light[1]),
-            encode(linear(t.color[2]) * light[2]),
+            encode(linear(t.color[0]) * linear(texture[0]) * light[0]),
+            encode(linear(t.color[1]) * linear(texture[1]) * light[1]),
+            encode(linear(t.color[2]) * linear(texture[2]) * light[2]),
             (t.color[3] * 255.).round() as u8,
         ]
     }
