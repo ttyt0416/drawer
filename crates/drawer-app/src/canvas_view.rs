@@ -99,6 +99,7 @@ pub struct CanvasView {
     pub(super) timeline_overlay: Option<TimelineOverlay>,
     pub(super) light_table_overlay: Option<TimelineOverlay>,
     camera_paths: crate::camera2d::Paths,
+    pub(super) world_guide_lines: usize,
     finish_paths: crate::animation_finish::Paths,
     pub(super) finish_view: drawer_core::animation_finish::View,
     pub comic_view: drawer_core::comic_view::Viewport,
@@ -195,6 +196,7 @@ impl CanvasView {
             timeline_overlay: None,
             light_table_overlay: None,
             camera_paths: Default::default(),
+            world_guide_lines: 0,
             finish_paths: Default::default(),
             finish_view: Default::default(),
             comic_view: Default::default(),
@@ -1286,6 +1288,7 @@ impl CanvasView {
             mesh.indices = vec![0, 1, 2, 0, 2, 3];
             painter.add(egui::Shape::mesh(mesh));
         }
+        self.world_guide_lines = crate::lighting::paint_guides(&painter, document, view, rect, ppp);
         if let Err(e) = self.camera_paths.paint(&painter, document, view, rect, ppp) {
             self.view_notice = Some(e);
         }

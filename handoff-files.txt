@@ -954,3 +954,9 @@ crates/drawer-core/src/model_presets_verify.rs
 crates/drawer-app/src/model_presets.rs
 crates/drawer-app/src/model_presets_verify.rs
 docs/process/model-presets.md
+crates/drawer-core/src/lighting.rs
+crates/drawer-core/src/lighting_verify.rs
+crates/drawer-core/src/world_render.rs
+crates/drawer-app/src/lighting.rs
+crates/drawer-app/src/lighting_verify.rs
+docs/process/scene-lighting.md

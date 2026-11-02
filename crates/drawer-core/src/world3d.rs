@@ -129,6 +129,8 @@ pub struct Data {
     pub surfaces: BTreeMap<u64, crate::model_mesh::Surface>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub rigs: BTreeMap<u64, crate::human_rig::Rig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lighting: Option<crate::lighting::Settings>,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -161,10 +163,23 @@ impl Data {
     pub fn bytes(&self) -> usize {
         self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
             + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
+            + self.lighting.as_ref().map_or(0, |s| s.bytes())
             + self.nodes.len() * std::mem::size_of::<(u64, Node)>()
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
+        if self.lighting.as_ref().is_some_and(|v| {
+            !v.valid()
+                || self.lens.is_none()
+                || self
+                    .surfaces
+                    .values()
+                    .map(|s| s.triangles.len())
+                    .sum::<usize>()
+                    > 262144
+        }) {
+            return false;
+        }
         if self.nodes.len() > 256
             || self
                 .lens
@@ -232,6 +247,7 @@ pub(crate) fn reconcile(s: &mut Scene) {
     }
     if s.camera.is_none() {
         s.world3d.lens = None;
+        s.world3d.lighting = None;
     }
 }
 pub(crate) fn duplicate(s: &mut Scene, original: &Scene, map: &BTreeMap<Key, Key>) {

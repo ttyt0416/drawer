@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 239] = [
+pub const EXTRA_COMMANDS: [&str; 240] = [
+    "scene-lighting",
     "3d-presets",
     "human-rig",
     "model-library",
@@ -543,6 +544,7 @@ impl Settings {
             "PixelPen" => "Pixel pen",
             "save" => "Save",
             "model-library" => "Local3D model library, primitives, OBJ, duplicate and align",
+            "scene-lighting" => "Scene lights, surface rendering and vanishing guides",
             "3d-presets" => "Local pose / body shape / camera presets",
             "human-rig" => "Mannequin body / head / hand shape and joint pose",
             "world3d" => "3D model placement, articulated pose, axes / pivots and camera",

@@ -27,6 +27,10 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_model_presets(&mut self) -> Result<(), String> {
+        if self.lighting_pending() {
+            return Err("Apply or discard lighting preview first".into());
+        }
+        self.lighting.open = false;
         self.finish_stroke();
         if self.models_busy() || self.has_world_preview() || self.rig_pending() {
             return Err("Apply / discard3D preview or cancel model preparation first".into());

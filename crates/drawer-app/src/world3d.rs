@@ -288,6 +288,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.lighting_pending() {
+            return Err("Apply or discard lighting preview first".into());
+        }
+        self.lighting.open = false;
         self.model_presets.open = false;
         if self.rig_pending() {
             return Err("Apply or discard the mannequin preview first".into());
@@ -410,7 +414,7 @@ impl Drawer {
             }
             ui.horizontal(|ui|{ui.label("Relative X / Y / Z");for v in &mut p.value{ui.add(egui::DragValue::new(v).speed(0.1));}let r=ui.button("Preview transform / pose");p.controls.insert("transform".into(),r.rect);if r.clicked(){edit=Some(Edit::Transform{ids:p.ids.clone(),options:p.preferences,value:p.value});}});
             p.pad(ui,d,budget);
-            ui.small("Drag a colored axis (or choose X/Y/Z below). Release keeps a preview; Apply commits one Undo. Esc / close discards. Preview and output use wireframe lines.");
+            ui.small("Drag a colored axis (or choose X/Y/Z below). Release keeps a preview; Apply commits one Undo. Esc / close discards. Wireframe gizmos; page output follows scene rendering settings.");
             egui::ScrollArea::vertical().id_salt("world-objects").max_height(65.).show(ui,|ui|{ui.horizontal(|ui|{if ui.button("Select all").clicked(){p.ids=(0..d.scene.worlds.len()).map(|i|d.scene.catalog.worlds.id(i)).collect();p.staged=None;}
 if ui.button("Clear selection").clicked(){p.ids.clear();p.staged=None;}ui.label(format!("Selection order: {:?}",p.ids));});for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let name=d.scene.catalog.world_info.get(&id).and_then(|i|i.name.as_deref()).unwrap_or("3D model");let mut selected=p.ids.contains(&id);let r=ui.checkbox(&mut selected,format!("{id}: {name} (parent {:?})",core::node(&d.scene,id).and_then(|n|n.parent)));p.controls.insert(format!("select-{id}"),r.rect);if r.changed(){if selected{p.ids.push(id);}else{p.ids.retain(|n|*n!=id);}p.staged=None;}}});
             let old_mode=p.preferences.mode;

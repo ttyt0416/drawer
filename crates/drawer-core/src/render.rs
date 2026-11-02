@@ -1,6 +1,6 @@
 //! Small page renderer used by sizing fixtures and the canvas preview.
 //! Later editors share these editable objects; this is not a text layout engine
-//! or a shaded 3D renderer.
+//!; world surfaces use a bounded local ray-query renderer.
 use crate::{
     document::Document,
     scene::{PageObject, Point, Rect},
@@ -12,6 +12,7 @@ mod text_contour_tree;
 mod text_paint;
 pub struct Renderer<'a> {
     world_geometry: Vec<text_contour_tree::Set>,
+    world_shading: Option<crate::world_render::Trace>,
     page_parts: Vec<(u64, Box<Renderer<'a>>)>,
     float_plan: Result<Option<Box<crate::float_render::Plan<'a>>>, String>,
     document: &'a Document,
@@ -409,6 +410,17 @@ impl<'a> Renderer<'a> {
         let Some(mesh) = self.doc().scene.worlds.get(index) else {
             return [0; 4];
         };
+        if let Some(trace) = &self.world_shading
+            && self
+                .doc()
+                .scene
+                .world3d
+                .surfaces
+                .get(&self.doc().scene.catalog.worlds.id(index))
+                .is_some_and(|s| !s.triangles.is_empty())
+        {
+            return trace.pixel(index, original);
+        }
         if self.doc().scene.world3d.lens.is_some() {
             return if self
                 .world_geometry
@@ -710,6 +722,7 @@ impl<'a> Renderer<'a> {
             })
             .collect();
         Self {
+            world_shading: crate::world_render::Trace::new(document),
             world_geometry: (0..document.scene.worlds.len())
                 .map(|i| {
                     text_contour_tree::Set::new(

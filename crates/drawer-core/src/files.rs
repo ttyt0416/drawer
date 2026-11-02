@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 109;
+pub(crate) const VERSION: u32 = 110;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -224,6 +224,9 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
         {
             return Err(invalid("Final camera and path guides require native101"));
+        }
+        if version < 110 && document.scene.world3d.lighting.is_some() {
+            return Err(invalid("Scene lighting requires native110"));
         }
         if version < 109 && !document.scene.world3d.rigs.is_empty() {
             return Err(invalid("Human rigs require version109"));
