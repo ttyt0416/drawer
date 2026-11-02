@@ -1638,3 +1638,11 @@ LDR의 sRGB/ICC/PNG 감마와 HDR 선형 radiance를 구분한다. LDR16비트�
 선택 포즈 편집은 포즈 열만, 기본 장면 편집은 기본 인체만 바꾸며 각 이력에 범위를 표시한다. 연결 해제하면 기본 자세가 보인다. 포즈 열은 native115에 저장하고 외부 파일을 바꿔도 Reload 전에는 변하지 않는다. 원본 경로에 Export하지 않는다. 뼈 이름·구조·축·범위가 모두 맞는 자체 골격만 허용한다.
 
 Play saved sequence preview와 Preview loop는 보기 전용이다. 문서 프레임·이력·타임라인 설정은 유지하며 Stop으로 중단한다. 저장된 변경 준비가 있으면 먼저 Apply/Cancel한다. 실제 문서 재생은 Open timeline playback을 사용한다. 2D 카메라는 포즈가 적용된3D 렌더 뒤에 적용된다. 상세 한도·기본 장면/물리 편집 범위는 소스 문서 `docs/process/pose-sequences.md`에 기록했다.
+
+## 장면 카메라 목록·프레이밍·보기 가림
+
+`scene-cameras`에서 카메라를 생성·독립 복제·이름 변경·선택 전환·삭제한다. 마지막1개는 유지한다. 원근/평행투영과 페이지 비율의 Lens shift X/Y를 조절하고 Prepare/Apply한다. Level verticals는 pitch/roll을 세우고 목표점의 화면 위치를 시프트로 유지한다. 수직 모드에서 pitch/roll은 잠기고 위치·yaw·FOV 변경 중에도 목표의 화면 위치를 유지한다. 수동 시프트로 목표 프레이밍을 조절하며 Release 또는 Undo로 돌아간다. 수평 카메라 뒤의 목표나 과도한 시프트는 거절한다.
+
+선택 모델과 여백을 지정해 Fit하면 현재 포즈 바운딩박스를 화면에 맞추고 near/far도 조정한다. 각 변경은 한 Undo이며 카메라 목록·시프트·모드는 native116에 저장한다. 다중 보기 창에서는 렌즈 시프트와 수직 보정도 독립 조절할 수 있다.
+
+`world-views`의 Hide geometry in front of reference plane은 선택 보기의 기준 세계점 앞쪽을 카메라 방향에 수직으로 잘라 뒤를 보여 준다. 걸친 개체는 일부만 남기고 절단면은 막지 않는다. 기준점과 켜짐은 보기별 작업공간 값이고 문서·Undo·기본 출력은 바꾸지 않는다. 카메라를 장면에 복사해도 가림 설정은 복사하지 않는다. 상세 계약은 소스 문서 `docs/process/scene-cameras.md`에 기록했다.

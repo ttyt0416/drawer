@@ -578,3 +578,6 @@ pub mod environment_verify;
 
 pub mod pose_sequence;
 pub mod pose_sequence_verify;
+
+pub mod camera_library;
+pub mod camera_library_verify;

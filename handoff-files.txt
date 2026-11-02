@@ -1000,3 +1000,9 @@ crates/drawer-core/src/pose_sequence_verify.rs
 crates/drawer-app/src/pose_sequence.rs
 crates/drawer-app/src/pose_sequence_verify.rs
 docs/process/pose-sequences.md
+
+crates/drawer-core/src/camera_library.rs
+crates/drawer-core/src/camera_library_verify.rs
+crates/drawer-app/src/camera_library.rs
+crates/drawer-app/src/camera_library_verify.rs
+docs/process/scene-cameras.md

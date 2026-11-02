@@ -21,12 +21,40 @@ pub enum Projection {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct LevelTarget {
+    pub world: V,
+    pub anchor: Point,
+    pub shift_base: Point,
+}
+impl LevelTarget {
+    fn valid(self) -> bool {
+        self.world
+            .into_iter()
+            .all(|v| v.is_finite() && v.abs() <= 1e9)
+            && self
+                .anchor
+                .into_iter()
+                .chain(self.shift_base)
+                .all(|v| v.is_finite() && v.abs() <= 4.)
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Lens {
     pub projection: Projection,
     pub angles: V,
     pub fov: f64,
     pub near: f64,
     pub far: f64,
+    #[serde(default, skip_serializing_if = "zero_shift")]
+    pub shift: [f64; 2],
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub vertical: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<LevelTarget>,
+}
+fn zero_shift(v: &[f64; 2]) -> bool {
+    *v == [0.; 2]
 }
 impl Default for Lens {
     fn default() -> Self {
@@ -36,6 +64,9 @@ impl Default for Lens {
             fov: 45.,
             near: 0.01,
             far: 10000.,
+            shift: [0.; 2],
+            vertical: false,
+            level: None,
         }
     }
 }
@@ -53,9 +84,20 @@ pub(crate) fn camera_valid(c: &Camera) -> bool {
 }
 impl Lens {
     pub fn valid(self) -> bool {
-        self.angles
+        self.shift
             .into_iter()
-            .all(|v| v.is_finite() && v.abs() <= 36000.)
+            .all(|x| x.is_finite() && x.abs() <= 4.)
+            && (if self.vertical {
+                self.angles[0] == 0.
+                    && self.angles[2] == 0.
+                    && self.level.is_some_and(LevelTarget::valid)
+            } else {
+                self.level.is_none()
+            })
+            && self
+                .angles
+                .into_iter()
+                .all(|v| v.is_finite() && v.abs() <= 36000.)
             && self.fov.is_finite()
             && (1. ..=179.).contains(&self.fov)
             && self.near.is_finite()
@@ -64,14 +106,82 @@ impl Lens {
             && self.far > self.near
             && self.far <= 1e9
     }
+    pub fn extended(self) -> bool {
+        self.shift != [0.; 2] || self.vertical || self.level.is_some()
+    }
+    pub fn valid_for(self, c: &Camera) -> bool {
+        self.valid()
+            && camera_valid(c)
+            && self.level.is_none_or(|level| {
+                let local = Matrix::euler(self.angles)
+                    .inverse()
+                    .vector(sub(level.world, c.position));
+                let center = self.screen_center(c);
+                local[2] < -1e-9
+                    && (0..2).all(|i| {
+                        center[i].is_finite()
+                            && ((center[i] - (c.page_bounds.min[i] + c.page_bounds.max[i]) / 2.)
+                                / (c.page_bounds.max[i] - c.page_bounds.min[i]))
+                                .abs()
+                                <= 4.
+                    })
+            })
+    }
+    fn center_rotation(self, c: &Camera, rotation: Matrix) -> Point {
+        let size = std::array::from_fn::<_, 2, _>(|i| c.page_bounds.max[i] - c.page_bounds.min[i]);
+        if self.vertical
+            && let Some(level) = self.level
+        {
+            let p = rotation.inverse().vector(sub(level.world, c.position));
+            let scale = match self.projection {
+                Projection::Perspective => {
+                    size[1] / 2. / (self.fov.to_radians() / 2.).tan() / -p[2]
+                }
+                Projection::Orthographic => c.pixels_per_unit,
+            };
+            return [
+                c.page_bounds.min[0]
+                    + (level.anchor[0] + self.shift[0] - level.shift_base[0]) * size[0]
+                    - p[0] * scale,
+                c.page_bounds.min[1]
+                    + (level.anchor[1] + self.shift[1] - level.shift_base[1]) * size[1]
+                    + p[1] * scale,
+            ];
+        }
+        std::array::from_fn(|i| {
+            (c.page_bounds.min[i] + c.page_bounds.max[i]) / 2. + self.shift[i] * size[i]
+        })
+    }
+    pub fn screen_center(self, c: &Camera) -> Point {
+        self.center_rotation(c, Matrix::euler(self.angles))
+    }
+    pub(crate) fn rays(self, c: &Camera) -> Rays {
+        let rotation = Matrix::euler(self.angles);
+        Rays {
+            projection: self.projection,
+            position: c.position,
+            rotation,
+            center: self.center_rotation(c, rotation),
+            scale: match self.projection {
+                Projection::Perspective => {
+                    (c.page_bounds.max[1] - c.page_bounds.min[1])
+                        / 2.
+                        / (self.fov.to_radians() / 2.).tan()
+                }
+                Projection::Orthographic => c.pixels_per_unit,
+            },
+        }
+    }
+    pub fn ray(self, c: &Camera, p: Point) -> (V, V) {
+        self.rays(c).at(p)
+    }
     fn view(self, c: &Camera, p: V) -> V {
         Matrix::euler(self.angles)
             .inverse()
             .vector(sub(p, c.position))
     }
     fn project_view(self, c: &Camera, p: V) -> Point {
-        let center =
-            std::array::from_fn::<_, 2, _>(|i| (c.page_bounds.min[i] + c.page_bounds.max[i]) / 2.);
+        let center = self.screen_center(c);
         let scale = match self.projection {
             Projection::Orthographic => c.pixels_per_unit,
             Projection::Perspective => {
@@ -114,6 +224,26 @@ impl Lens {
         ])
     }
 }
+pub(crate) struct Rays {
+    projection: Projection,
+    position: V,
+    rotation: Matrix,
+    center: Point,
+    scale: f64,
+}
+impl Rays {
+    pub(crate) fn at(&self, p: Point) -> (V, V) {
+        let x = (p[0] - self.center[0]) / self.scale;
+        let y = -(p[1] - self.center[1]) / self.scale;
+        match self.projection {
+            Projection::Perspective => (self.position, self.rotation.vector([x, y, -1.])),
+            Projection::Orthographic => (
+                add(self.position, self.rotation.vector([x, y, 0.])),
+                self.rotation.vector([0., 0., -1.]),
+            ),
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
@@ -140,6 +270,11 @@ pub struct Data {
         skip_serializing_if = "crate::pose_sequence::Data::is_default"
     )]
     pub sequences: crate::pose_sequence::Data,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::camera_library::Data::is_default"
+    )]
+    pub cameras: crate::camera_library::Data,
 }
 fn index(s: &Scene, id: u64) -> Option<usize> {
     s.catalog.worlds.index(id, s.worlds.len())
@@ -170,7 +305,8 @@ impl Data {
         *self == Self::default()
     }
     pub fn bytes(&self) -> usize {
-        self.sequences.bytes()
+        self.cameras.bytes()
+            + self.sequences.bytes()
             + self.environment.as_ref().map_or(0, |e| e.bytes())
             + self.surfaces.values().map(|s| s.bytes()).sum::<usize>()
             + self.rigs.values().map(|r| r.bytes()).sum::<usize>()
@@ -180,7 +316,7 @@ impl Data {
             + usize::from(self.lens.is_some()) * std::mem::size_of::<Lens>()
     }
     pub fn valid(&self, s: &Scene) -> bool {
-        if !self.sequences.valid(s) {
+        if !self.cameras.valid(s) || !self.sequences.valid(s) {
             return false;
         }
         if self
@@ -208,7 +344,7 @@ impl Data {
         if self.nodes.len() > 256
             || self
                 .lens
-                .is_some_and(|l| !l.valid() || s.camera.as_ref().is_none_or(|c| !camera_valid(c)))
+                .is_some_and(|l| s.camera.as_ref().is_none_or(|c| !l.valid_for(c)))
             || (!self.is_default()
                 && s.worlds
                     .iter()

@@ -552,6 +552,7 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     after.scene.objects.clear();
     after.scene.worlds.clear();
     after.scene.camera = None;
+    after.scene.world3d = Default::default();
     after.scene.clips.clear();
     after.scene.mouse_strokes.clear();
     after.scene.alignment = Default::default();

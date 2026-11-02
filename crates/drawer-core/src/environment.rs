@@ -343,23 +343,9 @@ impl Sampler {
         if !camera.page_bounds.contains(point) {
             return Default::default();
         }
-        let center = std::array::from_fn::<_, 2, _>(|i| {
-            (camera.page_bounds.min[i] + camera.page_bounds.max[i]) / 2.
-        });
-        let direction = if lens.projection == world3d::Projection::Perspective {
-            let scale = (camera.page_bounds.max[1] - camera.page_bounds.min[1])
-                / 2.
-                / (lens.fov.to_radians() / 2.).tan();
-            [
-                (point[0] - center[0]) / scale,
-                -(point[1] - center[1]) / scale,
-                -1.,
-            ]
-        } else {
-            [0., 0., -1.]
-        };
+        let (_, direction) = lens.ray(&camera, point);
         let rgb = self
-            .radiance(Matrix::euler(lens.angles).vector(direction))
+            .radiance(direction)
             .map(|v| encode(v * 2f64.powf(self.settings.exposure)));
         crate::color_precision::Sample::new([rgb[0], rgb[1], rgb[2], 1.]).unwrap()
     }

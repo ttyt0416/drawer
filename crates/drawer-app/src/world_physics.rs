@@ -33,6 +33,10 @@ impl Default for Panel {
 }
 impl Drawer {
     pub(super) fn begin_world_physics(&mut self) -> Result<(), String> {
+        if self.cameras_pending() {
+            return Err("Apply/discard scene camera preview first".into());
+        }
+        self.scene_cameras.open = false;
         if self.sequence_pending() {
             return Err("Apply/discard pose sequence preview first".into());
         }

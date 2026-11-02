@@ -15,7 +15,7 @@ pub struct View {
 }
 impl View {
     pub fn valid(&self) -> bool {
-        world3d::camera_valid(&self.camera) && self.lens.valid()
+        self.lens.valid_for(&self.camera)
     }
     pub fn scene(d: &Document) -> Self {
         let (camera, lens) = world3d::default_camera(d);
@@ -24,6 +24,9 @@ impl View {
     pub fn direction(&mut self, direction: Direction, target: V) {
         let delta = sub(self.camera.position, target);
         let distance = dot(delta, delta).sqrt().clamp(1., 1e7);
+        self.lens.vertical = false;
+        self.lens.level = None;
+        self.lens.shift = [0.; 2];
         self.lens.angles = match direction {
             Direction::Perspective => [-25., 35., 0.],
             Direction::Front => [0.; 3],
@@ -76,6 +79,19 @@ impl Direction {
         }
     }
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Occlusion {
+    pub enabled: bool,
+    pub point: V,
+}
+impl Occlusion {
+    fn valid(self) -> bool {
+        self.point
+            .into_iter()
+            .all(|x| x.is_finite() && x.abs() <= 1e9)
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Preferences {
@@ -88,6 +104,8 @@ pub struct Preferences {
     pub split: f32,
     pub camera_guides: bool,
     pub edges: bool,
+    #[serde(default)]
+    pub occlusion: [Occlusion; 4],
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -101,12 +119,14 @@ impl Default for Preferences {
             split: 0.5,
             camera_guides: true,
             edges: false,
+            occlusion: Default::default(),
         }
     }
 }
 impl Preferences {
     pub fn valid(&self) -> bool {
-        self.version == 1
+        self.occlusion.into_iter().all(Occlusion::valid)
+            && self.version == 1
             && matches!(self.count, 2 | 4)
             && self.selected < self.count
             && self.reference < self.count
@@ -271,23 +291,13 @@ fn guide_lines(d: &Document, view: &View, cameras: bool, edges: bool) -> Vec<(Po
     }
     if cameras {
         let source = View::scene(d);
-        let rotation = Matrix::euler(source.lens.angles);
-        let depth = 1.;
-        let height = match source.lens.projection {
-            Projection::Perspective => (source.lens.fov.to_radians() / 2.).tan() * depth,
-            Projection::Orthographic => {
-                (source.camera.page_bounds.max[1] - source.camera.page_bounds.min[1])
-                    / source.camera.pixels_per_unit
-                    / 2.
-            }
-        };
-        let aspect = (source.camera.page_bounds.max[0] - source.camera.page_bounds.min[0])
-            / (source.camera.page_bounds.max[1] - source.camera.page_bounds.min[1]);
-        let points = [[-1., -1.], [1., -1.], [1., 1.], [-1., 1.]].map(|p| {
-            add(
-                source.camera.position,
-                rotation.vector([p[0] * height * aspect, p[1] * height, -depth]),
-            )
+        let points = [[0., 0.], [1., 0.], [1., 1.], [0., 1.]].map(|p| {
+            let point = std::array::from_fn(|i| {
+                source.camera.page_bounds.min[i]
+                    + p[i] * (source.camera.page_bounds.max[i] - source.camera.page_bounds.min[i])
+            });
+            let (origin, direction) = source.lens.ray(&source.camera, point);
+            add(origin, direction)
         });
         for i in 0..4 {
             for (a, b) in [
@@ -340,7 +350,17 @@ pub fn render(
         return Err("Multiple-camera preview exceeds memory/ray-work budget".into());
     }
     let mut frames = vec![];
-    for view in p.views.iter().take(p.count) {
+    for (index, source) in p.views.iter().take(p.count).enumerate() {
+        let mut view = source.clone();
+        let clip = p.occlusion[index];
+        let depth = -Matrix::euler(view.lens.angles)
+            .inverse()
+            .vector(sub(clip.point, view.camera.position))[2];
+        let hide_world = clip.enabled && depth >= view.lens.far;
+        if clip.enabled && !hide_world {
+            view.lens.near = view.lens.near.max(depth);
+        }
+
         crate::book_io::check_cancel(cancel)?;
         let mut frozen = crate::layer_merge::preview(&d.snapshot(), d.current_frame)?;
         frozen.keyframe_content = d.keyframe_content;
@@ -365,7 +385,7 @@ pub fn render(
         let keys = crate::render_order::normalized(&frozen.scene)
             .into_iter()
             .map(|e| e.key)
-            .filter(|k| matches!(k, crate::layer_search::Key::World(_)))
+            .filter(|k| !hide_world && matches!(k, crate::layer_search::Key::World(_)))
             .collect::<Vec<_>>();
         for y in 0..frame.height {
             crate::book_io::check_cancel(cancel)?;
@@ -388,10 +408,12 @@ pub fn render(
                 frame.pixels.extend(color.rgba());
             }
         }
-        frame.guides = guide_lines(&frozen, view, false, p.edges);
+        if !hide_world {
+            frame.guides = guide_lines(&frozen, &view, false, p.edges);
+        }
         // The source camera is the real document camera, not the temporary preview camera.
-        if p.camera_guides {
-            frame.guides.extend(guide_lines(d, view, true, false));
+        if p.camera_guides && !hide_world {
+            frame.guides.extend(guide_lines(d, &view, true, false));
         }
         frames.push(frame);
     }

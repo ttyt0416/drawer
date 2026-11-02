@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 115;
+pub(crate) const VERSION: u32 = 116;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -224,6 +224,18 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
         {
             return Err(invalid("Final camera and path guides require native101"));
+        }
+        if version < 116
+            && (!document.scene.world3d.cameras.is_default()
+                || document
+                    .scene
+                    .world3d
+                    .lens
+                    .is_some_and(crate::world3d::Lens::extended))
+        {
+            return Err(invalid(
+                "Named scene cameras / extended lens framing require native116",
+            ));
         }
         if version < 115 && !document.scene.world3d.sequences.is_default() {
             return Err(invalid("Pose sequence assets/placements require native115"));

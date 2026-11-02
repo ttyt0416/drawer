@@ -161,8 +161,7 @@ pub fn vanishing(s: &Scene) -> Option<[Vanishing; 3]> {
     let l = s.world3d.lens?;
     let inverse = Matrix::euler(l.angles).inverse();
     let f = (c.page_bounds.max[1] - c.page_bounds.min[1]) / 2. / (l.fov.to_radians() / 2.).tan();
-    let center =
-        std::array::from_fn::<_, 2, _>(|i| (c.page_bounds.min[i] + c.page_bounds.max[i]) / 2.);
+    let center = l.screen_center(c);
     Some(std::array::from_fn(|axis| {
         let v = inverse.vector(Matrix::default().axis(axis));
         if l.projection == world3d::Projection::Orthographic || v[2].abs() < 1e-8 {

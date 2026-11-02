@@ -4,7 +4,7 @@ use crate::{
     lighting::{Kind, Settings, Style},
     scene::Point,
     world_math::{add, cross, dot, mul, sub, unit},
-    world3d::{Matrix, Projection, V},
+    world3d::{Matrix, V},
 };
 #[derive(Clone, Copy)]
 struct Bounds {
@@ -79,12 +79,9 @@ pub(crate) struct Trace {
     physical: bool,
     environment: Option<crate::environment::Light>,
     object_bounds: Vec<Option<Bounds>>,
-    rotation: Matrix,
-    center: Point,
-    camera_scale: f64,
+    rays: crate::world3d::Rays,
     nodes: Vec<Node>,
     settings: Settings,
-    camera: crate::scene::Camera,
     lens: crate::world3d::Lens,
 }
 #[derive(Clone, Copy)]
@@ -139,17 +136,7 @@ impl Trace {
         let (camera, lens) = crate::world3d::default_camera(d);
         let mut t = Self {
             object_bounds: vec![None; d.scene.worlds.len()],
-            rotation: Matrix::euler(lens.angles),
-            center: std::array::from_fn(|i| {
-                (camera.page_bounds.min[i] + camera.page_bounds.max[i]) / 2.
-            }),
-            camera_scale: if lens.projection == Projection::Perspective {
-                (camera.page_bounds.max[1] - camera.page_bounds.min[1])
-                    / 2.
-                    / (lens.fov.to_radians() / 2.).tan()
-            } else {
-                camera.pixels_per_unit
-            },
+            rays: lens.rays(&camera),
             textures: vec![None; d.scene.worlds.len()],
             imported: (0..d.scene.worlds.len())
                 .map(|_| Default::default())
@@ -159,7 +146,6 @@ impl Trace {
             triangles: vec![],
             nodes: vec![],
             settings: settings.clone(),
-            camera,
             lens,
         };
         let poses = if physical {
@@ -380,18 +366,8 @@ impl Trace {
         best
     }
     fn ray(&self, p: Point) -> Ray {
-        let x = (p[0] - self.center[0]) / self.camera_scale;
-        let y = -(p[1] - self.center[1]) / self.camera_scale;
-        match self.lens.projection {
-            Projection::Perspective => Ray {
-                o: self.camera.position,
-                d: self.rotation.vector([x, y, -1.]),
-            },
-            Projection::Orthographic => Ray {
-                o: add(self.camera.position, self.rotation.vector([x, y, 0.])),
-                d: self.rotation.vector([0., 0., -1.]),
-            },
-        }
+        let (o, d) = self.rays.at(p);
+        Ray { o, d }
     }
     pub(crate) fn pixel(&self, object: usize, p: Point) -> [u8; 4] {
         let ray = self.ray(p);

@@ -135,6 +135,10 @@ impl Drawer {
             || self.pose_sequences.job.as_ref().is_some_and(|j| !j.view)
     }
     pub(super) fn begin_pose_sequences(&mut self) -> Result<(), String> {
+        if self.cameras_pending() {
+            return Err("Apply/discard scene camera preview first".into());
+        }
+        self.scene_cameras.open = false;
         self.finish_stroke();
         if self.has_world_preview()
             || self.models_busy()
@@ -183,7 +187,8 @@ impl Drawer {
             return Err("Wait for/cancel sequence preparation first".into());
         }
         if edit.is_some()
-            && (self.has_world_preview()
+            && (self.cameras_pending()
+                || self.has_world_preview()
                 || self.models_busy()
                 || self.rig_pending()
                 || self.lighting_pending()

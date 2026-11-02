@@ -31,10 +31,10 @@ impl Drop for Job {
 #[derive(Default)]
 pub(super) struct Panel {
     pub open: bool,
-    preferences: Preferences,
+    pub(super) preferences: Preferences,
     job: Option<Job>,
     key: Option<Key>,
-    frames: Vec<core::Frame>,
+    pub(super) frames: Vec<core::Frame>,
     textures: Vec<egui::TextureHandle>,
     undo: Vec<Preferences>,
     redo: Vec<Preferences>,
@@ -44,6 +44,9 @@ pub(super) struct Panel {
 }
 
 impl Panel {
+    pub(super) fn busy(&self) -> bool {
+        self.job.is_some()
+    }
     fn clear(&mut self) {
         self.job = None;
         self.key = None;
@@ -70,6 +73,10 @@ impl Drawer {
         }
     }
     pub(super) fn begin_world_views(&mut self) -> Result<(), String> {
+        if self.cameras_pending() {
+            return Err("Apply/discard scene camera preview first".into());
+        }
+        self.scene_cameras.open = false;
         let n = self.active.ok_or("Choose a document")?;
         self.stop_timeline_playback(self.documents[n].id);
         self.world_views.preferences.initialize(&self.documents[n]);
@@ -199,6 +206,10 @@ impl Drawer {
         }
     }
     fn copy_view_to_scene(&mut self) -> Result<(), String> {
+        if self.cameras_pending() {
+            return Err("Apply/discard scene camera preview first".into());
+        }
+        self.scene_cameras.open = false;
         if self.sequence_pending() {
             return Err("Apply/discard pose sequence preview first".into());
         }
@@ -253,7 +264,11 @@ impl Drawer {
             ui.horizontal_wrapped(|ui|{egui::ComboBox::from_label("Link reference").selected_text(format!("View{}",p.preferences.reference+1)).show_ui(ui,|ui|{for i in 0..p.preferences.count{ui.selectable_value(&mut p.preferences.reference,i,format!("View{}",i+1));}});let r=ui.button("Link all using chosen reference");p.controls.insert("link".into(),r.rect);if r.clicked(){action=7;}let r=ui.button("Make cameras independent");p.controls.insert("independent".into(),r.rect);if r.clicked(){p.preferences.linked=false;}ui.label(if p.preferences.linked{"Linked: changing a view updates all editing cameras"}else{"Independent editing cameras"});});
             ui.horizontal_wrapped(|ui|{ui.label(format!("Selected View{}",p.preferences.selected+1));for dir in Direction::ALL{let r=ui.button(dir.label());p.controls.insert(dir.label().into(),r.rect);if r.clicked(){let mut v=p.preferences.views[p.preferences.selected].clone();v.direction(dir,target);if let Err(e)=p.preferences.replace(p.preferences.selected,v){p.notice=e;}}}for(key,label)in[("yaw","Orbit +15°"),("pan","Pan right")]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){let mut v=p.preferences.views[p.preferences.selected].clone();if key=="yaw"{v.lens.angles[1]+=15.;let delta=drawer_core::world_math::sub(v.camera.position,target);let distance=drawer_core::world_math::dot(delta,delta).sqrt();v.camera.position=drawer_core::world_math::add(target,drawer_core::world_math::Matrix::euler(v.lens.angles).vector([0.,0.,distance]));}else{v.camera.position[0]+=0.25;}
 if let Err(e)=p.preferences.replace(p.preferences.selected,v){p.notice=e;}}}});
-            let selected=p.preferences.selected;let mut view=p.preferences.views[selected].clone();let old=view.clone();ui.horizontal_wrapped(|ui|{ui.label("Position X/Y/Z");for v in &mut view.camera.position{ui.add(egui::DragValue::new(v).speed(0.1));}ui.label("Rotation X/Y/Z");for v in &mut view.lens.angles{ui.add(egui::DragValue::new(v));}});ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut view.lens.projection,drawer_core::world3d::Projection::Perspective,"Perspective projection");ui.selectable_value(&mut view.lens.projection,drawer_core::world3d::Projection::Orthographic,"Parallel projection");ui.label("FOV / ortho pixels per unit");ui.add(egui::DragValue::new(&mut view.lens.fov).range(1. ..=179.));ui.add(egui::DragValue::new(&mut view.camera.pixels_per_unit).range(1e-6..=1e6));});if view!=old&&let Err(e)=p.preferences.replace(selected,view){p.notice=e;}
+            let selected=p.preferences.selected;let mut view=p.preferences.views[selected].clone();let old=view.clone();ui.horizontal_wrapped(|ui|{ui.label("Position X/Y/Z");for v in &mut view.camera.position{ui.add(egui::DragValue::new(v).speed(0.1));}ui.label("Rotation X/Y/Z");for(i,v)in view.lens.angles.iter_mut().enumerate(){ui.add_enabled(!view.lens.vertical||i==1,egui::DragValue::new(v));}});ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut view.lens.projection,drawer_core::world3d::Projection::Perspective,"Perspective projection");ui.selectable_value(&mut view.lens.projection,drawer_core::world3d::Projection::Orthographic,"Parallel projection");ui.label("FOV / ortho pixels per unit");ui.add(egui::DragValue::new(&mut view.lens.fov).range(1. ..=179.));ui.add(egui::DragValue::new(&mut view.camera.pixels_per_unit).range(1e-6..=1e6));});ui.horizontal_wrapped(|ui|{ui.label("Lens shift X/Y");for x in &mut view.lens.shift{ui.add(egui::DragValue::new(x).range(-4. ..=4.).speed(0.01));}
+if ui.button("Level verticals / retain scene target").clicked(){match drawer_core::camera_library::straighten(&view,target){Ok(v)=>view=v,Err(e)=>p.notice=e}}
+if ui.button("Release vertical mode").clicked(){view.lens.vertical=false;view.lens.level=None;}});
+            if view!=old&&let Err(e)=p.preferences.replace(selected,view){p.notice=e;}
+            ui.horizontal_wrapped(|ui|{let selected=p.preferences.selected;let clip=&mut p.preferences.occlusion[selected];let r=ui.checkbox(&mut clip.enabled,"Hide geometry in front of reference plane (view only)");p.controls.insert("cut".into(),r.rect);ui.label("Reference world X/Y/Z");for x in &mut clip.point{ui.add(egui::DragValue::new(x).speed(0.1));}});
             let width=ui.available_width().min(735.);let height=if p.preferences.count==4{280.}else{180.};let(area,_)=ui.allocate_exact_size(egui::vec2(width,height),egui::Sense::hover());let gap=4.;let left=(width-gap)*p.preferences.split;let rows=if p.preferences.count==4{2}else{1};let row_height=(height-gap*(rows-1) as f32)/rows as f32;
             for i in 0..p.preferences.count{let row=i/2;let col=i%2;let x=if col==0{area.min.x}else{area.min.x+left+gap};let w=if col==0{left}else{width-left-gap};let rect=egui::Rect::from_min_size(egui::pos2(x,area.min.y+row as f32*(row_height+gap)),egui::vec2(w.max(1.),row_height.max(1.)));p.controls.insert(format!("pane{i}"),rect);let response=ui.interact(rect,ui.id().with(("world-pane",i)),egui::Sense::click());if response.clicked(){p.preferences.selected=i;}let painter=ui.painter_at(rect);painter.rect_filled(rect,2.,egui::Color32::from_rgb(24,29,34));painter.text(rect.min+egui::vec2(5.,3.),egui::Align2::LEFT_TOP,format!("View {}{}",i+1,if p.preferences.selected==i{" • selected"}else{""}),egui::FontId::proportional(12.),egui::Color32::WHITE);
                 if let(Some(texture),Some(frame))=(p.textures.get(i),p.frames.get(i)){let inside=egui::Rect::from_min_max(rect.min+egui::vec2(2.,22.),rect.max-egui::vec2(2.,2.));let scale=(inside.width()/frame.width as f32).min(inside.height()/frame.height as f32).max(0.);let image=egui::Rect::from_center_size(inside.center(),egui::vec2(frame.width as f32*scale,frame.height as f32*scale));painter.image(texture.id(),image,egui::Rect::from_min_max(egui::Pos2::ZERO,egui::pos2(1.,1.)),egui::Color32::WHITE);let overlay=painter.with_clip_rect(image);for(a,b,camera)in &frame.guides{let pos=|v:[f64;2]|egui::pos2(image.min.x+v[0] as f32*image.width(),image.min.y+v[1] as f32*image.height());overlay.line_segment([pos(*a),pos(*b)],egui::Stroke::new(1.,if *camera{egui::Color32::LIGHT_YELLOW}else{egui::Color32::from_white_alpha(100)}));p.guide_count+=1;}}

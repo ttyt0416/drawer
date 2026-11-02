@@ -288,6 +288,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn begin_world3d(&mut self) -> Result<(), String> {
+        if self.cameras_pending() {
+            return Err("Apply/discard scene camera preview first".into());
+        }
+        self.scene_cameras.open = false;
         if self.sequence_pending() {
             return Err("Apply/discard pose sequence preview first".into());
         }
@@ -439,7 +443,7 @@ if ui.button("Clear selection").clicked(){p.ids.clear();p.staged=None;}ui.label(
             if old_mode!=p.preferences.mode{p.value=if p.preferences.mode==Mode::Scale{[1.;3]}else{[0.;3]};}
             ui.horizontal_wrapped(|ui|{for(mode,label)in [(Pivot::Individual,"Individual pivots"),(Pivot::SelectionCenter,"Selection bounds center"),(Pivot::FirstSelected,"First selected pivot")]{ui.selectable_value(&mut p.preferences.pivot,mode,label);}ui.label("Rotation step (0 disables)");ui.add(egui::DragValue::new(&mut p.preferences.step).range(0. ..=180.));});
             ui.collapsing("Articulated parent links (keep world pose)",|ui|{egui::ComboBox::from_label("Parent").selected_text(p.parent.map_or("No parent".into(),|id|format!("Model{id}"))).show_ui(ui,|ui|{ui.selectable_value(&mut p.parent,None,"No parent");for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);ui.selectable_value(&mut p.parent,Some(id),format!("Model{id}"));}});if ui.button("Preview parent relation").clicked(){edit=Some(Edit::Parent{ids:p.ids.clone(),parent:p.parent});}});
-            ui.collapsing("Document 3D camera / depth clipping",|ui|{let c=p.camera.as_mut().unwrap();ui.horizontal(|ui|{ui.label("Position X/Y/Z");for v in &mut c.position{ui.add(egui::DragValue::new(v).speed(0.1));}});ui.horizontal(|ui|{ui.label("Rotation X/Y/Z degrees");for v in &mut p.lens.angles{ui.add(egui::DragValue::new(v));}});ui.horizontal(|ui|{ui.selectable_value(&mut p.lens.projection,Projection::Perspective,"Perspective");ui.selectable_value(&mut p.lens.projection,Projection::Orthographic,"Orthographic");ui.label("FOV / ortho pixels per unit");ui.add(egui::DragValue::new(&mut p.lens.fov).range(1. ..=179.));ui.add(egui::DragValue::new(&mut c.pixels_per_unit).range(1e-6..=1e6));});ui.horizontal(|ui|{ui.label("Near / far");ui.add(egui::DragValue::new(&mut p.lens.near).speed(0.01));ui.add(egui::DragValue::new(&mut p.lens.far).speed(1.));ui.label("Page left / top / right / bottom");for v in c.page_bounds.min.iter_mut().chain(c.page_bounds.max.iter_mut()){ui.add(egui::DragValue::new(v));}});let r=ui.button("Preview document camera");p.controls.insert("camera".into(),r.rect);if r.clicked(){edit=Some(Edit::Camera{camera:c.clone(),lens:p.lens});}});
+            ui.collapsing("Document 3D camera / depth clipping",|ui|{let c=p.camera.as_mut().unwrap();ui.horizontal(|ui|{ui.label("Position X/Y/Z");for v in &mut c.position{ui.add(egui::DragValue::new(v).speed(0.1));}});ui.horizontal(|ui|{ui.label("Rotation X/Y/Z degrees");for(i,v)in p.lens.angles.iter_mut().enumerate(){ui.add_enabled(!p.lens.vertical||i==1,egui::DragValue::new(v));}});ui.horizontal(|ui|{ui.selectable_value(&mut p.lens.projection,Projection::Perspective,"Perspective");ui.selectable_value(&mut p.lens.projection,Projection::Orthographic,"Orthographic");ui.label("FOV / ortho pixels per unit");ui.add(egui::DragValue::new(&mut p.lens.fov).range(1. ..=179.));ui.add(egui::DragValue::new(&mut c.pixels_per_unit).range(1e-6..=1e6));});ui.horizontal(|ui|{ui.label("Near / far");ui.add(egui::DragValue::new(&mut p.lens.near).speed(0.01));ui.add(egui::DragValue::new(&mut p.lens.far).speed(1.));ui.label("Page left / top / right / bottom");for v in c.page_bounds.min.iter_mut().chain(c.page_bounds.max.iter_mut()){ui.add(egui::DragValue::new(v));}});let r=ui.button("Preview document camera");p.controls.insert("camera".into(),r.rect);if r.clicked(){edit=Some(Edit::Camera{camera:c.clone(),lens:p.lens});}});
         });
         p.open = open;
         if !open {
