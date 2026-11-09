@@ -73,6 +73,11 @@ pub struct Rig {
     pub controls: Vec<crate::model_edit::Control>,
     #[serde(default, skip_serializing_if = "zero_expression")]
     pub expressions: [f64; 3],
+    #[serde(
+        default,
+        skip_serializing_if = "crate::mannequin_fit::Form::is_default"
+    )]
+    pub form: crate::mannequin_fit::Form,
 }
 fn zero_expression(v: &[f64; 3]) -> bool {
     *v == [0.; 3]
@@ -412,6 +417,20 @@ fn definition(r: &Rig) -> Definition {
             p.transform = p.transform.then(Matrix::scale([-1., 1., 1.]));
         }
     }
+    if !r.form.parts.is_empty() {
+        for j in &mut d.joints {
+            if let Some(parent) = j.parent {
+                let scale = r.form.parts.get(parent).copied().unwrap_or([1.; 3]);
+                for (axis, row) in j.bind.0.iter_mut().enumerate() {
+                    row[3] *= scale[axis];
+                }
+            }
+        }
+        for p in &mut d.pieces {
+            let scale = r.form.parts.get(p.joint).copied().unwrap_or([1.; 3]);
+            p.transform = p.transform.then(Matrix::scale(scale));
+        }
+    }
     d
 }
 fn head(d: &mut Definition, parent: usize, s: Shape, h: f64, e: [f64; 3]) {
@@ -484,6 +503,7 @@ impl Rig {
             mirrored: false,
             controls: vec![],
             expressions: [0.; 3],
+            form: Default::default(),
         };
         r.angles = vec![[0.; 3]; definition(&r).joints.len()];
         r
@@ -494,6 +514,7 @@ impl Rig {
     pub fn valid(&self) -> bool {
         self.version == 1
             && self.shape.valid()
+            && self.form.valid(self.joints().len())
             && (self.kind == Kind::Hand || !self.mirrored)
             && self
                 .expressions
@@ -531,7 +552,7 @@ impl Rig {
             self.mirrored = !self.mirrored;
         }
     }
-    pub fn frames(&self) -> Vec<Matrix> {
+    fn raw_frames(&self) -> Vec<Matrix> {
         let mut out = Vec::new();
         for (j, a) in self.joints().iter().zip(&self.angles) {
             let m = Matrix::euler(*a).then(j.bind);
@@ -539,8 +560,20 @@ impl Rig {
         }
         out
     }
+    pub fn frames(&self) -> Vec<Matrix> {
+        self.raw_frames()
+            .into_iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let part = self.form.parts.get(i).copied().unwrap_or([1.; 3]);
+                self.form
+                    .frame(Matrix::scale(part).then(m), self.shape.height)
+            })
+            .collect()
+    }
     pub fn bytes(&self) -> usize {
         std::mem::size_of::<Self>()
+            + self.form.parts.len() * std::mem::size_of::<V>()
             + self.angles.len() * std::mem::size_of::<V>()
             + self.controls.len() * std::mem::size_of::<crate::model_edit::Control>()
     }
@@ -558,14 +591,19 @@ pub(crate) fn generate(r: &Rig, cancel: &AtomicBool) -> Result<(WorldMesh, Surfa
         source: format!("Original {:?} mannequin / rigid joint skin v1", r.kind),
         ..Default::default()
     };
-    let frames = r.frames();
+    let frames = r.raw_frames();
     for p in definition(r).pieces {
         crate::book_io::check_cancel(cancel)?;
         let source = if p.round { &sphere } else { &cube };
         let m = p.transform.then(frames[p.joint]);
         let offset = mesh.vertices.len();
-        mesh.vertices
-            .extend(source.mesh.vertices.iter().map(|v| m.map(*v)));
+        mesh.vertices.extend(
+            source
+                .mesh
+                .vertices
+                .iter()
+                .map(|v| r.form.point(m.map(*v), r.shape.height)),
+        );
         mesh.edges
             .extend(source.mesh.edges.iter().map(|e| e.map(|i| i + offset)));
         for t in &source.surface.triangles {
@@ -762,4 +800,26 @@ pub fn prepare(
             p
         }
     })
+}
+
+pub(crate) fn feet(r: &Rig, cancel: &AtomicBool) -> Result<Vec<V>, String> {
+    let def = definition(r);
+    let frames = r.raw_frames();
+    let cube = crate::model_library::primitive(crate::model_library::Shape::Box, 6, cancel)?
+        .models
+        .remove(0);
+    let mut points = vec![];
+    for p in def.pieces {
+        if def.joints[p.joint].name.ends_with("Ankle") || def.joints[p.joint].name.ends_with("Toe")
+        {
+            let m = p.transform.then(frames[p.joint]);
+            points.extend(
+                cube.mesh
+                    .vertices
+                    .iter()
+                    .map(|v| r.form.point(m.map(*v), r.shape.height)),
+            );
+        }
+    }
+    Ok(points)
 }

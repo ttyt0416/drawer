@@ -42,6 +42,11 @@ struct Draft {
     parent: Option<u64>,
     bone: Option<usize>,
     keep: Keep,
+    form: drawer_core::mannequin_fit::Form,
+    target: drawer_core::human_rig::Shape,
+    blend: f64,
+    region: drawer_core::mannequin_fit::Region,
+    floor: f64,
 }
 impl Default for Draft {
     fn default() -> Self {
@@ -61,6 +66,11 @@ impl Default for Draft {
             parent: None,
             bone: None,
             keep: Keep::World,
+            form: Default::default(),
+            target: Default::default(),
+            blend: 0.5,
+            region: drawer_core::mannequin_fit::Region::Body,
+            floor: 0.,
         }
     }
 }
@@ -118,6 +128,13 @@ impl Panel {
                 p.angles = r.angles[p.joint];
                 p.control = Some(core::controls(r)[p.joint].clone());
                 p.expressions = r.expressions;
+                p.form = r.form.clone();
+                p.target = r.shape;
+                p.region = match r.kind {
+                    drawer_core::human_rig::Kind::Body => drawer_core::mannequin_fit::Region::Body,
+                    drawer_core::human_rig::Kind::Head => drawer_core::mannequin_fit::Region::Head,
+                    drawer_core::human_rig::Kind::Hand => drawer_core::mannequin_fit::Region::Hand,
+                };
             } else {
                 p.control = None;
             }
@@ -322,6 +339,17 @@ impl Drawer {
                         if let Some(c)=&mut v.control{ui.horizontal_wrapped(|ui|{for i in 0..3{let r=ui.checkbox(&mut c.locked[i],format!("Lock {}",["X","Y","Z"][i]));p.controls.insert(format!("lock-{i}"),r.rect);if r.changed(){c.hold=d.scene.world3d.rigs[&id].angles[v.joint];}ui.add(egui::DragValue::new(&mut c.min[i]).speed(1.));ui.add(egui::DragValue::new(&mut c.max[i]).speed(1.));}let r=ui.button("Prepare locks / ranges");p.controls.insert("limits".into(),r.rect);if r.clicked(){action=5;}});}
                         ui.horizontal_wrapped(|ui|{for(side,label)in[(Side::LeftToRight,"Left → right"),(Side::RightToLeft,"Right → left"),(Side::Swap,"Swap sides")]{ui.selectable_value(&mut v.side,side,label);}let r=ui.button("Prepare verified pose copy");p.controls.insert("copy".into(),r.rect);if r.clicked(){action=6;}});
                         if d.scene.world3d.rigs[&id].kind!=drawer_core::human_rig::Kind::Hand{ui.horizontal_wrapped(|ui|{for(i,label)in["Blink","Surprise","Cheek puff"].into_iter().enumerate(){ui.label(label);ui.add(egui::DragValue::new(&mut v.expressions[i]).range(0. ..=1.).speed(0.01));}let r=ui.button("Prepare expression morphs");p.controls.insert("expressions".into(),r.rect);if r.clicked(){action=7;}});}
+                        let advanced=egui::CollapsingHeader::new("Mannequin form / perspective / pose assistance").id_salt("mannequin-fit").show(ui,|ui|{
+                            use drawer_core::mannequin_fit::Region;
+                            ui.small("Local part axes; X/Y/Z0.5..2. Scale changes the selected part and the child joint offsets. Manga perspective freezes a local viewer direction; moving the camera does not deform the model.");
+                            ui.horizontal_wrapped(|ui|{ui.label("Selected part X/Y/Z");if v.form.parts.is_empty(){v.form.parts=vec![[1.;3];joints.len()];}for x in &mut v.form.parts[v.joint]{ui.add(egui::DragValue::new(x).range(0.5..=2.).speed(0.01));}ui.label("Perspective0..2");ui.add(egui::DragValue::new(&mut v.form.strength).range(0. ..=2.).speed(0.01));for(dir,label)in[([1.,0.,0.],"+X"),([-1.,0.,0.],"−X"),([0.,1.,0.],"+Y"),([0.,-1.,0.],"−Y"),([0.,0.,1.],"+Z"),([0.,0.,-1.],"−Z")]{ui.selectable_value(&mut v.form.toward,dir,label);}});
+                            ui.horizontal_wrapped(|ui|{for(key,label,a)in[("fit-form","Prepare part / perspective",14),("fit-reset","Reset all proportions / perspective",15)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+                            ui.horizontal_wrapped(|ui|{ui.label("Blend region");for(region,label)in[(Region::Body,"Body + head + hands"),(Region::Head,"Head only"),(Region::Hand,"Hands only")]{ui.selectable_value(&mut v.region,region,label);}ui.add(egui::Slider::new(&mut v.blend,0. ..=1.).text("Blend"));});
+                            ui.horizontal_wrapped(|ui|{ui.label("Target height");ui.add(egui::DragValue::new(&mut v.target.height).range(0.5..=3.).speed(0.01));for(label,x)in[("Shoulders",&mut v.target.shoulders),("Hips",&mut v.target.hips),("Bulk",&mut v.target.bulk),("Head",&mut v.target.head),("Face",&mut v.target.face),("Jaw",&mut v.target.jaw),("Hands",&mut v.target.hands),("Palm",&mut v.target.palm),("Fingers",&mut v.target.fingers)]{ui.label(label);ui.add(egui::DragValue::new(x).range(0.5..=2.).speed(0.01));}});
+                            let r=ui.button("Prepare regional shape blend");p.controls.insert("fit-blend".into(),r.rect);if r.clicked(){action=16;}
+                            ui.horizontal_wrapped(|ui|{ui.label("World floor Y");ui.add(egui::DragValue::new(&mut v.floor).speed(0.01));for(key,label,a)in[("fit-collision","Separate limb capsules",17),("fit-ground","Ground feet",18),("fit-upright","Stand upright",19),("fit-stand-ground","Stand + ground",20)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+                            ui.small("Assistances are explicit, each Apply is one Undo. Capsule separation excludes adjacent links and fingers; an unresolved constrained pose is rejected without changing it. Ground uses actual foot vertices; upright leaves locked joint axes fixed. Imported meshes need their original editor.");
+                        });p.controls.insert("fit-expand".into(),advanced.header_response.rect);
                     }else{
                         ui.horizontal_wrapped(|ui|{ui.label("Target name / local target scale X/Y/Z");ui.text_edit_singleline(&mut v.name);for x in &mut v.scale{ui.add(egui::DragValue::new(x).range(0.1..=4.).speed(0.01));}let r=ui.button("Register shape target");p.controls.insert("add-key".into(),r.rect);if r.clicked(){action=8;}});
                         ui.horizontal_wrapped(|ui|{egui::ComboBox::from_label("Matching topology source").selected_text(v.source.map_or("None".into(),|id|format!("Model{id}"))).show_ui(ui,|ui|{for i in 0..d.scene.worlds.len(){let source=d.scene.catalog.worlds.id(i);if source!=id{ui.selectable_value(&mut v.source,Some(source),format!("Model{source}"));}}});let r=ui.button("Capture frozen target");p.controls.insert("capture-key".into(),r.rect);if r.clicked(){action=9;}});
@@ -351,6 +379,32 @@ impl Drawer {
             let p = &self.model_controls.draft;
             let model = || p.actor.ok_or("Choose a model");
             let edit = match action {
+                14..=20 => {
+                    use drawer_core::mannequin_fit::{Change, Form};
+                    let change = match action {
+                        14 => Change::Form(p.form.clone()),
+                        15 => Change::Form(Form::default()),
+                        16 => Change::Blend {
+                            target: p.target,
+                            weight: p.blend,
+                            region: p.region,
+                        },
+                        _ => Change::Assist {
+                            collision: action == 17,
+                            upright: action == 19 || action == 20,
+                            ground: if action == 18 || action == 20 {
+                                Some(p.floor)
+                            } else {
+                                None
+                            },
+                        },
+                    };
+                    Some(Edit::Fit {
+                        rig: model()?,
+                        change,
+                        base: p.base,
+                    })
+                }
                 4 => Some(Edit::Joint {
                     rig: model()?,
                     joint: p.joint,
@@ -445,7 +499,8 @@ impl Drawer {
 #[path = "model_edit_verify.rs"]
 mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
-    verify::run(root)
+    verify::run(root)?;
+    fit_verify::run(root)
 }
 #[cfg(test)]
 mod tests {
@@ -453,5 +508,16 @@ mod tests {
     fn pointer_morph_joint_constraints_bone_parent_apply_undo_cancel_and_close() {
         let t = crate::tests::TestDirectory::new();
         super::smoke(&t.0).unwrap();
+    }
+}
+
+#[path = "mannequin_fit_verify.rs"]
+mod fit_verify;
+#[cfg(test)]
+mod fit_tests {
+    #[test]
+    fn pointer_original_form_blend_preview_apply_undo_cancel_stale_and_close() {
+        let t = crate::tests::TestDirectory::new();
+        super::fit_verify::run(&t.0).unwrap();
     }
 }

@@ -1012,3 +1012,7 @@ crates/drawer-core/src/model_edit_verify.rs
 crates/drawer-app/src/model_edit.rs
 crates/drawer-app/src/model_edit_verify.rs
 docs/process/model-controls.md
+crates/drawer-core/src/mannequin_fit.rs
+crates/drawer-core/src/mannequin_fit_verify.rs
+crates/drawer-app/src/mannequin_fit_verify.rs
+docs/process/mannequin-fit.md

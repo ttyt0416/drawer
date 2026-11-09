@@ -584,3 +584,6 @@ pub mod camera_library_verify;
 
 pub mod model_edit;
 pub mod model_edit_verify;
+
+pub mod mannequin_fit;
+pub mod mannequin_fit_verify;

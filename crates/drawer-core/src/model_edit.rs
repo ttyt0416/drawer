@@ -512,6 +512,11 @@ pub enum Keep {
     Local,
 }
 pub enum Edit {
+    Fit {
+        rig: u64,
+        change: crate::mannequin_fit::Change,
+        base: bool,
+    },
     Expressions {
         rig: u64,
         weights: [f64; 3],
@@ -668,6 +673,10 @@ pub fn prepare(
     cancel: &AtomicBool,
 ) -> Result<Prepared, String> {
     crate::book_io::check_cancel(cancel)?;
+    if let Edit::Fit { rig, change, base } = e {
+        let inner = crate::mannequin_fit::prepare(d, rig, change, base, budget, cancel)?;
+        return Ok(Prepared { inner, frame:d.current_frame, summary:"Original mannequin proportions / stylized perspective / explicit assistance. Collision uses limb capsules, not fingers, imported models or cloth. Ground aligns the lowest foot vertex to world Y; upright retains locked axes. Pose clips require explicit base scope.".into() });
+    }
     if d.memory_bytes()
         .saturating_mul(3)
         .saturating_add(4 * 1024 * 1024)

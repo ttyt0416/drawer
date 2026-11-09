@@ -48,7 +48,7 @@ pub fn fixture(kind: Kind) -> Result<Document, String> {
     d.edit_scene(s)?;
     Ok(d)
 }
-fn image(d: &Document) -> Vec<[u8; 4]> {
+pub(crate) fn image(d: &Document) -> Vec<[u8; 4]> {
     crate::render::Renderer::new(d)
         .output(d.dpi, B / 8)
         .unwrap()
