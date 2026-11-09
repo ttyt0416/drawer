@@ -1090,3 +1090,8 @@ crates/drawer-core/src/template_bundle_verify.rs
 crates/drawer-app/src/template_bundle.rs
 crates/drawer-app/src/template_bundle_verify.rs
 docs/process/template-bundles.md
+crates/drawer-core/src/output_batch.rs
+crates/drawer-core/src/output_batch_verify.rs
+crates/drawer-app/src/output_batch.rs
+crates/drawer-app/src/output_batch_verify.rs
+docs/process/output-batch.md

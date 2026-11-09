@@ -773,6 +773,7 @@ impl Drawer {
                 "color-management" => self.begin_monitor_color(),
                 "asset-library" => self.begin_asset_catalog()?,
                 "template-bundle" => self.begin_template_bundle(),
+                "output-batch" => self.begin_output_batch()?,
                 "raster-export" => self.begin_raster_export()?,
                 "save" => {
                     if let Some(n) = self.active {

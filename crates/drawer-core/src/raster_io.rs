@@ -12,6 +12,7 @@ use std::{
 };
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Format {
+    Png,
     #[default]
     Jpeg,
     Bmp,
@@ -20,9 +21,17 @@ pub enum Format {
     Webp,
 }
 impl Format {
-    pub const ALL: [Self; 5] = [Self::Jpeg, Self::Bmp, Self::Tga, Self::Tiff, Self::Webp];
+    pub const ALL: [Self; 6] = [
+        Self::Png,
+        Self::Jpeg,
+        Self::Bmp,
+        Self::Tga,
+        Self::Tiff,
+        Self::Webp,
+    ];
     pub fn extension(self) -> &'static str {
         match self {
+            Self::Png => "png",
             Self::Jpeg => "jpg",
             Self::Bmp => "bmp",
             Self::Tga => "tga",
@@ -32,6 +41,7 @@ impl Format {
     }
     pub fn label(self) -> &'static str {
         match self {
+            Self::Png => "PNG (lossless RGB/RGBA8/16)",
             Self::Jpeg => "JPEG (lossy RGB8)",
             Self::Bmp => "BMP (RGB/RGBA8)",
             Self::Tga => "TGA (RGB/RGBA8)",
@@ -75,10 +85,14 @@ impl Options {
     pub fn valid(self) -> bool {
         (1..=100).contains(&self.quality)
             && (self.format != Format::Jpeg || !self.alpha)
-            && (self.format == Format::Tiff || self.depth == Depth::Eight)
+            && (matches!(self.format, Format::Tiff | Format::Png) || self.depth == Depth::Eight)
+            && (self.format != Format::Png
+                || matches!(self.compression, Compression::None | Compression::Deflate))
     }
 }
+#[derive(Clone)]
 pub struct Prepared {
+    pub dpi: f64,
     pub width: u32,
     pub height: u32,
     pub pixels: Vec<[u16; 4]>,
@@ -125,6 +139,7 @@ pub fn prepare(d: &Document, budget: usize, c: &AtomicBool) -> Result<Prepared, 
         }
     }
     Ok(Prepared {
+        dpi: d.dpi,
         width: d.width,
         height: d.height,
         pixels,
@@ -135,6 +150,68 @@ pub fn prepare(d: &Document, budget: usize, c: &AtomicBool) -> Result<Prepared, 
     })
 }
 impl Prepared {
+    pub fn resized(
+        &self,
+        width: u32,
+        height: u32,
+        dpi: f64,
+        budget: usize,
+        c: &AtomicBool,
+    ) -> Result<Self, String> {
+        let count = (width as usize).saturating_mul(height as usize);
+        if width == 0
+            || height == 0
+            || width > 32768
+            || height > 32768
+            || count > 4 * 1024 * 1024
+            || !dpi.is_finite()
+            || !(1.0..=4800.).contains(&dpi)
+            || count.saturating_add(self.pixels.len()).saturating_mul(16) > budget
+        {
+            return Err("Output dimensions/DPI or resize memory limit".into());
+        }
+        cancel(c)?;
+        if (width, height) == (self.width, self.height) {
+            let mut same = self.clone();
+            same.dpi = dpi;
+            return Ok(same);
+        }
+        let mut pixels = Vec::with_capacity(count);
+        let step = [
+            self.width as f64 / width as f64,
+            self.height as f64 / height as f64,
+        ];
+        for y in 0..height {
+            cancel(c)?;
+            for x in 0..width {
+                let point = [
+                    (x as f64 + 0.5) * step[0] - 0.5,
+                    (y as f64 + 0.5) * step[1] - 0.5,
+                ];
+                let v = crate::interpolation::sample_float(
+                    point,
+                    crate::interpolation::box_footprint(point, step),
+                    crate::interpolation::Filter::Bilinear,
+                    |x, y| {
+                        let x = x.clamp(0, self.width as i64 - 1) as usize;
+                        let y = y.clamp(0, self.height as i64 - 1) as usize;
+                        Sample::from16(self.pixels[y * self.width as usize + x])
+                    },
+                );
+                pixels.push(v.rgba16());
+            }
+        }
+        Ok(Self {
+            width,
+            height,
+            dpi,
+            pixels,
+            source_depth: self.source_depth,
+            source: self.source,
+            revision: self.revision,
+            frame: self.frame,
+        })
+    }
     pub fn check(&self, d: &Document) -> Result<(), String> {
         if (self.source, self.revision, self.frame) == (d.id, d.revision, d.current_frame) {
             Ok(())
@@ -161,6 +238,21 @@ impl Prepared {
         if o.format == Format::Webp {
             s.push("Lossless WebP only; fully transparent hidden RGB may be normalized".into());
         }
+        if matches!(o.format, Format::Png | Format::Jpeg | Format::Tiff) {
+            let actual = match o.format {
+                Format::Png => (self.dpi / 0.0254).round() * 0.0254,
+                Format::Jpeg => self.dpi.round(),
+                _ => (self.dpi * 10000.).round() / 10000.,
+            };
+            if (actual - self.dpi).abs() > 1e-8 {
+                s.push(format!("Resolution metadata approximates {:.8}DPI as {:.8}DPI; source DPI is unchanged",self.dpi,actual));
+            }
+        } else {
+            s.push(
+                "This output adapter does not store DPI metadata; pixel dimensions remain exact"
+                    .into(),
+            );
+        }
         s
     }
     pub fn sample(&self, n: usize, o: Options) -> Result<Sample, String> {
@@ -177,6 +269,8 @@ impl Prepared {
     }
     pub fn encode(&self, o: Options, budget: usize, c: &AtomicBool) -> Result<Vec<u8>, String> {
         if !o.valid()
+            || !self.dpi.is_finite()
+            || !(1.0..=4800.0).contains(&self.dpi)
             || self.pixels.len() != self.width as usize * self.height as usize
             || self.pixels.len().saturating_mul(40) > budget
         {
@@ -185,7 +279,7 @@ impl Prepared {
         cancel(c)?;
         let channels = if o.alpha { 4 } else { 3 };
         let mut low = Vec::with_capacity(self.pixels.len() * channels);
-        let mut high = Vec::new();
+        let mut high: Vec<u16> = Vec::new();
         if o.depth == Depth::Sixteen {
             high.reserve(self.pixels.len() * channels);
         }
@@ -221,9 +315,52 @@ impl Prepared {
             image::ExtendedColorType::Rgb8
         };
         match o.format {
+            Format::Png => {
+                let mut info = png::Info::with_size(self.width, self.height);
+                info.color_type = if o.alpha {
+                    png::ColorType::Rgba
+                } else {
+                    png::ColorType::Rgb
+                };
+                info.bit_depth = if o.depth == Depth::Sixteen {
+                    png::BitDepth::Sixteen
+                } else {
+                    png::BitDepth::Eight
+                };
+                info.icc_profile = Some(std::borrow::Cow::Owned(icc()?));
+                let ppm = (self.dpi / 0.0254).round() as u32;
+                info.pixel_dims = Some(png::PixelDimensions {
+                    xppu: ppm,
+                    yppu: ppm,
+                    unit: png::Unit::Meter,
+                });
+                let mut encoder =
+                    png::Encoder::with_info(&mut bytes, info).map_err(|e| e.to_string())?;
+                encoder.set_compression(if o.compression == Compression::None {
+                    png::Compression::NoCompression
+                } else {
+                    png::Compression::Balanced
+                });
+                let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+                let mut precise = Vec::new();
+                let data = if o.depth == Depth::Sixteen {
+                    precise.reserve(high.len() * 2);
+                    for v in &high {
+                        precise.extend(v.to_be_bytes());
+                    }
+                    &precise
+                } else {
+                    &low
+                };
+                writer.write_image_data(data).map_err(|e| e.to_string())?;
+                writer.finish().map_err(|e| e.to_string())?;
+            }
             Format::Jpeg => {
                 let mut e =
                     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, o.quality);
+                e.set_pixel_density(image::codecs::jpeg::PixelDensity::dpi(
+                    self.dpi.round() as u16
+                ));
                 e.set_icc_profile(icc()?).map_err(|e| e.to_string())?;
                 e.encode(&low, self.width, self.height, color)
                     .map_err(|e| e.to_string())?;
@@ -269,6 +406,13 @@ impl Prepared {
                         let mut image = encoder
                             .new_image::<$ty>(self.width, self.height)
                             .map_err(|e| e.to_string())?;
+                        image.resolution(
+                            tiff::tags::ResolutionUnit::Inch,
+                            tiff::encoder::Rational {
+                                n: (self.dpi * 10000.).round() as u32,
+                                d: 10000,
+                            },
+                        );
                         if o.alpha {
                             image
                                 .encoder()

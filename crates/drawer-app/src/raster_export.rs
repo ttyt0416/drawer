@@ -110,6 +110,14 @@ impl Drawer {
                 }
             }
         }
+        if p.options.format == Format::Png
+            && !matches!(
+                p.options.compression,
+                Compression::None | Compression::Deflate
+            )
+        {
+            p.options.compression = Compression::Deflate;
+        }
         let before = p.options;
         let mut open = true;
         let mut export = false;
@@ -152,7 +160,7 @@ impl Drawer {
                     ui.color_edit_button_srgb(&mut p.options.background);
                     ui.label("Opaque background RGB");
                 }
-                if p.options.format == Format::Tiff {
+                if matches!(p.options.format, Format::Tiff | Format::Png) {
                     ui.horizontal(|ui| {
                         ui.selectable_value(&mut p.options.depth, Depth::Eight, "8-bit channels");
                         let r = ui.selectable_value(
@@ -171,6 +179,11 @@ impl Drawer {
                                 Compression::Deflate,
                                 Compression::Packbits,
                             ] {
+                                if p.options.format == Format::Png
+                                    && !matches!(c, Compression::None | Compression::Deflate)
+                                {
+                                    continue;
+                                }
                                 ui.selectable_value(
                                     &mut p.options.compression,
                                     c,
