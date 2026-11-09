@@ -8,6 +8,9 @@ fn invalid(message: impl Into<String>) -> io::Error {
 }
 
 fn relative_path(text: &str) -> io::Result<PathBuf> {
+    if text == ".gitattributes" {
+        return Ok(PathBuf::from(text));
+    }
     if text.contains('\\') || text.contains(':') {
         return Err(invalid("전달 경로에는 / 구분자만 사용해야 합니다"));
     }
@@ -302,6 +305,7 @@ mod tests {
     #[test]
     fn pinned_public_fbx_source_admission_keeps_other_native_files_excluded() {
         for p in [
+            ".gitattributes",
             "vendor/ufbx/ufbx/ufbx.c",
             "vendor/ufbx/ufbx/ufbx.h",
             "vendor/ufbx/LICENSE",
@@ -310,6 +314,9 @@ mod tests {
             assert!(super::relative_path(p).is_ok());
         }
         for p in [
+            ".env",
+            ".git/config",
+            ".cargo/credentials",
             "vendor/other/ufbx.c",
             "crates/drawer-core/foreign.c",
             "vendor/ufbx/ufbx/model.obj",

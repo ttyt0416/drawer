@@ -23,3 +23,5 @@
 Windows 배포를 위해 고정 ufbx 소스를 vendor/ufbx에 보관한다. 파서/바인딩은 그대로이며 빌드 설정만 MSVC /MT·/Zl로 바꿔 C 함수의 직접 호출을 사용하고 최종 Rust 바이너리가 CRT를 선택하게 한다. 동적 테스트와 정적 배포 모두 같은 C 객체를 사용한다. 원본 crate 체크섬·리비전·모든 로컬 소스 해시는 patched-sources.json/고지에 기록한다.
 
 배포 전 PE import/delay-import 표에서 VC 재배포/디버그 CRT DLL을 거절하며 개발도구 PATH 없는 설치본 실행도 수행한다. 전달 목록의 C/header 예외는 고정 vendor/ufbx/ufbx 경로에 한정한다.
+
+고정 의존 소스는 .gitattributes에서 줄바꿈 자동 변환을 제외한다. 커밋된 각 파일의 원시 바이트까지 patched-sources.json의 해시와 대조하며 이 설정도 전달 묶음에 포함한다.

@@ -1043,3 +1043,4 @@ vendor/ufbx/src/prelude.rs
 vendor/ufbx/ufbx/ufbx.c
 vendor/ufbx/ufbx/ufbx.h
 scripts/verify-pe.py
+.gitattributes

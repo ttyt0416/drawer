@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.md whitespace=-trailing-space
 docs/licenses/** whitespace=-trailing-space
+
+# Keep the exact bytes recorded in the pinned public dependency inventory.
+vendor/ufbx/** -text -eol whitespace=cr-at-eol
