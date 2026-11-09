@@ -603,3 +603,6 @@ mod model_stl;
 
 pub mod png_io;
 pub mod png_io_verify;
+
+pub mod palette_exchange;
+pub mod palette_exchange_verify;

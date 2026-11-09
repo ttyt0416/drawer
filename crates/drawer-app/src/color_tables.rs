@@ -13,6 +13,11 @@ pub(super) struct Tables {
     table: Option<u64>,
 }
 impl Tables {
+    pub(super) fn reset_exchange_selection(&mut self) {
+        self.selected = None;
+        self.editing = None;
+        self.drag = None;
+    }
     pub(super) fn cancel_drag(&mut self) {
         self.drag = None;
     }
@@ -42,6 +47,9 @@ impl Drawer {
             let mut restore = 0;
             let current = self.references.session.workspace.color;
             let recent = self.workspaces.store.current.eyedropper.recent.clone();
+            if ui.button("Import / export local palettes…").clicked() {
+                self.begin_palette_exchange();
+            }
             let tables = &mut self.workspaces.store.current.color_tables;
             egui::ComboBox::from_id_salt("color-table")
                 .selected_text(

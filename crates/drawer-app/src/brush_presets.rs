@@ -20,6 +20,7 @@ struct Editor {
 pub(super) struct Presets {
     pub open: bool,
     pub tools_requested: bool,
+    pub controls: std::collections::BTreeMap<&'static str, egui::Rect>,
     tool_history: drawer_core::user_tools::History,
     editor: Option<Editor>,
     #[cfg(test)]
@@ -144,7 +145,7 @@ impl Drawer {
         let mut apply = false;
         let mut cancel = false;
         egui::Window::new("Local brush presets").open(&mut open).vscroll(true).show(ctx,|ui|{
-   ui.horizontal(|ui|{let a=ui.add_enabled(e.draft.valid()&&e.tools.draft.valid()&&e.pending.is_none(),egui::Button::new("Apply brush presets"));let c=ui.button("Cancel brush presets");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.brush_presets.apply=Some(a.rect);self.brush_presets.cancel=Some(c.rect);}});
+   ui.horizontal(|ui|{let a=ui.add_enabled(e.draft.valid()&&e.tools.draft.valid()&&e.pending.is_none(),egui::Button::new("Apply brush presets"));let c=ui.button("Cancel brush presets");apply=a.clicked();cancel=c.clicked();self.brush_presets.controls.insert("apply",a.rect);self.brush_presets.controls.insert("cancel",c.rect);#[cfg(test)]{self.brush_presets.apply=Some(a.rect);self.brush_presets.cancel=Some(c.rect);}});
    ui.label("Presets and size lists are local settings. Restore is staged until Apply; drawing history stays separate.");
    if let Some(p)=&e.pending{
     ui.separator();ui.colored_label(egui::Color32::YELLOW,match p{Pending::Collection(p)=>format!("Replace existing preset ‘{}’?",p.name),Pending::File(_,path)=>format!("Replace local preset file {}?",path.display())});
@@ -171,8 +172,8 @@ impl Drawer {
       if ui.button("Export selected preset…").clicked() && let Some(path)=rfd::FileDialog::new().set_file_name("brush.json").add_filter("Local brush preset",&["json"]).save_file(){let p=selected.clone().unwrap();if path.exists(){e.pending=Some(Pending::File(p,path));}else if let Err(err)=p.save(&path,false){self.status=Some(err.to_string());}}
      });
     });
-    if ui.button("Read local brush preset into draft…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Local brush preset",&["json"]).pick_file(){match Preset::read(&path){Ok(p)=>if e.draft.contains(&p.name){e.pending=Some(Pending::Collection(p));}else if let Err(err)=e.draft.put(p,false){self.status=Some(err);},Err(err)=>self.status=Some(err.to_string())}}
-    if let Some(p)=&e.restore{for source in p.sequence.missing().into_iter().filter(|id|self.materials.library.get(*id,drawer_core::material_library::Kind::Tip).is_none()){ui.colored_label(egui::Color32::YELLOW,drawer_core::tip_sequence::Settings::label(source));}if p.overlay.missing()&&self.materials.library.get(p.overlay.source,drawer_core::material_library::Kind::Texture).is_none(){ui.colored_label(egui::Color32::YELLOW,p.overlay.label());}ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
+    if ui.button("Read local brush preset into draft…").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("Local brush preset",&["json"]).pick_file(){match Preset::read(&path).and_then(|p|{drawer_core::tool_bundle::validate_preset(&p,e.tools.materials.as_ref().map_or(self.materials.library.as_ref(),|(_,m)|m)).map_err(std::io::Error::other)?;Ok(p)}){Ok(p)=>if e.draft.contains(&p.name){e.pending=Some(Pending::Collection(p));}else if let Err(err)=e.draft.put(p,false){self.status=Some(err);},Err(err)=>self.status=Some(err.to_string())}}
+    if let Some(p)=&e.restore{for source in p.sequence.missing().into_iter().filter(|id|e.tools.materials.as_ref().map_or(self.materials.library.as_ref(),|(_,m)|m).get(*id,drawer_core::material_library::Kind::Tip).is_none()){ui.colored_label(egui::Color32::YELLOW,drawer_core::tip_sequence::Settings::label(source));}if p.overlay.missing()&&e.tools.materials.as_ref().map_or(self.materials.library.as_ref(),|(_,m)|m).get(p.overlay.source,drawer_core::material_library::Kind::Texture).is_none(){ui.colored_label(egui::Color32::YELLOW,p.overlay.label());}ui.label(format!("Apply will restore {} ({})",p.name,p.tip.label()));if ui.button("Cancel staged brush restore").clicked(){e.restore=None;}}
     egui::CollapsingHeader::new("User tools and categories").open(self.brush_presets.tools_requested.then_some(true)).show(ui,|ui|{
         match self.user_tools_ui(ui,&mut e.tools){Some(super::user_tools::Action::Brush(p))=>e.restore=Some(*p),Some(super::user_tools::Action::Backup(s))=>{e.draft=s.brushes.clone();e.restore=None;e.tools.backup=Some(s);},None=>{}}
     });
@@ -202,8 +203,8 @@ impl Drawer {
                 Ok::<_, String>(next)
             })();
             match next.and_then(|snapshot| {
-                self.stage_workspace(snapshot, self.workspaces.store.active.clone());
-                self.apply_workspace(
+                self.apply_tools_workspace(
+                    snapshot,
                     if e.tools.backup.is_some() {
                         drawer_core::workspaces::Scope::ALL
                     } else {
@@ -212,7 +213,7 @@ impl Drawer {
                             ..Default::default()
                         }
                     },
-                    None,
+                    e.tools.materials.as_ref(),
                 )
             }) {
                 Ok(()) => {
@@ -549,5 +550,19 @@ mod tests {
         click(&ctx, &mut app, rect);
         assert_eq!(Preset::read(&path).unwrap(), replacement);
         assert_eq!(app.capture_workspace(), before);
+    }
+}
+
+#[path = "preset_exchange_verify.rs"]
+mod exchange_verify;
+pub(super) fn exchange_smoke(root: &std::path::Path) -> Result<(), String> {
+    exchange_verify::run(root)
+}
+#[cfg(test)]
+mod exchange_tests {
+    #[test]
+    fn pointer_portable_material_stage_cancel_apply_rollback_and_restart() {
+        let t = crate::tests::TestDirectory::new();
+        super::exchange_verify::run(&t.0).unwrap();
     }
 }

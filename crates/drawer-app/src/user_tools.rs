@@ -9,6 +9,10 @@ pub(super) enum Action {
 }
 pub(super) struct Editor {
     pub draft: Library,
+    pub materials: Option<(
+        Arc<drawer_core::material_library::Library>,
+        drawer_core::material_library::Library,
+    )>,
     pub history: drawer_core::user_tools::History,
     drag: Option<(u64, bool)>,
     #[cfg(test)]
@@ -29,6 +33,7 @@ impl Editor {
     pub fn new(draft: Library, base: BrushTip) -> Self {
         Self {
             original_active: draft.active,
+            materials: None,
             category: draft.categories.first().map(|c| c.id),
             destination: None,
             draft,
@@ -562,7 +567,15 @@ impl Drawer {
             {
                 let r = Library::read(&path)
                     .map_err(|err| err.to_string())
-                    .and_then(|group| e.draft.import_group(&group));
+                    .and_then(|group| {
+                        drawer_core::tool_bundle::validate_group(
+                            &group,
+                            e.materials
+                                .as_ref()
+                                .map_or(self.materials.library.as_ref(), |(_, m)| m),
+                        )?;
+                        e.draft.import_group(&group)
+                    });
                 e.show_result(r);
             }
             if ui
@@ -601,7 +614,9 @@ impl Drawer {
                         drawer_core::tool_bundle::export(
                             &parent.join("Drawer-tool-bundle"),
                             &group,
-                            &self.materials.library,
+                            e.materials
+                                .as_ref()
+                                .map_or(self.materials.library.as_ref(), |(_, m)| m),
                         )
                         .map_err(|e| e.to_string())
                     });
@@ -610,17 +625,17 @@ impl Drawer {
             if ui.button("Import portable tool bundle…").clicked()
                 && let Some(path) = rfd::FileDialog::new().pick_folder()
             {
-                let r = drawer_core::tool_bundle::import(&path, &e.draft, &self.materials.library)
-                    .map_err(|e| e.to_string())
-                    .and_then(|(tools, materials)| {
-                        self.publish_materials(materials)?;
-                        e.draft = tools;
-                        Ok(())
-                    });
+                let r = self.stage_portable_tool_bundle(e, &path);
                 e.show_result(r);
             }
         });
-        ui.label("Portable export creates a new Drawer-tool-bundle folder inside the chosen folder. Import validates all files before registering materials and staging slots. Apply saves slots; Cancel keeps the previous slots. Registered materials remain local for reuse.");
+        if let Some((base, next)) = &e.materials {
+            ui.label(format!(
+                "{} new materials staged; Cancel discards their registration",
+                next.assets().len().saturating_sub(base.assets().len())
+            ));
+        }
+        ui.label("Portable export creates a new Drawer-tool-bundle folder inside the chosen folder. Import validates every file and stages tools and materials together. Apply saves them; Cancel registers nothing.");
         ui.label("Group JSON remaps imported tool/category IDs and preserves empty categories. Material IDs reference the local image library; image files are not included in this group format.");
         let mut preview = current.clone();
         preview.user_tools = e.draft.clone();
@@ -629,8 +644,9 @@ impl Drawer {
         }
         for t in e.draft.tools.iter().filter(|t| e.selected.contains(&t.id)) {
             for id in t.preset.sequence.missing().into_iter().filter(|id| {
-                self.materials
-                    .library
+                e.materials
+                    .as_ref()
+                    .map_or(self.materials.library.as_ref(), |(_, m)| m)
                     .get(*id, drawer_core::material_library::Kind::Tip)
                     .is_none()
             }) {
@@ -651,6 +667,80 @@ impl Drawer {
     }
 }
 
+impl Drawer {
+    pub(super) fn stage_portable_tool_bundle(
+        &self,
+        e: &mut Editor,
+        path: &std::path::Path,
+    ) -> Result<(), String> {
+        let current = e
+            .materials
+            .as_ref()
+            .map_or(self.materials.library.as_ref(), |(_, m)| m);
+        let (tools, materials) =
+            drawer_core::tool_bundle::import(path, &e.draft, current).map_err(|e| e.to_string())?;
+        let base = e
+            .materials
+            .as_ref()
+            .map_or_else(|| self.materials.library.clone(), |(base, _)| base.clone());
+        e.draft = tools;
+        e.materials = Some((base, materials));
+        Ok(())
+    }
+    pub(super) fn apply_tools_workspace(
+        &mut self,
+        snapshot: Snapshot,
+        scope: drawer_core::workspaces::Scope,
+        materials: Option<&(
+            Arc<drawer_core::material_library::Library>,
+            drawer_core::material_library::Library,
+        )>,
+    ) -> Result<(), String> {
+        let mut originally_missing = false;
+        if let Some((base, next)) = materials {
+            if self.materials.library.as_ref() != base.as_ref() {
+                return Err("Materials changed during tool import; reopen the draft".into());
+            }
+            let path = self
+                .storage
+                .as_ref()
+                .ok_or("Local user storage unavailable")?
+                .root()
+                .join("materials/library.json");
+            originally_missing = !path.exists();
+            self.publish_materials(next.clone())?;
+        }
+        self.stage_workspace(snapshot, self.workspaces.store.active.clone());
+        let result = self.apply_workspace(scope, None);
+        if let Err(error) = result {
+            self.workspaces.staged = None;
+            if let Some((base, _)) = materials {
+                if let Err(rollback) = self.publish_materials(base.as_ref().clone()) {
+                    self.materials.library = base.clone();
+                    return Err(format!(
+                        "{error}; material rollback failed: {rollback}; reload local materials before further edits"
+                    ));
+                }
+                if originally_missing {
+                    let path = self
+                        .storage
+                        .as_ref()
+                        .unwrap()
+                        .root()
+                        .join("materials/library.json");
+                    if drawer_core::material_library::Library::read(&path)
+                        .is_ok_and(|saved| &saved == base.as_ref())
+                    {
+                        std::fs::remove_file(path)
+                            .map_err(|e| format!("{error}; empty material file rollback: {e}"))?;
+                    }
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+}
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     use super::input_replay::frame;
     use drawer_core::{

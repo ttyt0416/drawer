@@ -45,6 +45,27 @@ fn refs(p: &Preset) -> impl Iterator<Item = (u32, Kind)> + '_ {
         }
     })
 }
+pub fn validate_preset(p: &Preset, materials: &Materials) -> Result<(), String> {
+    p.validate()?;
+    for (id, kind) in refs(p) {
+        if materials.get(id, kind).is_none() {
+            return Err(format!(
+                "Missing local {kind:?} material {id}; use a portable bundle containing its source"
+            ));
+        }
+    }
+    Ok(())
+}
+pub fn validate_group(group: &Library, materials: &Materials) -> Result<(), String> {
+    if !group.valid() {
+        return Err("Invalid local tool group".into());
+    }
+    for t in &group.tools {
+        validate_preset(&t.preset, materials)?;
+        validate_preset(&t.default, materials)?;
+    }
+    Ok(())
+}
 fn remap(p: &mut Preset, map: &BTreeMap<u32, u32>) {
     for id in &mut p.sequence.tips {
         if let Some(next) = map.get(id) {

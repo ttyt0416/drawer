@@ -1048,3 +1048,9 @@ crates/drawer-core/src/png_io.rs
 crates/drawer-core/src/png_io_verify.rs
 crates/drawer-app/src/png_options.rs
 crates/drawer-app/src/png_options_verify.rs
+crates/drawer-core/src/palette_exchange.rs
+crates/drawer-core/src/palette_exchange_verify.rs
+crates/drawer-app/src/palette_exchange.rs
+crates/drawer-app/src/palette_exchange_verify.rs
+crates/drawer-app/src/preset_exchange_verify.rs
+docs/process/preset-exchange.md
