@@ -59,13 +59,17 @@ impl Bundle {
         if bytes.len() > LIMIT {
             return Err("Palette exchange exceeds2MiB".into());
         }
-        let b: Self = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+        let b: Self = serde_json::from_slice(bytes.strip_prefix(&[239, 187, 191]).unwrap_or(bytes))
+            .map_err(|e| e.to_string())?;
         if !b.valid() {
             return Err("Invalid palette version, IDs, names, colors or capacity".into());
         }
         Ok(b)
     }
     pub fn read(path: &Path) -> Result<Self, String> {
+        Self::read_report(path).map(|(b, _)| b)
+    }
+    pub fn read_report(path: &Path) -> Result<(Self, Vec<String>), String> {
         let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
         if !m.is_file() || m.file_type().is_symlink() || m.len() > LIMIT as u64 {
             return Err("Choose a regular palette file up to2MiB".into());
@@ -75,18 +79,18 @@ impl Bundle {
             return Err("Choose a local palette file".into());
         }
         let mut bytes = vec![];
-        fs::File::open(path)
+        fs::File::open(&path)
             .map_err(|e| e.to_string())?
             .take(LIMIT as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
-        Self::decode(&bytes)
+        crate::palette_text::decode(&path, &bytes)
     }
     pub fn write(&self, path: &Path, replace: bool) -> Result<(), String> {
         if !self.valid() {
             return Err("Invalid palette bundle".into());
         }
-        let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        let bytes = crate::palette_text::encode(path, self)?;
         if bytes.len() > LIMIT {
             return Err("Palette exchange exceeds2MiB".into());
         }

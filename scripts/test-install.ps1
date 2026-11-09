@@ -242,6 +242,7 @@ try {
     if ($smokeResult -notmatch 'human_rig=true') { throw 'Mannequin verification failed' }
     if ($smokeResult -notmatch 'local_models=true') { throw '로컬 모델/배치·복제·정렬 검증 실패' }
     if ($smokeResult -notmatch 'local_models_extended=true') { throw 'OBJ/glTF/GLB 모델·텍스처·리그 가져오기 검증 실패' }
+    if ($smokeResult -notmatch 'preset_formats=true') { throw '브러시·색상표·그라데이션 교환 시험 실패' }
     if ($smokeResult -notmatch 'unsupported_documents=true') { throw '전용 문서 거절·교환 안내 시험 실패' }
     if ($smokeResult -notmatch 'raster_formats=true') { throw '정지 이미지 형식·알파·16비트·압축 검증 실패' }
     if ($smokeResult -notmatch 'color_management=true') { throw '문서·출력·모니터 ICC 분리 검증 실패' }

@@ -275,10 +275,42 @@ impl Library {
         if !self.valid() {
             return Err("Invalid gradient preset library".into());
         }
-        crate::workspaces::write_json(path, self).map_err(|e| e.to_string())
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."))
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        if !crate::font_library::local(&parent)
+            || !path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        {
+            return Err("Choose a local Drawer gradient JSON destination; proprietary gradient files are unsupported".into());
+        }
+        if std::fs::symlink_metadata(path).is_ok_and(|m| !m.is_file() || m.file_type().is_symlink())
+        {
+            return Err("Choose a regular gradient destination".into());
+        }
+        crate::workspaces::write_json(
+            &parent.join(path.file_name().ok_or("Missing gradient filename")?),
+            self,
+        )
+        .map_err(|e| e.to_string())
     }
     pub fn import(path: &std::path::Path) -> Result<Self, String> {
         use std::io::Read;
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        {
+            return Err("Only Drawer gradient JSON is supported".into());
+        }
+        let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        if !meta.is_file() || meta.file_type().is_symlink() || !crate::font_library::local(&path) {
+            return Err("Choose a regular local gradient JSON".into());
+        }
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
         let mut bytes = vec![];
         file.take(256 * 1024 + 1)
@@ -287,7 +319,9 @@ impl Library {
         if bytes.len() > 256 * 1024 {
             return Err("Gradient preset file exceeds 256 KiB".into());
         }
-        let library: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let library: Self =
+            serde_json::from_slice(bytes.strip_prefix(&[239, 187, 191]).unwrap_or(&bytes))
+                .map_err(|e| format!("Gradient JSON must be valid UTF-8: {e}"))?;
         if !library.valid() {
             return Err("Invalid gradient preset file".into());
         }

@@ -238,11 +238,25 @@ impl Preset {
         if bytes.len() as u64 > LIMIT {
             return Err(io::Error::other("Brush preset exceeds 64 KiB"));
         }
-        let p: Self = serde_json::from_slice(bytes).map_err(io::Error::other)?;
+        let p: Self = serde_json::from_slice(bytes.strip_prefix(&[239, 187, 191]).unwrap_or(bytes))
+            .map_err(io::Error::other)?;
         p.validate().map_err(io::Error::other)?;
         Ok(p)
     }
     pub fn read(path: &Path) -> io::Result<Self> {
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        {
+            return Err(io::Error::other(
+                "Only Drawer brush JSON is supported here; use a portable tool folder or the separate verified ABR importer",
+            ));
+        }
+        let path = path.canonicalize()?;
+        if !crate::font_library::local(&path) {
+            return Err(io::Error::other("Choose a local brush JSON file"));
+        }
+
         let file = std::fs::File::open(path)?;
         if !file.metadata()?.is_file() {
             return Err(io::Error::other("Choose a regular local preset file"));
@@ -256,6 +270,21 @@ impl Preset {
     }
     /// false creates atomically without replacing a concurrently created destination.
     pub fn save(&self, path: &Path, overwrite: bool) -> io::Result<()> {
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .canonicalize()?;
+        if !crate::font_library::local(&parent)
+            || !path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
+        {
+            return Err(io::Error::other(
+                "Choose a local Drawer brush JSON destination",
+            ));
+        }
+
         let bytes = self.encode()?;
         if overwrite && path.try_exists()? && Self::read(path)?.locked {
             return Err(io::Error::other("Locked preset file: save a separate copy"));

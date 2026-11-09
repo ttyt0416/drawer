@@ -225,3 +225,103 @@ mod tests {
         super::verify(&root.0).unwrap();
     }
 }
+
+/// Exact hard-edge ordering is retained; malformed files never replace the caller's library.
+pub fn exchange(root: &std::path::Path) -> Result<(), String> {
+    let dir = root.join("gradient-exchange-core");
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let mut ramp = Ramp::two([20, 40, 60, 255], [200, 100, 30, 0]);
+        let mut left = Stop::new(0.5, [10, 200, 30, 100]);
+        left.midpoint = 0.3;
+        left.curve = Curve::Smooth;
+        let mut right = Stop::new(0.5, [240, 10, 80, 200]);
+        right.midpoint = 0.7;
+        right.curve = Curve::EaseOut;
+        ramp.stops.insert(1, left);
+        ramp.stops.insert(2, right);
+        ramp.space = Space::LinearRgb;
+        let mut library = Library::default();
+        library.save(
+            None,
+            "중복 위치 에지",
+            Settings {
+                ramp: Some(ramp.clone()),
+                repeat: Repeat::Reverse,
+                ..Default::default()
+            },
+        )?;
+        let before = library.clone();
+        let path = dir.join("gradient.json");
+        library.export(&path)?;
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let mut bom = vec![239, 187, 191];
+        bom.extend(&bytes);
+        std::fs::write(&path, bom).map_err(|e| e.to_string())?;
+        let loaded = Library::import(&path)?;
+        if loaded != library
+            || loaded.presets[0]
+                .settings
+                .ramp
+                .as_ref()
+                .unwrap()
+                .sample(0.5)
+                != ramp.sample(0.5)
+        {
+            return Err("Gradient duplicate stop order / interpolation / BOM lost".into());
+        }
+        let mut value = serde_json::to_value(&library).map_err(|e| e.to_string())?;
+        for variant in 0..5 {
+            let mut v = value.clone();
+            match variant {
+                0 => v["version"] = serde_json::json!(99),
+                1 => {
+                    v["presets"][0]["settings"]["ramp"]["stops"][2]["position"] =
+                        serde_json::json!(-0.1)
+                }
+                2 => {
+                    v["presets"][0]["settings"]["ramp"]["stops"][1]["midpoint"] =
+                        serde_json::json!(1.0)
+                }
+                3 => {
+                    v["presets"][0]["settings"]["ramp"]["stops"][1]["color"][3] =
+                        serde_json::json!(256)
+                }
+                _ => {
+                    v["presets"][0]["settings"]["ramp"]["stops"][1]["position"] =
+                        serde_json::json!(0.75)
+                }
+            }
+            std::fs::write(&path, serde_json::to_vec(&v).unwrap()).map_err(|e| e.to_string())?;
+            if Library::import(&path).is_ok() || library != before {
+                return Err("Invalid gradient caused partial replacement".into());
+            }
+        }
+        value["unknown"] = serde_json::json!(true);
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).map_err(|e| e.to_string())?;
+        if Library::import(&path).is_ok() {
+            return Err("Unknown gradient schema field accepted".into());
+        }
+        std::fs::write(&path, [255, 254, 0, 0]).map_err(|e| e.to_string())?;
+        if Library::import(&path).is_ok() {
+            return Err("UTF16 gradient accepted".into());
+        }
+        let third = dir.join("gradient.grd");
+        std::fs::write(&third, &bytes).map_err(|e| e.to_string())?;
+        if Library::import(&third).is_ok() {
+            return Err("Proprietary gradient suffix accepted".into());
+        }
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        std::fs::remove_file(third).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    result.and(std::fs::remove_dir(dir).map_err(|e| e.to_string()))
+}
+#[cfg(test)]
+mod exchange_tests {
+    #[test]
+    fn own_gradient_json_hard_edges_versions_encoding_and_partial_failure() {
+        let t = crate::test_support::TempDir::new();
+        super::exchange(&t.0).unwrap();
+    }
+}

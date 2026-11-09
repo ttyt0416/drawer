@@ -616,3 +616,5 @@ pub mod psd_exchange;
 pub mod raster_io;
 
 pub mod exchange_guidance;
+
+pub mod palette_text;

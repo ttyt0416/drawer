@@ -1076,3 +1076,4 @@ crates/drawer-app/src/raster_export.rs
 crates/drawer-core/src/psd_report.rs
 crates/drawer-core/src/exchange_guidance.rs
 crates/drawer-app/src/exchange_guidance.rs
+crates/drawer-core/src/palette_text.rs
