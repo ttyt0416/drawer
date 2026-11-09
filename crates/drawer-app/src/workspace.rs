@@ -224,13 +224,6 @@ impl Drawer {
         if !warnings.is_empty() {
             self.status = Some(warnings.join("; "));
         }
-        if document
-            .source_path
-            .as_ref()
-            .is_some_and(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("psd")))
-        {
-            self.status=Some("PSD opened as its merged preview. Layer effects and editable layers were not imported.".into());
-        }
         document.view = self.default_view;
         self.documents.try_reserve(1).map_err(|e| e.to_string())?;
         self.tabs.try_reserve(1).map_err(|e| e.to_string())?;
@@ -521,7 +514,7 @@ impl Drawer {
                     .set_title("Open local drawings")
                     .add_filter("Drawer document", &["drawer"])
                     .add_filter("PNG", &["png"])
-                    .add_filter("Raw RGBA8 PSD merged preview", &["psd"])
+                    .add_filter("PSD / PSB RGB8 (raw / RLE)", &["psd", "psb"])
                     .pick_files()
             {
                 for path in paths {
@@ -625,7 +618,7 @@ impl Drawer {
                 if crate::help::button(ui, "Layer / folder paper…", "textures").clicked() {
                     self.textures.open = true;
                 }
-                if crate::help::button(ui, "Export rendered PSD…", "textures").clicked() {
+                if crate::help::button(ui, "Export PSD / PSB…", "textures").clicked() {
                     self.request_psd();
                 }
                 if crate::help::button(ui, "Export PNG…", "files").clicked()

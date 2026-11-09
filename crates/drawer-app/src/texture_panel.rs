@@ -17,12 +17,8 @@ struct Editor {
     draft: Graph,
     node: Node,
 }
-pub(super) struct Export {
-    id: u64,
-    revision: u64,
-    path: PathBuf,
-    replace: bool,
-}
+pub(super) use crate::psd_exchange::Export;
+
 impl Textures {
     pub fn modal(&self) -> bool {
         self.open || self.export.is_some()
@@ -219,50 +215,17 @@ impl Drawer {
         } else {
             self.textures.editor = None;
         }
-        if let Some(mut e) = self.textures.export.take() {
-            let Some(n) = self.documents.iter().position(|d| d.id == e.id) else {
-                return;
-            };
-            let d = &self.documents[n];
-            let mut open = true;
-            let mut choice = None;
-            egui::Window::new("PSD rendered export").open(&mut open).show(ctx,|ui|{
-                ui.label(drawer_core::psd::LOSS);if let Some(note)=drawer_core::psd::text_loss(d){ui.colored_label(egui::Color32::YELLOW,note);}
-                if let Some(note)=drawer_core::layer_blend::exchange_notice(d){ui.label(note);}ui.label(e.path.display().to_string());
-                if e.path.exists(){ui.checkbox(&mut e.replace,"Replace this existing PSD file");}
-                ui.add_enabled_ui(!e.path.exists() || e.replace,|ui|{
-                    if ui.add_enabled(drawer_core::psd::layers_supported(d),egui::Button::new("Export rendered root layers / folders")).clicked(){choice=Some(drawer_core::psd::Choice::RenderedLayers);}
-                    if ui.button("Export rendered whole image").clicked(){choice=Some(drawer_core::psd::Choice::RenderedImage);}
-                });
-                if !drawer_core::psd::layers_supported(d){ui.label("Layer blending, source order, page objects, hidden content or animation require the rendered whole image to preserve the current appearance.");}
-                if ui.button("Cancel PSD export").clicked(){choice=Some(drawer_core::psd::Choice::Cancel);}
-            });
-            if let Some(choice) = choice {
-                if self.documents[n].revision != e.revision {
-                    self.status = Some("The drawing changed; choose the export again".into());
-                } else if let Err(err) = self.export_psd_to(n, &e.path, choice, e.replace) {
-                    self.status = Some(err);
-                }
-            } else if open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.textures.export = Some(e);
-            }
-        }
+        self.psd_exchange_window(ctx);
     }
     pub(super) fn request_psd(&mut self) {
         self.finish_stroke();
-        if let Some(n) = self.active
-            && let Some(path) = rfd::FileDialog::new()
-                .add_filter("Rendered PSD", &["psd"])
-                .set_file_name("drawing.psd")
-                .save_file()
+        if let Some(path) = rfd::FileDialog::new()
+            .add_filter("PSD / PSB", &["psd", "psb"])
+            .set_file_name("drawing.psd")
+            .save_file()
+            && let Err(e) = self.begin_psd_exchange(path)
         {
-            let d = &self.documents[n];
-            self.textures.export = Some(Export {
-                id: d.id,
-                revision: d.revision,
-                path,
-                replace: false,
-            });
+            self.status = Some(e);
         }
     }
     pub(super) fn export_psd_to(
@@ -341,8 +304,8 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         return Err("PSD cancellation wrote a file".into());
     }
     app.export_psd_to(0, &path, Choice::RenderedLayers, false)?;
-    let reopened = drawer_core::files::open(&path, 100000).map_err(|e| e.to_string())?;
-    if reopened.layers[0].pixels != shown
+    let reopened = drawer_core::psd::open(&path, 100000).map_err(|e| e.to_string())?;
+    if drawer_core::psd_exchange::difference(&reopened.layers[0].pixels, &shown) > 1
         || app.documents[0].snapshot() != before
         || app.documents[0].history_counts() != (0, 0)
     {

@@ -1060,3 +1060,11 @@ crates/drawer-core/src/auto_actions_tests.rs
 crates/drawer-core/src/auto_actions_verify.rs
 crates/drawer-app/src/auto_actions.rs
 crates/drawer-app/src/auto_actions_verify.rs
+crates/drawer-core/src/psd_exchange.rs
+crates/drawer-core/src/psd_exchange_io.rs
+crates/drawer-core/src/psd_plan.rs
+crates/drawer-core/src/psd_exchange_verify.rs
+crates/drawer-app/src/psd_exchange.rs
+crates/drawer-app/src/psd_exchange_verify.rs
+scripts/verify-psd-exchange.py
+docs/process/psd-exchange.md
