@@ -37,6 +37,26 @@ struct Contour {
     points: Vec<Point>,
     bounds: Rect,
 }
+pub(crate) struct Wires(text_contour_tree::Set);
+impl Wires {
+    pub(crate) fn new(scene: &crate::scene::Scene, mesh: &crate::scene::WorldMesh) -> Self {
+        Self(text_contour_tree::Set::new(
+            crate::world3d::segments_mesh(scene, mesh)
+                .into_iter()
+                .map(|line| Contour {
+                    points: line.to_vec(),
+                    bounds: Rect {
+                        min: std::array::from_fn(|i| line[0][i].min(line[1][i])),
+                        max: std::array::from_fn(|i| line[0][i].max(line[1][i])),
+                    },
+                })
+                .collect(),
+        ))
+    }
+    pub(crate) fn near(&self, p: Point) -> bool {
+        self.0.near(p, 0.65)
+    }
+}
 impl<'a> Renderer<'a> {
     pub fn editing_preview(d: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
         let mut r = Self::preview(d, stroke);

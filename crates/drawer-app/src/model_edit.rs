@@ -10,7 +10,11 @@ use std::{
         mpsc,
     },
 };
-type ImageResult = Result<(Box<core::Prepared>, Vec<u8>), String>;
+enum Outcome {
+    Edit(Box<core::Prepared>, Vec<u8>),
+    Export(drawer_core::surface_edit::Report),
+}
+type ImageResult = Result<Outcome, String>;
 struct Job {
     stamp: (u64, u64, u32),
     cancel: Arc<AtomicBool>,
@@ -47,6 +51,17 @@ struct Draft {
     blend: f64,
     region: drawer_core::mannequin_fit::Region,
     floor: f64,
+    surface_mat: u16,
+    divisions: u16,
+    surface_display: drawer_core::surface_edit::Display,
+    uv: drawer_core::surface_edit::Uv,
+    material_alpha: Option<drawer_core::model_import::Alpha>,
+    cutoff: f64,
+    map_path: String,
+    normal_strength: f64,
+    normal_flip: bool,
+    export_folder: String,
+    conflict: drawer_core::surface_edit::Conflict,
 }
 impl Default for Draft {
     fn default() -> Self {
@@ -71,6 +86,17 @@ impl Default for Draft {
             blend: 0.5,
             region: drawer_core::mannequin_fit::Region::Body,
             floor: 0.,
+            surface_mat: 0,
+            divisions: 1,
+            surface_display: Default::default(),
+            uv: Default::default(),
+            material_alpha: None,
+            cutoff: 0.5,
+            map_path: String::new(),
+            normal_strength: 1.,
+            normal_flip: false,
+            export_folder: "textures".into(),
+            conflict: drawer_core::surface_edit::Conflict::Fail,
         }
     }
 }
@@ -123,6 +149,25 @@ impl Panel {
                     .find(|id| Some(*id) != p.actor)
             });
         if let Some(id) = p.actor {
+            if let Some(surface) = d.scene.world3d.surfaces.get(&id) {
+                p.surface_mat = p
+                    .surface_mat
+                    .min(surface.materials.len().saturating_sub(1) as u16);
+                p.divisions = surface.tools.primitive.as_ref().map_or(1, |s| s.detail);
+                p.surface_display = surface.tools.display;
+                let m = surface
+                    .tools
+                    .materials
+                    .get(&p.surface_mat)
+                    .cloned()
+                    .unwrap_or_default();
+                p.uv = m.uv;
+                p.material_alpha = m.alpha;
+                p.cutoff = m.cutoff;
+                p.normal_strength = m.normal_strength;
+                p.normal_flip = m.flip_green;
+            }
+
             if let Some(r) = d.scene.world3d.rigs.get(&id) {
                 p.joint = p.joint.min(r.angles.len() - 1);
                 p.angles = r.angles[p.joint];
@@ -249,9 +294,14 @@ impl Drawer {
         let ctx = ctx.clone();
         let worker = std::thread::spawn(move || {
             let result = (|| {
+                if let Edit::TextureExport { folder, policy } = edit {
+                    let snapshot =
+                        drawer_core::surface_edit::Export::capture(&frozen, budget, &flag)?;
+                    return Ok(Outcome::Export(snapshot.write(&folder, policy, &flag)?));
+                }
                 let p = core::prepare(&frozen, edit, budget, &flag)?;
                 let image = p.thumbnail(&frozen, budget, &flag)?;
-                Ok((Box::new(p), image))
+                Ok(Outcome::Edit(Box::new(p), image))
             })();
             let _ = tx.send(result);
             ctx.request_repaint();
@@ -303,7 +353,7 @@ impl Drawer {
             self.model_controls.job = None;
             if !canceled {
                 match result {
-                    Ok((p, image)) => {
+                    Ok(Outcome::Edit(p, image)) => {
                         self.model_controls.notice = p.summary.clone();
                         self.model_controls.staged = Some(p);
                         self.model_controls.texture = Some(ctx.load_texture(
@@ -311,6 +361,14 @@ impl Drawer {
                             egui::ColorImage::from_rgba_unmultiplied([128, 128], &image),
                             egui::TextureOptions::NEAREST,
                         ));
+                    }
+                    Ok(Outcome::Export(report)) => {
+                        self.model_controls.notice = format!(
+                            "Exported{} PNGs to{}; skipped{}. Source document and images unchanged.",
+                            report.files,
+                            report.folder.display(),
+                            report.skipped
+                        );
                     }
                     Err(e) => self.model_controls.notice = e,
                 }
@@ -322,7 +380,12 @@ impl Drawer {
         }
         let mut p = std::mem::take(&mut self.model_controls);
         let before = p.draft.clone();
-        let selection = (p.draft.actor, p.draft.joint, p.draft.key);
+        let selection = (
+            p.draft.actor,
+            p.draft.joint,
+            p.draft.key,
+            p.draft.surface_mat,
+        );
         let mut action = 0;
         let busy = p.job.is_some();
         let mut open = true;
@@ -355,11 +418,26 @@ impl Drawer {
                         ui.horizontal_wrapped(|ui|{egui::ComboBox::from_label("Matching topology source").selected_text(v.source.map_or("None".into(),|id|format!("Model{id}"))).show_ui(ui,|ui|{for i in 0..d.scene.worlds.len(){let source=d.scene.catalog.worlds.id(i);if source!=id{ui.selectable_value(&mut v.source,Some(source),format!("Model{source}"));}}});let r=ui.button("Capture frozen target");p.controls.insert("capture-key".into(),r.rect);if r.clicked(){action=9;}});
                         if let Some(m)=d.scene.world3d.editing.morphs.get(&id){ui.horizontal_wrapped(|ui|{for(i,k)in m.keys.iter().enumerate(){ui.selectable_value(&mut v.key,i,&k.name);}ui.add(egui::Slider::new(&mut v.weight,0. ..=1.).text("Weight"));for(key,label,a)in[("weight","Prepare key weight",10),("delete-key","Delete selected key",11)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});}
                     }
+                    if let Some(surface)=d.scene.world3d.surfaces.get(&id){let expanded=egui::CollapsingHeader::new("Primitive / material maps and texture export").id_salt("surface-tools").show(ui,|ui|{
+                        use drawer_core::{surface_edit::{Display,Conflict},model_import::{Wrap,Alpha}};
+                        ui.horizontal_wrapped(|ui|{ui.label("Primitive divisions");ui.add(egui::DragValue::new(&mut v.divisions).range(0..=65535));for(key,label,a)in[("surface-divisions","Prepare divisions",30),("surface-uv-generate","Generate overlapping box UV",31),("surface-clear","Clear linked maps and painted RGB",32)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+                        ui.horizontal_wrapped(|ui|{for(value,label)in[(Display::Source,"Scene display"),(Display::Wire,"Wire only (X-ray)"),(Display::Face,"Faces"),(Display::Both,"Faces + wire overlay")]{ui.selectable_value(&mut v.surface_display,value,label);}let r=ui.button("Prepare display");p.controls.insert("surface-display".into(),r.rect);if r.clicked(){action=33;}});
+                        ui.horizontal_wrapped(|ui|{egui::ComboBox::from_label("Material slot").selected_text(format!("{}:{}",v.surface_mat,surface.materials[v.surface_mat as usize].name)).show_ui(ui,|ui|{for(i,m)in surface.materials.iter().enumerate(){ui.selectable_value(&mut v.surface_mat,i as u16,&m.name);}});for(value,label)in[(None,"Source alpha"),(Some(Alpha::Opaque),"Opaque"),(Some(Alpha::Mask),"Remove with threshold"),(Some(Alpha::Blend),"Semi-transparent")]{ui.selectable_value(&mut v.material_alpha,value,label);}ui.add(egui::DragValue::new(&mut v.cutoff).range(0. ..=1.).speed(0.01));let r=ui.button("Prepare material alpha");p.controls.insert("surface-alpha".into(),r.rect);if r.clicked(){action=34;}});
+                        ui.horizontal_wrapped(|ui|{ui.label("UV offset U/V; scale U/V; rotation degrees");for x in &mut v.uv.offset{ui.add(egui::DragValue::new(x).speed(0.01));}for x in &mut v.uv.scale{ui.add(egui::DragValue::new(x).speed(0.01));}ui.add(egui::DragValue::new(&mut v.uv.angle).speed(1.));});
+                        ui.horizontal_wrapped(|ui|{for(axis,label)in["U wrap","V wrap"].into_iter().enumerate(){egui::ComboBox::from_id_salt(("surface-wrap",axis)).selected_text(format!("{label}:{:?}",v.uv.wrap[axis])).show_ui(ui,|ui|{for(value,label)in[(None,"Source"),(Some(Wrap::Repeat),"Repeat"),(Some(Wrap::Mirror),"Mirror repeat"),(Some(Wrap::Clamp),"Clamp")]{ui.selectable_value(&mut v.uv.wrap[axis],value,label);}});}let r=ui.button("Prepare UV transform");p.controls.insert("surface-uv".into(),r.rect);if r.clicked(){action=35;}});
+                        ui.horizontal_wrapped(|ui|{ui.label("Local PNG/JPEG");ui.text_edit_singleline(&mut v.map_path);if ui.button("Choose image").clicked()&&let Some(path)=rfd::FileDialog::new().add_filter("Texture",&["png","jpg","jpeg"]).pick_file(){v.map_path=path.display().to_string();}});
+                        ui.horizontal_wrapped(|ui|{for(key,label,a)in[("surface-diffuse","Load diffuse snapshot",36),("surface-normal","Load normal snapshot",37),("surface-reload","Reload linked diffuse",38),("surface-reload-normal","Reload linked normal",39),("surface-remove","Remove linked diffuse",40),("surface-remove-normal","Remove normal",41)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
+                        ui.horizontal_wrapped(|ui|{ui.label("Normal strength0..4");ui.add(egui::DragValue::new(&mut v.normal_strength).range(0. ..=4.).speed(0.01));ui.checkbox(&mut v.normal_flip,"Invert green (−Y convention)");let r=ui.button("Prepare normal settings");p.controls.insert("surface-normal-settings".into(),r.rect);if r.clicked(){action=42;}});
+                        ui.small("RGBA8 snapshots; color metadata is not applied. Normal maps are linear tangent RGB. Missing/reload errors retain existing data. New diffuse replaces painted RGB; Undo restores it. UV generation overlaps face charts and changes existing mapping. Topology rebuild requires clearing map/paint and detaching shape keys/rig first. Billboards are in scene-lighting; alpha has per-slot controls here.");
+                        ui.horizontal_wrapped(|ui|{ui.label("Export all assigned scene textures to a new folder");ui.text_edit_singleline(&mut v.export_folder);if ui.button("Choose parent folder").clicked()&&let Some(path)=rfd::FileDialog::new().pick_folder(){v.export_folder=path.join("textures").display().to_string();}for(value,label)in[(Conflict::Fail,"Fail on duplicate"),(Conflict::Skip,"Skip"),(Conflict::Rename,"Rename")]{ui.selectable_value(&mut v.conflict,value,label);}let r=ui.button("Export texture PNGs now");p.controls.insert("surface-export".into(),r.rect);if r.clicked(){action=43;}});
+                        ui.small("Export freezes all used diffuse/alpha, paint and normal snapshots. Existing folders are never merged/replaced; policy applies to folder and file names. Cancel works until publication begins. Export does not edit document history.");
+                    });p.controls.insert("surface-expand".into(),expanded.header_response.rect);}
                     ui.separator();ui.horizontal_wrapped(|ui|{egui::ComboBox::from_label("Parent model").selected_text(v.parent.map_or("No parent".into(),|id|format!("Model{id}"))).show_ui(ui,|ui|{if ui.selectable_value(&mut v.parent,None,"No parent").changed(){v.bone=None;}for i in 0..d.scene.worlds.len(){let parent=d.scene.catalog.worlds.id(i);if parent!=id&&ui.selectable_value(&mut v.parent,Some(parent),format!("Model{parent}")).changed(){v.bone=None;}}});if let Some(r)=v.parent.and_then(|id|d.scene.world3d.rigs.get(&id)){let joints=r.joints();egui::ComboBox::from_label("Parent bone / part").selected_text(v.bone.and_then(|i|joints.get(i)).map_or("Model axes",|b|b.name.as_str())).show_ui(ui,|ui|{ui.selectable_value(&mut v.bone,None,"Model axes");for(i,j)in joints.iter().enumerate(){ui.selectable_value(&mut v.bone,Some(i),&j.name);}});}for(keep,label)in[(Keep::World,"Keep current world pose"),(Keep::Local,"Keep current local pose")]{ui.selectable_value(&mut v.keep,keep,label);}});
                     ui.horizontal_wrapped(|ui|{for(key,label,a)in[("parent","Prepare parent / attachment",12),("detach","Detach parent (keep world)",13)]{let r=ui.button(label);p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
                 }
             });
             if let Some(texture)=&p.texture{ui.image((texture.id(),egui::vec2(140.,140.)));}ui.small("Each applied model edit is one Undo. Bone links follow base edits and explicit pose-sequence placement. Shape targets are independent local vertex snapshots. Locks/ranges reject incompatible pose clips; they never silently clamp keys. Side copying needs the complete original skeleton mapping.");
+            p.controls.insert("surface-scroll".into(),ui.clip_rect());
         });
         p.open = open;
         if !open {
@@ -368,7 +446,14 @@ impl Drawer {
         if before != p.draft {
             p.clear();
         }
-        if selection != (p.draft.actor, p.draft.joint, p.draft.key) {
+        if selection
+            != (
+                p.draft.actor,
+                p.draft.joint,
+                p.draft.key,
+                p.draft.surface_mat,
+            )
+        {
             p.load(d);
         }
         self.model_controls = p;
@@ -379,6 +464,55 @@ impl Drawer {
             let p = &self.model_controls.draft;
             let model = || p.actor.ok_or("Choose a model");
             let edit = match action {
+                30..=43 => {
+                    use drawer_core::surface_edit::Change;
+                    if action == 43 {
+                        Some(Edit::TextureExport {
+                            folder: std::path::PathBuf::from(&p.export_folder),
+                            policy: p.conflict,
+                        })
+                    } else {
+                        let change = match action {
+                            30 => Change::Subdivide(p.divisions),
+                            31 => Change::GenerateUv,
+                            32 => Change::ClearTextures,
+                            33 => Change::Display(p.surface_display),
+                            34 => Change::Material {
+                                material: p.surface_mat,
+                                alpha: p.material_alpha,
+                                cutoff: p.cutoff,
+                            },
+                            35 => Change::Uv {
+                                material: p.surface_mat,
+                                value: p.uv.clone(),
+                            },
+                            36 | 37 => Change::Load {
+                                material: p.surface_mat,
+                                normal: action == 37,
+                                path: std::path::PathBuf::from(&p.map_path),
+                            },
+                            38 | 39 => Change::Reload {
+                                material: p.surface_mat,
+                                normal: action == 39,
+                            },
+                            40 | 41 => Change::Remove {
+                                material: p.surface_mat,
+                                normal: action == 41,
+                            },
+                            42 => Change::Normal {
+                                material: p.surface_mat,
+                                strength: p.normal_strength,
+                                flip_green: p.normal_flip,
+                            },
+                            _ => unreachable!(),
+                        };
+                        Some(Edit::Surface {
+                            model: model()?,
+                            change,
+                        })
+                    }
+                }
+
                 14..=20 => {
                     use drawer_core::mannequin_fit::{Change, Form};
                     let change = match action {
@@ -500,7 +634,8 @@ impl Drawer {
 mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::run(root)?;
-    fit_verify::run(root)
+    fit_verify::run(root)?;
+    surface_verify::run(root)
 }
 #[cfg(test)]
 mod tests {
@@ -519,5 +654,16 @@ mod fit_tests {
     fn pointer_original_form_blend_preview_apply_undo_cancel_stale_and_close() {
         let t = crate::tests::TestDirectory::new();
         super::fit_verify::run(&t.0).unwrap();
+    }
+}
+
+#[path = "surface_edit_verify.rs"]
+mod surface_verify;
+#[cfg(test)]
+mod surface_tests {
+    #[test]
+    fn pointer_primitive_material_uv_reload_export_preview_apply_cancel_stale_and_close() {
+        let t = crate::tests::TestDirectory::new();
+        super::surface_verify::run(&t.0).unwrap();
     }
 }

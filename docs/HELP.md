@@ -1670,3 +1670,12 @@ Play saved sequence preview와 Preview loop는 보기 전용이다. 문서 프�
 안개는 Depth/Distance/세계 Height from below·above를 구분하고 시작<끝·밀도·색을 조절한다. 윤곽선 폭0..4와 색은 별도다. 환경의 단색 tint 또는 Files/내장 로컬 Material/Panorama를 고른다. 이미지 소스는 `scene-environment`에서 로컬2:1 PNG/JPEG/HDR을 먼저 내장하며 회전·광량·배경은 그 창에서 독립 편집한다. 클라우드 소재는 사용하지 않는다.
 
 물체의 알파 Source/Opaque/임계/반투명과 alpha multiplier, 빌보드 전체축/수평축을 선택한다. 연속3D 레이어는 앞뒤 면과 다른 물체를 깊이순으로 합성한다.2D 레이어·파일 대체·물체2D 키 변환은 별도 합성 그룹을 만든다. 빌보드는 표시용이며 메시/물리 배치를 바꾸지 않는다. Normal/Fast/High speed는 편집 화면만 줄이고 최종 출력은 유지한다. 설정은 취소 가능한 Preview/Apply/Discard·한 Undo와 native119로 보존한다. 상세 범위는 `docs/process/scene-rendering.md`에 기록했다.
+
+
+### 프리미티브·노멀맵·질감 편집과 일괄 출력
+
+`model-controls`에서 `Primitive / material maps and texture export`를 펼친다. 자체 프리미티브의 분할과 모델별 Wire/Faces/Both를 선택한다. Wire는 숨은 선을 포함하는 X-ray 표시다. 재질 슬롯의 Opaque/Mask/Blend·임계값과 UV 이동/회전/배율·Repeat/Mirror/Clamp를 편집한다. 빌보드는 기존 `scene-lighting`의 전체축/수평축 옵션을 사용한다.
+
+UV가 없으면 `Generate overlapping box UV`를 명시적으로 실행한다. 면 차트가 겹치는 기본 투영이며 기존 매핑을 바꾼다. 로컬 PNG/JPEG를 diffuse/normal로 내장하고 Reload로 수동 갱신한다. 파일이 없어져도 내장 질감은 유지한다. 입력은 RGBA8로 변환하고 색 메타데이터는 적용하지 않으며 노멀은 선형 RGB·강도·green 반전으로 조절한다. PNG 투명도에는 Blend/Mask를 선택한다. 새 diffuse 배정은 painted RGB를 지우고 Undo로 복원한다. 위상 재구축은 rig/형태키와 질감/채색을 정리한 뒤 실행한다.
+
+`Export texture PNGs now`는 사용된 문서 질감·노멀·채색을 새 로컬 폴더에 출력한다. Fail/Skip/Rename으로 동명 파일/폴더를 처리하며 기존 폴더를 병합하거나 원본을 덮어쓰지 않는다. 게시 시작 전까지 취소할 수 있다. 편집은 미리보기 후 Apply/Cancel·한 Undo이고 결과는 native120에 저장한다. 상세 계약은 `docs/process/surface-tools.md`에 기록했다.

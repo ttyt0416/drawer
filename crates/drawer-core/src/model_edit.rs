@@ -512,6 +512,14 @@ pub enum Keep {
     Local,
 }
 pub enum Edit {
+    Surface {
+        model: u64,
+        change: crate::surface_edit::Change,
+    },
+    TextureExport {
+        folder: std::path::PathBuf,
+        policy: crate::surface_edit::Conflict,
+    },
     Fit {
         rig: u64,
         change: crate::mannequin_fit::Change,
@@ -673,6 +681,13 @@ pub fn prepare(
     cancel: &AtomicBool,
 ) -> Result<Prepared, String> {
     crate::book_io::check_cancel(cancel)?;
+    if let Edit::Surface { model, change } = e {
+        let inner = crate::surface_edit::prepare(d, model, change, budget, cancel)?;
+        return Ok(Prepared{inner,frame:d.current_frame,summary:"Surface preview only. Local PNG/JPEG is normalized to RGBA8; color metadata is not applied. Normal maps use linear RGB tangent data. New diffuse assignment clears painted RGB (one Undo restores it); reload failure retains the prior snapshot. Explicit wire overlay includes hidden edges.".into()});
+    }
+    if matches!(e, Edit::TextureExport { .. }) {
+        return Err("Use the explicit frozen texture export job".into());
+    }
     if let Edit::Fit { rig, change, base } = e {
         let inner = crate::mannequin_fit::prepare(d, rig, change, base, budget, cancel)?;
         return Ok(Prepared { inner, frame:d.current_frame, summary:"Original mannequin proportions / stylized perspective / explicit assistance. Collision uses limb capsules, not fingers, imported models or cloth. Ground aligns the lowest foot vertex to world Y; upright retains locked axes. Pose clips require explicit base scope.".into() });

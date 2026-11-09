@@ -591,3 +591,7 @@ pub mod mannequin_fit_verify;
 pub mod scene_render;
 
 pub mod scene_render_verify;
+
+pub mod surface_edit;
+
+pub mod surface_edit_verify;

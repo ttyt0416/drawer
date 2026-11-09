@@ -9,7 +9,7 @@ use crate::{
     world3d::{self, Matrix, V},
 };
 use std::{collections::BTreeSet, path::PathBuf, sync::atomic::AtomicBool};
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shape {
     Box,
     Plane,
@@ -194,6 +194,14 @@ pub fn primitive(shape: Shape, detail: u16, cancel: &AtomicBool) -> Result<Asset
             t.smoothing = 1;
         }
     }
+    model.surface.tools.primitive = Some(crate::surface_edit::Primitive {
+        shape,
+        detail: if matches!(shape, Shape::Sphere | Shape::Cylinder | Shape::Cone) {
+            detail
+        } else {
+            1
+        },
+    });
     let asset = Asset {
         models: vec![model],
         warnings: vec![],

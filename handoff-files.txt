@@ -1020,3 +1020,7 @@ crates/drawer-core/src/scene_render.rs
 crates/drawer-core/src/scene_render_verify.rs
 crates/drawer-app/src/scene_render_verify.rs
 docs/process/scene-rendering.md
+crates/drawer-core/src/surface_edit.rs
+crates/drawer-core/src/surface_edit_verify.rs
+crates/drawer-app/src/surface_edit_verify.rs
+docs/process/surface-tools.md

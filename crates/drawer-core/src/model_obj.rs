@@ -358,6 +358,7 @@ pub fn decode(bytes: &[u8], source: &str, cancel: &AtomicBool) -> Result<Parsed,
                 color: [180, 210, 245, 255],
             },
             surface: Surface {
+                tools: Default::default(),
                 triangles,
                 texcoords: used_t.iter().map(|i| tex[*i]).collect(),
                 normals: used_n.iter().map(|i| normals[*i]).collect(),

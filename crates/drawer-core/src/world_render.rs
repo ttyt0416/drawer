@@ -58,6 +58,7 @@ struct Triangle {
     opaque: bool,
     material: u16,
     bounds: Bounds,
+    visible: bool,
 }
 struct ImportedMaterial {
     pixels: Option<(usize, usize, Vec<u8>)>,
@@ -65,6 +66,10 @@ struct ImportedMaterial {
     flip_v: bool,
     alpha: crate::model_import::Alpha,
     cutoff: f64,
+    uv: crate::surface_edit::Uv,
+    normal: Option<(usize, usize, Vec<u8>)>,
+    strength: f64,
+    flip_green: bool,
 }
 struct Node {
     bounds: Bounds,
@@ -79,6 +84,9 @@ struct FragmentCache {
 }
 pub(crate) struct Trace {
     cache: std::sync::Mutex<Option<FragmentCache>>,
+    surface_tools: bool,
+    wires: Vec<Option<crate::render::Wires>>,
+    wire_colors: Vec<[u8; 4]>,
     triangles: Vec<Triangle>,
     textures: Vec<Option<(usize, Vec<u8>)>>,
     imported: Vec<std::collections::BTreeMap<u16, ImportedMaterial>>,
@@ -123,7 +131,14 @@ fn intersect(t: &Triangle, r: Ray, lo: f64, hi: f64) -> Option<(f64, f64, f64)> 
 impl Trace {
     pub(crate) fn new(d: &Document) -> Option<Self> {
         let settings = d.scene.world3d.lighting.as_ref()?;
-        if settings.style == Style::Wire {
+        if settings.style == Style::Wire
+            && !d.scene.world3d.surfaces.values().any(|s| s.tools.active())
+            && !settings.render.as_ref().is_some_and(|r| {
+                r.objects
+                    .values()
+                    .any(|o| o.billboard != crate::scene_render::Billboard::Off)
+            })
+        {
             return None;
         }
         let mut trace = Self::build_geometry(d, settings.clone(), false)?;
@@ -176,6 +191,10 @@ impl Trace {
         }
         let mut t = Self {
             cache: std::sync::Mutex::new(None),
+            surface_tools: d.scene.world3d.surfaces.values().any(|s| s.tools.active())
+                || settings.style == Style::Wire,
+            wires: (0..d.scene.worlds.len()).map(|_| None).collect(),
+            wire_colors: vec![[24, 24, 24, 255]; d.scene.worlds.len()],
             camera: camera.clone(),
             policies: (0..d.scene.worlds.len())
                 .map(|i| {
@@ -248,8 +267,84 @@ impl Trace {
                             flip_v: m.flip_v,
                             alpha: m.alpha,
                             cutoff: m.cutoff,
+                            uv: Default::default(),
+                            normal: None,
+                            strength: 1.,
+                            flip_green: false,
                         },
                     );
+                }
+            }
+            let visible = physical
+                || match s.tools.display {
+                    crate::surface_edit::Display::Wire => false,
+                    crate::surface_edit::Display::Source => settings.style != Style::Wire,
+                    _ => true,
+                };
+            if !physical {
+                if matches!(
+                    s.tools.display,
+                    crate::surface_edit::Display::Wire | crate::surface_edit::Display::Both
+                ) || s.tools.display == crate::surface_edit::Display::Source
+                    && settings.style == Style::Wire
+                {
+                    let mut mesh = m.clone();
+                    if t.policies[object].billboard != crate::scene_render::Billboard::Off {
+                        for p in &mut mesh.vertices {
+                            *p = delta.map(*p);
+                        }
+                    }
+                    t.wires[object] = Some(crate::render::Wires::new(&d.scene, &mesh));
+                    if s.tools.display == crate::surface_edit::Display::Source {
+                        t.wire_colors[object] = m.color;
+                    }
+                }
+                for (index, custom) in &s.tools.materials {
+                    let slot =
+                        t.imported[object]
+                            .entry(*index)
+                            .or_insert_with(|| ImportedMaterial {
+                                pixels: None,
+                                wrap: [crate::model_import::Wrap::Repeat; 2],
+                                flip_v: true,
+                                alpha: if s.materials[*index as usize].rgba[3] >= 1. {
+                                    crate::model_import::Alpha::Opaque
+                                } else {
+                                    crate::model_import::Alpha::Blend
+                                },
+                                cutoff: 0.5,
+                                uv: Default::default(),
+                                normal: None,
+                                strength: 1.,
+                                flip_green: false,
+                            });
+                    if let Some(alpha) = custom.alpha {
+                        slot.alpha = alpha;
+                        slot.cutoff = custom.cutoff;
+                    }
+                    slot.uv = custom.uv.clone();
+                    for axis in 0..2 {
+                        if let Some(w) = custom.uv.wrap[axis] {
+                            slot.wrap[axis] = w;
+                        }
+                    }
+                    if let Some(img) = &custom.diffuse {
+                        slot.pixels = Some((
+                            img.image.width as usize,
+                            img.image.height as usize,
+                            img.image.decode().ok()?,
+                        ));
+                        slot.flip_v = true;
+                    }
+                    if let Some(img) = &custom.normal {
+                        slot.normal = Some((
+                            img.image.width as usize,
+                            img.image.height as usize,
+                            img.image.decode().ok()?,
+                        ));
+                    }
+                    slot.strength = custom.normal_strength;
+                    slot.flip_green = custom.flip_green;
                 }
             }
             if !physical
@@ -304,6 +399,7 @@ impl Trace {
                 t.object_bounds[object] =
                     Some(t.object_bounds[object].map_or(bounds, |b| b.union(bounds)));
                 t.triangles.push(Triangle {
+                    visible,
                     p,
                     n,
                     color,
@@ -319,9 +415,8 @@ impl Trace {
                             crate::scene_render::Alpha::Blend => false,
                             crate::scene_render::Alpha::Source => {
                                 props.opacity == 100
-                                    && s.imported
-                                        .as_ref()
-                                        .and_then(|a| a.materials.get(&face.material))
+                                    && t.imported[object]
+                                        .get(&face.material)
                                         .map_or(color[3] >= 1., |m| {
                                             m.alpha != crate::model_import::Alpha::Blend
                                         })
@@ -338,19 +433,27 @@ impl Trace {
         Some(t)
     }
     pub(crate) fn paint_view(d: &Document) -> Self {
-        Self::build_geometry(d, Settings::default(), false).unwrap()
+        let mut t = Self::build_geometry(d, Settings::default(), false).unwrap();
+        for triangle in &mut t.triangles {
+            triangle.visible = true;
+        }
+        t
     }
     pub(crate) fn uv(&self, object: usize, point: Point) -> Option<(Point, usize)> {
-        let h = self.nearest(self.ray(point), self.lens.near, self.lens.far, |_| true)?;
+        let h = self.nearest(self.ray(point), self.lens.near, self.lens.far, |t| {
+            t.visible
+        })?;
         let t = &self.triangles[h.index];
         if t.object != object {
             return None;
         }
-        let uv = t.uv?;
-        Some((
-            std::array::from_fn(|i| uv[0][i] * (1. - h.u - h.v) + uv[1][i] * h.u + uv[2][i] * h.v),
-            t.face,
-        ))
+        let uv = self.mapped_uv(t, h.u, h.v)?;
+        let uv = if let Some(m) = self.imported[t.object].get(&t.material) {
+            std::array::from_fn(|i| crate::surface_edit::wrap(uv[i], m.wrap[i]))
+        } else {
+            uv
+        };
+        Some((uv, t.face))
     }
     pub(crate) fn cast(
         &self,
@@ -446,7 +549,7 @@ impl Trace {
         Ray { o, d }
     }
     pub(crate) fn modern(&self) -> bool {
-        self.settings.render.is_some()
+        self.settings.render.is_some() || self.surface_tools
     }
     pub(crate) fn fragments_cached(&self, objects: &[usize], p: Point) -> Vec<(usize, [u8; 4])> {
         if let Ok(cache) = self.cache.lock()
@@ -483,7 +586,8 @@ impl Trace {
             } else {
                 for i in node.start..node.end {
                     let t = &self.triangles[i];
-                    if objects.contains(&t.object)
+                    if t.visible
+                        && objects.contains(&t.object)
                         && let Some((depth, u, v)) =
                             intersect(t, ray, self.lens.near, self.lens.far)
                         && self.imported_sample(t, u, v)[3] > 0.
@@ -548,6 +652,13 @@ impl Trace {
                 output.push((self.triangles[hit.index].object, options.line));
             }
         }
+        for object in objects {
+            if let Some(w) = &self.wires[*object]
+                && w.near(p)
+            {
+                output.push((*object, self.wire_colors[*object]));
+            }
+        }
         output
     }
     pub(crate) fn pixel(&self, object: usize, p: Point) -> [u8; 4] {
@@ -567,13 +678,14 @@ impl Trace {
         {
             return [0; 4];
         }
-        let Some(h) = self.nearest(ray, self.lens.near, self.lens.far, |t| t.object == object)
-        else {
+        let Some(h) = self.nearest(ray, self.lens.near, self.lens.far, |t| {
+            t.visible && t.object == object
+        }) else {
             return [0; 4];
         };
         if self
             .nearest(ray, self.lens.near, h.t - 1e-7, |t| {
-                t.object != object && t.opaque
+                t.visible && t.object != object && t.opaque
             })
             .is_some()
         {
@@ -594,16 +706,41 @@ impl Trace {
         if !b.hit(r, self.lens.near, self.lens.far) {
             return None;
         }
-        let h = self.nearest(r, self.lens.near, self.lens.far, |t| t.object == object)?;
+        let h = self.nearest(r, self.lens.near, self.lens.far, |t| {
+            t.visible && t.object == object
+        })?;
         if self
             .nearest(r, self.lens.near, h.t - 1e-7, |t| {
-                t.object != object && t.opaque
+                t.visible && t.object != object && t.opaque
             })
             .is_some()
         {
             return None;
         }
         Some((h.t, self.normal(r, h, true)))
+    }
+    fn mapped_uv(&self, t: &Triangle, u: f64, v: f64) -> Option<Point> {
+        let uv = t.uv?;
+        let p = std::array::from_fn(|i| uv[0][i] * (1. - u - v) + uv[1][i] * u + uv[2][i] * v);
+        Some(
+            self.imported[t.object]
+                .get(&t.material)
+                .map_or(p, |m| m.uv.map(p)),
+        )
+    }
+    fn texture_pixel(
+        &self,
+        p: Point,
+        m: &ImportedMaterial,
+        flip_v: bool,
+        w: usize,
+        height: usize,
+    ) -> usize {
+        let x = crate::surface_edit::wrap(p[0], m.wrap[0]);
+        let y = crate::surface_edit::wrap(if flip_v { 1. - p[1] } else { p[1] }, m.wrap[1]);
+        (((y * height as f64).floor() as usize).min(height - 1) * w
+            + ((x * w as f64).floor() as usize).min(w - 1))
+            * 4
     }
     fn normal(&self, r: Ray, h: Hit, smooth: bool) -> V {
         let t = &self.triangles[h.index];
@@ -615,6 +752,44 @@ impl Trace {
             );
             if dot(v, v) > 1e-20 {
                 n = unit(v);
+            }
+        }
+        if let Some(m) = self.imported[t.object].get(&t.material)
+            && let Some((w, height, pixels)) = &m.normal
+            && let Some(p) = self.mapped_uv(t, h.u, h.v)
+            && let Some(uv) = t.uv
+        {
+            let coordinates = uv.map(|uv| m.uv.map([uv[0], uv[1]]));
+            let a = sub(t.p[1], t.p[0]);
+            let b = sub(t.p[2], t.p[0]);
+            let du1 = coordinates[1][0] - coordinates[0][0];
+            let dv1 = coordinates[1][1] - coordinates[0][1];
+            let du2 = coordinates[2][0] - coordinates[0][0];
+            let dv2 = coordinates[2][1] - coordinates[0][1];
+            let determinant = du1 * dv2 - du2 * dv1;
+            if determinant.abs() > 1e-12 && m.strength > 0. {
+                let tangent = mul(sub(mul(a, dv2), mul(b, dv1)), 1. / determinant);
+                let bitangent = mul(sub(mul(b, du1), mul(a, du2)), 1. / determinant);
+                let tangent = sub(tangent, mul(n, dot(tangent, n)));
+                if dot(tangent, tangent) > 1e-20 {
+                    let tangent = unit(tangent);
+                    let handed = if dot(cross(n, tangent), bitangent) < 0. {
+                        -1.
+                    } else {
+                        1.
+                    };
+                    let binormal = mul(cross(n, tangent), handed);
+                    let index = self.texture_pixel(p, m, true, *w, *height);
+                    let x = (pixels[index] as f64 / 255. * 2. - 1.) * m.strength;
+                    let y = (pixels[index + 1] as f64 / 255. * 2. - 1.)
+                        * m.strength
+                        * if m.flip_green { -1. } else { 1. };
+                    let z = pixels[index + 2] as f64 / 255. * 2. - 1.;
+                    let mapped = add(add(mul(tangent, x), mul(binormal, y)), mul(n, z));
+                    if dot(mapped, mapped) > 1e-20 {
+                        n = unit(mapped);
+                    }
+                }
             }
         }
         if dot(n, r.d) > 0. {
@@ -637,7 +812,7 @@ impl Trace {
             .map_or([self.settings.ambient; 3], |r| {
                 r.tint.map(|v| v * self.settings.ambient)
             });
-        if self.settings.style == Style::Unlit {
+        if matches!(self.settings.style, Style::Unlit | Style::Wire) {
             light = [1.; 3];
         } else {
             if let Some(environment) = &self.environment {
@@ -724,10 +899,21 @@ impl Trace {
         if let Some((size, pixels)) = &self.textures[t.object]
             && let Some(uv) = t.uv
         {
-            let u = uv[0][0] * (1. - h.u - h.v) + uv[1][0] * h.u + uv[2][0] * h.v;
-            let v = uv[0][1] * (1. - h.u - h.v) + uv[1][1] * h.u + uv[2][1] * h.v;
-            let x = (u.rem_euclid(1.) * *size as f64).floor() as usize;
-            let y = ((1. - v.rem_euclid(1.)) * *size as f64).floor() as usize;
+            let _ = uv;
+            let p = self.mapped_uv(t, h.u, h.v).unwrap();
+            let p = if let Some(m) = self.imported[t.object].get(&t.material) {
+                std::array::from_fn(|i| crate::surface_edit::wrap(p[i], m.wrap[i]))
+            } else {
+                p
+            };
+            let [u, v] = p;
+            let [u, v] = if self.imported[t.object].contains_key(&t.material) {
+                [u, v]
+            } else {
+                [u.rem_euclid(1.), v.rem_euclid(1.)]
+            };
+            let x = (u * *size as f64).floor() as usize;
+            let y = ((1. - v) * *size as f64).floor() as usize;
             let i = (y.min(*size - 1) * *size + x.min(*size - 1)) * 4;
             texture = std::array::from_fn(|c| pixels[i + c] as f64 / 255.);
         }
@@ -779,28 +965,17 @@ impl Trace {
         }
     }
     fn imported_sample(&self, t: &Triangle, u: f64, v: f64) -> [f64; 4] {
-        use crate::model_import::{Alpha, Wrap};
+        use crate::model_import::Alpha;
         let Some(m) = self.imported[t.object].get(&t.material) else {
             let alpha = self.policy_alpha(t, t.color[3]);
             return [1., 1., 1., alpha];
         };
         let mut color = [1.; 4];
-        if let (Some((w, h, pixels)), Some(uv)) = (&m.pixels, t.uv) {
-            let p: [f64; 2] =
-                std::array::from_fn(|i| uv[0][i] * (1. - u - v) + uv[1][i] * u + uv[2][i] * v);
-            let wrap = |x: f64, mode: Wrap| match mode {
-                Wrap::Repeat => x.rem_euclid(1.),
-                Wrap::Clamp => x.clamp(0., 1.),
-                Wrap::Mirror => {
-                    let x = x.rem_euclid(2.);
-                    if x > 1. { 2. - x } else { x }
-                }
-            };
-            let x = wrap(p[0], m.wrap[0]);
-            let y = wrap(if m.flip_v { 1. - p[1] } else { p[1] }, m.wrap[1]);
-            let x = ((x * *w as f64).floor() as usize).min(*w - 1);
-            let y = ((y * *h as f64).floor() as usize).min(*h - 1);
-            color = std::array::from_fn(|i| pixels[(y * *w + x) * 4 + i] as f64 / 255.);
+        if let Some((w, h, pixels)) = &m.pixels
+            && let Some(p) = self.mapped_uv(t, u, v)
+        {
+            let index = self.texture_pixel(p, m, m.flip_v, *w, *h);
+            color = std::array::from_fn(|i| pixels[index + i] as f64 / 255.);
         }
         let alpha = color[3] * t.color[3];
         color[3] = if self.policies[t.object].alpha != crate::scene_render::Alpha::Source {

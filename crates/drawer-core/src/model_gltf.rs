@@ -658,6 +658,7 @@ fn primitive(
             color: base.rgba.map(|v| (v * 255.).round() as u8),
         },
         surface: Surface {
+            tools: Default::default(),
             triangles,
             texcoords,
             normals,

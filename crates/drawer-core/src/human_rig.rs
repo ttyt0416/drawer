@@ -762,6 +762,8 @@ pub fn prepare(
             *v = frame.map(*v);
         }
         if let Some(old) = s.world3d.surfaces.get(&id) {
+            surface.tools = old.tools.clone();
+            surface.tools.primitive = None;
             surface.paint = old.paint.clone();
             surface.materials = old.materials.clone();
             surface.texcoords = old.texcoords.clone();
