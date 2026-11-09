@@ -80,6 +80,7 @@ impl ImageSource {
     }
     pub fn read(path: &Path, budget: usize, cancel: &AtomicBool) -> io::Result<Self> {
         checked(cancel)?;
+        crate::exchange_guidance::probe(path).map_err(invalid)?;
         let path = path.canonicalize()?;
         let mut file = fs::File::open(&path)?;
         let limit = MAX_ENCODED_BYTES.min(budget / 2);
@@ -103,6 +104,7 @@ impl ImageSource {
         budget: usize,
         cancel: &AtomicBool,
     ) -> io::Result<Self> {
+        crate::exchange_guidance::reject_private(&path).map_err(invalid)?;
         if bytes.len() > MAX_ENCODED_BYTES.min(budget / 2) {
             return Err(invalid("Encoded image exceeds the import memory limit"));
         }
@@ -117,10 +119,11 @@ impl ImageSource {
             {
                 ImageFormat::Tga
             }
-            Err(e) => return Err(invalid(e.to_string())),
+            Err(e) => return Err(invalid(format!("{e}. {}", crate::exchange_guidance::GUIDE))),
         };
         if format == ImageFormat::Tga {
-            crate::raster_io::validate_tga(&bytes).map_err(invalid)?;
+            crate::raster_io::validate_tga(&bytes)
+                .map_err(|e| invalid(format!("{e}. {}", crate::exchange_guidance::GUIDE)))?;
         }
 
         let png_info = if format == ImageFormat::Png {
@@ -177,9 +180,7 @@ impl ImageSource {
                 }
             }
             _ => {
-                return Err(invalid(
-                    "Import supports PNG, JPEG, BMP, TGA, TIFF and WebP in the verified variants.",
-                ));
+                return Err(invalid(crate::exchange_guidance::GUIDE));
             }
         }
         Ok(Self {

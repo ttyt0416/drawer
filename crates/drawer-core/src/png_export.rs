@@ -34,6 +34,7 @@ pub fn export_with(
     budget: usize,
     options: Options,
 ) -> io::Result<()> {
+    crate::exchange_guidance::reject_private(path).map_err(crate::exchange_guidance::invalid)?;
     let invalid = |s: &str| io::Error::new(io::ErrorKind::InvalidInput, s.to_owned());
     if !document.color.valid_layers(&document.layers)
         || !document.scene.paper.valid_for(document.layers.len())

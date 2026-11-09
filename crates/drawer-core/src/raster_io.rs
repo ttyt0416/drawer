@@ -307,6 +307,7 @@ impl Prepared {
         budget: usize,
         c: &AtomicBool,
     ) -> Result<(), String> {
+        crate::exchange_guidance::reject_private(path)?;
         self.check(d)?;
         if !confirmed {
             return Err("Confirm the listed export losses".into());

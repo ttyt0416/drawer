@@ -214,6 +214,7 @@ pub(super) fn write(
     budget: usize,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
+    crate::exchange_guidance::reject_private(path)?;
     let expected = if format == Format::Psd { "psd" } else { "psb" };
     if !path
         .extension()
@@ -816,6 +817,7 @@ pub fn open_detailed(
     path: &Path,
     budget: usize,
 ) -> Result<(Document, Vec<String>, report::Report), String> {
+    crate::exchange_guidance::reject_private(path)?;
     let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     if !m.is_file() || m.file_type().is_symlink() || m.len() > budget as u64 / 2 {
         return Err("Choose a regular local PSD/PSB within the read budget".into());

@@ -95,6 +95,14 @@ impl Drawer {
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
     }
     pub(super) fn begin_import(&mut self, ctx: &egui::Context, path: &Path) {
+        if let Err(error) = drawer_core::exchange_guidance::probe(path)
+            && error == drawer_core::exchange_guidance::GUIDE
+        {
+            self.import_dialog = None;
+            self.status = Some(error);
+            return;
+        }
+
         let budget = self.import_budget();
         let path = path.to_owned();
         self.import_dialog = Some(ImportDialog {
@@ -127,7 +135,14 @@ impl Drawer {
         let d = &self.documents[self.active.ok_or("Open a page first")?];
         let destination = (d.id, d.revision, d.current_frame);
         self.begin_import(ctx, path);
-        self.import_dialog.as_mut().unwrap().destination = Some(destination);
+        self.import_dialog
+            .as_mut()
+            .ok_or_else(|| {
+                self.status
+                    .clone()
+                    .unwrap_or_else(|| drawer_core::exchange_guidance::GUIDE.into())
+            })?
+            .destination = Some(destination);
         Ok(())
     }
     pub(super) fn choose_image_layer(&mut self, ctx: &egui::Context) -> Result<(), String> {

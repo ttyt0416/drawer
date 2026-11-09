@@ -26,6 +26,7 @@ pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
     open_report(path, budget).map(|(d, _)| d)
 }
 pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<String>)> {
+    crate::exchange_guidance::probe(path).map_err(invalid)?;
     let path = path.canonicalize()?;
     let ext = path
         .extension()
@@ -74,9 +75,7 @@ pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<Stri
             d.source_path = Some(path);
             Ok((d, warnings))
         }
-        _ => Err(invalid(
-            "Supported open formats: Drawer, PNG, PSD/PSB, JPEG, BMP, TGA, TIFF and WebP (verified variants)",
-        )),
+        _ => Err(invalid(crate::exchange_guidance::GUIDE)),
     }
 }
 fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
@@ -104,7 +103,10 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     let mut magic = [0; 8];
     reader.read_exact(&mut magic)?;
     let version = read_u32(&mut reader)?;
-    if &magic != MAGIC || !(1..=VERSION).contains(&version) {
+    if &magic != MAGIC {
+        return Err(invalid(crate::exchange_guidance::GUIDE));
+    }
+    if !(1..=VERSION).contains(&version) {
         return Err(invalid("Unsupported Drawer document version"));
     }
     let width = read_u32(&mut reader)?;
@@ -713,6 +715,7 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
 }
 
 pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
+    crate::exchange_guidance::reject_private(path).map_err(invalid)?;
     if !path
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("drawer"))

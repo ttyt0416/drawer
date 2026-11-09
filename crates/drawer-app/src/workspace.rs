@@ -32,16 +32,8 @@ impl Drawer {
                     ))
                     .clicked()
                 {
-                    if path
-                        .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("drawer"))
-                    {
-                        if let Err(error) = self.open_path(&path) {
-                            self.status =
-                                Some(format!("Cannot reopen {}: {error}", path.display()));
-                        }
-                    } else {
-                        self.begin_import(ui.ctx(), &path);
+                    if let Err(error) = self.open_exchange_file(ui.ctx(), &path) {
+                        self.status = Some(error);
                     }
                     ui.close();
                 }
@@ -365,6 +357,7 @@ impl Drawer {
             .map_err(|e| e.to_string())
     }
     pub(super) fn export_target(&self, index: usize, path: &Path) -> Result<PathBuf, String> {
+        drawer_core::exchange_guidance::reject_private(path)?;
         self.text_output_guard(index)?;
         let target = if path.exists() {
             path.canonicalize()
@@ -524,17 +517,15 @@ impl Drawer {
                         &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"],
                     )
                     .add_filter("PSD / PSB RGB8 (raw / RLE)", &["psd", "psb"])
+                    .add_filter(
+                        "SAI / SAI2 / CLIP — unsupported; exchange via PSD / PNG",
+                        &["sai", "sai2", "clip"],
+                    )
                     .pick_files()
             {
                 for path in paths {
-                    if path.extension().is_some_and(|e| {
-                        ["jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"]
-                            .iter()
-                            .any(|x| e.eq_ignore_ascii_case(x))
-                    }) {
-                        self.begin_import(ui.ctx(), &path);
-                    } else if let Err(error) = self.open_path(&path) {
-                        self.status = Some(format!("{}: {error}", path.display()));
+                    if let Err(error) = self.open_exchange_file(ui.ctx(), &path) {
+                        self.status = Some(error);
                     }
                 }
             }
