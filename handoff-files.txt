@@ -1070,3 +1070,6 @@ scripts/verify-psd-exchange.py
 docs/process/psd-exchange.md
 crates/drawer-core/src/monitor_color.rs
 crates/drawer-app/src/monitor_color.rs
+crates/drawer-core/src/raster_io.rs
+crates/drawer-core/src/raster_io_verify.rs
+crates/drawer-app/src/raster_export.rs

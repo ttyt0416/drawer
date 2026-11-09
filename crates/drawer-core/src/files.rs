@@ -52,8 +52,28 @@ pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<Stri
             d.source_path = Some(path);
             Ok((d, warnings))
         }
+        "jpg" | "jpeg" | "bmp" | "tga" | "tif" | "tiff" | "webp" => {
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let source = crate::image_import::ImageSource::read(&path, budget, &cancel)?;
+            let page = source.decode(0, true, budget, &cancel)?;
+            let mut warnings = page.warnings.clone();
+            if source.pages.len() > 1 {
+                warnings.push(format!(
+                    "First TIFF page of {} opened; use image import to select another page",
+                    source.pages.len()
+                ));
+            }
+            let mut d = page.document(budget)?;
+            d.title = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            d.source_path = Some(path);
+            Ok((d, warnings))
+        }
         _ => Err(invalid(
-            "Supported open formats: .drawer, .png, raw RGB8 .psd merged preview",
+            "Supported open formats: Drawer, PNG, PSD/PSB, JPEG, BMP, TGA, TIFF and WebP (verified variants)",
         )),
     }
 }

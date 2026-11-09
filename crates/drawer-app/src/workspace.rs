@@ -513,12 +513,21 @@ impl Drawer {
                 && let Some(paths) = rfd::FileDialog::new()
                     .set_title("Open local drawings")
                     .add_filter("Drawer document", &["drawer"])
-                    .add_filter("PNG", &["png"])
+                    .add_filter(
+                        "Still images",
+                        &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"],
+                    )
                     .add_filter("PSD / PSB RGB8 (raw / RLE)", &["psd", "psb"])
                     .pick_files()
             {
                 for path in paths {
-                    if let Err(error) = self.open_path(&path) {
+                    if path.extension().is_some_and(|e| {
+                        ["jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"]
+                            .iter()
+                            .any(|x| e.eq_ignore_ascii_case(x))
+                    }) {
+                        self.begin_import(ui.ctx(), &path);
+                    } else if let Err(error) = self.open_path(&path) {
                         self.status = Some(format!("{}: {error}", path.display()));
                     }
                 }
@@ -526,8 +535,8 @@ impl Drawer {
             if crate::help::button(ui, "Image as new document…", "files").clicked()
                 && let Some(path) = rfd::FileDialog::new()
                     .add_filter(
-                        "PNG / JPEG / TIFF / BMP",
-                        &["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+                        "PNG / JPEG / BMP / TGA / TIFF / WebP",
+                        &["png", "jpg", "jpeg", "tif", "tiff", "bmp", "tga", "webp"],
                     )
                     .pick_file()
             {
@@ -620,6 +629,12 @@ impl Drawer {
                 }
                 if crate::help::button(ui, "Export PSD / PSB…", "textures").clicked() {
                     self.request_psd();
+                }
+                if crate::help::button(ui, "Export JPEG / BMP / TGA / TIFF / WebP…", "files")
+                    .clicked()
+                    && let Err(e) = self.begin_raster_export()
+                {
+                    self.status = Some(e);
                 }
                 if crate::help::button(ui, "Export PNG…", "files").clicked()
                     && let Err(e) = self.begin_png_export()

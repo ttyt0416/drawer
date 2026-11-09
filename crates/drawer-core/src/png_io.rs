@@ -4,7 +4,7 @@ use crate::{
     image_import::ImportedPage,
     references::LocalImage,
 };
-use image::{DynamicImage, ImageDecoder};
+use image::{DynamicImage, ImageDecoder, metadata::Orientation};
 use std::{
     io::{self, Cursor},
     sync::atomic::AtomicBool,
@@ -108,9 +108,29 @@ pub(crate) fn decode16(
     );
     let orientation = decoder.orientation().map_err(|e| invalid(e.to_string()))?;
     let profile = decoder.icc_profile().map_err(|e| invalid(e.to_string()))?;
-    let mut rgba = DynamicImage::from_decoder(decoder)
+    let rgba = DynamicImage::from_decoder(decoder)
         .map_err(|e| invalid(e.to_string()))?
         .into_rgba16();
+    finish16(rgba, orientation, profile, gray, orient, budget, cancel)
+}
+pub(crate) fn finish16(
+    mut rgba: image::ImageBuffer<image::Rgba<u16>, Vec<u16>>,
+    orientation: Orientation,
+    profile: Option<Vec<u8>>,
+    gray: bool,
+    orient: bool,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> io::Result<ImportedPage> {
+    if (rgba.width() as usize)
+        .saturating_mul(rgba.height() as usize)
+        .saturating_mul(32)
+        > budget
+    {
+        return Err(invalid(
+            "High precision image conversion exceeds memory budget",
+        ));
+    }
     if let Some(bytes) = &profile {
         if bytes.len() > 1024 * 1024 {
             return Err(invalid("ICC profile exceeds1MiB"));
@@ -121,7 +141,7 @@ pub(crate) fn decode16(
         let layout = match (p.color_space, gray) {
             (DataColorSpace::Rgb, false) => Layout::Rgba,
             (DataColorSpace::Gray, true) => Layout::Gray,
-            _ => return Err(invalid("PNG ICC profile does not match RGB/Gray input")),
+            _ => return Err(invalid("Image ICC profile does not match RGB/Gray input")),
         };
         let transform = p
             .create_transform_16bit(
@@ -204,7 +224,9 @@ impl ImportedPage {
         };
         let count = self.image.pixels.len();
         if count.saturating_mul(24) > budget || color.pixels.len() != count {
-            return Err(invalid("High precision PNG document exceeds memory budget"));
+            return Err(invalid(
+                "High precision image document exceeds memory budget",
+            ));
         }
         let mut d = crate::document::Document::create_with_color(
             crate::document::CanvasSpec {

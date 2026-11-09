@@ -612,3 +612,5 @@ pub mod auto_actions_verify;
 
 pub mod monitor_color;
 pub mod psd_exchange;
+
+pub mod raster_io;

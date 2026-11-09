@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 250] = [
+pub const EXTRA_COMMANDS: [&str; 251] = [
+    "raster-export",
     "color-management",
     "auto-actions",
     "model-controls",

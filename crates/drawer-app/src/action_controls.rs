@@ -771,6 +771,7 @@ impl Drawer {
                 }
                 "auto-actions" => self.begin_auto_actions(),
                 "color-management" => self.begin_monitor_color(),
+                "raster-export" => self.begin_raster_export()?,
                 "save" => {
                     if let Some(n) = self.active {
                         self.save_document(n)?;

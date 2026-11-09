@@ -107,7 +107,22 @@ impl ImageSource {
             return Err(invalid("Encoded image exceeds the import memory limit"));
         }
         checked(cancel)?;
-        let format = image::guess_format(&bytes).map_err(|e| invalid(e.to_string()))?;
+        let format = match image::guess_format(&bytes) {
+            Ok(f) => f,
+            Err(_)
+                if path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("tga"))
+                    || bytes.ends_with(b"TRUEVISION-XFILE.\0") =>
+            {
+                ImageFormat::Tga
+            }
+            Err(e) => return Err(invalid(e.to_string())),
+        };
+        if format == ImageFormat::Tga {
+            crate::raster_io::validate_tga(&bytes).map_err(invalid)?;
+        }
+
         let png_info = if format == ImageFormat::Png {
             Some(crate::png_io::validate(&bytes, cancel)?)
         } else {
@@ -115,7 +130,7 @@ impl ImageSource {
         };
         let mut pages = Vec::new();
         match format {
-            ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp => {
+            ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp | ImageFormat::Tga => {
                 if format == ImageFormat::Png
                     && image::codecs::png::PngDecoder::with_limits(
                         Cursor::new(&bytes),
@@ -132,6 +147,14 @@ impl ImageSource {
                 let mut reader = image::ImageReader::with_format(Cursor::new(&bytes), format);
                 reader.limits(image_limits(budget));
                 let decoder = reader.into_decoder().map_err(|e| invalid(e.to_string()))?;
+                let (width, height) = decoder.dimensions();
+                dimensions(width, height, budget)?;
+                pages.push(PageInfo { width, height });
+            }
+            ImageFormat::WebP => {
+                let mut decoder = image_webp::WebPDecoder::new(Cursor::new(&bytes))
+                    .map_err(|e| invalid(e.to_string()))?;
+                decoder.set_memory_limit(budget);
                 let (width, height) = decoder.dimensions();
                 dimensions(width, height, budget)?;
                 pages.push(PageInfo { width, height });
@@ -155,7 +178,7 @@ impl ImageSource {
             }
             _ => {
                 return Err(invalid(
-                    "Import supports PNG, JPEG, TIFF and BMP. Other formats are not yet supported.",
+                    "Import supports PNG, JPEG, BMP, TGA, TIFF and WebP in the verified variants.",
                 ));
             }
         }
@@ -182,7 +205,9 @@ impl ImageSource {
         let count = dimensions(info.width, info.height, budget)?;
         // Reserve space for source copies, decoder/conversion/orientation buffers and the new document.
         let peak = count
-            .checked_mul(if self.png_info.is_some_and(|p| p.bits == 16) {
+            .checked_mul(if self.format == ImageFormat::Tiff {
+                10
+            } else if self.png_info.is_some_and(|p| p.bits == 16) {
                 8
             } else {
                 5
@@ -203,8 +228,39 @@ impl ImageSource {
         if self.png_info.is_some_and(|p| p.bits == 16) {
             return crate::png_io::decode16(&self.bytes, orient, budget, cancel);
         }
-        let (mut rgba, orientation, profile, gray) = if self.format == ImageFormat::Tiff {
+        let (mut rgba, orientation, profile, gray, precise) = if self.format == ImageFormat::Tiff {
             decode_tiff(&self.bytes, page, budget, cancel)?
+        } else if self.format == ImageFormat::WebP {
+            let mut decoder = image_webp::WebPDecoder::new(Cursor::new(self.bytes.as_slice()))
+                .map_err(|e| invalid(e.to_string()))?;
+            decoder.set_memory_limit(budget);
+            let profile = decoder.icc_profile().map_err(|e| invalid(e.to_string()))?;
+            let mut data = vec![
+                0;
+                decoder
+                    .output_buffer_size()
+                    .ok_or_else(|| invalid("WebP buffer overflow"))?
+            ];
+            if decoder.is_animated() {
+                decoder
+                    .read_frame(&mut data)
+                    .map_err(|e| invalid(e.to_string()))?;
+            } else {
+                decoder
+                    .read_image(&mut data)
+                    .map_err(|e| invalid(e.to_string()))?;
+            }
+            let rgba = if decoder.has_alpha() {
+                image::RgbaImage::from_raw(info.width, info.height, data)
+                    .ok_or_else(|| invalid("WebP dimensions mismatch"))?
+            } else {
+                DynamicImage::ImageRgb8(
+                    image::RgbImage::from_raw(info.width, info.height, data)
+                        .ok_or_else(|| invalid("WebP dimensions mismatch"))?,
+                )
+                .into_rgba8()
+            };
+            (rgba, Orientation::NoTransforms, profile, false, None)
         } else {
             let mut reader =
                 image::ImageReader::with_format(Cursor::new(self.bytes.as_slice()), self.format);
@@ -222,9 +278,21 @@ impl ImageSource {
             let rgba = DynamicImage::from_decoder(decoder)
                 .map_err(|e| invalid(e.to_string()))?
                 .into_rgba8();
-            (rgba, orientation, profile, gray)
+            (rgba, orientation, profile, gray, None)
         };
         checked(cancel)?;
+        if let Some(high) = precise {
+            drop(rgba);
+            return crate::png_io::finish16(
+                high,
+                orientation,
+                profile,
+                gray,
+                orient,
+                budget,
+                cancel,
+            );
+        }
         let profile_applied = if let Some(profile) = profile {
             convert_profile(&mut rgba, &profile, gray, cancel)?;
             true
@@ -249,7 +317,20 @@ impl ImageSource {
             profile_applied,
             color: None,
             bits: self.png_info.map_or(8, |p| p.bits),
-            warnings: vec![],
+            warnings: if self.format == ImageFormat::WebP {
+                let decoder = image_webp::WebPDecoder::new(Cursor::new(self.bytes.as_slice()))
+                    .map_err(|e| invalid(e.to_string()))?;
+                if decoder.is_animated() {
+                    vec![format!(
+                        "Animated WebP: first composited frame 0 of {}; animation/timing are not imported",
+                        decoder.num_frames()
+                    )]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            },
         })
     }
 }
@@ -262,7 +343,13 @@ fn tiff_decoder(bytes: &[u8], budget: usize) -> io::Result<Decoder<Cursor<&[u8]>
         .map(|d| d.with_limits(limits))
         .map_err(|e| invalid(e.to_string()))
 }
-type Decoded = (image::RgbaImage, Orientation, Option<Vec<u8>>, bool);
+type Decoded = (
+    image::RgbaImage,
+    Orientation,
+    Option<Vec<u8>>,
+    bool,
+    Option<image::ImageBuffer<image::Rgba<u16>, Vec<u16>>>,
+);
 fn decode_tiff(
     bytes: &[u8],
     page: usize,
@@ -344,10 +431,12 @@ fn decode_tiff(
     checked(cancel)?;
     let decoded = decoder.read_image().map_err(|e| invalid(e.to_string()))?;
     let mut rgba = image::RgbaImage::new(width, height);
+    let mut precise =
+        (depth == 16).then(|| image::ImageBuffer::<image::Rgba<u16>, Vec<u16>>::new(width, height));
     for y in 0..height as usize {
         checked(cancel)?;
         for x in 0..width as usize {
-            let sample = |c: usize| -> io::Result<u8> {
+            let sample = |c: usize| -> io::Result<u16> {
                 let index = if layout.planes > 1 {
                     c * plane.ok_or_else(|| invalid("Unsupported TIFF plane layout"))? + y * row + x
                 } else {
@@ -356,11 +445,11 @@ fn decode_tiff(
                 match &decoded {
                     DecodingResult::U8(v) => v
                         .get(index)
-                        .copied()
+                        .map(|v| *v as u16 * 257)
                         .ok_or_else(|| invalid("Truncated TIFF pixels")),
                     DecodingResult::U16(v) => v
                         .get(index)
-                        .map(|n| ((*n as u32 + 128) / 257) as u8)
+                        .copied()
                         .ok_or_else(|| invalid("Truncated TIFF pixels")),
                     _ => Err(invalid(
                         "Signed or floating-point TIFF samples are not yet supported",
@@ -372,22 +461,29 @@ fn decode_tiff(
                 r,
                 if gray { r } else { sample(1)? },
                 if gray { r } else { sample(2)? },
-                if alpha { sample(channels - 1)? } else { 255 },
+                if alpha { sample(channels - 1)? } else { 65535 },
             ];
             if associated {
                 for c in 0..3 {
                     pixel[c] = if pixel[3] == 0 {
                         0
                     } else {
-                        ((pixel[c] as u32 * 255 + pixel[3] as u32 / 2) / pixel[3] as u32).min(255)
-                            as u8
+                        ((pixel[c] as u64 * 65535 + pixel[3] as u64 / 2) / pixel[3] as u64)
+                            .min(65535) as u16
                     };
                 }
             }
-            rgba.put_pixel(x as u32, y as u32, image::Rgba(pixel));
+            if let Some(high) = &mut precise {
+                high.put_pixel(x as u32, y as u32, image::Rgba(pixel));
+            }
+            rgba.put_pixel(
+                x as u32,
+                y as u32,
+                image::Rgba(pixel.map(|v| ((v as u32 + 128) / 257) as u8)),
+            );
         }
     }
-    Ok((rgba, orientation, profile, gray))
+    Ok((rgba, orientation, profile, gray, precise))
 }
 pub(crate) fn convert_profile(
     rgba: &mut image::RgbaImage,
@@ -607,7 +703,13 @@ mod tests {
         );
         let page = decode(&path, 1, true);
         assert_eq!((page.image.width, page.image.height), (2, 1));
-        assert_eq!(page.image.pixels, [[40, 50, 60, 0], [10, 20, 30, 128]]);
+        // Shared high-precision import normalizes invisible RGB, as PNG16 does.
+        assert_eq!(page.image.pixels, [[0; 4], [10, 20, 30, 128]]);
+        assert_eq!(
+            page.color.as_ref().unwrap().pixels[1],
+            [2570, 5140, 7710, 32896]
+        );
+        assert!(page.warnings.iter().any(|w| w.contains("hidden RGB")));
         assert_eq!(fs::read(&path).unwrap(), before);
         assert!(source.decode(2, true, BUDGET, &cancel).is_err());
     }

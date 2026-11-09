@@ -1732,3 +1732,10 @@ Open의 PSD/PSB는 RGB8·3채널 또는 투명 포함4채널과 raw/PackBits RLE
 `color-management`에서 세 역할을 구분한다. 문서 작업 RGB ICC는 `Document working profile…`에서 숫자 배정/색 변환을 미리보기·Apply/Cancel·한 Undo로 적용하고 자체 문서에 보존한다. ICC가 없으면 sRGB 가정을 표시한다. `Output soft proof / rendering intent…`는 출력 대상 ICC와 Perceptual/Relative/Saturation/Absolute 의도를 선택하는 보기 전용 왕복 시뮬레이션이다. 실제 출력 옵션과 문서 픽셀에는 모니터 보정을 섞지 않는다.
 
 주/분할 캔버스와 별도 표시 창의 모니터 RGB ICC를 각각 로컬 파일로 지정한다. 표시 순서는 문서 작업 공간 → sRGB 표시 → 선택한 출력 프루프 → 모니터 RGB의 상대 색도 변환이다. 모니터 ICC가 없으면 sRGB 표시를 가정하며 운영체제 설정을 추측하지 않는다. 잘못된/회색/CMYK 모니터 ICC와 누락 파일은 적용을 거절한다. `Validate and save / reload`는 프로파일을 읽어 검증한 뒤 로컬 설정만 저장하며 같은 경로의 변경도 명시적으로 다시 읽는다. `Undo monitor settings`와 Cancel은 문서 이력과 별개다. 재시작 때 프로파일이 없어지면 sRGB 표시와 오류를 알리고 저장된 경로를 유지한다. 모니터 설정은 `settings/monitor-color.json`이며 프로파일 파일을 바꾸지 않는다.
+
+
+### JPEG·BMP·TGA·TIFF·WebP 로컬 교환
+
+`raster-export` 또는 `Export JPEG / BMP / TGA / TIFF / WebP…`에서 형식·알파/배경·비트 깊이·압축을 고르고 변환 손실을 확인한 뒤 출력한다. JPEG RGB8은 품질1..100의 손실 압축과 불투명 배경을 사용한다. BMP RGB24/RGBA32는 무압축, TGA RGB24/RGBA32는 raw/RLE, TIFF RGB/RGBA는8/16비트와 None/LZW/Deflate/PackBits, WebP RGB/RGBA8은 lossless를 제공한다. JPEG/TIFF/WebP에 sRGB ICC를 포함한다. 출력은 sRGB로 변환하며 색역 밖 값은 제한되고16→8비트와 알파 제거를 안내한다. JPEG 미리보기는 압축 노이즈를 재현하지 않는다. 원문서·변경 표시·실행 취소 이력은 바꾸지 않으며 원본 파일 대체는 막는다.
+
+이미지 열기/새 문서/새 레이어 가져오기는 검증된 JPEG/BMP/TGA/TIFF/WebP 변형을 읽는다. TIFF 페이지와 방향을 선택하고16비트 채널·ICC를 보존한다. TGA는 팔레트 없는 gray8/RGB24/RGBA32의 raw/RLE, WebP는 정지 lossy/lossless를 읽는다. 애니메이션 WebP는 첫 합성 프레임0만 가져오며 프레임 수와 애니메이션/타이밍 손실을 표시한다. 손상/미지원 샘플·채널·압축은 거절한다. 새 층은 픽셀 크기를 유지하고 DPI로 자동 축소하지 않으며 중심 배치/별도 맞춤·한 Undo와 원본 파일 삭제 후 재열기를 지원한다. 범위와 한계는 이미지 입력 안내를 따른다.

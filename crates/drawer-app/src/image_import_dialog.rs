@@ -135,7 +135,10 @@ impl Drawer {
             return Err("Open a page first".into());
         }
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Local image", &["png", "jpg", "jpeg", "tif", "tiff"])
+            .add_filter(
+                "Local image",
+                &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"],
+            )
             .pick_file()
         {
             self.begin_import_layer(ctx, &path)?;
@@ -292,7 +295,7 @@ impl Drawer {
             } else {
                 "Image as new document"
             });
-            ui.label("PNG / JPEG / TIFF · independent copy · source kept unchanged");
+            ui.label("PNG / JPEG / BMP / TGA / TIFF / WebP · independent copy · source kept unchanged");
             if let Some(source) = &dialog.source {
                 ui.label(source.path.display().to_string());
                 ui.add_enabled_ui(dialog.job.is_none(), |ui| {
