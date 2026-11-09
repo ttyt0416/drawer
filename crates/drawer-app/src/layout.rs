@@ -445,6 +445,10 @@ impl Drawer {
                 .entry(tab.id)
                 .or_insert_with(|| canvas_view::CanvasView::new(ctx));
             canvas.set_proof(&proof);
+            canvas.set_monitor(
+                self.monitor_color.serial,
+                self.monitor_color.stages[0].clone(),
+            );
             canvas.comic_view = self
                 .comics_view_session
                 .get(&doc.id)

@@ -41,6 +41,14 @@ impl Drawer {
             .map(|i| self.proof_for(Target::View(self.tabs[i].id)))
             .unwrap_or_default();
         self.canvas_view.set_proof(&main);
+        self.canvas_view.set_monitor(
+            self.monitor_color.serial,
+            self.monitor_color.stages[0].clone(),
+        );
+        self.display.canvas.set_monitor(
+            self.monitor_color.serial,
+            self.monitor_color.stages[1].clone(),
+        );
         self.display
             .canvas
             .set_proof(&self.proof_for(Target::Display));
@@ -165,15 +173,15 @@ impl Drawer {
         let mut open = true;
         let mut action = None;
         let mut target = None;
-        egui::Window::new("View color proof and tone preview").id(egui::Id::new("soft-proof-editor")).open(&mut open).vscroll(true).default_size([660.0,1000.0]).max_height((ctx.content_rect().height()-40.0).max(160.0)).resizable(true).show(ctx,|ui|{
+        egui::Window::new("Output color proof and tone preview").id(egui::Id::new("soft-proof-editor")).open(&mut open).vscroll(true).default_size([660.0,1000.0]).max_height((ctx.content_rect().height()-40.0).max(160.0)).resizable(true).show(ctx,|ui|{
             ui.horizontal_wrapped(|ui|{if ui.button("Edit active canvas view").clicked()&&let Some(i)=self.active_tab{target=Some(Target::View(self.tabs[i].id));}
             if ui.button("Edit separate display view").clicked(){target=Some(Target::Display);}});
-            ui.label(match editor.target{Target::View(id)=>format!("Canvas view {id} · working space sRGB"),Target::Display=>"Separate display view · working space sRGB".into()});
+            ui.label(match editor.target{Target::View(id)=>format!("Canvas view {id} · document display converted to sRGB"),Target::Display=>"Separate display view · document display converted to sRGB".into()});
             let s=&mut editor.draft;ui.checkbox(&mut s.enabled,"Enable view-only proof / tones");
             ui.horizontal_wrapped(|ui|{ui.label(s.profile.as_ref().map_or("ICC: none (sRGB working color)".into(),|p|p.display().to_string()));if ui.button("Choose local ICC…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("ICC profile",&["icc","icm"]).pick_file(){s.profile=Some(p);}
             if ui.button("Clear ICC").clicked(){s.profile=None;}});
             egui::ComboBox::from_id_salt("proof-intent").selected_text(format!("{:?}",s.intent)).show_ui(ui,|ui|{for intent in [Intent::Perceptual,Intent::Relative,Intent::Saturation,Intent::Absolute]{ui.selectable_value(&mut s.intent,intent,format!("{intent:?}"));}});
-            ui.label("ICC is a view-only working → target → sRGB round trip. Profiles need both directions; no assumed fallback.");
+            ui.label("Output proof: document display sRGB → output target → sRGB; monitor calibration is a separate final stage. Profiles need both directions; invalid ICC is refused.");
             ui.heading("Tone curve (five fixed input positions)");for (n,v) in s.tone.curve.iter_mut().enumerate(){super::edit::slider(ui,v,0.0..=1.0,format!("Input {}% output",n*25),"soft-proof");}
             ui.heading("Levels");for (v,label,range) in [(&mut s.tone.black,"Input black",0.0..=1.0),(&mut s.tone.white,"Input white",0.0..=1.0),(&mut s.tone.gamma,"Gamma",0.1..=10.0),(&mut s.tone.output[0],"Output black",0.0..=1.0)]{super::edit::slider(ui,v,range,label,"soft-proof");}
             super::edit::slider(ui,&mut s.tone.output[1],0.0..=1.0,"Output white","soft-proof");

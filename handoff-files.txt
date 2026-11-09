@@ -1068,3 +1068,5 @@ crates/drawer-app/src/psd_exchange.rs
 crates/drawer-app/src/psd_exchange_verify.rs
 scripts/verify-psd-exchange.py
 docs/process/psd-exchange.md
+crates/drawer-core/src/monitor_color.rs
+crates/drawer-app/src/monitor_color.rs

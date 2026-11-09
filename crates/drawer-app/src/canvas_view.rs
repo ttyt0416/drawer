@@ -117,6 +117,8 @@ pub struct CanvasView {
     pub vector_selection_marks: usize,
     proof_settings: Option<drawer_core::soft_proof::Settings>,
     proof: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
+    monitor: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
+    monitor_serial: u64,
     pub(super) proof_error: Option<String>,
     render_error: Option<String>,
     pub(super) preview_sample: Option<([u8; 4], [u8; 4])>,
@@ -215,6 +217,8 @@ impl CanvasView {
             image: None,
             proof_settings: None,
             proof: None,
+            monitor: None,
+            monitor_serial: 0,
             proof_error: None,
             render_error: None,
             preview_sample: None,
@@ -328,6 +332,19 @@ impl CanvasView {
     pub(super) fn reload_proof(&mut self) {
         self.proof_settings = None;
     }
+    pub(super) fn set_monitor(
+        &mut self,
+        serial: u64,
+        monitor: Option<std::sync::Arc<drawer_core::soft_proof::Proof>>,
+    ) {
+        if self.monitor_serial != serial {
+            self.monitor_serial = serial;
+            self.monitor = monitor;
+            self.image = None;
+            self.screen_image = None;
+            self.preview_sample = None;
+        }
+    }
     fn proof_notice(&self, ui: &mut egui::Ui) {
         if let Some(e) = &self.render_error {
             ui.colored_label(
@@ -345,7 +362,8 @@ impl CanvasView {
         }
     }
     fn displayed_color(&self, color: [u8; 4]) -> [u8; 4] {
-        self.proof.as_ref().map_or(color, |p| p.map(color))
+        let color = self.proof.as_ref().map_or(color, |p| p.map(color));
+        self.monitor.as_ref().map_or(color, |p| p.map(color))
     }
     pub fn cancel_input(&mut self) {
         self.pan_drag = None;

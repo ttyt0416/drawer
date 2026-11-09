@@ -132,6 +132,32 @@ fn read_profile(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 impl Proof {
+    /// Display calibration is a one-way sRGB-to-monitor transform, after any output proof.
+    pub fn monitor_from_bytes(bytes: &[u8]) -> Result<Self, String> {
+        use crate::color_profile::{RgbProfile, Transform};
+        let monitor = RgbProfile::embedded("Monitor RGB".into(), bytes.to_vec())?;
+        let transform = Transform::new(&RgbProfile::Srgb, &monitor)?;
+        let mut lut = Vec::with_capacity(N * N * N);
+        for r in 0..N {
+            for g in 0..N {
+                for b in 0..N {
+                    let p = transform
+                        .map(crate::color_precision::Sample::from8([
+                            axis(r),
+                            axis(g),
+                            axis(b),
+                            255,
+                        ]))?
+                        .rgba8();
+                    lut.push([p[0], p[1], p[2]]);
+                }
+            }
+        }
+        Ok(Self {
+            tone: Tone::default().table(),
+            lut: Some(lut),
+        })
+    }
     pub fn read(settings: &Settings) -> Result<Self, String> {
         if !settings.valid() {
             return Err("Invalid proof curve/levels or ICC path".into());

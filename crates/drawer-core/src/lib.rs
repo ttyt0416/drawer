@@ -610,4 +610,5 @@ pub mod palette_exchange_verify;
 pub mod auto_actions;
 pub mod auto_actions_verify;
 
+pub mod monitor_color;
 pub mod psd_exchange;
