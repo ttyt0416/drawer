@@ -440,14 +440,7 @@ pub(super) fn decode(
         return Err("PSD file exceeds read memory limit".into());
     }
     let mut r = Cursor::new(bytes);
-    if r.take(4)? != b"8BPS" {
-        return Err("Invalid PSD signature".into());
-    }
-    let f = match r.u16()? {
-        1 => Format::Psd,
-        2 => Format::Psb,
-        _ => return Err("Unsupported PSD/PSB version".into()),
-    };
+    let f = report::header(r.take(6)?)?;
     if r.take(6)? != [0; 6] {
         return Err("Invalid PSD reserved fields".into());
     }
@@ -817,6 +810,12 @@ if v.left()>=8{if v.take(4)?!=b"8BIM"{return Err("Invalid PSD group blend".into(
     ))
 }
 pub fn open_report(path: &Path, budget: usize) -> Result<(Document, Vec<String>), String> {
+    open_detailed(path, budget).map(|(d, w, _)| (d, w))
+}
+pub fn open_detailed(
+    path: &Path,
+    budget: usize,
+) -> Result<(Document, Vec<String>, report::Report), String> {
     let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     if !m.is_file() || m.file_type().is_symlink() || m.len() > budget as u64 / 2 {
         return Err("Choose a regular local PSD/PSB within the read budget".into());
@@ -834,10 +833,16 @@ pub fn open_report(path: &Path, budget: usize) -> Result<(Document, Vec<String>)
     let cancel = AtomicBool::new(false);
     let (image, mut warnings, force) = decode(&bytes, budget, &cancel)?;
     let candidate = image.document(budget);
-    let mut d = if !force
-        && let Ok(d) = candidate.as_ref()
-        && difference(&image.merged, &render(d, budget, &cancel)?) <= 1
-    {
+    let preserved = if !force {
+        match candidate.as_ref() {
+            Ok(d) => difference(&image.merged, &render(d, budget, &cancel)?) <= 1,
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+    let mut report = report::Report::image(&image, report::header(&bytes)?, !preserved, &warnings);
+    let mut d = if preserved {
         candidate.unwrap()
     } else {
         let detail = if force {
@@ -864,5 +869,6 @@ pub fn open_report(path: &Path, budget: usize) -> Result<(Document, Vec<String>)
     };
     d.title = path.file_name().unwrap().to_string_lossy().into_owned();
     d.source_path = Some(path);
-    Ok((d, warnings))
+    report.notes = warnings.clone();
+    Ok((d, warnings, report))
 }

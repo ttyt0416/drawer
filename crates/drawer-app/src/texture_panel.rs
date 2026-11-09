@@ -8,6 +8,7 @@ pub(super) struct Textures {
     pub open: bool,
     editor: Option<Editor>,
     pub export: Option<Export>,
+    pub report: Option<Vec<String>>,
     #[cfg(test)]
     buttons: [Option<egui::Rect>; 2],
 }
@@ -216,6 +217,7 @@ impl Drawer {
             self.textures.editor = None;
         }
         self.psd_exchange_window(ctx);
+        self.psd_import_report_window(ctx);
     }
     pub(super) fn request_psd(&mut self) {
         self.finish_stroke();

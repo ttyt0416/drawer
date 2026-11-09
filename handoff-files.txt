@@ -1073,3 +1073,4 @@ crates/drawer-app/src/monitor_color.rs
 crates/drawer-core/src/raster_io.rs
 crates/drawer-core/src/raster_io_verify.rs
 crates/drawer-app/src/raster_export.rs
+crates/drawer-core/src/psd_report.rs

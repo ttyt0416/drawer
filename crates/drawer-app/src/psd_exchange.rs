@@ -219,6 +219,24 @@ impl Drawer {
         }
         !e.open && e.preparing.is_none() && e.writing.is_none()
     }
+    pub(super) fn psd_import_report_window(&mut self, ctx: &egui::Context) {
+        if let Some(lines) = &self.textures.report {
+            let mut open = true;
+            egui::Window::new("PSD / PSB import results")
+                .default_width(650.)
+                .max_height(580.)
+                .vscroll(true)
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    for line in lines {
+                        ui.label(line);
+                    }
+                });
+            if !open {
+                self.textures.report = None;
+            }
+        }
+    }
     pub(super) fn psd_exchange_window(&mut self, ctx: &egui::Context) {
         let Some(mut e) = self.textures.export.take() else {
             return;
@@ -238,7 +256,8 @@ impl Drawer {
                 if let Some(p)=&e.plan{let partial=ui.add_enabled(p.partial.is_some(),egui::RadioButton::new(!e.flatten,"Preserve verified layers / minimal dependency ranges"));e.controls.insert("partial",partial.rect);if partial.clicked(){e.flatten=false;e.confirmed=false;}let r=ui.radio(e.flatten,"Whole composite — all separate layer/group/mask/object editing lost");e.controls.insert("whole",r.rect);if r.clicked(){e.flatten=true;e.confirmed=false;}
                     let r=ui.checkbox(&mut e.confirmed,"I reviewed the conversion ranges and editing losses below");e.controls.insert("confirm",r.rect);
                     ui.checkbox(&mut e.replace,"Replace this existing export file (original source is always protected)");
-                    egui::ScrollArea::vertical().id_salt("psd-losses").max_height(145.).show(ui,|ui|{for loss in &p.losses{ui.label(loss);}if e.flatten{ui.colored_label(egui::Color32::YELLOW,format!("Whole composite range: {}",p.whole_names.join(" → ")));}else{for range in &p.ranges{ui.colored_label(egui::Color32::YELLOW,format!("Rasterize range: {}",range.join(" → ")));}}
+                    egui::ScrollArea::vertical().id_salt("psd-losses").max_height(145.).show(ui,|ui|{if let Ok(report)=p.report(e.format,e.flatten){for line in report.lines(){ui.label(line);}}
+if e.flatten{ui.colored_label(egui::Color32::YELLOW,format!("Whole composite range: {}",p.whole_names.join(" → ")));}else{for range in &p.ranges{ui.colored_label(egui::Color32::YELLOW,format!("Rasterize range: {}",range.join(" → ")));}}
 if let Some(reason)=&p.reason{ui.colored_label(egui::Color32::YELLOW,reason);}});
                 }
             });

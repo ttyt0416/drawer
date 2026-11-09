@@ -91,7 +91,11 @@ pub(super) fn run(root: &std::path::Path) -> Result<(), String> {
         }
         let (d, w) = drawer_core::files::open_report(&path, DEFAULT_DOCUMENT_BUDGET)
             .map_err(|e| e.to_string())?;
-        if d.layers.len() != 3 || !w.is_empty() {
+        if d.layers.len() != 3
+            || !w.iter().any(|s| s.starts_with("PSD v1"))
+            || w.iter()
+                .any(|s| s.starts_with("Raster replacement | Raster layer:"))
+        {
             return Err("Open did not preserve PSD structure".into());
         }
         let canceled = dir.join("cancel.psb");

@@ -34,7 +34,9 @@ pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<Stri
         .to_ascii_lowercase();
     match ext.as_str() {
         "drawer" => Ok((read_native(&path, budget)?, vec![])),
-        "psd" | "psb" => crate::psd_exchange::open_report(&path, budget).map_err(invalid),
+        "psd" | "psb" => crate::psd_exchange::open_detailed(&path, budget)
+            .map(|(d, _warnings, report)| (d, report.lines()))
+            .map_err(invalid),
         "png" => {
             let cancel = std::sync::atomic::AtomicBool::new(false);
             let source = crate::image_import::ImageSource::read(&path, budget, &cancel)?;

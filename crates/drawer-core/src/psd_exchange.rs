@@ -500,7 +500,9 @@ mod planner;
 pub use planner::prepare;
 #[path = "psd_exchange_io.rs"]
 mod io;
-pub use io::open_report;
+pub use io::{open_detailed, open_report};
+#[path = "psd_report.rs"]
+pub mod report;
 
 #[path = "psd_exchange_verify.rs"]
 pub mod verify;

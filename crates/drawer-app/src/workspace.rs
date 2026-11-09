@@ -220,6 +220,12 @@ impl Drawer {
         let (mut document, mut warnings) =
             drawer_core::files::open_report(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("psd") || e.eq_ignore_ascii_case("psb"))
+        {
+            self.textures.report = Some(warnings.clone());
+        }
         warnings.extend(self.material_dependencies(&document));
         if !warnings.is_empty() {
             self.status = Some(warnings.join("; "));

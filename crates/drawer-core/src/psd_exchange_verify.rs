@@ -461,7 +461,8 @@ pub fn verify(root: &Path) -> Result<(), String> {
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let result = roundtrips(&dir)
         .and_then(|_| dependencies(&dir))
-        .and_then(|_| files(&dir));
+        .and_then(|_| files(&dir))
+        .and_then(|_| report::verify(&dir));
     result.and(std::fs::remove_dir_all(dir).map_err(|e| e.to_string()))
 }
 #[cfg(test)]
