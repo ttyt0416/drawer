@@ -217,12 +217,12 @@ impl Drawer {
         if self.tabs.len() >= 256 {
             return Err("The workspace supports up to 256 views.".into());
         }
-        let mut document =
-            drawer_core::files::open(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
+        let (mut document, mut warnings) =
+            drawer_core::files::open_report(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
                 .map_err(|e| e.to_string())?;
-        let missing = self.material_dependencies(&document);
-        if !missing.is_empty() {
-            self.status = Some(missing.join("; "));
+        warnings.extend(self.material_dependencies(&document));
+        if !warnings.is_empty() {
+            self.status = Some(warnings.join("; "));
         }
         if document
             .source_path
@@ -629,14 +629,9 @@ impl Drawer {
                     self.request_psd();
                 }
                 if crate::help::button(ui, "Export PNG…", "files").clicked()
-                    && let Err(error) = self.export_from(self.active.unwrap(), || {
-                        rfd::FileDialog::new()
-                            .add_filter("PNG", &["png"])
-                            .set_file_name("drawing.png")
-                            .save_file()
-                    })
+                    && let Err(e) = self.begin_png_export()
                 {
-                    self.status = Some(error);
+                    self.status = Some(e);
                 }
             });
         }

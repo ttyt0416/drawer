@@ -600,3 +600,6 @@ mod model_fbx;
 pub mod model_formats_verify;
 pub mod model_source;
 mod model_stl;
+
+pub mod png_io;
+pub mod png_io_verify;

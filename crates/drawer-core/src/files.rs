@@ -23,6 +23,9 @@ fn read_u64(reader: &mut impl Read) -> io::Result<u64> {
 }
 
 pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
+    open_report(path, budget).map(|(d, _)| d)
+}
+pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<String>)> {
     let path = path.canonicalize()?;
     let ext = path
         .extension()
@@ -30,46 +33,29 @@ pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
         .to_string_lossy()
         .to_ascii_lowercase();
     match ext.as_str() {
-        "drawer" => read_native(&path, budget),
-        "png" => read_png(&path, budget),
-        "psd" => crate::psd::open(&path, budget),
+        "drawer" => Ok((read_native(&path, budget)?, vec![])),
+        "psd" => Ok((crate::psd::open(&path, budget)?, vec![])),
+        "png" => {
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let source = crate::image_import::ImageSource::read(&path, budget, &cancel)?;
+            if source.png_info.is_none() {
+                return Err(invalid("Expected a PNG signature"));
+            }
+            let page = source.decode(0, true, budget, &cancel)?;
+            let warnings = page.warnings.clone();
+            let mut d = page.document(budget)?;
+            d.title = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            d.source_path = Some(path);
+            Ok((d, warnings))
+        }
         _ => Err(invalid(
             "Supported open formats: .drawer, .png, raw RGB8 .psd merged preview",
         )),
     }
-}
-fn read_png(path: &Path, budget: usize) -> io::Result<Document> {
-    let mut reader = image::ImageReader::open(path)?;
-    reader.set_format(image::ImageFormat::Png);
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_DIMENSION);
-    limits.max_image_height = Some(MAX_DIMENSION);
-    limits.max_alloc = Some(budget as u64);
-    reader.limits(limits);
-    let image = reader
-        .decode()
-        .map_err(|error| invalid(error.to_string()))?
-        .into_rgba8();
-    let mut document = Document::create(
-        CanvasSpec {
-            width: image.width(),
-            height: image.height(),
-            dpi: 300.0,
-            background: Background::Transparent,
-        },
-        budget,
-    )
-    .map_err(|e| invalid(e.to_string()))?;
-    for (destination, source) in document.layers[0].pixels.iter_mut().zip(image.pixels()) {
-        *destination = source.0;
-    }
-    document.title = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-    document.source_path = Some(path.into());
-    Ok(document)
 }
 fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     let file = fs::File::open(path)?;

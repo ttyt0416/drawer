@@ -840,6 +840,7 @@ name = "drawer-core"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "crc32fast",
  "epaint_default_fonts",
  "gif",
  "icu_casemap",

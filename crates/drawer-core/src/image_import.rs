@@ -64,11 +64,15 @@ pub struct ImageSource {
     pub pages: Vec<PageInfo>,
     bytes: Arc<Vec<u8>>,
     format: ImageFormat,
+    pub(crate) png_info: Option<crate::png_io::Info>,
 }
 pub struct ImportedPage {
     pub image: LocalImage,
     pub orientation: Orientation,
     pub profile_applied: bool,
+    pub color: Option<crate::paste::ClipboardColor>,
+    pub bits: u8,
+    pub warnings: Vec<String>,
 }
 impl ImageSource {
     pub fn encoded_snapshot(&self) -> Arc<Vec<u8>> {
@@ -104,6 +108,11 @@ impl ImageSource {
         }
         checked(cancel)?;
         let format = image::guess_format(&bytes).map_err(|e| invalid(e.to_string()))?;
+        let png_info = if format == ImageFormat::Png {
+            Some(crate::png_io::validate(&bytes, cancel)?)
+        } else {
+            None
+        };
         let mut pages = Vec::new();
         match format {
             ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Bmp => {
@@ -155,6 +164,7 @@ impl ImageSource {
             pages,
             bytes: Arc::new(bytes),
             format,
+            png_info,
         })
     }
     pub fn decode(
@@ -172,13 +182,26 @@ impl ImageSource {
         let count = dimensions(info.width, info.height, budget)?;
         // Reserve space for source copies, decoder/conversion/orientation buffers and the new document.
         let peak = count
-            .checked_mul(5)
+            .checked_mul(if self.png_info.is_some_and(|p| p.bits == 16) {
+                8
+            } else {
+                5
+            })
             .and_then(|n| n.checked_add(self.bytes.len() * 2))
-            .and_then(|n| n.checked_add(MAX_PROFILE_BYTES * 2));
+            .and_then(|n| {
+                n.checked_add(if self.png_info.is_some_and(|p| !p.icc) {
+                    0
+                } else {
+                    MAX_PROFILE_BYTES * 2
+                })
+            });
         if peak.is_none_or(|n| n > budget) {
             return Err(invalid(
                 "Not enough memory for image decoding and the independent document",
             ));
+        }
+        if self.png_info.is_some_and(|p| p.bits == 16) {
+            return crate::png_io::decode16(&self.bytes, orient, budget, cancel);
         }
         let (mut rgba, orientation, profile, gray) = if self.format == ImageFormat::Tiff {
             decode_tiff(&self.bytes, page, budget, cancel)?
@@ -224,6 +247,9 @@ impl ImageSource {
             image,
             orientation,
             profile_applied,
+            color: None,
+            bits: self.png_info.map_or(8, |p| p.bits),
+            warnings: vec![],
         })
     }
 }

@@ -47,3 +47,5 @@
 기능230의 OBJ/MTL·glTF/GLB·VRM·ASCII/binary FBX·STL 시험은 model_formats_verify.rs의 직접 작성한 삼각형/사각형 좌표·반투명 색·단일 본/위치 형태키·조건 문장으로 생성한다. FBX 바이너리 작성기도 이 시험 자료만 직렬화하며 외부/원본 앱 모델이나 샘플 자산을 동봉하지 않는다. FBX 파싱은 고정된 ufbx0.11.5(공개 MIT/Unlicense)만 사용하고 C 소스는 Cargo의 고정 체크섬으로 확인한다.
 
 ufbx의 공개 MIT/Unlicense 의존 소스만 vendor/ufbx에 고정하고 재배포 고지를 포함한다. 원본 그림 프로그램의 코드/자산이 아니며 MSVC CRT 선택용 빌드 설정 외 파서/바인딩은 수정하지 않는다. 정확한 수정과 파일 해시는 docs/licenses/patched-sources.json에 있다.
+
+기능231의 PNG8/16·알파/배경·손상 chunk/CRC·저비트 수치 시험 이미지는 png_io_verify.rs의 자체 픽셀 배열과 직접 정의한 바이트 변경으로 생성한다. Display P3/sRGB ICC 시험 자료는 이미 고지한 moxcms 프로파일 생성기로 만들며 원본 그림 프로그램의 이미지나 외부 사진/프로파일 자산을 가져오지 않는다.

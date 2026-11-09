@@ -1,14 +1,40 @@
-use crate::{document::Document, render::Renderer};
+use crate::{
+    color_precision::{Depth, Pixels, Sample},
+    document::Document,
+    render::Renderer,
+};
 use image::ImageEncoder;
 use std::{
     fs,
     io::{self, BufWriter, Write},
     path::Path,
 };
-
-/// Export pixels without changing document association, history, selection or view.
-pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()> {
-    let invalid = |message: &str| io::Error::new(io::ErrorKind::InvalidInput, message);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Options {
+    pub depth: Depth,
+    pub transparent: bool,
+    pub background: [u8; 3],
+}
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            depth: Depth::Eight,
+            transparent: true,
+            background: [255; 3],
+        }
+    }
+}
+/// Export a rendered copy; source association, pixels, history and view stay unchanged.
+pub fn export(d: &Document, path: &Path, budget: usize) -> io::Result<()> {
+    export_with(d, path, budget, Options::default())
+}
+pub fn export_with(
+    document: &Document,
+    path: &Path,
+    budget: usize,
+    options: Options,
+) -> io::Result<()> {
+    let invalid = |s: &str| io::Error::new(io::ErrorKind::InvalidInput, s.to_owned());
     if !document.color.valid_layers(&document.layers)
         || !document.scene.paper.valid_for(document.layers.len())
         || !document.scene.valid()
@@ -34,7 +60,7 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
         path.file_name()
             .ok_or_else(|| invalid("Missing filename."))?,
     );
-    if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+    if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
         return Err(invalid("Choose a regular destination file."));
     }
     let path = if path.exists() {
@@ -53,63 +79,144 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
         } else {
             0
         };
-    if extra > budget / 2 {
-        return Err(invalid("Draft output snapshot exceeds export memory"));
+    let count = (document.width as usize).saturating_mul(document.height as usize);
+    if extra > budget / 2
+        || count
+            .saturating_mul(options.depth.bytes())
+            .saturating_mul(3)
+            > budget.saturating_sub(extra)
+    {
+        return Err(invalid("PNG output buffers exceed export memory budget"));
     }
     let floating = document.color != crate::color_storage::Config::legacy();
+    let owned = if floating {
+        crate::layer_roles::output_view(document).map_err(|e| invalid(&e))?
+    } else {
+        None
+    };
+    let d = owned.as_deref().unwrap_or(document);
     let (width, height, pixels) = if floating {
-        let owned = crate::layer_roles::output_view(document).map_err(|e| invalid(&e))?;
-        let d = owned.as_deref().unwrap_or(document);
-        let output = crate::float_render::Renderer::for_export(d)
-            .map_err(|e| invalid(&e))?
-            .output(
-                crate::color_precision::Depth::Eight,
-                d.color.dither,
-                budget.saturating_sub(extra) / 2,
-            )
+        let r = crate::float_render::Renderer::for_export(d).map_err(|e| invalid(&e))?;
+        let space =
+            crate::color_profile::WorkingSpace::new(&d.color.profile).map_err(|e| invalid(&e))?;
+        let matte = space
+            .from_srgb(Sample::from8([
+                options.background[0],
+                options.background[1],
+                options.background[2],
+                255,
+            ]))
             .map_err(|e| invalid(&e))?;
-        let crate::color_precision::Pixels::Eight(mut pixels) = output else {
-            unreachable!()
-        };
         let page = &d.scene.comics.page;
         page.guides(d).map_err(|e| invalid(&e))?;
-        if page.include_guides || page.include_number {
-            use crate::color_precision::{Depth, Sample};
-            let space = crate::color_profile::WorkingSpace::new(&d.color.profile)
-                .map_err(|e| invalid(&e))?;
-            for (i, pixel) in pixels.iter_mut().enumerate() {
-                let x = (i % d.width as usize) as i64;
-                let y = (i / d.width as usize) as i64;
-                let overlay = page.output_pixel(d, [x as f64 + 0.5, y as f64 + 0.5]);
-                if overlay[3] != 0 {
-                    let overlay = space
-                        .from_srgb(Sample::from8(overlay))
+        let mut low = vec![];
+        let mut high = vec![];
+        if options.depth == Depth::Eight {
+            low.try_reserve_exact(count)
+                .map_err(|_| invalid("Not enough PNG memory"))?;
+        } else {
+            high.try_reserve_exact(count)
+                .map_err(|_| invalid("Not enough PNG memory"))?;
+        }
+        for y in 0..d.height {
+            for x in 0..d.width {
+                let mut value = r
+                    .pixel([x as f64 + 0.5, y as f64 + 0.5])
+                    .map_err(|e| invalid(&e))?;
+                if page.include_guides || page.include_number {
+                    let overlay = page.output_pixel(d, [x as f64 + 0.5, y as f64 + 0.5]);
+                    if overlay[3] != 0 {
+                        value = value
+                            .over(
+                                space
+                                    .from_srgb(Sample::from8(overlay))
+                                    .map_err(|e| invalid(&e))?,
+                                crate::layer_blend::Mode::Normal,
+                                1.,
+                            )
+                            .map_err(|e| invalid(&e))?;
+                    }
+                }
+                if !options.transparent {
+                    value = matte
+                        .over(value, crate::layer_blend::Mode::Normal, 1.)
                         .map_err(|e| invalid(&e))?;
-                    *pixel = Sample::from8(*pixel)
-                        .over(overlay, crate::layer_blend::Mode::Normal, 1.)
-                        .map_err(|e| invalid(&e))?
-                        .store(Depth::Eight, d.color.dither, [x, y])
-                        .map(|v| v as u8);
+                }
+                let v = value.store(options.depth, d.color.dither, [x as i64, y as i64]);
+                if options.depth == Depth::Eight {
+                    low.push(v.map(|v| v as u8));
+                } else {
+                    high.push(v);
                 }
             }
         }
-        (d.width, d.height, pixels)
+        (
+            d.width,
+            d.height,
+            if options.depth == Depth::Eight {
+                Pixels::Eight(low)
+            } else {
+                Pixels::Sixteen(high)
+            },
+        )
     } else {
-        Renderer::for_export(document)
+        let (w, h, mut low) = Renderer::for_export(document)
             .map_err(|e| invalid(&e))?
             .output(document.dpi, budget.saturating_sub(extra) / 2)
-            .map_err(|e| invalid(&e))?
+            .map_err(|e| invalid(&e))?;
+        if low
+            .len()
+            .saturating_mul(options.depth.bytes())
+            .saturating_mul(3)
+            > budget.saturating_sub(extra)
+        {
+            return Err(invalid("PNG output size exceeds memory budget"));
+        }
+        if !options.transparent {
+            let matte = Sample::from8([
+                options.background[0],
+                options.background[1],
+                options.background[2],
+                255,
+            ]);
+            if options.depth == Depth::Sixteen {
+                let high = low
+                    .into_iter()
+                    .map(|p| {
+                        matte
+                            .over(Sample::from8(p), crate::layer_blend::Mode::Normal, 1.)
+                            .map(|s| s.rgba16())
+                            .map_err(|e| invalid(&e))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                (w, h, Pixels::Sixteen(high))
+            } else {
+                for p in &mut low {
+                    *p = matte
+                        .over(Sample::from8(*p), crate::layer_blend::Mode::Normal, 1.)
+                        .map_err(|e| invalid(&e))?
+                        .rgba8();
+                }
+                (w, h, Pixels::Eight(low))
+            }
+        } else if options.depth == Depth::Sixteen {
+            (
+                w,
+                h,
+                Pixels::Sixteen(low.into_iter().map(|p| p.map(|v| v as u16 * 257)).collect()),
+            )
+        } else {
+            (w, h, Pixels::Eight(low))
+        }
     };
-    let icc = if floating {
+    let icc = if floating || options.depth == Depth::Sixteen {
         Some(match &document.color.profile {
             crate::color_profile::RgbProfile::Embedded { bytes, .. } => bytes.clone(),
             _ => {
-                let mut profile = moxcms::ColorProfile::new_srgb()
+                let mut p = moxcms::ColorProfile::new_srgb()
                     .encode()
                     .map_err(|e| invalid(&e.to_string()))?;
-                // ICC encoding stamps wall-clock time. Generated sRGB has no source creation
-                // date: normalize this header so frozen animation frames remain byte stable.
-                for (slot, value) in profile[24..36]
+                for (slot, value) in p[24..36]
                     .as_chunks_mut::<2>()
                     .0
                     .iter_mut()
@@ -117,7 +224,7 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
                 {
                     slot.copy_from_slice(&value.to_be_bytes());
                 }
-                profile
+                p
             }
         })
     } else {
@@ -125,10 +232,21 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
     };
     let mut bytes = Vec::new();
     bytes
-        .try_reserve_exact(pixels.len() * 4)
-        .map_err(|_| invalid("Not enough export memory."))?;
-    for pixel in pixels {
-        bytes.extend_from_slice(&pixel);
+        .try_reserve_exact(pixels.memory_bytes())
+        .map_err(|_| invalid("Not enough PNG memory"))?;
+    match pixels {
+        Pixels::Eight(v) => {
+            for p in v {
+                bytes.extend(p);
+            }
+        }
+        Pixels::Sixteen(v) => {
+            for p in v {
+                for n in p {
+                    bytes.extend(n.to_ne_bytes());
+                }
+            }
+        }
     }
     let mut name = path.file_name().unwrap().to_owned();
     name.push(".png-write.tmp");
@@ -146,7 +264,16 @@ pub fn export(document: &Document, path: &Path, budget: usize) -> io::Result<()>
                 .map_err(|e| invalid(&e.to_string()))?;
         }
         encoder
-            .write_image(&bytes, width, height, image::ExtendedColorType::Rgba8)
+            .write_image(
+                &bytes,
+                width,
+                height,
+                if options.depth == Depth::Sixteen {
+                    image::ExtendedColorType::Rgba16
+                } else {
+                    image::ExtendedColorType::Rgba8
+                },
+            )
             .map_err(|e| invalid(&e.to_string()))?;
         writer.flush()?;
         writer.get_ref().sync_all()

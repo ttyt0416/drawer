@@ -199,7 +199,7 @@ impl Drawer {
                 &context,
                 || {
                     Ok(drawer_core::paste::ClipboardImage {
-                        color: None,
+                        color: preview.color,
                         image: preview.image,
                         origin: None,
                     })
@@ -210,7 +210,14 @@ impl Drawer {
                 p.set_layer_name(title.chars().take(64).collect());
             }
         } else {
-            self.add_image_document(preview.image, title)?;
+            let mut document = preview
+                .document(self.import_budget())
+                .map_err(|e| e.to_string())?;
+            document.title = title;
+            document.view = self.default_view;
+            self.documents.try_reserve(1).map_err(|e| e.to_string())?;
+            self.tabs.try_reserve(1).map_err(|e| e.to_string())?;
+            self.add_document(document);
         }
 
         self.protected_sources.insert(source.path.clone());
@@ -337,11 +344,9 @@ impl Drawer {
                     page.image.height,
                     page.orientation.to_exif()
                 ));
-                ui.label(if page.profile_applied {
-                    "Embedded ICC converted to sRGB (RGBA8)"
-                } else {
-                    "No ICC profile: sRGB assumed (RGBA8)"
-                });
+                ui.label(format!("{} · {} bit RGBA",if page.profile_applied{"Embedded ICC converted to sRGB"}else{"No ICC: sRGB assumed"},if page.color.is_some(){16}else{8}));
+                for warning in &page.warnings {ui.colored_label(egui::Color32::YELLOW,warning);}
+                if page.color.is_some() && dialog.destination.is_some() && self.active.is_some_and(|i|self.documents[i].color.depth==drawer_core::color_precision::Depth::Eight){ui.colored_label(egui::Color32::YELLOW,"16 to8 bit loses channel precision in this destination. Source stays unchanged; paste preview and Cancel are available.");}
                 if let Some(texture) = &dialog.texture {
                     let size = texture.size_vec2().min(egui::vec2(420.0, 300.0));
                     let ratio =

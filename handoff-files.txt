@@ -1044,3 +1044,7 @@ vendor/ufbx/ufbx/ufbx.c
 vendor/ufbx/ufbx/ufbx.h
 scripts/verify-pe.py
 .gitattributes
+crates/drawer-core/src/png_io.rs
+crates/drawer-core/src/png_io_verify.rs
+crates/drawer-app/src/png_options.rs
+crates/drawer-app/src/png_options_verify.rs
