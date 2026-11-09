@@ -1054,3 +1054,9 @@ crates/drawer-app/src/palette_exchange.rs
 crates/drawer-app/src/palette_exchange_verify.rs
 crates/drawer-app/src/preset_exchange_verify.rs
 docs/process/preset-exchange.md
+crates/drawer-core/src/auto_actions.rs
+crates/drawer-core/src/auto_actions_io.rs
+crates/drawer-core/src/auto_actions_tests.rs
+crates/drawer-core/src/auto_actions_verify.rs
+crates/drawer-app/src/auto_actions.rs
+crates/drawer-app/src/auto_actions_verify.rs

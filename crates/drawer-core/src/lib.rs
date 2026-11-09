@@ -606,3 +606,6 @@ pub mod png_io_verify;
 
 pub mod palette_exchange;
 pub mod palette_exchange_verify;
+
+pub mod auto_actions;
+pub mod auto_actions_verify;

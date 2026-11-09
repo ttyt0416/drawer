@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 248] = [
+pub const EXTRA_COMMANDS: [&str; 249] = [
+    "auto-actions",
     "model-controls",
     "scene-cameras",
     "pose-sequences",

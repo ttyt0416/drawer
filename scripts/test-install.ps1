@@ -242,6 +242,7 @@ try {
     if ($smokeResult -notmatch 'human_rig=true') { throw 'Mannequin verification failed' }
     if ($smokeResult -notmatch 'local_models=true') { throw '로컬 모델/배치·복제·정렬 검증 실패' }
     if ($smokeResult -notmatch 'local_models_extended=true') { throw 'OBJ/glTF/GLB 모델·텍스처·리그 가져오기 검증 실패' }
+    if ($smokeResult -notmatch 'auto_actions=true') { throw '오토 액션 기록·재생·취소·교환 검증 실패' }
     if ($smokeResult -notmatch 'preset_exchange=true') { throw '브러시·소재·색상표 교환/취소 검증 실패' }
     if ($smokeResult -notmatch 'png_io=true') { throw 'PNG 정밀도·투명 출력·손상 검사 실패' }
     if ($smokeResult -notmatch 'model_formats=true') { throw '모든 로컬 모델 형식·사용조건·형태키 검증 실패' }

@@ -217,6 +217,7 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        self.auto_actions_nonrecordable(command);
         if self.drawing.has_path_draft() && matches!(command, "undo" | "redo") {
             self.drawing.path_history(command == "redo");
             return;
@@ -768,6 +769,7 @@ impl Drawer {
                         .clamp(0.01, 64.0);
                     }
                 }
+                "auto-actions" => self.begin_auto_actions(),
                 "save" => {
                     if let Some(n) = self.active {
                         self.save_document(n)?;
