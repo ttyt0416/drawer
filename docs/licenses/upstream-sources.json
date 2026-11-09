@@ -113,5 +113,15 @@
     "source": "https://raw.githubusercontent.com/eto0202/michiu/6235158b40e8678ab7634152c7ea939da9bcbfbb/LICENSE-MIT",
     "path": "docs/licenses/upstream/eto0202-michiu-6235158b40e8-LICENSE-MIT.txt",
     "sha256": "0dd9dafc67f5b1f9e8df09e51a81bc9855394e410536fe42580609498678a259"
+  },
+  {
+    "repository": "ufbx/ufbx-rust",
+    "revision": "856c76840977cd504f053bf17ab4948b675b981a",
+    "packages": [
+      "ufbx"
+    ],
+    "source": "https://raw.githubusercontent.com/ufbx/ufbx-rust/856c76840977cd504f053bf17ab4948b675b981a/LICENSE",
+    "path": "docs/licenses/upstream/ufbx-rust-856c76840977-LICENSE.txt",
+    "sha256": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391"
   }
 ]

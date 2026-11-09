@@ -158,7 +158,7 @@ impl Morph {
             })
             .collect()
     }
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         self.normals.len() <= 131072
             && points(&self.base)
             && !self.keys.is_empty()
@@ -178,7 +178,7 @@ impl Morph {
                     && (0. ..=1.).contains(&k.weight)
             })
     }
-    fn bytes(&self) -> usize {
+    pub(crate) fn bytes(&self) -> usize {
         self.base.len() * 24
             + self.normals.len() * 16
             + self

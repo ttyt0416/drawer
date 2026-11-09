@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "name": "ufbx",
+    "version": "0.11.5",
+    "path": "vendor/ufbx",
+    "crate_sha256": "260522f1eb74139f0e78b29dd82a58e5437d728c5498024a39e5af7282694240",
+    "upstream_revision": "856c76840977cd504f053bf17ab4948b675b981a",
+    "description": "Windows MSVC build uses direct CRT calls (/MT) without a forced default CRT library (/Zl), allowing both Rust dynamic test and static release links. Parser/bindings are unchanged.",
+    "files": {
+      "build.rs": "1247b3582b97cfa6bb8e543d86381314644067518d016a2093e66b7bc5d21423",
+      "Cargo.toml": "a852551f3656d1297951a2e452b463e4b863f57b2b3a1b386f09ee6b81565444",
+      "Cargo.toml.orig": "3d90786bde72c0c1f8c16330d73ed72969c6e087430aded87c0a2809230f9c73",
+      "LICENSE": "0dd48ebadf52273c736256325c8f078c03c8bb4facee22a4122de0ad3f615391",
+      "README.md": "dbf51e2f9df308a37641cb8c174504f1e00230b52b1f404a2cca0e6da8891ef2",
+      "src/generated.rs": "22d469c72fdb44c8ffec56aef064586be444afdc97338ed6e63282ca752a740f",
+      "src/impl_mint.rs": "570cbd12177f91883d5cf0e4cd3106ed35940dd7e5ed8ca665c94881180eb1a7",
+      "src/lib.rs": "1fae8ca72358c1848101b46de75f57650bd63cc65300d6b880f0509936cd9741",
+      "src/prelude.rs": "fd1d4643ec1fb137d7e6b981bbe030699b2b90fe54a573753c4439ff2c2d5d8e",
+      "ufbx/ufbx.c": "4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d",
+      "ufbx/ufbx.h": "f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc"
+    }
+  }
+]

@@ -1,4 +1,5 @@
 [workspace]
+exclude = ["vendor/ufbx"]
 members = ["crates/xtask", "crates/drawer-infer", "crates/drawer-core", "crates/drawer-app", "crates/drawer-platform"]
 resolver = "3"
 [workspace.package]
@@ -8,3 +9,6 @@ rust-version = "1.95"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[patch.crates-io]
+ufbx = { path = "vendor/ufbx" }

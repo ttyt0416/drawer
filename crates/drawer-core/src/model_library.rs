@@ -441,6 +441,17 @@ fn place(
                 parent: None,
             },
         );
+        if let Some(mut morph) = m.surface.imported.as_mut().and_then(|a| a.morph.take()) {
+            let local = s.scene.world3d.nodes[&id].frame.inverse();
+            let f = transform.then(local);
+            morph.base = morph.base.iter().map(|v| f.map(*v)).collect();
+            for key in &mut morph.keys {
+                for v in &mut key.delta {
+                    *v = crate::world_math::sub(f.map(*v), f.map([0.; 3]));
+                }
+            }
+            s.scene.world3d.editing.morphs.insert(id, morph);
+        }
         s.scene.world3d.surfaces.insert(id, m.surface);
     }
     Ok((s, ids, asset.warnings))
@@ -508,7 +519,7 @@ pub fn prepare(
                 s,
                 ids,
                 w,
-                "Place frozen local OBJ/glTF/GLB geometry, textures and skin".into(),
+                "Place frozen local geometry, textures, skin, morphs and source terms".into(),
             )
         }
         Edit::Duplicate { ids, offset } => {

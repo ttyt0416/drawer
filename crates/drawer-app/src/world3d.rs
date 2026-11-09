@@ -436,6 +436,8 @@ impl Drawer {
             if let Some(staged)=&p.staged && !staged.warnings.is_empty(){
                 egui::ScrollArea::vertical().id_salt("model-import-notices").max_height(85.).show(ui,|ui|{for warning in &staged.warnings{ui.add(egui::Label::new(warning).truncate()).on_hover_text(warning);}});
                 let r=ui.checkbox(&mut p.review_models,"I reviewed the notices and preview result");p.controls.insert("model-review".into(),r.rect);
+                let r=egui::CollapsingHeader::new("Original source / usage terms before adoption").id_salt("import-source-terms").show(ui,|ui|{for id in &staged.affected {if let Some(source)=staged.scene().world3d.surfaces.get(id).and_then(|s|s.imported.as_ref()).and_then(|a|a.source.as_ref()){ui.strong(format!("{} {}",source.format,source.version));ui.label(&source.file);if !source.usage_present{ui.label("Usage information: not provided / 정보 없음");}
+if !source.notices.is_empty(){ui.label("Original source metadata; unclassified comments/header may contain no usage terms. Metadata does not grant permission.");for n in &source.notices {ui.strong(&n.source);ui.add(egui::Label::new(&n.text).wrap());}}}}});p.controls.insert("source-terms".into(),r.header_response.rect);
             }
             ui.horizontal(|ui|{ui.label("Relative X / Y / Z");for v in &mut p.value{ui.add(egui::DragValue::new(v).speed(0.1));}let r=ui.button("Preview transform / pose");p.controls.insert("transform".into(),r.rect);if r.clicked(){edit=Some(Edit::Transform{ids:p.ids.clone(),options:p.preferences,value:p.value});}});
             p.pad(ui,d,budget);

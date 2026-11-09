@@ -176,10 +176,18 @@ impl Skin {
 pub struct Attributes {
     pub materials: BTreeMap<u16, Material>,
     pub skin: Option<Skin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::model_source::Source>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub morph: Option<crate::model_edit::Morph>,
 }
 impl Attributes {
     pub fn valid(&self, s: &Surface, vertices: usize) -> bool {
-        self.materials.len() <= 256
+        self.source.as_ref().is_none_or(|s| s.valid())
+            && self.morph.as_ref().is_none_or(|m| {
+                m.valid() && m.base.len() == vertices && m.normals.len() == s.triangles.len()
+            })
+            && self.materials.len() <= 256
             && self
                 .materials
                 .iter()
@@ -187,10 +195,13 @@ impl Attributes {
             && self.skin.as_ref().is_none_or(|r| r.valid(vertices))
     }
     pub fn bytes(&self) -> usize {
-        self.materials
-            .values()
-            .map(|m| m.image.as_ref().map_or(0, Image::bytes) + 64)
-            .sum::<usize>()
+        self.source.as_ref().map_or(0, |s| s.bytes())
+            + self.morph.as_ref().map_or(0, |m| m.bytes())
+            + self
+                .materials
+                .values()
+                .map(|m| m.image.as_ref().map_or(0, Image::bytes) + 64)
+                .sum::<usize>()
             + self.skin.as_ref().map_or(0, Skin::bytes)
     }
 }
@@ -252,7 +263,9 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
         .unwrap_or("")
         .to_ascii_lowercase();
     let mut asset = match ext.as_str() {
-        "gltf" | "glb" => crate::model_gltf::load(&path, budget, cancel)?,
+        "stl" => crate::model_stl::load(&path, budget, cancel)?,
+        "fbx" => crate::model_fbx::load(&path, budget, cancel)?,
+        "vrm" | "gltf" | "glb" => crate::model_gltf::load(&path, budget, cancel)?,
         "obj" => {
             let mut a = crate::model_obj::load(&path, budget, cancel)?;
             a.warnings.retain(|s| {
@@ -295,10 +308,11 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
                     model.surface.imported = Some(attrs);
                 }
             }
+            crate::model_source::obj(&path, &mut a)?;
             a.warning("OBJ axes/units are unspecified; use import rotation and scale (Fit changes units). Diffuse PNG/JPEG maps use nearest repeat sampling; advanced MTL statements are listed separately".into());
             a
         }
-        _ => return Err("Choose a local .obj, .gltf or .glb model".into()),
+        _ => return Err("Choose a local OBJ, glTF2, GLB2, VRM, FBX or STL model".into()),
     };
     if !asset.valid() {
         return Err("Imported attributes failed validation".into());
@@ -317,7 +331,7 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
             .as_ref()
             .is_some_and(|a| a.materials.values().any(|m| m.alpha == Alpha::Blend))
     }) {
-        asset.warning("Transparent surfaces use the nearest surface per object and existing layer order; overlapping transparent faces within one model are not fully composited".into());
+        asset.warning("Transparent imported materials use depth-composited surfaces within continuous model groups; 2D layers split groups. Advanced source shading is not reproduced".into());
     }
     crate::book_io::check_cancel(cancel)?;
     Ok(asset)

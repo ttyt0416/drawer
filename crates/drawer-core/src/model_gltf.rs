@@ -30,11 +30,13 @@ fn scan(v: &J, path: &str, a: &mut Asset) -> Result<(), String> {
             for (k, v) in o {
                 if k == "extensions" {
                     for name in v.as_object().ok_or("extensions must be an object")?.keys() {
-                        a.warning(format!("Unsupported extension {path}.{name}"));
+                        if !matches!(name.as_str(), "VRM" | "VRMC_vrm") {
+                            a.warning(format!("Unsupported extension {path}.{name}"));
+                        }
                     }
                 }
                 if k == "extras" {
-                    a.warning(format!("Application extras at {path} are not retained"));
+                    a.warning(format!("Application extras at {path}: root/asset source notes and morph names are retained; other extras are not converted"));
                 }
                 if k == "uri" {
                     let uri = v.as_str().ok_or("URI must be text")?;
@@ -157,9 +159,6 @@ fn worlds(json: &J, a: &mut Asset) -> Result<(Vec<Matrix>, Vec<Option<usize>>), 
             a.warning(format!(
                 "Node {i}: source camera is not imported; document camera retained"
             ));
-        }
-        if n.get("weights").is_some() {
-            a.warning(format!("Node {i}: morph weights are not applied"));
         }
         local.push(transform(n)?);
         for c in b::array(n, "children")? {
@@ -437,7 +436,7 @@ fn skin(
             &format!("Joint {id}"),
         )?);
     }
-    a.warning("Skin JOINTS_0/WEIGHTS_0, joint ancestry, source positions and inverse-bind/rest matrices are retained; the default linear-blend pose is baked into editable geometry. Imported rigs do not use the built-in mannequin pose controls; extra influences, animations and morph targets are not retained".into());
+    a.warning("Skin JOINTS_0/WEIGHTS_0, joint ancestry, source positions and inverse-bind/rest matrices are retained; the default linear-blend pose is baked into editable geometry. Imported rigs do not use the built-in mannequin pose controls; extra influences and animations are not retained; position morphs convert to independent shape keys".into());
     Ok(Skin {
         names,
         parents: joint_parents,
@@ -465,11 +464,6 @@ fn primitive(
         "primitive",
         a,
     )?;
-    if primitive.get("targets").is_some() {
-        a.warning(format!(
-            "Node {node_id} primitive {index}: morph targets are not applied/retained"
-        ));
-    }
     let attributes = primitive
         .get("attributes")
         .and_then(J::as_object)
@@ -534,30 +528,108 @@ fn primitive(
         }
         None
     };
+    let targets = b::array(primitive, "targets")?;
+    if targets.len() > 32 {
+        return Err("glTF morph key limit32".into());
+    }
+    let mesh = b::at(r.json, "meshes", b::field(node, "mesh")?)?;
+    let weights = node
+        .get("weights")
+        .or_else(|| mesh.get("weights"))
+        .map(|v| v.as_array().ok_or("Morph weights must be an array"))
+        .transpose()?;
+    if weights.is_some_and(|w| w.len() != targets.len()) {
+        return Err("Morph weight / target count mismatch".into());
+    }
+    let names = mesh
+        .pointer("/extras/targetNames")
+        .map(|n| n.as_array().ok_or("Morph names must be an array"))
+        .transpose()?;
+    if names.is_some_and(|n| n.len() != targets.len()) {
+        return Err("Morph name count mismatch".into());
+    }
+    if vertices
+        .len()
+        .saturating_mul(targets.len() + 3)
+        .saturating_mul(24 * 8)
+        > r.budget
+    {
+        return Err("glTF morph memory reservation exceeded".into());
+    }
+    let mut keys = vec![];
+    for (k, target) in targets.iter().enumerate() {
+        unknown(
+            target,
+            &["POSITION", "NORMAL", "TANGENT"],
+            "morph target",
+            a,
+        )?;
+        let delta = if let Some(id) = target.get("POSITION") {
+            r.accessor(b::number(id)?, "VEC3", &[5126], 65536)?
+                .into_iter()
+                .map(|v| v.try_into().unwrap())
+                .collect::<Vec<V>>()
+        } else {
+            vec![[0.; 3]; vertices.len()]
+        };
+        if delta.len() != vertices.len() {
+            return Err("Morph POSITION count mismatch".into());
+        }
+        if target.get("NORMAL").is_some() || target.get("TANGENT").is_some() {
+            a.warning("Morph NORMAL/TANGENT deltas are not retained; nonzero morphs use geometric face normals".into());
+        }
+        let weight = weights.map_or(Ok(0.), |w| w[k].as_f64().ok_or("Invalid morph weight"))?;
+        if !weight.is_finite() || !(0. ..=1.).contains(&weight) {
+            return Err("Imported morph weights require0..1".into());
+        }
+        let name = names.map_or_else(
+            || Ok(format!("Target {k}")),
+            |n| n[k].as_str().map(str::to_owned).ok_or("Invalid morph name"),
+        )?;
+        keys.push(crate::model_edit::ShapeKey {
+            name,
+            delta,
+            weight,
+        });
+    }
+    if keys
+        .iter()
+        .map(|k| k.name.to_lowercase())
+        .collect::<BTreeSet<_>>()
+        .len()
+        != keys.len()
+    {
+        return Err("Duplicate morph names".into());
+    }
+    let mut morph_base = vertices.clone();
     for (i, v) in vertices.iter_mut().enumerate() {
         if i % 256 == 0 {
             crate::book_io::check_cancel(cancel)?;
         }
-        if let Some(s) = &imported_skin {
+        let matrix = if let Some(s) = &imported_skin {
             let matrices =
                 s.joints[i].map(|j| s.inverse_bind[j as usize].then(s.world[j as usize]));
-            let blended = Matrix(std::array::from_fn(|r| {
+            Matrix(std::array::from_fn(|r| {
                 std::array::from_fn(|c| (0..4).map(|j| matrices[j].0[r][c] * s.weights[i][j]).sum())
-            }));
-            if !blended.valid() {
-                return Err("Skin produced a singular blended vertex transform".into());
-            }
-            *v = blended.map(*v);
-            if !normals.is_empty() {
-                normals[i] = normal(blended, normals[i]);
-            }
+            }))
         } else {
-            *v = world[node_id].map(*v);
-            if !normals.is_empty() {
-                normals[i] = normal(world[node_id], normals[i]);
-            }
+            world[node_id]
+        };
+        if !matrix.valid() {
+            return Err("Skin / node produced a singular vertex transform".into());
+        }
+        morph_base[i] = matrix.map(*v);
+        for key in &mut keys {
+            key.delta[i] = matrix.vector(key.delta[i]);
+        }
+        *v = keys.iter().fold(morph_base[i], |p, k| {
+            crate::world_math::add(p, crate::world_math::mul(k.delta[i], k.weight))
+        });
+        if !normals.is_empty() {
+            normals[i] = normal(matrix, normals[i]);
         }
     }
+
     let indices = if let Some(i) = primitive.get("indices") {
         let id = b::number(i)?;
         if b::at(r.json, "accessors", id)?
@@ -649,6 +721,23 @@ fn primitive(
             "Node {node_id} primitive {index}: skipped {degenerate} degenerate triangles"
         ));
     }
+    let morph = if keys.is_empty() {
+        None
+    } else {
+        Some(crate::model_edit::Morph {
+            base: morph_base,
+            keys,
+            normals: triangles.iter().map(|t| t.n).collect(),
+        })
+    };
+    if morph
+        .as_ref()
+        .is_some_and(|m| m.keys.iter().any(|k| k.weight != 0.))
+    {
+        for t in &mut triangles {
+            t.n = None;
+        }
+    }
     let node_name = b::label(node, &format!("Node {node_id}"))?;
     Ok(Model {
         name: format!("{node_name} / primitive {index}"),
@@ -669,6 +758,8 @@ fn primitive(
             imported: Some(Attributes {
                 materials: BTreeMap::from([(0, material)]),
                 skin: imported_skin,
+                morph,
+                source: None,
             }),
         },
     })
@@ -727,7 +818,7 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
     let (json, bin) = container(
         &bytes,
         path.extension()
-            .is_some_and(|s| s.eq_ignore_ascii_case("glb")),
+            .is_some_and(|s| s.eq_ignore_ascii_case("glb") || s.eq_ignore_ascii_case("vrm")),
         &mut a,
     )?;
     unknown(
@@ -769,7 +860,20 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
         return Err("Only glTF2.0 assets are supported".into());
     }
     let required = b::array(&json, "extensionsRequired")?;
-    if !required.is_empty() {
+    let avatar = json
+        .pointer("/extensions/VRMC_vrm")
+        .or_else(|| json.pointer("/extensions/VRM"));
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("vrm"))
+        && avatar.is_none()
+    {
+        return Err("VRM file requires VRM or VRMC_vrm extension metadata".into());
+    }
+    if required
+        .iter()
+        .any(|e| !matches!(e.as_str(), Some("VRMC_vrm" | "VRM")))
+    {
         return Err(format!(
             "Required extensions are unsupported: {}",
             required
@@ -779,8 +883,20 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
                 .join(", ")
         ));
     }
+    if required.iter().any(|e| {
+        e.as_str()
+            .is_some_and(|e| json.get("extensions").and_then(|v| v.get(e)).is_none())
+    }) {
+        return Err("Required extension data is missing".into());
+    }
+    if json.pointer("/extensions/VRMC_vrm").is_some() && json.pointer("/extensions/VRM").is_some() {
+        return Err("Choose one VRM specification version per source".into());
+    }
     scan(&json, "glTF", &mut a)?;
     for e in b::array(&json, "extensionsUsed")? {
+        if matches!(e.as_str(), Some("VRM" | "VRMC_vrm")) {
+            continue;
+        }
         a.warning(format!(
             "Unsupported declared extension: {}",
             e.as_str().ok_or("Invalid extension name")?
@@ -855,6 +971,108 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
             "Source animation channels are not imported; only the default node/skin pose is frozen"
                 .into(),
         );
+    }
+    let mut source = crate::model_source::Source {
+        format: if avatar.is_some() {
+            "VRM"
+        } else if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("glb"))
+        {
+            "GLB"
+        } else {
+            "glTF"
+        }
+        .into(),
+        version: "2.0".into(),
+        file: path.display().to_string(),
+        notices: vec![],
+        usage_present: false,
+    };
+    if let Some(v) = asset.get("copyright") {
+        if !v.is_string() {
+            return Err("Unreadable glTF asset copyright".into());
+        }
+        source.push("/asset/copyright", v)?;
+        source.usage_present = v.as_str().is_some_and(|s| !s.trim().is_empty());
+    }
+    if let Some(v) = json.get("extras") {
+        source.push("/extras (unclassified metadata)", v)?;
+    }
+    if let Some(v) = asset.get("extras") {
+        source.push("/asset/extras (unclassified metadata)", v)?;
+    }
+    if let Some(v) = avatar {
+        let version = v
+            .get("specVersion")
+            .and_then(J::as_str)
+            .ok_or("Missing VRM specVersion")?;
+        let one = json.pointer("/extensions/VRMC_vrm").is_some();
+        if (one && version != "1.0") || (!one && !matches!(version, "0.0" | "0.1" | "0.99")) {
+            return Err("Unsupported VRM specVersion (expected0.x or1.0)".into());
+        }
+        source.version = format!("{version} / GLB2");
+        let meta = v
+            .get("meta")
+            .and_then(J::as_object)
+            .ok_or("VRM usage meta must be an object")?;
+        for (key, value) in meta {
+            let valid = if one {
+                match key.as_str() {
+                    "authors" | "references" => {
+                        value.as_array().is_some_and(|a| a.iter().all(J::is_string))
+                    }
+                    "thumbnailImage" => value.as_u64().is_some(),
+                    "allowExcessivelyViolentUsage"
+                    | "allowExcessivelySexualUsage"
+                    | "allowPoliticalOrReligiousUsage"
+                    | "allowAntisocialOrHateUsage"
+                    | "allowRedistribution" => value.is_boolean(),
+                    _ => value.is_string(),
+                }
+            } else {
+                key == "texture" && value.is_i64() || value.is_string()
+            };
+            if !valid {
+                return Err(format!("Unreadable VRM usage field {key}"));
+            }
+        }
+        if one
+            && (meta
+                .get("name")
+                .and_then(J::as_str)
+                .is_none_or(str::is_empty)
+                || meta
+                    .get("authors")
+                    .and_then(J::as_array)
+                    .is_none_or(Vec::is_empty)
+                || meta
+                    .get("licenseUrl")
+                    .and_then(J::as_str)
+                    .is_none_or(str::is_empty))
+        {
+            return Err("VRM1 requires name, authors and licenseUrl".into());
+        }
+        source.usage_present = meta.keys().any(|k| {
+            !matches!(
+                k.as_str(),
+                "name"
+                    | "version"
+                    | "authors"
+                    | "author"
+                    | "thumbnailImage"
+                    | "texture"
+                    | "references"
+                    | "contactInformation"
+                    | "contact"
+                    | "title"
+            )
+        });
+        source.push(
+            "/extensions (VRM usage text, humanoid / expression definitions and source behavior)",
+            json.get("extensions").unwrap(),
+        )?;
+        a.warning("VRM humanoid / expression bindings are retained in source metadata; joint transforms and position morph keys convert independently. MToon, spring bones, constraints and runtime avatar behavior are not simulated; source metadata URLs are not fetched".into());
     }
     let (world, parents) = worlds(&json, &mut a)?;
     let scenes = b::array(&json, "scenes")?;
@@ -935,6 +1153,7 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
         }
     }
     a.warning("glTF2 source: right-handed +Y up, distances in metres; import rotation and scale convert axes/units. Fit recentres and rescales the asset. External files are frozen into the document; source files stay unchanged".into());
+    crate::model_source::attach(&mut a, source)?;
     if !a.valid() {
         return Err("glTF has no usable triangles or exceeds editable model limits".into());
     }

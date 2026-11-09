@@ -50,11 +50,11 @@ for package in sorted(metadata["packages"], key=lambda package: (package["name"]
         raise RuntimeError(f"Missing redistribution notice: {package['name']}")
     component = {"name": package["name"], "version": package["version"], "source": f"https://crates.io/crates/{package['name']}/{package['version']}", "repository": package["repository"], "license": package["license"], "crate_sha256": patch["crate_sha256"] if patch else checksums[(package["name"], package["version"])], "notice_files": [{"name": file.name, "sha256": hashlib.sha256(file.read_bytes()).hexdigest()} for file in files], "supplement_sources": [source["source"] for source in supplement]}
     if patch:
-        component["local_patch"] = {"manifest": "docs/licenses/patched-sources.json", "upstream_revision": patch["upstream_revision"], "files": patch["files"]}
+        component["local_patch"] = {"manifest": "docs/licenses/patched-sources.json", "upstream_revision": patch["upstream_revision"], "description": patch["description"], "files": patch["files"]}
     components.append(component)
     notices.append(f"\n{'=' * 72}\n{package['name']} {package['version']}\n{component['source']}\nDeclared license: {component['license']}\n")
     if patch:
-        notices.append("\nLocal modification: Windows Ink StylusButtonUp reports release as pressed=false.\nUpstream source and exact patched file hashes: COMPONENTS.json / local_patch.\n")
+        notices.append("\nLocal modification: " + patch["description"] + "\nUpstream source and exact patched file hashes: COMPONENTS.json / local_patch.\n")
     for file in files:
         notices.append(f"\n--- {file.name} ---\n" + file.read_text(encoding="utf-8") + "\n")
 
@@ -67,6 +67,6 @@ for name, text in outputs.items():
     if check:
         if not destination.exists() or destination.read_text(encoding="utf-8") != text:
             raise RuntimeError(f"Inventory needs regeneration: {name}")
-    else:
+    elif not destination.exists() or destination.read_text(encoding="utf-8") != text:
         destination.write_text(text, encoding="utf-8", newline="\n")
 print(f"{'Verified' if check else 'Recorded'} {len(components)} libraries, {len(fonts)} embedded fonts; missing licenses/notices=0")

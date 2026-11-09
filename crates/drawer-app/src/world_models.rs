@@ -237,7 +237,8 @@ impl Drawer {
             if let Some(job)=&p.job{ui.spinner();let r=ui.button("Cancel model preparation");p.controls.insert("cancel",r.rect);if r.clicked(){job.cancel.store(true,Ordering::Relaxed);}}
             ui.add_enabled_ui(!busy,|ui|{ui.horizontal_wrapped(|ui|{for(key,label,value)in[("primitive","Preview primitive",1),("import","Preview local model",3),("duplicate","Duplicate models",4),("align","Align models",5)]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){action=value;}}});});
             egui::ScrollArea::vertical().id_salt("model-library-settings").max_height(540.).show(ui,|ui|{ui.add_enabled_ui(!busy,|ui|{
-                ui.label("Original built-in geometry; local OBJ/glTF2/GLB models. Preview first, then apply in the 3D window. Materials and missing references are listed before adoption.");
+                ui.label("Original built-in geometry; local OBJ/glTF2/GLB/VRM/FBX/STL models. Preview first, then apply in the 3D window. Materials and missing references are listed before adoption.");
+                let r=egui::CollapsingHeader::new("Import formats / preserved, converted and omitted data").show(ui,|ui|{for (format,version,details) in drawer_core::model_source::SUPPORT {ui.strong(format!("{format} — {version}"));ui.label(*details);}ui.small("All files and references stay on local drives. Limits: 128 meshes, 65536 vertices/edges per mesh, 131072 triangles, 256 materials, 128 skin joints with4 influences, 32 morph keys; texture PNG/JPEG max8MiB/1024px. Source behavior beyond this table is rejected or listed for review; source URLs are never fetched.");});p.controls.insert("formats",r.header_response.rect);
                 ui.horizontal_wrapped(|ui|{for shape in Shape::ALL{ui.selectable_value(&mut p.shape,shape,shape.label());}});
                 ui.horizontal(|ui|{ui.label("Round detail");ui.add(egui::DragValue::new(&mut p.detail).range(3..=64))});
                 ui.horizontal(|ui|{ui.label("Model file");ui.text_edit_singleline(&mut p.path);if ui.button("Browse local file…").clicked(){action=2;}});
@@ -249,7 +250,9 @@ impl Drawer {
                     if ui.button("Clear models").clicked(){p.ids.clear();}});for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let info=d.scene.catalog.world_info.get(&id);let name=info.and_then(|i|i.name.as_deref()).unwrap_or("Model");let hidden=info.is_some_and(|i|i.properties.hidden);let mut selected=p.ids.contains(&id);if ui.checkbox(&mut selected,format!("{id}: {name}{}",if hidden{" (hidden)"}else{""})).changed(){if selected{p.ids.push(id);}else{p.ids.retain(|n|*n!=id);}}}});
                 ui.horizontal(|ui|{ui.label("Duplicate offset X/Y/Z");for v in &mut p.offset{ui.add(egui::DragValue::new(v).speed(0.1));}});
                 ui.horizontal_wrapped(|ui|{for i in 0..3{ui.selectable_value(&mut p.axis,i,["X","Y","Z"][i]);}for(a,label)in [(Anchor::Min,"Minimum"),(Anchor::Center,"Center"),(Anchor::Max,"Maximum")]{ui.selectable_value(&mut p.anchor,a,label);}ui.selectable_value(&mut p.target,AlignTarget::First,"First selected tree");ui.selectable_value(&mut p.target,AlignTarget::Selection,"Selection bounds");});
-                if let Some(id)=p.ids.first()&&let Some(s)=d.scene.world3d.surfaces.get(id){ui.small(format!("{}: {} triangles, {} UV coordinates, {} normals",s.source,s.triangles.len(),s.texcoords.len(),s.normals.len()));if let Some(a)=&s.imported{ui.small(format!("{} imported material slots; {} retained skin joints (frozen default pose)",a.materials.len(),a.skin.as_ref().map_or(0,|r|r.names.len())));if let Some(r)=&a.skin{for (i,n) in r.names.iter().enumerate(){ui.small(format!("Joint {i}: {n}; parent {:?}",r.parents[i]));}}}for reference in &s.references{ui.small(format!("{} — {} at import",reference.name,if reference.present{"available"}else{"missing"}));}}
+                if let Some(id)=p.ids.first()&&let Some(s)=d.scene.world3d.surfaces.get(id){ui.small(format!("{}: {} triangles, {} UV coordinates, {} normals",s.source,s.triangles.len(),s.texcoords.len(),s.normals.len()));if let Some(a)=&s.imported{ui.small(format!("{} imported material slots; {} retained skin joints (frozen default pose)",a.materials.len(),a.skin.as_ref().map_or(0,|r|r.names.len())));if let Some(source)=&a.source{egui::CollapsingHeader::new("Source / usage terms (original metadata)").default_open(true).show(ui,|ui|{ui.label(format!("{} {}; {}",source.format,source.version,source.file));if !source.usage_present{ui.label("Usage information: not provided / 정보 없음");}
+if !source.notices.is_empty(){ui.label("Source metadata below; comments / headers are unclassified and may contain no usage terms. Metadata does not grant permission.");for n in &source.notices{ui.strong(&n.source);ui.add(egui::Label::new(&n.text).wrap()).on_hover_text(&n.text);}}});}
+if let Some(r)=&a.skin{for (i,n) in r.names.iter().enumerate(){ui.small(format!("Joint {i}: {n}; parent {:?}",r.parents[i]));}}}for reference in &s.references{ui.small(format!("{} — {} at import",reference.name,if reference.present{"available"}else{"missing"}));}}
             });});
         });
         p.open = open;
@@ -271,7 +274,10 @@ impl Drawer {
                 }
                 2 => {
                     if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Local OBJ / glTF2 / GLB", &["obj", "gltf", "glb"])
+                        .add_filter(
+                            "Verified local OBJ / glTF2 / GLB / VRM / FBX / STL",
+                            drawer_core::model_source::EXTENSIONS,
+                        )
                         .pick_file()
                     {
                         self.world_models.path = path.display().to_string();
@@ -315,7 +321,9 @@ mod import_verify;
 mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::run(root)?;
-    import_verify::run(root)
+    import_verify::run(root)?;
+    drawer_core::model_formats_verify::verify(root)?;
+    formats_verify::run(root)
 }
 #[cfg(test)]
 mod tests {
@@ -332,5 +340,16 @@ mod import_tests {
     fn pointer_gltf_review_apply_undo_cancel_stale_close_and_source_preservation() {
         let t = crate::tests::TestDirectory::new();
         super::import_verify::run(&t.0).unwrap();
+    }
+}
+
+#[path = "model_formats_verify.rs"]
+mod formats_verify;
+#[cfg(test)]
+mod format_tests {
+    #[test]
+    fn pointer_all_formats_support_table_terms_review_adopt_and_undo() {
+        let t = crate::tests::TestDirectory::new();
+        super::formats_verify::run(&t.0).unwrap();
     }
 }

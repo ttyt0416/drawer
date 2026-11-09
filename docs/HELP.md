@@ -1679,3 +1679,12 @@ Play saved sequence preview와 Preview loop는 보기 전용이다. 문서 프�
 UV가 없으면 `Generate overlapping box UV`를 명시적으로 실행한다. 면 차트가 겹치는 기본 투영이며 기존 매핑을 바꾼다. 로컬 PNG/JPEG를 diffuse/normal로 내장하고 Reload로 수동 갱신한다. 파일이 없어져도 내장 질감은 유지한다. 입력은 RGBA8로 변환하고 색 메타데이터는 적용하지 않으며 노멀은 선형 RGB·강도·green 반전으로 조절한다. PNG 투명도에는 Blend/Mask를 선택한다. 새 diffuse 배정은 painted RGB를 지우고 Undo로 복원한다. 위상 재구축은 rig/형태키와 질감/채색을 정리한 뒤 실행한다.
 
 `Export texture PNGs now`는 사용된 문서 질감·노멀·채색을 새 로컬 폴더에 출력한다. Fail/Skip/Rename으로 동명 파일/폴더를 처리하며 기존 폴더를 병합하거나 원본을 덮어쓰지 않는다. 게시 시작 전까지 취소할 수 있다. 편집은 미리보기 후 Apply/Cancel·한 Undo이고 결과는 native120에 저장한다. 상세 계약은 `docs/process/surface-tools.md`에 기록했다.
+
+
+### 로컬 모델 형식과 원본 사용조건
+
+`model-library`에서 OBJ+MTL·glTF2·GLB2·VRM0.x/1.0·FBX·STL을 선택한다. 파일 경로 위의 `Import formats / preserved, converted and omitted data`에서 버전과 변환 범위를 먼저 확인한다. 가져오기 작업은 로컬 파일만 읽고 원본을 바꾸지 않는다. 준비 후 3D 창의 `Original source / usage terms before adoption`을 펼쳐 원본 메타데이터를 읽고 변환 안내를 검토한 다음 Apply한다. 정보가 없으면 `정보 없음`이며, 댓글/헤더 같은 분류되지 않은 메타데이터가 사용 허가를 의미하지는 않는다. URL은 표시용으로만 보존한다.
+
+OBJ는 diffuse PNG/JPEG·알파·UV/법선을, glTF/GLB/VRM은 기본 LBS 포즈·관절/가중치와 위치 형태키를, FBX는 기본 메시/재질·로컬 diffuse 맵·선형 스킨/위치 블렌드셰이프를 변환한다. 위치 형태키는 `model-controls`의 일반 형태키로 편집하며 노멀 형태키는 기하 법선으로 대체한다. 원본 애니메이션·VRM MToon/스프링/표정 매핑의 동작과 고급 FBX 셰이더는 재현하지 않는다. VRM의 humanoid/표정 정의·사용조건 원문 값은 출처 데이터로 보존한다. STL은 재질·UV·리그·모프가 없는 삼각형 형식이며 비표준 색상은 안내 후 제외한다. 제한을 넘거나 알 수 없는 필수 확장이 있는 파일은 거절한다.
+
+형식/버전·원본 로컬 경로·조건 원문은 자체 문서에 내장한다. 원본을 옮겨도 저장한 픽셀/형상/조건은 유지되며 한 Undo로 전체 가져오기를 되돌린다. 세부 버전·보존/변환/손실·제한 계약은 [모델 형식](process/model-formats.md)에 있다.

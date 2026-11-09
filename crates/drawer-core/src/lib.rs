@@ -595,3 +595,8 @@ pub mod scene_render_verify;
 pub mod surface_edit;
 
 pub mod surface_edit_verify;
+
+mod model_fbx;
+pub mod model_formats_verify;
+pub mod model_source;
+mod model_stl;

@@ -22,10 +22,15 @@ fn relative_path(text: &str) -> io::Result<PathBuf> {
         return Err(invalid(format!("허용하지 않는 전달 경로: {text}")));
     }
     let extension = path.extension().and_then(|value| value.to_str());
-    if !matches!(
-        extension,
-        Some("rs" | "frag" | "md" | "toml" | "txt" | "lock" | "ps1" | "py" | "json")
-    ) {
+    let pinned_fbx_source = (path.starts_with("vendor/ufbx/ufbx")
+        && matches!(extension, Some("c" | "h")))
+        || matches!(text, "vendor/ufbx/LICENSE" | "vendor/ufbx/Cargo.toml.orig");
+    if !pinned_fbx_source
+        && !matches!(
+            extension,
+            Some("rs" | "frag" | "md" | "toml" | "txt" | "lock" | "ps1" | "py" | "json")
+        )
+    {
         return Err(invalid(format!("허용하지 않는 전달 파일 형식: {text}")));
     }
     Ok(path.to_owned())
@@ -294,6 +299,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn pinned_public_fbx_source_admission_keeps_other_native_files_excluded() {
+        for p in [
+            "vendor/ufbx/ufbx/ufbx.c",
+            "vendor/ufbx/ufbx/ufbx.h",
+            "vendor/ufbx/LICENSE",
+            "vendor/ufbx/Cargo.toml.orig",
+        ] {
+            assert!(super::relative_path(p).is_ok());
+        }
+        for p in [
+            "vendor/other/ufbx.c",
+            "crates/drawer-core/foreign.c",
+            "vendor/ufbx/ufbx/model.obj",
+            "vendor/ufbx/ufbx/parser.dll",
+        ] {
+            assert!(super::relative_path(p).is_err());
+        }
+    }
     #[test]
     fn denies_path_escape_and_non_source_formats() {
         for path in [

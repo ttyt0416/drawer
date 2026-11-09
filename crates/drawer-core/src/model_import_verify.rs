@@ -1,3 +1,14 @@
+fn same_surface(a: &crate::model_mesh::Surface, b: &crate::model_mesh::Surface) -> bool {
+    let mut a = a.clone();
+    let mut b = b.clone();
+    if let Some(a) = &mut a.imported {
+        a.source = None;
+    }
+    if let Some(b) = &mut b.imported {
+        b.source = None;
+    }
+    a == b
+}
 use crate::{
     document::{DEFAULT_DOCUMENT_BUDGET as B, Document},
     model_import::*,
@@ -129,7 +140,7 @@ fn save_json(root: &Path, j: &J) -> Result<PathBuf, String> {
     write(&path, serde_json::to_vec(j).unwrap())?;
     Ok(path)
 }
-fn glb(root: &Path, j: &J, bin: &[u8]) -> Result<PathBuf, String> {
+pub fn glb(root: &Path, j: &J, bin: &[u8]) -> Result<PathBuf, String> {
     let mut j = j.clone();
     j["buffers"][0].as_object_mut().unwrap().remove("uri");
     let mut data = serde_json::to_vec(&j).unwrap();
@@ -169,7 +180,8 @@ pub fn containers(root: &Path) -> Result<(), String> {
     let p = glb(root, &j, &bin)?;
     let b = load(&p, B, &AtomicBool::new(false))?;
     check(
-        a.models[0].mesh == b.models[0].mesh && a.models[0].surface == b.models[0].surface,
+        a.models[0].mesh == b.models[0].mesh
+            && same_surface(&a.models[0].surface, &b.models[0].surface),
         "GLB and external glTF differ",
     )?;
     let mut embedded = j.clone();
@@ -181,7 +193,7 @@ pub fn containers(root: &Path) -> Result<(), String> {
         json!(format!("data:image/png;base64,{}", STANDARD.encode(&png)));
     save_json(root, &embedded)?;
     check(
-        load_here(root)?.models[0].surface == a.models[0].surface,
+        same_surface(&load_here(root)?.models[0].surface, &a.models[0].surface),
         "Embedded data URI differs",
     )?;
     let mut chunk = j.clone();
@@ -199,7 +211,10 @@ pub fn containers(root: &Path) -> Result<(), String> {
     chunk["buffers"][0]["byteLength"] = json!(binary.len());
     let p = glb(root, &chunk, &binary)?;
     check(
-        load(&p, B, &AtomicBool::new(false))?.models[0].surface == a.models[0].surface,
+        same_surface(
+            &load(&p, B, &AtomicBool::new(false))?.models[0].surface,
+            &a.models[0].surface,
+        ),
         "GLB buffer-view image differs",
     )?;
     let mut stride = j;
