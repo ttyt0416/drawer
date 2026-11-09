@@ -289,6 +289,16 @@ fn repeat_label(r: Repeat) -> &'static str {
     }
 }
 
+impl Drawer {
+    pub(super) fn stage_catalog_gradient(&mut self, path: &std::path::Path) -> Result<(), String> {
+        drawer_core::gradient_ramp::Library::import(path)?;
+        self.begin_gradient()?;
+        self.gradient.ramps.exchange_path(path);
+        self.status=Some("Gradient JSON validated. Expand Color stops / local presets and use Import with undo backup to review local preset replacement.".into());
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

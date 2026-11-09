@@ -662,6 +662,33 @@ pub fn prepare(
     id: Option<u64>,
     s: &Settings,
 ) -> Result<Prepared, String> {
+    let mut prepared = prepare_value(d, id, s)?;
+    if let Some(mapping) = s.style.rich.as_ref().and_then(|r| r.mapping.as_ref())
+        && prepared.state != d.snapshot()
+    {
+        let definition = serde_json::to_vec(mapping).map_err(|e| e.to_string())?;
+        let snapshot = serde_json::to_vec(s).map_err(|e| e.to_string())?;
+        prepared
+            .state
+            .scene
+            .catalog
+            .object_info
+            .entry(prepared.id)
+            .or_default()
+            .asset_version = Some(crate::asset_catalog::Version {
+            source_hash: crate::asset_catalog::hash(&definition),
+            snapshot_hash: crate::asset_catalog::hash(&snapshot),
+            name: "Mixed-font mapping".into(),
+        });
+    }
+    validate_scene(&prepared.state.scene)?;
+    Ok(prepared)
+}
+fn prepare_value(
+    d: &crate::document::Document,
+    id: Option<u64>,
+    s: &Settings,
+) -> Result<Prepared, String> {
     if d.memory_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Text snapshot memory limit".into());
     }

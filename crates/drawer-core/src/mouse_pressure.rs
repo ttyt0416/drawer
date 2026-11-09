@@ -123,6 +123,8 @@ pub struct Sample {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Metadata {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub material_versions: Vec<crate::asset_catalog::MaterialVersion>,
     pub layer: usize,
     pub settings: Settings,
     pub style: Style,
@@ -134,7 +136,19 @@ pub struct Metadata {
 }
 impl Metadata {
     pub fn valid(&self) -> bool {
-        self.layer < 256
+        self.material_versions.len() <= 64
+            && self.material_versions.iter().all(|v| {
+                v.id >= crate::material_library::FIRST_ID
+                    && crate::asset_catalog::valid_hash(&v.hash)
+            })
+            && self
+                .material_versions
+                .iter()
+                .map(|v| (v.id, v.kind as u8))
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == self.material_versions.len()
+            && self.layer < 256
             && self.settings.valid()
             && self.style.valid()
             && self.count > 0
@@ -160,6 +174,7 @@ pub struct Replay {
     inputs: Vec<[f64; 2]>,
     dynamic_inputs: Vec<crate::brush_dynamics::Input>,
     materials: std::sync::Arc<crate::material_library::Library>,
+    material_versions: Vec<crate::asset_catalog::MaterialVersion>,
 }
 impl Replay {
     pub fn begin(
@@ -213,6 +228,7 @@ impl Replay {
             inputs: vec![],
             dynamic_inputs: vec![],
             materials: Default::default(),
+            material_versions: vec![],
         })
     }
     pub fn configure_snapping(
@@ -247,6 +263,7 @@ impl Replay {
         if !self.samples.is_empty() || !materials.valid() {
             return Err("Material snapshot must be valid and set before input".into());
         }
+        self.material_versions = crate::asset_catalog::material_versions(&self.style, &materials);
         self.materials = materials;
         Ok(self)
     }
@@ -386,6 +403,7 @@ impl Replay {
     }
     pub fn metadata(&self) -> Metadata {
         Metadata {
+            material_versions: self.material_versions.clone(),
             layer: self.layer,
             settings: self.settings,
             style: self.style,
@@ -879,6 +897,7 @@ impl crate::scene::Scene {
             && last.layer == record.layer
             && last.settings == record.settings
             && last.style == record.style
+            && last.material_versions == record.material_versions
             && last.ends == record.ends
             && last.native_pressure == record.native_pressure
         {
@@ -908,6 +927,7 @@ mod tests {
         use super::*;
         let mut scene = crate::scene::Scene::default();
         let first = Metadata {
+            material_versions: vec![],
             layer: 0,
             settings: Settings::default(),
             style: style(BrushTip::Pen),

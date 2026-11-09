@@ -89,6 +89,7 @@ fn dab(
     let changed = stroke.commit_mouse(
         d,
         crate::mouse_pressure::Metadata {
+            material_versions: vec![],
             layer: 0,
             settings: Default::default(),
             style: s,

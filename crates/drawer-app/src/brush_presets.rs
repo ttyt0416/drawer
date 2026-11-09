@@ -307,6 +307,50 @@ pub(super) fn smoke() -> Result<(), String> {
     }
     Ok(())
 }
+impl Drawer {
+    pub(super) fn stage_catalog_brush(
+        &mut self,
+        path: &std::path::Path,
+        bundle: bool,
+    ) -> Result<(), String> {
+        if self.brush_presets.open {
+            return Err("Finish or cancel the open brush preset editor first".into());
+        }
+        self.finish_stroke();
+        let mut tools =
+            super::user_tools::Editor::new(self.capture_workspace().user_tools, self.selected);
+        tools.history = self.brush_presets.tool_history.clone();
+        let mut editor = Editor {
+            tools,
+            abr: Default::default(),
+            draft: self.workspaces.store.current.brushes.clone(),
+            name: self.selected.label().into(),
+            selected: None,
+            restore: None,
+            pending: None,
+        };
+        if bundle {
+            let (tools, materials) = drawer_core::tool_bundle::import(
+                path.parent().ok_or("Missing tool folder")?,
+                &editor.tools.draft,
+                &self.materials.library,
+            )
+            .map_err(|e| e.to_string())?;
+            editor.tools.draft = tools;
+            editor.tools.materials = Some((self.materials.library.clone(), materials));
+            self.brush_presets.tools_requested = true;
+        } else {
+            let preset = Preset::read(path).map_err(|e| e.to_string())?;
+            drawer_core::tool_bundle::validate_preset(&preset, &self.materials.library)?;
+            editor.name = preset.name.clone();
+            editor.restore = Some(preset);
+        }
+        self.brush_presets.editor = Some(editor);
+        self.brush_presets.open = true;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

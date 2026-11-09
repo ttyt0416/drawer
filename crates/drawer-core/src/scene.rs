@@ -566,6 +566,18 @@ impl Scene {
             })
             + usize::from(self.camera.is_some()) * 64
             + self.mouse_strokes.len() * std::mem::size_of::<crate::mouse_pressure::Metadata>()
+            + self
+                .mouse_strokes
+                .iter()
+                .map(|m| {
+                    m.material_versions.len()
+                        * std::mem::size_of::<crate::asset_catalog::MaterialVersion>()
+                        + m.material_versions
+                            .iter()
+                            .map(|v| v.hash.len())
+                            .sum::<usize>()
+                })
+                .sum::<usize>()
     }
     pub fn physical_points(&self, original_pixels: f64, dpi: f64) -> Point {
         [

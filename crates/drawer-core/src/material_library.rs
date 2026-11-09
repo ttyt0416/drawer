@@ -537,6 +537,7 @@ pub fn verify(root: &Path) -> io::Result<Library> {
     st.commit_mouse(
         &mut d,
         crate::mouse_pressure::Metadata {
+            material_versions: vec![],
             layer: 0,
             settings: Default::default(),
             style: brush(tip, 0),

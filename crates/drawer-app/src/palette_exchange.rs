@@ -231,3 +231,16 @@ mod text_format_tests {
         super::formats_smoke(&t.0).unwrap();
     }
 }
+
+impl Drawer {
+    pub(super) fn stage_catalog_palette(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let mut p = Panel {
+            open: true,
+            path: path.display().to_string(),
+            ..Default::default()
+        };
+        self.stage_palette(&mut p)?;
+        self.palette_exchange = p;
+        Ok(())
+    }
+}

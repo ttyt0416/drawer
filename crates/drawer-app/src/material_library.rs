@@ -4,6 +4,8 @@ use std::{io, sync::Arc};
 #[derive(Default)]
 pub(super) struct Materials {
     pub library: Arc<Library>,
+    history: MaterialHistory,
+    confirm_remove: Option<(u32, usize)>,
     path: String,
     name: String,
     kind: Kind,
@@ -11,6 +13,11 @@ pub(super) struct Materials {
     fibres: drawer_core::fibres::Set,
     blocked: Option<String>,
     message: Option<String>,
+}
+#[derive(Clone, Default, PartialEq)]
+pub(super) struct MaterialHistory {
+    undo: Vec<(Arc<Library>, usize)>,
+    redo: Vec<(Arc<Library>, usize)>,
 }
 impl Drawer {
     pub(super) fn material_dependencies(&self, document: &Document) -> Vec<String> {
@@ -28,6 +35,11 @@ impl Drawer {
                 if source <= builtin || self.materials.library.get(source, kind).is_some() {
                     continue;
                 }
+                let frozen = record.material_versions.iter().any(|v| {
+                    v.id == source
+                        && v.kind == kind
+                        && drawer_core::asset_catalog::valid_hash(&v.hash)
+                });
                 let note = match kind {
                     Kind::Tip => drawer_core::tip_sequence::Settings::label(source),
                     Kind::Texture => drawer_core::texture::Pattern {
@@ -35,6 +47,13 @@ impl Drawer {
                         ..Default::default()
                     }
                     .label(),
+                };
+                let note = if frozen {
+                    format!(
+                        "{note} (definition unavailable for new drawing; saved pixels and frozen settings are preserved)"
+                    )
+                } else {
+                    note
                 };
                 if missing.len() < 8 && !missing.contains(&note) {
                     missing.push(note);
@@ -50,10 +69,14 @@ impl Drawer {
             Ok(lib) => {
                 self.materials.library = Arc::new(lib);
                 self.materials.blocked = None;
+                self.materials.history = Default::default();
+                self.materials.confirm_remove = None;
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
                 self.materials.library = Arc::default();
                 self.materials.blocked = None;
+                self.materials.history = Default::default();
+                self.materials.confirm_remove = None;
             }
             Err(e) => {
                 self.materials.blocked = Some(format!(
@@ -80,6 +103,37 @@ impl Drawer {
         }
     }
     pub(super) fn publish_materials(&mut self, next: Library) -> Result<(), String> {
+        self.save_materials(next, true)
+    }
+    fn material_library_bytes(library: &Library) -> usize {
+        std::mem::size_of::<Library>()
+            + 32 * std::mem::size_of::<drawer_core::material_library::Asset>()
+            + library
+                .assets()
+                .iter()
+                .map(|a| {
+                    a.values.capacity()
+                        + a.name.capacity()
+                        + a.fibres.as_ref().map_or(0, |set| {
+                            set.fibres.capacity()
+                                * std::mem::size_of::<drawer_core::fibres::Fibre>()
+                        })
+                })
+                .sum::<usize>()
+    }
+    pub(super) fn material_checkpoint(&self) -> MaterialHistory {
+        self.materials.history.clone()
+    }
+    pub(super) fn rollback_materials(
+        &mut self,
+        next: Library,
+        history: MaterialHistory,
+    ) -> Result<(), String> {
+        self.save_materials(next, false)?;
+        self.materials.history = history;
+        Ok(())
+    }
+    fn save_materials(&mut self, next: Library, record: bool) -> Result<(), String> {
         if let Some(e) = &self.materials.blocked {
             return Err(e.clone());
         }
@@ -99,8 +153,63 @@ impl Drawer {
             _ => {}
         }
         next.save(&path).map_err(|e| e.to_string())?;
+        if record && self.materials.library.as_ref() != &next {
+            let before = self.materials.library.clone();
+            let size = Self::material_library_bytes(&before);
+            self.materials.history.undo.push((before, size));
+            self.materials.history.redo.clear();
+            while self.materials.history.undo.len() > 20
+                || self
+                    .materials
+                    .history
+                    .undo
+                    .iter()
+                    .map(|(_, n)| *n)
+                    .sum::<usize>()
+                    > 64 * 1024 * 1024
+            {
+                self.materials.history.undo.remove(0);
+            }
+        }
+        self.materials.confirm_remove = None;
         self.materials.library = Arc::new(next);
         Ok(())
+    }
+    fn restore_material_history(&mut self, redo: bool) -> Result<(), String> {
+        let target = if redo {
+            self.materials.history.redo.last()
+        } else {
+            self.materials.history.undo.last()
+        }
+        .cloned();
+        let Some((target, _)) = target else {
+            return Ok(());
+        };
+        let current = self.materials.library.clone();
+        let size = Self::material_library_bytes(&current);
+        self.save_materials(target.as_ref().clone(), false)?;
+        if redo {
+            self.materials.history.redo.pop();
+            self.materials.history.undo.push((current, size));
+        } else {
+            self.materials.history.undo.pop();
+            self.materials.history.redo.push((current, size));
+        }
+        Ok(())
+    }
+    fn material_reference_count(&self, id: u32, kind: Kind) -> usize {
+        self.documents
+            .iter()
+            .flat_map(|d| &d.scene.mouse_strokes)
+            .filter(|m| {
+                drawer_core::tip_texture::references(
+                    &m.style.sequence,
+                    &m.style.variation.dual.controls,
+                    m.style.texture,
+                )
+                .contains(&(id, kind))
+            })
+            .fold(0usize, |n, m| n.saturating_add(m.count as usize))
     }
     fn fibre_material_ui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Owned fibre tip editor").show(ui,|ui|{
@@ -205,6 +314,27 @@ impl Drawer {
                 Err(e) => format!("Registration rejected; previous materials preserved: {e}"),
             });
         }
+        ui.horizontal(|ui| {
+            for (redo, label, enabled) in [
+                (
+                    false,
+                    "Undo mask library",
+                    !self.materials.history.undo.is_empty(),
+                ),
+                (
+                    true,
+                    "Redo mask library",
+                    !self.materials.history.redo.is_empty(),
+                ),
+            ] {
+                if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                    self.materials.message = Some(match self.restore_material_history(redo) {
+                        Ok(()) => "Local definitions restored; drawing history unchanged".into(),
+                        Err(e) => e,
+                    });
+                }
+            }
+        });
         if crate::help::button(ui, "Reload local material library", "local-materials").clicked()
             && let Some(storage) = &self.storage
         {
@@ -271,8 +401,12 @@ impl Drawer {
                         }
                     }
                 }
-                if crate::help::button(ui, "Remove registration", "local-materials").clicked() {
-                    remove = Some(asset.id);
+                let references=self.material_reference_count(asset.id,asset.kind);
+                if crate::help::button(ui,"Remove registration…","local-materials").clicked(){self.materials.confirm_remove=Some((asset.id,references));}
+                if let Some((id,reviewed))=self.materials.confirm_remove&&id==asset.id{
+                    if reviewed!=references{self.materials.confirm_remove=None;ui.label("Reference count changed; review deletion again");}
+                    else{ui.label(format!("Remove owned {} #{}; {} frozen stroke reference(s) in open drawings. Source image files and already painted pixels stay unchanged. Library Undo restores the definition.",asset.kind.label(),asset.id,references));ui.horizontal(|ui|{if ui.button("Confirm removal of this definition").clicked(){remove=Some(asset.id);}
+if ui.button("Cancel removal").clicked(){self.materials.confirm_remove=None;}});}
                 }
             });
         }
@@ -281,7 +415,7 @@ impl Drawer {
                 .remove(id)
                 .map_err(|e| e.to_string())
                 .and_then(|next| self.publish_materials(next));
-            self.materials.message=Some(match result{Ok(())=>"Registration removed. Stored references keep their IDs and use their missing-material fallback.".into(),Err(e)=>e});
+            self.materials.message=Some(match result{Ok(())=>"Registration removed. Frozen pixels/settings/versions remain; Undo mask library restores future-use definitions.".into(),Err(e)=>e});
         }
     }
 }
@@ -311,7 +445,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     if *restarted.materials.library != library {
         return Err("Local materials were not restored on restart".into());
     }
-    let saved = drawer_core::files::open(&root.join("material-pixels.drawer"), 65536)
+    let mut saved = drawer_core::files::open(&root.join("material-pixels.drawer"), 65536)
         .map_err(|e| e.to_string())?;
     if !restarted.material_dependencies(&saved).is_empty() {
         return Err("Registered native tip was reported missing".into());
@@ -388,6 +522,53 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     if !cancelled.record.passed || cancelled.pixels.iter().any(|p| p[3] != 0) {
         return Err("Cancelled image-material stroke changed original".into());
     }
+    for record in &mut saved.scene.mouse_strokes {
+        record.material_versions =
+            drawer_core::asset_catalog::material_versions(&record.style, &library);
+    }
+    app.add_document(saved);
+    let snapshots = app
+        .documents
+        .iter()
+        .map(Document::snapshot)
+        .collect::<Vec<_>>();
+    let counts = app
+        .documents
+        .iter()
+        .map(Document::history_counts)
+        .collect::<Vec<_>>();
+    if app.material_reference_count(tip, Kind::Tip) == 0 {
+        return Err("Mask deletion reference count missed frozen strokes".into());
+    }
+    app.publish_materials(library.remove(tip).map_err(|e| e.to_string())?)?;
+    let notices = app.material_dependencies(app.documents.last().unwrap());
+    if notices.is_empty() || notices.iter().any(|n| !n.contains("saved pixels")) {
+        return Err(
+            "Missing future-use definition did not distinguish preserved frozen artwork".into(),
+        );
+    }
+    app.restore_material_history(false)?;
+    if *app.materials.library != library {
+        return Err("Mask library Undo did not restore definitions".into());
+    }
+    app.restore_material_history(true)?;
+    app.restore_material_history(false)?;
+    if app
+        .documents
+        .iter()
+        .map(Document::snapshot)
+        .collect::<Vec<_>>()
+        != snapshots
+        || app
+            .documents
+            .iter()
+            .map(Document::history_counts)
+            .collect::<Vec<_>>()
+            != counts
+    {
+        return Err("Mask definition deletion/history changed artwork or document Undo".into());
+    }
+
     Ok(())
 }
 #[cfg(test)]

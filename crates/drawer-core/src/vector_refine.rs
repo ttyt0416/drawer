@@ -446,6 +446,23 @@ pub fn prepare(
             Operation::Join(_) | Operation::Split => unreachable!(),
         }
     }
+    if let Operation::Tip(tip) = op {
+        let definition =
+            serde_json::to_vec(&(tip, tip.frame(), tip.polygon())).map_err(|e| e.to_string())?;
+        let snapshot = serde_json::to_vec(&state.scene.lines.layers[layer_index])
+            .map_err(|e| e.to_string())?;
+        state
+            .scene
+            .catalog
+            .vectors
+            .entry(layer)
+            .or_default()
+            .asset_version = Some(crate::asset_catalog::Version {
+            source_hash: crate::asset_catalog::hash(&definition),
+            snapshot_hash: crate::asset_catalog::hash(&snapshot),
+            name: format!("Vector tip {}", tip.label()),
+        });
+    }
     finish(d, state, layer, ids.into_iter().collect())
 }
 fn fixed(ends: Ends, start: Point, a: Point, b: Point) -> (bool, bool) {

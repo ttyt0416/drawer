@@ -618,3 +618,5 @@ pub mod raster_io;
 pub mod exchange_guidance;
 
 pub mod palette_text;
+
+pub mod asset_catalog;

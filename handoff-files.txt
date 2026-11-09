@@ -1077,3 +1077,11 @@ crates/drawer-core/src/psd_report.rs
 crates/drawer-core/src/exchange_guidance.rs
 crates/drawer-app/src/exchange_guidance.rs
 crates/drawer-core/src/palette_text.rs
+crates/drawer-core/src/asset_catalog.rs
+crates/drawer-core/src/asset_scan.rs
+crates/drawer-core/src/asset_transfer.rs
+crates/drawer-core/src/asset_history.rs
+crates/drawer-core/src/asset_catalog_verify.rs
+crates/drawer-app/src/asset_catalog.rs
+crates/drawer-app/src/asset_catalog_verify.rs
+docs/process/asset-catalog.md

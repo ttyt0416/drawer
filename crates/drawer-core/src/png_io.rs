@@ -131,7 +131,10 @@ pub(crate) fn finish16(
             "High precision image conversion exceeds memory budget",
         ));
     }
-    if let Some(bytes) = &profile {
+    if let Some(bytes) = profile
+        .as_ref()
+        .filter(|bytes| gray || !is_own_srgb_profile(bytes))
+    {
         if bytes.len() > 1024 * 1024 {
             return Err(invalid("ICC profile exceeds1MiB"));
         }
@@ -247,4 +250,26 @@ impl ImportedPage {
         d.layers[0].precise = Some(color.pixels);
         Ok(d)
     }
+}
+
+/// Own deterministic standard-sRGB ICC is already the destination space. Re-parsing its
+/// quantized matrix as a foreign profile causes avoidable16-bit round-trip drift.
+pub(crate) fn is_own_srgb_profile(bytes: &[u8]) -> bool {
+    static STANDARD: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
+    STANDARD
+        .get_or_init(|| {
+            moxcms::ColorProfile::new_srgb().encode().ok().map(|mut p| {
+                for (slot, n) in p[24..36]
+                    .as_chunks_mut::<2>()
+                    .0
+                    .iter_mut()
+                    .zip([2000u16, 1, 1, 0, 0, 0])
+                {
+                    slot.copy_from_slice(&n.to_be_bytes());
+                }
+                p
+            })
+        })
+        .as_ref()
+        .is_some_and(|p| p.as_slice() == bytes)
 }

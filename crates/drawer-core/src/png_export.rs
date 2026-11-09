@@ -321,6 +321,10 @@ mod tests {
         let icc = info.info().icc_profile.as_ref().unwrap();
         assert_eq!(&icc[24..36], &[7, 208, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0]);
         assert!(moxcms::ColorProfile::new_from_slice(icc).is_ok());
+        assert!(crate::png_io::is_own_srgb_profile(icc));
+        let mut different = icc.to_vec();
+        different[24] ^= 1;
+        assert!(!crate::png_io::is_own_srgb_profile(&different));
     }
     #[test]
     fn view_mirror_does_not_change_png_but_actual_transforms_change_corner_markers() {

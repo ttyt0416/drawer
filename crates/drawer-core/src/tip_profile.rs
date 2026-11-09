@@ -264,6 +264,7 @@ pub fn verify_pixel(root: &std::path::Path) -> Result<(), String> {
             stroke.commit_mouse(
                 &mut d,
                 crate::mouse_pressure::Metadata {
+                    material_versions: vec![],
                     layer: 0,
                     settings: Default::default(),
                     style,

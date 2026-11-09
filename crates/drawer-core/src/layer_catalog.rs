@@ -85,6 +85,8 @@ impl Ids {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Info {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_version: Option<crate::asset_catalog::Version>,
     pub name: Option<String>,
     pub kind: Option<Kind>,
     pub expression: Expression,
@@ -95,9 +97,11 @@ pub struct Info {
 }
 impl Info {
     pub fn valid(&self) -> bool {
-        self.name.as_ref().is_none_or(|s| {
-            !s.trim().is_empty() && s.chars().count() <= 64 && !s.chars().any(char::is_control)
-        }) && self.tags.len() <= 16
+        self.asset_version.as_ref().is_none_or(|v| v.valid())
+            && self.name.as_ref().is_none_or(|s| {
+                !s.trim().is_empty() && s.chars().count() <= 64 && !s.chars().any(char::is_control)
+            })
+            && self.tags.len() <= 16
             && self
                 .tags
                 .iter()

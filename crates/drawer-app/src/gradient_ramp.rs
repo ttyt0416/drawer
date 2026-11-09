@@ -354,6 +354,12 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     }
     Ok(())
 }
+impl Panel {
+    pub(super) fn exchange_path(&mut self, path: &std::path::Path) {
+        self.path = path.display().to_string();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

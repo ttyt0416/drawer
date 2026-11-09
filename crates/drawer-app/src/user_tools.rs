@@ -696,6 +696,7 @@ impl Drawer {
             drawer_core::material_library::Library,
         )>,
     ) -> Result<(), String> {
+        let material_history = self.material_checkpoint();
         let mut originally_missing = false;
         if let Some((base, next)) = materials {
             if self.materials.library.as_ref() != base.as_ref() {
@@ -715,7 +716,9 @@ impl Drawer {
         if let Err(error) = result {
             self.workspaces.staged = None;
             if let Some((base, _)) = materials {
-                if let Err(rollback) = self.publish_materials(base.as_ref().clone()) {
+                if let Err(rollback) =
+                    self.rollback_materials(base.as_ref().clone(), material_history)
+                {
                     self.materials.library = base.clone();
                     return Err(format!(
                         "{error}; material rollback failed: {rollback}; reload local materials before further edits"
