@@ -29,6 +29,7 @@ pub mod scene;
 pub mod selection;
 pub mod sizing;
 pub mod storage;
+pub mod template_bundle;
 #[cfg(test)]
 mod test_support;
 pub mod thumbnail;

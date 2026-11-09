@@ -1085,3 +1085,8 @@ crates/drawer-core/src/asset_catalog_verify.rs
 crates/drawer-app/src/asset_catalog.rs
 crates/drawer-app/src/asset_catalog_verify.rs
 docs/process/asset-catalog.md
+crates/drawer-core/src/template_bundle.rs
+crates/drawer-core/src/template_bundle_verify.rs
+crates/drawer-app/src/template_bundle.rs
+crates/drawer-app/src/template_bundle_verify.rs
+docs/process/template-bundles.md

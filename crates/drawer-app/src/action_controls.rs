@@ -772,6 +772,7 @@ impl Drawer {
                 "auto-actions" => self.begin_auto_actions(),
                 "color-management" => self.begin_monitor_color(),
                 "asset-library" => self.begin_asset_catalog()?,
+                "template-bundle" => self.begin_template_bundle(),
                 "raster-export" => self.begin_raster_export()?,
                 "save" => {
                     if let Some(n) = self.active {
