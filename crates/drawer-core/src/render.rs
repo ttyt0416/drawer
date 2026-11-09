@@ -28,6 +28,7 @@ pub struct Renderer<'a> {
     text_error: Option<String>,
     export_page: bool,
     comic_clips: bool,
+    editing_3d: bool,
     vector_bounds: Vec<Vec<Rect>>,
     order: Vec<crate::render_order::Entry>,
     deferred: Vec<bool>,
@@ -37,6 +38,80 @@ struct Contour {
     bounds: Rect,
 }
 impl<'a> Renderer<'a> {
+    pub fn editing_preview(d: &'a Document, stroke: Option<&'a crate::painting::Stroke>) -> Self {
+        let mut r = Self::preview(d, stroke);
+        r.enable_editing_3d();
+        r
+    }
+    pub(crate) fn enable_editing_3d(&mut self) {
+        self.editing_3d = true;
+        if let Ok(Some(plan)) = &mut self.float_plan {
+            plan.editing_3d();
+        }
+    }
+    pub(crate) fn world_groupable(&self, index: usize) -> bool {
+        let d = self.doc();
+        let id = d.scene.catalog.worlds.id(index);
+        self.world_shading.as_ref().is_some_and(|t| t.modern())
+            && d.scene
+                .world3d
+                .surfaces
+                .get(&id)
+                .is_some_and(|s| !s.triangles.is_empty())
+            && d.scene
+                .file_objects
+                .get(crate::layer_search::Key::World(id))
+                .is_none()
+            && crate::keyframes::local(d, crate::layer_search::Key::World(id), self.export_page)
+                .0
+                .is_identity()
+    }
+    pub(crate) fn world_fragments(&self, objects: &[usize], point: Point) -> Vec<(usize, [u8; 4])> {
+        let d = self.doc();
+        let Some(camera) = &d.scene.camera else {
+            return vec![];
+        };
+        let clipped;
+        let objects = if camera.page_bounds.contains(point) {
+            objects
+        } else {
+            clipped = objects
+                .iter()
+                .copied()
+                .filter(|i| {
+                    d.scene.comics.masks.iter().any(|m| {
+                        m.target == crate::layer_search::Key::World(d.scene.catalog.worlds.id(*i))
+                    })
+                })
+                .collect::<Vec<_>>();
+            &clipped
+        };
+        let p = if self.editing_3d {
+            crate::scene_render::edit_point(d, point)
+        } else {
+            point
+        };
+        self.world_shading
+            .as_ref()
+            .map_or_else(Vec::new, |t| {
+                if self.editing_3d && p != point {
+                    t.fragments_cached(objects, p)
+                } else {
+                    t.fragments(objects, p)
+                }
+            })
+            .into_iter()
+            .filter(|(i, _)| {
+                !self.comic_clips
+                    || crate::comics::coverage(
+                        d,
+                        crate::layer_search::Key::World(d.scene.catalog.worlds.id(*i)),
+                        point,
+                    ) > 0.
+            })
+            .collect()
+    }
+
     fn ordered(&self, mut result: [u8; 4], point: Point, original: Point) -> [u8; 4] {
         use crate::{layer_properties::Target, layer_search::Key};
         let d = self.doc();
@@ -83,6 +158,38 @@ impl<'a> Renderer<'a> {
                     |n| Some(self.vector_pixel(n, point)),
                 );
                 i = end;
+                continue;
+            }
+            if objects
+                && matches!(key, Key::World(_))
+                && let Some(n) = crate::layer_catalog::source_index(d, key)
+                && self.world_groupable(n)
+            {
+                let mut next = i;
+                let mut indices = vec![];
+                while next < self.order.len() {
+                    let key = self.order[next].key;
+                    if !matches!(key, Key::World(_)) {
+                        break;
+                    }
+                    let Some(n) = crate::layer_catalog::source_index(d, key) else {
+                        break;
+                    };
+                    if !self.world_groupable(n) {
+                        break;
+                    }
+                    indices.push(n);
+                    next += 1;
+                }
+                for (n, color) in self.world_fragments(&indices, original) {
+                    result = crate::layer_catalog::compose(
+                        d,
+                        Key::World(d.scene.catalog.worlds.id(n)),
+                        result,
+                        color,
+                    );
+                }
+                i = next;
                 continue;
             }
             match key {
@@ -458,7 +565,14 @@ impl<'a> Renderer<'a> {
                 .get(&self.doc().scene.catalog.worlds.id(index))
                 .is_some_and(|s| !s.triangles.is_empty())
         {
-            return trace.pixel(index, original);
+            return trace.pixel(
+                index,
+                if self.editing_3d {
+                    crate::scene_render::edit_point(self.doc(), original)
+                } else {
+                    original
+                },
+            );
         }
         if self.doc().scene.world3d.lens.is_some() {
             return if self
@@ -768,6 +882,7 @@ impl<'a> Renderer<'a> {
             })
             .collect();
         Self {
+            editing_3d: false,
             world_shading: crate::world_render::Trace::new(document),
             environment: document
                 .scene
@@ -1090,13 +1205,33 @@ impl<'a> Renderer<'a> {
             if self.environment_enabled() {
                 result = over(result, self.environment_at(original).rgba8());
             }
-            for index in 0..scene.worlds.len() {
-                result = crate::layer_catalog::compose(
-                    doc,
-                    crate::layer_search::Key::World(scene.catalog.worlds.id(index)),
-                    result,
-                    self.world_pixel(index, original),
-                );
+            let mut index = 0;
+            while index < scene.worlds.len() {
+                if self.world_groupable(index) {
+                    let mut end = index + 1;
+                    while end < scene.worlds.len() && self.world_groupable(end) {
+                        end += 1;
+                    }
+                    for (n, color) in
+                        self.world_fragments(&(index..end).collect::<Vec<_>>(), original)
+                    {
+                        result = crate::layer_catalog::compose(
+                            doc,
+                            crate::layer_search::Key::World(scene.catalog.worlds.id(n)),
+                            result,
+                            color,
+                        );
+                    }
+                    index = end;
+                } else {
+                    result = crate::layer_catalog::compose(
+                        doc,
+                        crate::layer_search::Key::World(scene.catalog.worlds.id(index)),
+                        result,
+                        self.world_pixel(index, original),
+                    );
+                    index += 1;
+                }
             }
         }
         result

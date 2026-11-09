@@ -331,6 +331,9 @@ impl Data {
         }
         if self.lighting.as_ref().is_some_and(|v| {
             !v.valid()
+                || v.render
+                    .as_ref()
+                    .is_some_and(|r| r.objects.keys().any(|id| index(s, *id).is_none()))
                 || self.lens.is_none()
                 || self
                     .surfaces
@@ -405,6 +408,9 @@ pub(crate) fn reconcile(s: &mut Scene) {
     s.world3d.surfaces.retain(|id, _| ids.contains(id));
     s.world3d.rigs.retain(|id, _| ids.contains(id));
     s.world3d.colliders.retain(|id| ids.contains(id));
+    if let Some(r) = s.world3d.lighting.as_mut().and_then(|l| l.render.as_mut()) {
+        r.objects.retain(|id, _| ids.contains(id));
+    }
     crate::pose_sequence::prune(s);
     crate::model_edit::prune(s);
     for n in s.world3d.nodes.values_mut() {
@@ -452,6 +458,20 @@ pub(crate) fn duplicate(
                 _ => p,
             });
             s.world3d.nodes.insert(*new, node);
+        }
+    }
+    if let Some(r) = s.world3d.lighting.as_mut().and_then(|l| l.render.as_mut()) {
+        for (old, new) in map {
+            if let (Key::World(old), Key::World(new)) = (old, new)
+                && let Some(o) = original
+                    .world3d
+                    .lighting
+                    .as_ref()
+                    .and_then(|l| l.render.as_ref())
+                    .and_then(|r| r.objects.get(old))
+            {
+                r.objects.insert(*new, o.clone());
+            }
         }
     }
     crate::pose_sequence::duplicate(s, original, map)?;

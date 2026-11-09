@@ -46,6 +46,9 @@ pub struct Renderer<'a> {
     sampling: Sampling<'a>,
 }
 impl<'a> Plan<'a> {
+    pub(crate) fn editing_3d(&mut self) {
+        self.geometry.enable_editing_3d();
+    }
     pub(crate) fn display(&self, sample: Sample) -> Result<Sample, String> {
         self.space.to_srgb(sample)
     }

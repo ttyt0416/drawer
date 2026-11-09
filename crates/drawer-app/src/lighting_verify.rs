@@ -42,6 +42,14 @@ pub(super) fn run(root: &std::path::Path) -> Result<(), String> {
                     ],
                 );
             }
+            let end = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while app.lighting.job.is_some() {
+                frame(app, t, vec![]);
+                if std::time::Instant::now() > end {
+                    return Err("Lighting preparation timed out".into());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
             settle(app, t);
             Ok(())
         };

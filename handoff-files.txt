@@ -1016,3 +1016,7 @@ crates/drawer-core/src/mannequin_fit.rs
 crates/drawer-core/src/mannequin_fit_verify.rs
 crates/drawer-app/src/mannequin_fit_verify.rs
 docs/process/mannequin-fit.md
+crates/drawer-core/src/scene_render.rs
+crates/drawer-core/src/scene_render_verify.rs
+crates/drawer-app/src/scene_render_verify.rs
+docs/process/scene-rendering.md

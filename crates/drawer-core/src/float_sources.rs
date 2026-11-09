@@ -648,6 +648,55 @@ impl Renderer<'_> {
                 environment_done = true;
             }
             let key = self.plan().order[i].key;
+            if let Key::World(_) = key
+                && let Some(n) = crate::layer_catalog::source_index(d, key)
+                && self.plan().geometry.world_groupable(n)
+            {
+                let mut next = i;
+                let mut indices = vec![];
+                while next < self.plan().order.len() {
+                    let key = self.plan().order[next].key;
+                    if !matches!(key, Key::World(_)) {
+                        break;
+                    }
+                    let Some(n) = crate::layer_catalog::source_index(d, key) else {
+                        break;
+                    };
+                    if !self.plan().geometry.world_groupable(n) {
+                        break;
+                    }
+                    indices.push(n);
+                    next += 1;
+                }
+                let objects = self.sampling.references.is_none_or(|r| r.objects)
+                    && self.sampling.fill.is_none_or(|(_, s)| {
+                        matches!(
+                            s.reference,
+                            crate::bucket::Reference::Composite | crate::bucket::Reference::Marked
+                        )
+                    });
+                if objects {
+                    for (n, color) in self.plan().geometry.world_fragments(&indices, original) {
+                        let key = Key::World(d.scene.catalog.worlds.id(n));
+                        let target = crate::layer_catalog::target(d, key)
+                            .ok_or("Missing 3D render source")?;
+                        let alpha = self.animated(key, point).2 * p::factor(d, target);
+                        let raw = self
+                            .plan()
+                            .space
+                            .from_srgb(Sample::from8(color))?
+                            .coverage(alpha)?;
+                        back = self.plan().space.compose(
+                            back,
+                            raw,
+                            crate::layer_blend::mode(d, target),
+                            1.,
+                        )?;
+                    }
+                }
+                i = next;
+                continue;
+            }
             if let Key::Layer(Target::Vector(id)) = key {
                 let target = Target::Vector(id);
                 if d.scene.clipping.binding(target).is_some() {

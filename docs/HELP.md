@@ -1661,3 +1661,12 @@ Play saved sequence preview와 Preview loop는 보기 전용이다. 문서 프�
 `model-controls`의 `Mannequin form / perspective / pose assistance`를 펼친다. 선택 관절 부위의 X/Y/Z 비율0.5..2, 로컬 viewer축과 원근 과장0..2, Body/Head/Hands 영역별 목표 외형과 혼합0..1을 조절한다. 원근은 확정된 모델 변형이므로 카메라 이동과 독립이다. Reset은 부위 비율과 원근만 기본값으로 되돌린다.
 
 자체 Body의 `Separate limb capsules`는 관절 잠금/한도 안에서 팔다리 교차를 보정하고 해결하지 못하면 원본을 유지한다. 캡슐은 손가락·의상·가져온 메시를 포함하지 않는다. `Stand upright`는 잠기지 않은 몸통/하체를 펴고 모델 위쪽을 세계 위쪽으로 맞춘다. `Ground feet`는 실제 최저 발 꼭짓점을 세계Y 바닥 높이에 맞춘다. 두 발의 동시IK·동적 균형은 수행하지 않는다. `Stand + ground`는 두 작업을 한 Undo로 묶는다. 모두 미리보기 후 Apply/Cancel이고 결과는 native118에 내장한다.
+
+
+### 3D 광원·그림자·안개와 표면 옵션
+
+`scene-lighting`에서 광원의 `Follow scene camera`를 선택하면 카메라 기준 위치/방향을 사용한다. `Advanced local scene rendering`을 펼쳐 물체별 그림자 생성/수신과 바닥 역할, 그림자 대상 Off/3D models/Ground/Both·해상도 High1024/Medium512/Low256을 고른다. 바닥은 실제 Plane/Box 모델을 지정한다.
+
+안개는 Depth/Distance/세계 Height from below·above를 구분하고 시작<끝·밀도·색을 조절한다. 윤곽선 폭0..4와 색은 별도다. 환경의 단색 tint 또는 Files/내장 로컬 Material/Panorama를 고른다. 이미지 소스는 `scene-environment`에서 로컬2:1 PNG/JPEG/HDR을 먼저 내장하며 회전·광량·배경은 그 창에서 독립 편집한다. 클라우드 소재는 사용하지 않는다.
+
+물체의 알파 Source/Opaque/임계/반투명과 alpha multiplier, 빌보드 전체축/수평축을 선택한다. 연속3D 레이어는 앞뒤 면과 다른 물체를 깊이순으로 합성한다.2D 레이어·파일 대체·물체2D 키 변환은 별도 합성 그룹을 만든다. 빌보드는 표시용이며 메시/물리 배치를 바꾸지 않는다. Normal/Fast/High speed는 편집 화면만 줄이고 최종 출력은 유지한다. 설정은 취소 가능한 Preview/Apply/Discard·한 Undo와 native119로 보존한다. 상세 범위는 `docs/process/scene-rendering.md`에 기록했다.

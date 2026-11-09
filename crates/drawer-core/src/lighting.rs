@@ -36,6 +36,8 @@ pub struct Light {
     pub color: V,
     pub intensity: f64,
     pub shadow: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub follow_camera: bool,
 }
 impl Default for Light {
     fn default() -> Self {
@@ -46,6 +48,7 @@ impl Default for Light {
             color: [1.; 3],
             intensity: 1.,
             shadow: true,
+            follow_camera: false,
         }
     }
 }
@@ -81,6 +84,8 @@ pub struct Settings {
     pub shadows: bool,
     pub bands: u8,
     pub guides: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub render: Option<crate::scene_render::Settings>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -92,12 +97,17 @@ impl Default for Settings {
             shadows: true,
             bands: 3,
             guides: false,
+            render: None,
         }
     }
 }
 impl Settings {
     pub fn valid(&self) -> bool {
         self.version == 1
+            && self
+                .render
+                .as_ref()
+                .is_none_or(crate::scene_render::Settings::valid)
             && self.lights.len() <= 8
             && self.lights.iter().all(Light::valid)
             && self.ambient.is_finite()
@@ -105,7 +115,27 @@ impl Settings {
             && (2..=8).contains(&self.bands)
     }
     pub fn bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.lights.len() * std::mem::size_of::<Light>()
+        std::mem::size_of::<Self>()
+            + self.lights.len() * std::mem::size_of::<Light>()
+            + self
+                .render
+                .as_ref()
+                .map_or(0, |r| std::mem::size_of_val(r) + r.objects.len() * 128)
+    }
+}
+pub struct Prepared {
+    inner: world3d::Prepared,
+    frame: u32,
+}
+impl Prepared {
+    pub fn scene(&self) -> &Scene {
+        self.inner.scene()
+    }
+    pub fn commit(self, d: &mut Document) -> Result<bool, String> {
+        if d.current_frame != self.frame {
+            return Err("Lighting preview frame changed".into());
+        }
+        self.inner.commit(d)
     }
 }
 pub fn prepare(
@@ -113,7 +143,7 @@ pub fn prepare(
     settings: Settings,
     budget: usize,
     cancel: &AtomicBool,
-) -> Result<world3d::Prepared, String> {
+) -> Result<Prepared, String> {
     crate::book_io::check_cancel(cancel)?;
     if !settings.valid() {
         return Err("Invalid lights / rendering settings".into());
@@ -135,6 +165,16 @@ pub fn prepare(
         return Err("Lighting scene / acceleration memory budget exceeded".into());
     }
     let mut s = d.snapshot();
+    if let Some(r) = &settings.render
+        && matches!(
+            r.source,
+            crate::scene_render::LightSource::Files
+                | crate::scene_render::LightSource::Material
+                | crate::scene_render::LightSource::Panorama
+        )
+    {
+        s.scene.world3d.environment.as_mut().ok_or("Load/embed a local environment file or material panorama in scene-environment first")?.settings.illumination=true;
+    }
     s.scene.world3d.lighting = Some(settings);
     let (c, mut l) = world3d::default_camera(d);
     if d.scene.camera.is_some() && d.scene.world3d.lens.is_none() {
@@ -142,6 +182,8 @@ pub fn prepare(
     }
     s.scene.camera = Some(c);
     s.scene.world3d.lens = Some(l);
+    let frozen = crate::layer_merge::preview(&s, d.current_frame)?;
+    crate::files::native_scene(&frozen).map_err(|e| e.to_string())?;
     crate::book_io::check_cancel(cancel)?;
     world3d::prepared(
         d,
@@ -150,6 +192,10 @@ pub fn prepare(
         vec![],
         vec![],
     )
+    .map(|inner| Prepared {
+        inner,
+        frame: d.current_frame,
+    })
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Vanishing {

@@ -1017,11 +1017,12 @@ impl CanvasView {
                 stroke.map_or((0, 0), |s| s.preview_key()),
             ))
         {
-            let reduction = document.width.max(document.height).div_ceil(2048).max(1);
+            let reduction = document.width.max(document.height).div_ceil(2048).max(1)
+                * drawer_core::scene_render::viewport_reduction(document);
             let width = document.width.div_ceil(reduction);
             let height = document.height.div_ceil(reduction);
             let mut pixels = Vec::with_capacity((width * height) as usize);
-            let renderer = drawer_core::render::Renderer::preview(document, stroke);
+            let renderer = drawer_core::render::Renderer::editing_preview(document, stroke);
             self.render_error = renderer.error().map(str::to_owned);
             if self.render_error.is_some() {
                 return;
@@ -1110,7 +1111,8 @@ impl CanvasView {
         mesh.indices = vec![0, 1, 2, 0, 2, 3];
         painter.add(egui::Shape::mesh(mesh));
         {
-            let scale = (2048.0 / (rect.width().max(rect.height()) as f64 * ppp)).min(1.0);
+            let scale = (2048.0 / (rect.width().max(rect.height()) as f64 * ppp)).min(1.0)
+                / drawer_core::scene_render::viewport_reduction(document) as f64;
             let dimensions = [
                 (rect.width() as f64 * ppp * scale).ceil().max(1.0) as usize,
                 (rect.height() as f64 * ppp * scale).ceil().max(1.0) as usize,
@@ -1127,7 +1129,7 @@ impl CanvasView {
                 stroke: stroke.map_or((0, 0), |s| s.preview_key()),
             };
             if self.screen_image.as_ref().map(|(k, _)| *k) != Some(key) {
-                let renderer = drawer_core::render::Renderer::preview(document, stroke);
+                let renderer = drawer_core::render::Renderer::editing_preview(document, stroke);
                 self.render_error = renderer.error().map(str::to_owned);
                 if self.render_error.is_some() {
                     return;

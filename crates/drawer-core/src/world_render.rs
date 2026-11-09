@@ -72,7 +72,13 @@ struct Node {
     end: usize,
     children: Option<[usize; 2]>,
 }
+struct FragmentCache {
+    point: Point,
+    objects: Vec<usize>,
+    pixels: Vec<(usize, [u8; 4])>,
+}
 pub(crate) struct Trace {
+    cache: std::sync::Mutex<Option<FragmentCache>>,
     triangles: Vec<Triangle>,
     textures: Vec<Option<(usize, Vec<u8>)>>,
     imported: Vec<std::collections::BTreeMap<u16, ImportedMaterial>>,
@@ -83,6 +89,8 @@ pub(crate) struct Trace {
     nodes: Vec<Node>,
     settings: Settings,
     lens: crate::world3d::Lens,
+    camera: crate::scene::Camera,
+    policies: Vec<crate::scene_render::Object>,
 }
 #[derive(Clone, Copy)]
 struct Hit {
@@ -119,22 +127,64 @@ impl Trace {
             return None;
         }
         let mut trace = Self::build_geometry(d, settings.clone(), false)?;
-        trace.environment = d
-            .scene
-            .world3d
-            .environment
+        trace.environment = if settings
+            .render
             .as_ref()
-            .filter(|e| e.settings.illumination && e.settings.strength > 0.)
-            .and_then(|e| crate::environment::Sampler::new(e).ok())
-            .map(|s| s.light());
+            .is_some_and(|r| r.source == crate::scene_render::LightSource::SingleColor)
+        {
+            None
+        } else {
+            d.scene
+                .world3d
+                .environment
+                .as_ref()
+                .filter(|e| e.settings.illumination && e.settings.strength > 0.)
+                .and_then(|e| crate::environment::Sampler::new(e).ok())
+                .map(|s| s.light())
+        };
         Some(trace)
     }
     pub(crate) fn surfaces(d: &Document) -> Self {
         Self::build_geometry(d, Settings::default(), true).unwrap()
     }
-    fn build_geometry(d: &Document, settings: Settings, physical: bool) -> Option<Self> {
+    fn build_geometry(d: &Document, mut settings: Settings, physical: bool) -> Option<Self> {
         let (camera, lens) = crate::world3d::default_camera(d);
+        if !physical {
+            for lamp in &mut settings.lights {
+                if lamp.follow_camera {
+                    let rotation = Matrix::euler(lens.angles);
+                    let pose = rotation.then(Matrix::translation(camera.position));
+                    lamp.kind = match lamp.kind {
+                        Kind::Directional { direction } => Kind::Directional {
+                            direction: rotation.vector(direction),
+                        },
+                        Kind::Point { position } => Kind::Point {
+                            position: pose.map(position),
+                        },
+                        Kind::Spot {
+                            position,
+                            direction,
+                            angle,
+                        } => Kind::Spot {
+                            position: pose.map(position),
+                            direction: rotation.vector(direction),
+                            angle,
+                        },
+                    };
+                }
+            }
+        }
         let mut t = Self {
+            cache: std::sync::Mutex::new(None),
+            camera: camera.clone(),
+            policies: (0..d.scene.worlds.len())
+                .map(|i| {
+                    settings
+                        .render
+                        .as_ref()
+                        .map_or_else(Default::default, |r| r.object(d.scene.catalog.worlds.id(i)))
+                })
+                .collect(),
             object_bounds: vec![None; d.scene.worlds.len()],
             rays: lens.rays(&camera),
             textures: vec![None; d.scene.worlds.len()],
@@ -175,6 +225,13 @@ impl Trace {
             let frame = frames.get(&id).copied().unwrap_or_else(|| {
                 crate::world3d::node(&d.scene, id).map_or(Matrix::default(), |n| n.frame)
             });
+            let original_frame = frame;
+            let frame = if physical {
+                frame
+            } else {
+                crate::scene_render::billboard(frame, t.policies[object].billboard, &camera, lens)
+            };
+            let delta = original_frame.inverse().then(frame);
             let inv = frame.inverse();
             if !physical && let Some(attributes) = &s.imported {
                 for (index, m) in &attributes.materials {
@@ -221,15 +278,20 @@ impl Trace {
                 } else {
                     face
                 };
-                let p = face.v.map(|i| m.vertices[i as usize]);
+                let p = face.v.map(|i| {
+                    if physical
+                        || t.policies[object].billboard == crate::scene_render::Billboard::Off
+                    {
+                        m.vertices[i as usize]
+                    } else {
+                        delta.map(m.vertices[i as usize])
+                    }
+                });
                 let area = cross(sub(p[1], p[0]), sub(p[2], p[0]));
                 if dot(area, area) < 1e-24 {
                     continue;
                 }
                 let color = s.materials[face.material as usize].rgba.map(|v| v as f64);
-                if !physical && color[3] <= 0. {
-                    continue;
-                }
                 let n = face.n.map(|indices| {
                     indices.map(|i| {
                         let n = s.normals[i as usize];
@@ -251,13 +313,20 @@ impl Trace {
                         .map(|indices| indices.map(|i| s.texcoords[i as usize])),
                     face: face_index,
                     opaque: physical
-                        || props.opacity == 100
-                            && s.imported
-                                .as_ref()
-                                .and_then(|a| a.materials.get(&face.material))
-                                .map_or(color[3] >= 1., |m| {
-                                    m.alpha != crate::model_import::Alpha::Blend
-                                }),
+                        || (match t.policies[object].alpha {
+                            crate::scene_render::Alpha::Opaque
+                            | crate::scene_render::Alpha::Threshold => props.opacity == 100,
+                            crate::scene_render::Alpha::Blend => false,
+                            crate::scene_render::Alpha::Source => {
+                                props.opacity == 100
+                                    && s.imported
+                                        .as_ref()
+                                        .and_then(|a| a.materials.get(&face.material))
+                                        .map_or(color[3] >= 1., |m| {
+                                            m.alpha != crate::model_import::Alpha::Blend
+                                        })
+                            }
+                        }),
                     material: face.material,
                     bounds: Bounds::of(p),
                 });
@@ -376,7 +445,119 @@ impl Trace {
         let (o, d) = self.rays.at(p);
         Ray { o, d }
     }
+    pub(crate) fn modern(&self) -> bool {
+        self.settings.render.is_some()
+    }
+    pub(crate) fn fragments_cached(&self, objects: &[usize], p: Point) -> Vec<(usize, [u8; 4])> {
+        if let Ok(cache) = self.cache.lock()
+            && let Some(c) = &*cache
+            && c.point == p
+            && c.objects == objects
+        {
+            return c.pixels.clone();
+        }
+        let pixels = self.fragments(objects, p);
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = Some(FragmentCache {
+                point: p,
+                objects: objects.to_vec(),
+                pixels: pixels.clone(),
+            });
+        }
+        pixels
+    }
+    pub(crate) fn fragments(&self, objects: &[usize], p: Point) -> Vec<(usize, [u8; 4])> {
+        let ray = self.ray(p);
+        let mut hits = vec![];
+        let mut stack = vec![];
+        if !self.nodes.is_empty() {
+            stack.push(0);
+        }
+        while let Some(index) = stack.pop() {
+            let node = &self.nodes[index];
+            if !node.bounds.hit(ray, self.lens.near, self.lens.far) {
+                continue;
+            }
+            if let Some(children) = node.children {
+                stack.extend(children);
+            } else {
+                for i in node.start..node.end {
+                    let t = &self.triangles[i];
+                    if objects.contains(&t.object)
+                        && let Some((depth, u, v)) =
+                            intersect(t, ray, self.lens.near, self.lens.far)
+                        && self.imported_sample(t, u, v)[3] > 0.
+                    {
+                        hits.push(Hit {
+                            index: i,
+                            t: depth,
+                            u,
+                            v,
+                        });
+                    }
+                }
+            }
+        }
+        hits.sort_by(|a, b| {
+            b.t.total_cmp(&a.t).then_with(|| {
+                self.triangles[a.index]
+                    .object
+                    .cmp(&self.triangles[b.index].object)
+            })
+        });
+        let mut last = vec![None::<f64>; self.object_bounds.len()];
+        hits.retain(|h| {
+            let object = self.triangles[h.index].object;
+            let duplicate =
+                last[object].is_some_and(|depth| (depth - h.t).abs() < 2e-9 + 1e-12 * h.t.abs());
+            if !duplicate {
+                last[object] = Some(h.t);
+            }
+            !duplicate
+        });
+        let mut output = hits
+            .iter()
+            .map(|h| (self.triangles[h.index].object, self.shade(ray, *h)))
+            .collect::<Vec<_>>();
+        if let Some(options) = &self.settings.render
+            && options.outline > 0
+        {
+            let near = hits.last().copied();
+            let radius = options.outline as f64;
+            let mut edge = None;
+            for delta in [[-radius, 0.], [radius, 0.], [0., -radius], [0., radius]] {
+                let other_ray = self.ray(add2(p, delta));
+                let other = self.nearest(other_ray, self.lens.near, self.lens.far, |t| {
+                    objects.contains(&t.object)
+                });
+                let changed = match (near, other) {
+                    (Some(a), Some(b)) => {
+                        self.triangles[a.index].object != self.triangles[b.index].object
+                            || (a.t - b.t).abs() > 0.02 * (1. + a.t.abs())
+                            || dot(self.normal(ray, a, true), self.normal(other_ray, b, true)) < 0.7
+                    }
+                    (None, None) => false,
+                    _ => true,
+                };
+                if changed {
+                    edge = near.or(other);
+                    break;
+                }
+            }
+            if let Some(hit) = edge {
+                output.push((self.triangles[hit.index].object, options.line));
+            }
+        }
+        output
+    }
     pub(crate) fn pixel(&self, object: usize, p: Point) -> [u8; 4] {
+        if self.modern() {
+            return self
+                .fragments(&[object], p)
+                .into_iter()
+                .fold([0; 4], |back, (_, top)| crate::render::over(back, top));
+        }
+
         let ray = self.ray(p);
         if self
             .object_bounds
@@ -449,7 +630,13 @@ impl Trace {
             h,
             matches!(self.settings.style, Style::Smooth | Style::Toon),
         );
-        let mut light = [self.settings.ambient; 3];
+        let mut light = self
+            .settings
+            .render
+            .as_ref()
+            .map_or([self.settings.ambient; 3], |r| {
+                r.tint.map(|v| v * self.settings.ambient)
+            });
         if self.settings.style == Style::Unlit {
             light = [1.; 3];
         } else {
@@ -487,15 +674,36 @@ impl Trace {
                 if cosine == 0. || attenuation == 0. {
                     continue;
                 }
-                if self.settings.shadows && lamp.shadow {
+                if self.settings.shadows
+                    && lamp.shadow
+                    && self
+                        .settings
+                        .render
+                        .as_ref()
+                        .is_none_or(|r| r.receives(&self.policies[t.object]))
+                {
                     let epsilon = 1e-5 + p.into_iter().map(f64::abs).fold(0., f64::max) * 1e-12;
+                    let sample = if let Some(r) = &self.settings.render {
+                        let span = self.nodes.first().map_or(1., |n| {
+                            (0..3)
+                                .map(|i| n.bounds.hi[i] - n.bounds.lo[i])
+                                .fold(0., f64::max)
+                        });
+                        crate::scene_render::shadow_sample(p, dir, span, r.shadow.resolution())
+                    } else {
+                        p
+                    };
                     let shadow = Ray {
-                        o: add(p, mul(n, epsilon)),
+                        o: add(sample, mul(n, epsilon)),
                         d: dir,
                     };
                     if self
                         .nearest(shadow, epsilon, (maximum - epsilon).max(epsilon), |t| {
                             t.opaque
+                                && (self.settings.render.is_none()
+                                    || (self.policies[t.object].cast
+                                        && (t.face != self.triangles[h.index].face
+                                            || t.object != self.triangles[h.index].object)))
                         })
                         .is_some()
                     {
@@ -539,17 +747,42 @@ impl Trace {
             };
             (s.clamp(0., 1.) * 255.).round() as u8
         };
+        let fog = self.settings.render.as_ref().and_then(|r| r.fog.as_ref());
+        let coverage = fog.map_or(0., |f| f.coverage(p, &self.camera, self.lens));
+        let color = std::array::from_fn::<_, 3, _>(|i| {
+            encode(
+                linear(t.color[i]) * linear(texture[i]) * light[i] * (1. - coverage)
+                    + fog.map_or(0., |f| linear(f.color[i])) * coverage,
+            )
+        });
         [
-            encode(linear(t.color[0]) * linear(texture[0]) * light[0]),
-            encode(linear(t.color[1]) * linear(texture[1]) * light[1]),
-            encode(linear(t.color[2]) * linear(texture[2]) * light[2]),
+            color[0],
+            color[1],
+            color[2],
             (imported[3] * 255.).round() as u8,
         ]
+    }
+    fn policy_alpha(&self, t: &Triangle, alpha: f64) -> f64 {
+        use crate::scene_render::Alpha;
+        let p = &self.policies[t.object];
+        match p.alpha {
+            Alpha::Source => alpha,
+            Alpha::Blend => alpha * p.alpha_scale,
+            Alpha::Opaque => 1.,
+            Alpha::Threshold => {
+                if alpha * p.alpha_scale >= p.threshold {
+                    1.
+                } else {
+                    0.
+                }
+            }
+        }
     }
     fn imported_sample(&self, t: &Triangle, u: f64, v: f64) -> [f64; 4] {
         use crate::model_import::{Alpha, Wrap};
         let Some(m) = self.imported[t.object].get(&t.material) else {
-            return [1., 1., 1., t.color[3]];
+            let alpha = self.policy_alpha(t, t.color[3]);
+            return [1., 1., 1., alpha];
         };
         let mut color = [1.; 4];
         if let (Some((w, h, pixels)), Some(uv)) = (&m.pixels, t.uv) {
@@ -570,16 +803,20 @@ impl Trace {
             color = std::array::from_fn(|i| pixels[(y * *w + x) * 4 + i] as f64 / 255.);
         }
         let alpha = color[3] * t.color[3];
-        color[3] = match m.alpha {
-            Alpha::Opaque => 1.,
-            Alpha::Mask => {
-                if alpha >= m.cutoff {
-                    1.
-                } else {
-                    0.
+        color[3] = if self.policies[t.object].alpha != crate::scene_render::Alpha::Source {
+            self.policy_alpha(t, alpha)
+        } else {
+            match m.alpha {
+                Alpha::Opaque => 1.,
+                Alpha::Mask => {
+                    if alpha >= m.cutoff {
+                        1.
+                    } else {
+                        0.
+                    }
                 }
+                Alpha::Blend => alpha,
             }
-            Alpha::Blend => alpha,
         };
         color
     }
@@ -607,4 +844,8 @@ impl Trace {
         }
         true
     }
+}
+
+fn add2(a: Point, b: Point) -> Point {
+    [a[0] + b[0], a[1] + b[1]]
 }

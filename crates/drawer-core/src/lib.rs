@@ -587,3 +587,7 @@ pub mod model_edit_verify;
 
 pub mod mannequin_fit;
 pub mod mannequin_fit_verify;
+
+pub mod scene_render;
+
+pub mod scene_render_verify;
