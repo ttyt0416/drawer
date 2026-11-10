@@ -628,6 +628,7 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn resume_data_work_time(&mut self) {
+        self.resume_recovery();
         let Some(storage) = &self.storage else {
             return;
         };

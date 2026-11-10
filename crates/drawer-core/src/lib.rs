@@ -654,3 +654,5 @@ mod native_integrity;
 pub mod save_generation;
 
 pub mod atomic_file;
+
+pub mod recovery;

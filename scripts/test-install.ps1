@@ -334,3 +334,5 @@ if($smokeResult -notmatch 'atomic_history=true'){throw '문서별 원자적 실�
 if($smokeResult -notmatch 'native_generation=true'){throw 'Native generation verification failed'}
 
 if($smokeResult -notmatch 'atomic_save=true'){throw 'Verified atomic save failed'}
+
+if($smokeResult -notmatch 'local_recovery=true'){throw 'Local recovery verification failed'}

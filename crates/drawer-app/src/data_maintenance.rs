@@ -81,6 +81,7 @@ fn worker(
 }
 impl Drawer {
     fn quiesce_data_io(&mut self, ctx: &egui::Context) -> bool {
+        self.quiesce_recovery();
         let mut busy = false;
         busy |= self.quiesce_asset_catalog(ctx);
         busy |= self.quiesce_raster_export(ctx);

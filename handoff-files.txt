@@ -1191,3 +1191,9 @@ docs/process/native-generations.md
 crates/drawer-core/src/atomic_file.rs
 crates/drawer-core/src/atomic_file_verify.rs
 docs/process/atomic-save.md
+
+crates/drawer-core/src/recovery.rs
+crates/drawer-core/src/recovery_verify.rs
+crates/drawer-app/src/recovery.rs
+crates/drawer-app/src/recovery_verify.rs
+docs/process/recovery.md

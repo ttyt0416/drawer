@@ -536,6 +536,9 @@ impl Drawer {
             {
                 self.status = Some(error);
             }
+            if crate::help::button(ui, "Recovery…", "files").clicked() {
+                self.recovery.open = true;
+            }
             self.recent_menu(ui);
             if crate::help::button(ui, "Scanner / camera…", "acquisition").clicked() {
                 self.finish_stroke();

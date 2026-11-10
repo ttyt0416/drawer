@@ -183,6 +183,40 @@ pub struct Document {
 }
 
 impl Document {
+    /// Freeze editable current state without cloning session Undo/Redo caches.
+    pub fn current_copy(&self) -> Self {
+        Self {
+            work_time: self.work_time.clone(),
+            id: self.id,
+            color: self.color.clone(),
+            title: self.title.clone(),
+            source_path: self.source_path.clone(),
+            width: self.width,
+            height: self.height,
+            dpi: self.dpi,
+            layers: self.layers.clone(),
+            path: self.path.clone(),
+            dirty: self.dirty,
+            view: self.view,
+            tool: self.tool,
+            revision: self.revision,
+            scene: self.scene.clone(),
+            animation: self.animation.clone(),
+            current_frame: self.current_frame,
+            camera_guides: self.camera_guides,
+            onion: self.onion,
+            light_table: self.light_table.clone(),
+            keyframe_content: self.keyframe_content,
+            history: Default::default(),
+        }
+    }
+    pub fn mark_recovered(&mut self, title: String) {
+        self.path = None;
+        self.source_path = None;
+        self.title = title;
+        self.history = Default::default();
+        self.dirty = true;
+    }
     pub fn create(spec: CanvasSpec, memory_budget: usize) -> Result<Self, CreateError> {
         if !(1..=MAX_DIMENSION).contains(&spec.width) || !(1..=MAX_DIMENSION).contains(&spec.height)
         {
