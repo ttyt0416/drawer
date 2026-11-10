@@ -645,3 +645,5 @@ pub mod action_repeat;
 pub mod print_options;
 
 pub mod book_options;
+
+pub mod work_library;

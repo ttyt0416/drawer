@@ -788,6 +788,7 @@ impl Drawer {
                 }
                 "auto-actions" => self.begin_auto_actions(),
                 "color-management" => self.begin_monitor_color(),
+                "work-library" => self.begin_work_library()?,
                 "local-data" => self.data_maintenance.open = true,
                 "asset-library" => self.begin_asset_catalog()?,
                 "template-bundle" => self.begin_template_bundle(),

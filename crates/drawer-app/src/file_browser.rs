@@ -247,7 +247,11 @@ impl Drawer {
         p.open = false;
         Ok(())
     }
-    fn browser_event(&mut self, p: &mut Panel, event: core::Event) -> Result<(), String> {
+    pub(super) fn browser_event(
+        &mut self,
+        p: &mut Panel,
+        event: core::Event,
+    ) -> Result<(), String> {
         match event {
             core::Event::Renamed { old, new } => {
                 let mut unresolved = std::collections::BTreeSet::new();
@@ -493,6 +497,10 @@ impl Drawer {
                         .map(Value::Event)
                 })?);
             }
+            "work-library" => {
+                self.begin_work_library()?;
+                p.open = false;
+            }
             "new-folder" => {
                 if p.job.is_some() {
                     return Err("Finish or cancel the browser job first".into());
@@ -719,7 +727,7 @@ impl Drawer {
         p.controls.clear();
         p.rows.clear();
         egui::Window::new("Local files").id(egui::Id::new("local-files")).default_pos(egui::pos2(20.,20.)).default_width(790.).max_height(660.).vscroll(true).open(&mut open).show(ctx,|ui|{
-            ui.horizontal_wrapped(|ui|{for(key,label)in[("open","Open selected"),("parent","Parent"),("home","Home"),("refresh","Refresh folder"),("save","Save preferences"),("close","Close")]{let r=ui.add_enabled(!p.mutating(),egui::Button::new(label));p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
+            ui.horizontal_wrapped(|ui|{for(key,label)in[("work-library","Work library"),("open","Open selected"),("parent","Parent"),("home","Home"),("refresh","Refresh folder"),("save","Save preferences"),("close","Close")]{let r=ui.add_enabled(!p.mutating(),egui::Button::new(label));p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
             ui.horizontal(|ui|{let r=ui.text_edit_singleline(&mut p.address);p.controls.insert("address",r.rect);if r.lost_focus()&&ui.input(|i|i.key_pressed(egui::Key::Enter)){command=Some("go");}let r=ui.button("Go");p.controls.insert("go",r.rect);if r.clicked(){command=Some("go");}});
             ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut p.draft.view,View::Details,"Details");let r=ui.selectable_value(&mut p.draft.view,View::Thumbnails,"Thumbnails");p.controls.insert("thumbnails",r.rect);ui.label("Sort");for v in[Sort::Name,Sort::Extension,Sort::Modified,Sort::ExtensionModified]{ui.selectable_value(&mut p.draft.sort,v,format!("{v:?}"));}let r=ui.checkbox(&mut p.draft.descending,"Descending");p.controls.insert("descending",r.rect);});
             ui.horizontal_wrapped(|ui|{ui.label("File type");for v in[Filter::All,Filter::Supported,Filter::Native,Filter::Images]{ui.selectable_value(&mut p.draft.filter,v,format!("{v:?}"));}ui.label("Name contains");ui.text_edit_singleline(&mut p.draft.name);let r=ui.button("Favorite this folder");p.controls.insert("favorite",r.rect);if r.clicked(){command=Some("favorite");}});

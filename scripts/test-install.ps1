@@ -326,3 +326,5 @@ try {
 if($smokeResult -notmatch 'pdf_options=true'){throw 'PDF/PSD 페이지·주석·압축·합성 검증 실패'}
 
 if($smokeResult -notmatch 'local_format_support=true'){throw '로컬 문서/도구 미지원 형식 검증 실패'}
+
+if($smokeResult -notmatch 'work_library=true'){throw '로컬 작품 목록/복구/색인/휴지통 분리 검증 실패'}

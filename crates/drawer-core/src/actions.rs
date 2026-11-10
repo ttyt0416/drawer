@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 260] = [
+pub const EXTRA_COMMANDS: [&str; 261] = [
+    "work-library",
     "local-data",
     "local-files",
     "print-preview",
@@ -560,6 +561,7 @@ impl Settings {
             }
         }
         match command {
+            "work-library" => "Local work library, cached previews and metadata recovery",
             "Wash" => "Airbrush",
             "PixelPen" => "Pixel pen",
             "save" => "Save",
