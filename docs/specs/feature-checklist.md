@@ -2593,7 +2593,7 @@
   저장·취소: 출력 프리셋 저장; 원문서 픽셀 무변경 인쇄/출력 설정은 그림 실행 취소 제외  
   완료 검증: 물리 길이·컬러 표본·표시 전용 가이드의 포함/제외를 로컬 출력물과 대조한다. 빈 입력·최소/최대 설정·취소·문서 닫기·저장 후 재열기를 포함한다.
 
-- [ ] **257.** PDF 입력 해상도·페이지·주석 이미지화·제본 방향·메타데이터·압축, PSD/PSB 텍스트·말풍선·합성본 옵션
+- [x] **257.** PDF 입력 해상도·페이지·주석 이미지화·제본 방향·메타데이터·압축, PSD/PSB 텍스트·말풍선·합성본 옵션
 
   입력·결과: PDF는 선택페이지·DPI·주석이미지화·제본방향·메타데이터·압축을 지정하되 스크립트와 외부URL은 실행하지 않는다. PSD/PSB 텍스트·말풍선은 검증된 편집객체 어댑터가 없으면 기능180/234와 같이 레이어별 래스터대체하고 손실을 표시한다. 합성미리보기 포함 여부는 선택할 수 있으나 원본자체문서의 편집성을 바꾸지 않는다.  
   필수 옵션: PDF 압축·뷰어 페이지 배치·가져오기 방향 — PDF 출력: ZIP, JPEG (Highest), JPEG (High), JPEG (Medium), JPEG (Low), JPEG (Lowest), Single Page, Single Page Continuous, Two-Up, Two-Up Continuous; PDF 입력: Left binding, Right binding, From left, From right, Import annotations as image. 무손실 ZIP/단계별 JPEG, 단면/연속단면/맞쪽/연속맞쪽, 제본·시작 방향과 주석 래스터화를 구분한다.  

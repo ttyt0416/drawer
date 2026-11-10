@@ -322,3 +322,5 @@ try {
     if ((Get-Item -LiteralPath $resolvedTest).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '시험 정리 대상은 링크일 수 없습니다.' }
     Remove-Item -LiteralPath $resolvedTest -Recurse -Force
 }
+
+if($smokeResult -notmatch 'pdf_options=true'){throw 'PDF/PSD 페이지·주석·압축·합성 검증 실패'}

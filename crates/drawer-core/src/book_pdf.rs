@@ -93,8 +93,45 @@ pub fn validate(bytes: &[u8]) -> Result<usize, String> {
     Ok(count)
 }
 pub fn encode(pages: &[Page], cancel: &AtomicBool) -> Result<Vec<u8>, String> {
+    encode_options(pages, &crate::book_options::Output::default(), cancel)
+}
+pub fn encode_options(
+    pages: &[Page],
+    options: &crate::book_options::Output,
+    cancel: &AtomicBool,
+) -> Result<Vec<u8>, String> {
+    encode_options_budget(pages, options, book_io::MAX_BYTES.saturating_mul(4), cancel)
+}
+pub fn encode_options_budget(
+    pages: &[Page],
+    options: &crate::book_options::Output,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> Result<Vec<u8>, String> {
     book_io::validate(pages, book_io::MAX_BYTES)?;
-    let mut d = lopdf::Document::with_version("1.4");
+    let raw = pages.iter().map(|p| p.image.memory_bytes()).sum::<usize>();
+    let jpeg = if options.compression.quality().is_some() {
+        pages
+            .iter()
+            .map(|p| p.image.memory_bytes())
+            .max()
+            .unwrap_or(0)
+            .saturating_mul(9)
+    } else {
+        0
+    };
+    if raw
+        .saturating_mul(4)
+        .saturating_add(jpeg)
+        .saturating_add(1024 * 1024)
+        > budget
+    {
+        return Err("PDF encoding workspace memory reserve; choose fewer/smaller pages".into());
+    }
+    if !options.metadata.valid() {
+        return Err("PDF metadata limit".into());
+    }
+    let mut d = lopdf::Document::with_version("1.5");
     d.reference_table.cross_reference_type = lopdf::xref::XrefType::CrossReferenceTable;
     let tree = d.new_object_id();
     let mut kids = vec![];
@@ -119,7 +156,28 @@ pub fn encode(pages: &[Page], cancel: &AtomicBool) -> Result<Vec<u8>, String> {
             dictionary! {"Type"=>"XObject","Subtype"=>"Image","Width"=>w,"Height"=>h,"ColorSpace"=>"DeviceRGB","BitsPerComponent"=>8,"SMask"=>mask},
             rgb,
         );
-        image.compress().map_err(|e| e.to_string())?;
+        if let Some(q) = options.compression.quality() {
+            let jpeg = crate::jpeg_output::encode(
+                crate::jpeg_output::Image {
+                    rgb: &image.content,
+                    width: w,
+                    height: h,
+                    dpi: p.dpi,
+                    icc: None,
+                },
+                crate::jpeg_output::Settings {
+                    luma: q,
+                    chroma: q,
+                    sampling: crate::jpeg_output::Sampling::S444,
+                },
+                book_io::MAX_BYTES,
+                cancel,
+            )?;
+            image.set_content(jpeg);
+            image.dict.set("Filter", "DCTDecode");
+        } else {
+            image.compress().map_err(|e| e.to_string())?;
+        }
         let image = d.add_object(image);
         let pw = w as f64 * 72. / p.dpi;
         let ph = h as f64 * 72. / p.dpi;
@@ -134,7 +192,12 @@ pub fn encode(pages: &[Page], cancel: &AtomicBool) -> Result<Vec<u8>, String> {
         tree,
         Object::Dictionary(dictionary! {"Type"=>"Pages","Kids"=>kids,"Count"=>pages.len() as i64}),
     );
-    let catalog = d.add_object(dictionary! {"Type"=>"Catalog","Pages"=>tree});
+    let catalog = d.add_object(dictionary! {"Type"=>"Catalog","Pages"=>tree,
+    "PageLayout"=>options.layout.name(options.right_binding),
+    "Lang"=>lopdf::text_string(&options.metadata.language),
+    "ViewerPreferences"=>dictionary!{"Direction"=>if options.right_binding{"R2L"}else{"L2R"}}});
+    let info=d.add_object(dictionary!{"Title"=>lopdf::text_string(&options.metadata.title),"Author"=>lopdf::text_string(&options.metadata.author),"Creator"=>lopdf::text_string("Drawer local raster exchange")});
+    d.trailer.set("Info", info);
     d.trailer.set("Root", catalog);
     let mut out = vec![];
     d.save_to(&mut out).map_err(|e| e.to_string())?;

@@ -1166,3 +1166,8 @@ crates/drawer-core/src/print_options.rs
 crates/drawer-core/src/print_options_verify.rs
 crates/drawer-app/src/print_options_verify.rs
 docs/process/print-options.md
+crates/drawer-core/src/book_options.rs
+crates/drawer-core/src/pdf_annotations.rs
+crates/drawer-core/src/book_options_verify.rs
+crates/drawer-app/src/book_options_verify.rs
+docs/process/pdf-options.md

@@ -75,6 +75,23 @@ impl Plan {
         budget: usize,
         cancel: &AtomicBool,
     ) -> Result<(), String> {
+        self.write_with_preview(
+            d, path, format, flatten, true, confirmed, replace, budget, cancel,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_with_preview(
+        &self,
+        d: &Document,
+        path: &Path,
+        format: Format,
+        flatten: bool,
+        merged_preview: bool,
+        confirmed: bool,
+        replace: bool,
+        budget: usize,
+        cancel: &AtomicBool,
+    ) -> Result<(), String> {
         self.check(d)?;
         if !confirmed {
             return Err("Review and confirm the conversion/loss list before exporting".into());
@@ -86,7 +103,16 @@ impl Plan {
                 "Partial conversion could not preserve appearance; choose the whole composite",
             )?
         };
-        io::write(image, d, path, format, replace, budget, cancel)
+        io::write(
+            image,
+            d,
+            path,
+            format,
+            merged_preview,
+            replace,
+            budget,
+            cancel,
+        )
     }
 }
 pub(crate) fn canceled(cancel: &AtomicBool) -> Result<(), String> {

@@ -59,6 +59,15 @@ pub(super) fn encode(
     budget: usize,
     cancel: &AtomicBool,
 ) -> Result<Vec<u8>, String> {
+    encode_with_preview(image, f, true, budget, cancel)
+}
+pub(super) fn encode_with_preview(
+    image: &Image,
+    f: Format,
+    merged_preview: bool,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> Result<Vec<u8>, String> {
     if image.width == 0
         || image.height == 0
         || image.width > if f == Format::Psd { 30000 } else { 32768 }
@@ -174,6 +183,18 @@ pub(super) fn encode(
     }
     resource(&mut resources, 1005, &dpi);
     resource(&mut resources, 1039, &srgb_icc()?);
+    let mut version = vec![];
+    u32w(&mut version, 1);
+    version.push(merged_preview as u8);
+    for name in ["Drawer", "Drawer"] {
+        let words = name.encode_utf16().collect::<Vec<_>>();
+        u32w(&mut version, words.len() as u32);
+        for w in words {
+            u16w(&mut version, w);
+        }
+    }
+    u32w(&mut version, 1);
+    resource(&mut resources, 1057, &version);
     let mut out = b"8BPS".to_vec();
     u16w(&mut out, if f == Format::Psd { 1 } else { 2 });
     out.extend([0; 6]);
@@ -192,7 +213,9 @@ pub(super) fn encode(
         canceled(cancel)?;
         for p in &image.merged {
             // Merged RGB is white-matted when its extra channel stores transparency.
-            out.push(if c == 3 {
+            out.push(if !merged_preview {
+                if c == 3 { 0 } else { 255 }
+            } else if c == 3 {
                 p[c]
             } else {
                 ((p[c] as u32 * p[3] as u32 + 255 * (255 - p[3] as u32) + 127) / 255) as u8
@@ -210,6 +233,7 @@ pub(super) fn write(
     d: &Document,
     path: &Path,
     format: Format,
+    merged_preview: bool,
     replace: bool,
     budget: usize,
     cancel: &AtomicBool,
@@ -277,7 +301,7 @@ pub(super) fn write(
         Ok(())
     };
     check()?;
-    let bytes = encode(image, format, budget, cancel)?;
+    let bytes = encode_with_preview(image, format, merged_preview, budget, cancel)?;
     canceled(cancel)?;
     let mut name = path.file_name().unwrap().to_owned();
     name.push(".psd-exchange.tmp");
@@ -475,6 +499,7 @@ pub(super) fn decode(
     let mut dpi = 300.;
     let mut profile = None;
     let mut resource_ids = BTreeSet::new();
+    let mut real_merged = true;
     while resources.left() > 0 {
         if resources.take(4)? != b"8BIM" {
             return Err("Invalid PSD resource signature".into());
@@ -501,6 +526,16 @@ pub(super) fn decode(
                 return Err("Unsupported PSD resolution units/value".into());
             }
             dpi = value;
+        } else if id == 1057 {
+            let mut v = Cursor::new(data);
+            if v.u32()? != 1 {
+                return Err("Unsupported PSD version-info resource".into());
+            }
+            real_merged = match v.byte()? {
+                0 => false,
+                1 => true,
+                _ => return Err("Invalid PSD merged-data flag".into()),
+            };
         } else if id == 1039 {
             profile = Some(crate::color_profile::RgbProfile::embedded(
                 "PSD ICC".into(),
@@ -798,17 +833,22 @@ if v.left()>=8{if v.take(4)?!=b"8BIM"{return Err("Invalid PSD group blend".into(
     } else {
         warnings.push("PSD has no ICC profile; assuming sRGB".into());
     }
-    Ok((
-        Image {
-            width,
-            height,
-            dpi,
-            layers,
-            merged,
-        },
-        warnings,
-        force_merged,
-    ))
+    let mut image = Image {
+        width,
+        height,
+        dpi,
+        layers,
+        merged,
+    };
+    if !real_merged {
+        if force_merged || image.layers.is_empty() {
+            return Err("This PSD has no real merged preview and its layer composition is unverified; export a compatible merged preview in the source app".into());
+        }
+        let document = image.document(budget)?;
+        image.merged = render(&document, budget, cancel)?;
+        warnings.push("No embedded merged preview (Version Info hasRealMergedData=false); appearance rebuilt from the verified raster layers".into());
+    }
+    Ok((image, warnings, force_merged))
 }
 pub fn open_report(path: &Path, budget: usize) -> Result<(Document, Vec<String>), String> {
     open_detailed(path, budget).map(|(d, w, _)| (d, w))

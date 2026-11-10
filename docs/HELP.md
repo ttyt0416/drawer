@@ -1838,3 +1838,7 @@ Rename updates open document/source paths, protected imported paths, favorites a
 액션 반복: Local auto actions → Action playback → Repeat rounds / wait / confirm에서 반복 수·대기시간·계속 확인을 선택합니다. 전체 성공한 문서 회차마다 자동으로 적용되며 각각 Undo 한 번으로 되돌립니다. 중지·오류 회차는 적용하지 않고 재개 때 그 회차 처음부터 실행합니다. 파일은 모든 회차가 끝난 뒤 새 .drawer로만 저장합니다. 명령 작성기의 Document transform은 문서 좌표, View scroll은 보기 중심의 문서 픽셀 이동량을 기록합니다. 보기 이동은 그림 Undo에 들어가지 않습니다.
 
 인쇄 추가 옵션: Print preview의 접힌 Content / channels / RGB ICC / physical screen calibration에서 밑그림·문자/번호·페이지 가이드와 등록 표시, RGB/알파 분판, 출력 RGB ICC와 렌더링 의도를 선택합니다. 이미 합성된 래스터에는 내용 분리 스위치가 적용되지 않습니다. 화면 눈금 양 끝 중심 사이를 자로 측정한 mm를 입력하고 Calibrate this screen을 누르면 Show active page at physical print size로 보기만 보정합니다. 다른 화면에서는 다시 측정하세요. 인쇄 설정 저장에 보정값을 포함하며 원문서 DPI/픽셀/Undo를 바꾸지 않습니다. ICC가 검토 후 변경되면 다시 검토해야 합니다. 실제 프린터·종이 길이/색은 실물로 확인합니다.
+
+
+### PDF·PSD/PSB 세부 옵션
+PDF 창의 추가 옵션에서 주석 이미지화, Left/Right binding과 From left/right, ZIP 또는 JPEG 다섯 품질, 단면/연속/맞쪽 보기 배치를 선택합니다. 입력은 정적인 외형만 이미지로 가져오며 스크립트·원격 참조를 거절합니다. PDF 제목·저자·언어는 Unicode로 저장하고 새 문서/출력은 원본과 독립입니다. PSD 검토의 합성 미리보기를 끄면 편집 레이어를 유지하되 다른 프로그램의 호환성이 낮아질 수 있습니다. 텍스트·말풍선은 손실을 확인한 래스터 대체이며 자체 문서 편집 상태는 그대로입니다.

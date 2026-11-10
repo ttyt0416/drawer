@@ -643,3 +643,5 @@ pub mod storage_migration;
 pub mod action_repeat;
 
 pub mod print_options;
+
+pub mod book_options;

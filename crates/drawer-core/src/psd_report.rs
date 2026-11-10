@@ -130,6 +130,21 @@ impl Report {
     }
 }
 impl Plan {
+    pub fn report_with_preview(
+        &self,
+        format: Format,
+        flatten: bool,
+        merged_preview: bool,
+    ) -> Result<Report, String> {
+        let mut r = self.report(format, flatten)?;
+        if !merged_preview {
+            r.outcomes[0].result = ResultKind::Unsupported;
+            r.outcomes[0].detail="Real merged preview omitted; required image data is an explicitly flagged placeholder. Verified raster layers retain the appearance; readers requiring a real merged image may refuse it.".into();
+        }
+        Ok(r)
+    }
+}
+impl Plan {
     pub fn report(&self, format: Format, flatten: bool) -> Result<Report, String> {
         let image = if flatten {
             &self.flattened

@@ -1,5 +1,6 @@
 use super::*;
 use drawer_core::book_io::{self as core, Page};
+use std::collections::BTreeMap;
 use std::{
     path::Path,
     sync::{
@@ -19,6 +20,11 @@ pub(super) struct Panel {
     language: String,
     cover: usize,
     right_binding: bool,
+    pdf: drawer_core::book_options::Settings,
+    pdf_loaded: bool,
+    pdf_blocked: bool,
+    pdf_replace: bool,
+    controls: BTreeMap<&'static str, egui::Rect>,
     blank_after: String,
     import_meta: Option<drawer_core::epub_metadata::Metadata>,
     project: bool,
@@ -150,10 +156,32 @@ impl Drawer {
             return Err("Apply or cancel the pending edit first".into());
         }
         self.book_io.open = true;
+        if !self.book_io.pdf_loaded {
+            self.book_io.pdf_loaded = true;
+            if let Some(storage) = &self.storage {
+                match drawer_core::book_options::Settings::load(storage) {
+                    Ok(v) => {
+                        self.book_io.title = v.output.metadata.title.clone();
+                        self.book_io.author = v.output.metadata.author.clone();
+                        self.book_io.language = v.output.metadata.language.clone();
+                        self.book_io.right_binding = v.output.right_binding;
+                        self.book_io.pdf = v;
+                    }
+                    Err(e) => {
+                        self.book_io.pdf_blocked = true;
+                        self.book_io.notice = e;
+                    }
+                }
+            }
+        }
         if self.book_io.dpi == 0. {
             self.book_io.dpi = 300.;
-            self.book_io.title = "Local image book".into();
-            self.book_io.language = "ko".into();
+            if self.book_io.title.is_empty() {
+                self.book_io.title = "Local image book".into();
+            }
+            if self.book_io.language.is_empty() {
+                self.book_io.language = "ko".into();
+            }
             self.book_io.project = self.active_page_work().is_some();
         }
         Ok(())
@@ -243,9 +271,10 @@ impl Drawer {
         if self.book_io.job.is_some() {
             return Err("Wait for the current page operation".into());
         }
-        let path = PathBuf::from(&self.book_io.path)
-            .canonicalize()
-            .map_err(|e| e.to_string())?;
+        let path = PathBuf::from(&self.book_io.path);
+        drawer_platform::file_browser::local_disk(&path)?;
+        let path = drawer_core::file_browser::checked(&path)?;
+        let pdf_input = self.book_io.pdf.input.clone();
         let range = self.book_io.import_range.clone();
         let dpi = self.book_io.dpi;
         let budget = self.book_budget();
@@ -261,7 +290,30 @@ impl Drawer {
                 let decoded = drawer_core::epub_metadata::decode(&bytes, &range, budget, cancel)?;
                 (decoded.pages, Some(decoded.metadata))
             } else {
-                (import(&path, &range, dpi, budget, cancel)?, None)
+                if path
+                    .extension()
+                    .is_some_and(|s| s.eq_ignore_ascii_case("pdf"))
+                {
+                    let bytes = core::read_local(&path, budget / 2)?;
+                    let m = drawer_core::book_options::metadata(&bytes)?;
+                    let pages = drawer_platform::book_pdf::render_options(
+                        &bytes, &range, dpi, budget, &pdf_input, cancel,
+                    )?;
+                    let meta = drawer_core::epub_metadata::Metadata {
+                        title: m.title,
+                        author: m.author,
+                        language: if m.language.is_empty() {
+                            "und".into()
+                        } else {
+                            m.language
+                        },
+                        right_binding: pdf_input.right_binding,
+                        ..Default::default()
+                    };
+                    (pages, Some(meta))
+                } else {
+                    (import(&path, &range, dpi, budget, cancel)?, None)
+                }
             };
             core::check_cancel(cancel)?;
             Ok(ResultValue::Pages(path, pages, metadata))
@@ -288,6 +340,13 @@ impl Drawer {
             cover: self.book_io.cover.checked_sub(1),
             right_binding: self.book_io.right_binding,
         };
+        let mut pdf_output = self.book_io.pdf.output.clone();
+        pdf_output.right_binding = self.book_io.right_binding;
+        pdf_output.metadata = drawer_core::book_options::Metadata {
+            title: self.book_io.title.clone(),
+            author: self.book_io.author.clone(),
+            language: self.book_io.language.clone(),
+        };
         let blank = self.book_io.blank_after.trim();
         let blank = if kind != 2 || blank.is_empty() {
             None
@@ -311,7 +370,7 @@ impl Drawer {
             }
             let path = path.ok_or("Choose an output filename")?;
             let bytes = if kind == 1 {
-                drawer_core::book_pdf::encode(&pages, cancel)?
+                drawer_core::book_pdf::encode_options_budget(&pages, &pdf_output, budget, cancel)?
             } else {
                 drawer_core::book_epub::encode_metadata(&pages, &metadata, cancel)?
             };
@@ -371,16 +430,28 @@ impl Drawer {
         let mut open = true;
         let mut action = 0;
         let mut browse = false;
+        p.controls.clear();
         let working = p.job.is_some();
         egui::Window::new("PDF, image EPUB and printing").id(egui::Id::new("local-book-io")).open(&mut open).default_width(660.).show(ctx,|ui|{
             ui.label("Pages are raster composites. Original layers, text and timeline structure remain in .drawer files.");
             ui.add_enabled_ui(!working,|ui|{
-                let old=(p.path.clone(),p.import_range.clone(),p.dpi);
+                let old=(p.path.clone(),p.import_range.clone(),p.dpi,p.pdf.input.clone());
                 ui.horizontal(|ui|{ui.label("Raster DPI");ui.add(egui::DragValue::new(&mut p.dpi).range(1. ..=4800.));});
                 ui.separator();ui.label("Import local PDF / fixed-layout image EPUB");
                 ui.horizontal(|ui|{ui.text_edit_singleline(&mut p.path);if ui.button("Browse file…").clicked(){browse=true;}});
                 ui.horizontal(|ui|{ui.label("File pages (blank = all)");ui.text_edit_singleline(&mut p.import_range);});
-                if old!=(p.path.clone(),p.import_range.clone(),p.dpi){p.prepared=None;p.texture=None;}
+                let header=ui.collapsing("PDF annotations, direction, compression and viewer layout",|ui|{
+                    ui.horizontal(|ui|{ui.label("Import binding");ui.selectable_value(&mut p.pdf.input.right_binding,false,"Left binding");let r=ui.selectable_value(&mut p.pdf.input.right_binding,true,"Right binding");p.controls.insert("right-binding",r.rect);});
+                    ui.horizontal(|ui|{ui.label("Import order");ui.selectable_value(&mut p.pdf.input.from_right,false,"From left");let r=ui.selectable_value(&mut p.pdf.input.from_right,true,"From right");p.controls.insert("from-right",r.rect);});
+                    let r=ui.checkbox(&mut p.pdf.input.annotations,"Import annotations as image");p.controls.insert("annotations",r.rect);
+                    ui.small("Static cached annotation appearances only. Scripts, actions, external URLs and embedded content are refused before rendering. Unsupported appearances require a flattened export in the source app.");
+                    let combo=egui::ComboBox::from_id_salt("pdf-compression").selected_text(p.pdf.output.compression.label()).show_ui(ui,|ui|{for v in drawer_core::book_options::Compression::ALL{let r=ui.selectable_value(&mut p.pdf.output.compression,v,v.label());p.controls.insert(v.label(),r.rect);}});p.controls.insert("compression",combo.response.rect);
+                    let combo=egui::ComboBox::from_id_salt("pdf-layout").selected_text(p.pdf.output.layout.label()).show_ui(ui,|ui|{for v in drawer_core::book_options::Layout::ALL{let r=ui.selectable_value(&mut p.pdf.output.layout,v,v.label());p.controls.insert(v.label(),r.rect);}});p.controls.insert("layout",combo.response.rect);
+                    ui.small("PDF title/author/language and output binding use the fields below. Viewer layout does not reorder output pixels. Five JPEG levels are lossy RGB; alpha remains lossless.");
+                    if p.pdf_blocked{ui.checkbox(&mut p.pdf_replace,"Replace unreadable PDF preferences");}
+                    let r=ui.button("Save local PDF options");p.controls.insert("save-pdf",r.rect);if r.clicked(){action=6;}
+                });p.controls.insert("pdf-options",header.header_response.rect);
+                if old!=(p.path.clone(),p.import_range.clone(),p.dpi,p.pdf.input.clone()){p.prepared=None;p.texture=None;}
                 if ui.button("Prepare selected file pages").clicked(){action=1;}
                 if let Some((_,pages))=&p.prepared{
                     if p.texture.is_none(){let i=&pages[0].image;let scale=(i.width.max(i.height) as f64/256.).max(1.);let w=(i.width as f64/scale).round().max(1.)as usize;let h=(i.height as f64/scale).round().max(1.)as usize;let pixels=(0..h).flat_map(|y|(0..w).map(move|x|i.pixels[((y*i.height as usize/h)*i.width as usize)+(x*i.width as usize/w)])).flatten().collect::<Vec<_>>();p.texture=Some(ctx.load_texture("book-first-page",egui::ColorImage::from_rgba_unmultiplied([w,h],&pixels),egui::TextureOptions::LINEAR));}
@@ -392,9 +463,9 @@ impl Drawer {
                 ui.separator();ui.label("Export / print selected page composites");
                 ui.checkbox(&mut p.project,"Use current local project order (otherwise open documents)");
                 ui.horizontal(|ui|{ui.label("Output pages (e.g. 1,3-5)");ui.text_edit_singleline(&mut p.export_range);});
-                ui.horizontal(|ui|{ui.label("EPUB title");ui.text_edit_singleline(&mut p.title);});
+                ui.horizontal(|ui|{ui.label("Book / PDF title");ui.text_edit_singleline(&mut p.title);});
                 ui.horizontal(|ui|{ui.label("Author / language");ui.text_edit_singleline(&mut p.author);ui.text_edit_singleline(&mut p.language);});
-                ui.checkbox(&mut p.right_binding,"EPUB reads right to left");
+                ui.checkbox(&mut p.right_binding,"Output binding: right to left (PDF / EPUB)");
                 ui.horizontal(|ui|{ui.label("Cover page in final EPUB (0 = none)");ui.add(egui::DragValue::new(&mut p.cover).range(0..=512));});
                 ui.horizontal(|ui|{ui.label("Insert one blank after selected page (0 = before first; empty = none)");ui.text_edit_singleline(&mut p.blank_after);});
                 ui.label("EPUB identifier is generated locally from metadata and pixels. Cover numbering includes the inserted blank.");
@@ -451,6 +522,24 @@ if ui.button("Close").clicked(){action=9;}
                 }
             }
             5 => self.start_book_output(ctx, 3, None),
+            6 => (|| {
+                if self.book_io.pdf_blocked && !self.book_io.pdf_replace {
+                    return Err("Confirm replacement of unreadable PDF preferences".into());
+                }
+                let storage = self.storage.as_ref().ok_or("Local storage unavailable")?;
+                let p = &mut self.book_io;
+                p.pdf.output.right_binding = p.right_binding;
+                p.pdf.output.metadata = drawer_core::book_options::Metadata {
+                    title: p.title.clone(),
+                    author: p.author.clone(),
+                    language: p.language.clone(),
+                };
+                p.pdf.save(storage)?;
+                p.pdf_blocked = false;
+                p.pdf_replace = false;
+                p.notice = "Saved local PDF options".into();
+                Ok(())
+            })(),
             _ => Ok(()),
         };
         if let Err(e) = result {
@@ -464,6 +553,7 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     drawer_core::book_verify::verify(root)?;
     #[cfg(windows)]
     drawer_platform::book_pdf::verify()?;
+    options_verify::run(root)?;
     let dir = root.join("book-app-verify");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let result = (|| {
@@ -746,3 +836,6 @@ mod tests {
         std::fs::remove_dir(root).unwrap();
     }
 }
+
+#[path = "book_options_verify.rs"]
+mod options_verify;

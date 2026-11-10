@@ -20,6 +20,46 @@ pub fn render(
     budget: usize,
     cancel: &AtomicBool,
 ) -> Result<Vec<Page>, String> {
+    render_options(
+        bytes,
+        range,
+        dpi,
+        budget,
+        &drawer_core::book_options::Input::default(),
+        cancel,
+    )
+}
+pub fn render_options(
+    bytes: &[u8],
+    range: &str,
+    dpi: f64,
+    budget: usize,
+    options: &drawer_core::book_options::Input,
+    cancel: &AtomicBool,
+) -> Result<Vec<Page>, String> {
+    if bytes.len().saturating_mul(3) > budget {
+        return Err("PDF annotation snapshot memory limit".into());
+    }
+    let prepared = drawer_core::book_options::prepare_import(bytes, range, options, cancel)?;
+    let mut pages = render_prepared(
+        &prepared,
+        range,
+        dpi,
+        budget.saturating_sub(bytes.len()),
+        cancel,
+    )?;
+    if options.from_right {
+        pages.reverse();
+    }
+    Ok(pages)
+}
+fn render_prepared(
+    bytes: &[u8],
+    range: &str,
+    dpi: f64,
+    budget: usize,
+    cancel: &AtomicBool,
+) -> Result<Vec<Page>, String> {
     std::thread::scope(|scope| {
         scope
             .spawn(|| render_mta(bytes, range, dpi, budget, cancel))
@@ -166,5 +206,58 @@ mod tests {
     #[test]
     fn windows_pdf_raster_page_selection_dpi_alpha_and_cancellation() {
         super::verify().unwrap();
+    }
+}
+
+pub fn verify_options() -> Result<(), String> {
+    use drawer_core::book_options::{self, Input};
+    let bytes = book_options::verify::annotation_fixture()?;
+    let before = bytes.clone();
+    let c = AtomicBool::new(false);
+    let off = render_options(&bytes, "1", 96., book_io::MAX_BYTES, &Input::default(), &c)?;
+    let on = render_options(
+        &bytes,
+        "1",
+        96.,
+        book_io::MAX_BYTES,
+        &Input {
+            annotations: true,
+            ..Default::default()
+        },
+        &c,
+    )?;
+    let at = (20 * 16 + 2) as usize;
+    if on[0].image.pixels[at][0] < 245
+        || on[0].image.pixels[at][1] > 10
+        || off[0].image.pixels[at] == on[0].image.pixels[at]
+    {
+        return Err("Windows static annotation include/exclude pixels".into());
+    }
+    let reverse = render_options(
+        &bytes,
+        "1-3",
+        96.,
+        book_io::MAX_BYTES,
+        &Input {
+            right_binding: true,
+            from_right: true,
+            ..Default::default()
+        },
+        &c,
+    )?;
+    if reverse.len() != 3
+        || reverse[0].image.height != 21
+        || reverse[2].image.height != 24
+        || bytes != before
+    {
+        return Err("Windows PDF right-to-left order/source identity".into());
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod option_tests {
+    #[test]
+    fn windows_pdf_annotation_pixels_and_explicit_input_order() {
+        super::verify_options().unwrap();
     }
 }

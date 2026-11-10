@@ -15,10 +15,11 @@ pub(super) struct Export {
     path: PathBuf,
     format: Format,
     replace: bool,
-    confirmed: bool,
+    pub(super) confirmed: bool,
     flatten: bool,
+    pub(super) merged_preview: bool,
     open: bool,
-    plan: Option<Plan>,
+    pub(super) plan: Option<Plan>,
     preview: Option<egui::TextureHandle>,
     cancel: Arc<AtomicBool>,
     preparing: Option<mpsc::Receiver<Result<Plan, String>>>,
@@ -78,6 +79,7 @@ impl Drawer {
             replace: false,
             confirmed: false,
             flatten: false,
+            merged_preview: true,
             open: true,
             plan: None,
             preview: None,
@@ -115,6 +117,7 @@ impl Drawer {
         copy.source_path = d.source_path.clone();
         e.plan.as_ref().ok_or("Wait for the preview")?.check(d)?;
         let (format, flatten, confirmed, replace) = (e.format, e.flatten, e.confirmed, e.replace);
+        let merged_preview = e.merged_preview;
         let cancel = e.cancel.clone();
         let (tx, rx) = mpsc::channel();
         // The named thread is started before handing off the plan so spawn failure cannot consume the preview.
@@ -124,8 +127,16 @@ impl Drawer {
             .spawn(move || {
                 if let Ok(plan) = job_rx.recv() {
                     let plan: Plan = plan;
-                    let result = plan.write(
-                        &copy, &target, format, flatten, confirmed, replace, available, &cancel,
+                    let result = plan.write_with_preview(
+                        &copy,
+                        &target,
+                        format,
+                        flatten,
+                        merged_preview,
+                        confirmed,
+                        replace,
+                        available,
+                        &cancel,
                     );
                     let _ = tx.send((plan, result));
                 }
@@ -254,9 +265,11 @@ impl Drawer {
             ui.add_enabled_ui(e.writing.is_none(),|ui|{let mut path=e.path.display().to_string();if ui.text_edit_singleline(&mut path).changed(){e.path=PathBuf::from(path);e.replace=false;e.confirmed=false;}
                 ui.horizontal(|ui|{for(f,name)in[(Format::Psd,"PSD"),(Format::Psb,"PSB")]{let r=ui.selectable_value(&mut e.format,f,name);e.controls.insert(name,r.rect);if r.changed(){e.path.set_extension(if f==Format::Psd{"psd"}else{"psb"});e.replace=false;e.confirmed=false;}}});
                 if let Some(p)=&e.plan{let partial=ui.add_enabled(p.partial.is_some(),egui::RadioButton::new(!e.flatten,"Preserve verified layers / minimal dependency ranges"));e.controls.insert("partial",partial.rect);if partial.clicked(){e.flatten=false;e.confirmed=false;}let r=ui.radio(e.flatten,"Whole composite — all separate layer/group/mask/object editing lost");e.controls.insert("whole",r.rect);if r.clicked(){e.flatten=true;e.confirmed=false;}
+                    let r=ui.checkbox(&mut e.merged_preview,"Include real merged compatibility preview");e.controls.insert("merged-preview",r.rect);if r.changed(){e.confirmed=false;}
+                    ui.small("Text and balloons use per-layer raster replacement with the loss report below. Without the merged preview, compatible readers must reconstruct the verified layers; required image-data bytes are an explicitly flagged placeholder.");
                     let r=ui.checkbox(&mut e.confirmed,"I reviewed the conversion ranges and editing losses below");e.controls.insert("confirm",r.rect);
                     ui.checkbox(&mut e.replace,"Replace this existing export file (original source is always protected)");
-                    egui::ScrollArea::vertical().id_salt("psd-losses").max_height(145.).show(ui,|ui|{if let Ok(report)=p.report(e.format,e.flatten){for line in report.lines(){ui.label(line);}}
+                    egui::ScrollArea::vertical().id_salt("psd-losses").max_height(145.).show(ui,|ui|{if let Ok(report)=p.report_with_preview(e.format,e.flatten,e.merged_preview){for line in report.lines(){ui.label(line);}}
 if e.flatten{ui.colored_label(egui::Color32::YELLOW,format!("Whole composite range: {}",p.whole_names.join(" → ")));}else{for range in &p.ranges{ui.colored_label(egui::Color32::YELLOW,format!("Rasterize range: {}",range.join(" → ")));}}
 if let Some(reason)=&p.reason{ui.colored_label(egui::Color32::YELLOW,reason);}});
                 }
