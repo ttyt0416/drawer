@@ -235,6 +235,9 @@ impl Preset {
         Ok(bytes)
     }
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        if crate::exchange_guidance::private_container(bytes).is_some() {
+            return Err(io::Error::other(crate::exchange_guidance::GUIDE));
+        }
         if bytes.len() as u64 > LIMIT {
             return Err(io::Error::other("Brush preset exceeds 64 KiB"));
         }
@@ -244,6 +247,7 @@ impl Preset {
         Ok(p)
     }
     pub fn read(path: &Path) -> io::Result<Self> {
+        crate::exchange_guidance::reject_private(path).map_err(io::Error::other)?;
         if !path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("json"))
@@ -270,6 +274,7 @@ impl Preset {
     }
     /// false creates atomically without replacing a concurrently created destination.
     pub fn save(&self, path: &Path, overwrite: bool) -> io::Result<()> {
+        crate::exchange_guidance::reject_private(path).map_err(io::Error::other)?;
         let parent = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())

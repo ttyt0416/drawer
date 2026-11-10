@@ -70,6 +70,7 @@ impl Bundle {
         Self::read_report(path).map(|(b, _)| b)
     }
     pub fn read_report(path: &Path) -> Result<(Self, Vec<String>), String> {
+        crate::exchange_guidance::reject_private(path)?;
         let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
         if !m.is_file() || m.file_type().is_symlink() || m.len() > LIMIT as u64 {
             return Err("Choose a regular palette file up to2MiB".into());
@@ -84,9 +85,13 @@ impl Bundle {
             .take(LIMIT as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| e.to_string())?;
+        if crate::exchange_guidance::private_container(&bytes).is_some() {
+            return Err(crate::exchange_guidance::GUIDE.into());
+        }
         crate::palette_text::decode(&path, &bytes)
     }
     pub fn write(&self, path: &Path, replace: bool) -> Result<(), String> {
+        crate::exchange_guidance::reject_private(path)?;
         if !self.valid() {
             return Err("Invalid palette bundle".into());
         }

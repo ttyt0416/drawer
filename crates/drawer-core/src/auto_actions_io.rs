@@ -7,6 +7,9 @@ use std::{
 const LIMIT: usize = 2 * 1024 * 1024;
 impl Settings {
     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
+        if crate::exchange_guidance::private_container(bytes).is_some() {
+            return Err(crate::exchange_guidance::GUIDE.into());
+        }
         if bytes.len() > LIMIT {
             return Err("Auto action file exceeds 2 MiB".into());
         }
@@ -18,6 +21,7 @@ impl Settings {
         Ok(s)
     }
     pub fn read(path: &Path) -> Result<Self, String> {
+        crate::exchange_guidance::reject_private(path)?;
         let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
         if !m.is_file() || m.file_type().is_symlink() || m.len() > LIMIT as u64 {
             return Err("Choose a regular auto action file up to 2 MiB".into());
@@ -35,6 +39,7 @@ impl Settings {
         Self::decode(&bytes)
     }
     pub fn write(&self, path: &Path, replace: bool) -> Result<(), String> {
+        crate::exchange_guidance::reject_private(path)?;
         if !self.valid() {
             return Err("Invalid auto action settings".into());
         }

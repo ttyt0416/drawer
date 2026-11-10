@@ -43,6 +43,7 @@ impl Drawer {
 }
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
     core::verify(root)?;
+    core::local_formats_verify::run(root)?;
     let dir = root.join("unsupported-documents-ui");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let result = (|| {
@@ -56,12 +57,21 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
             "bad.sai",
             "bad.sai2",
             "bad.clip",
+            "bad.lip",
+            "bad.xpg",
+            "bad.cpg",
+            "bad.cst",
+            "bad.csnf",
+            "bad.ipv",
+            "bad.kako",
+            "bad.tos",
+            "bad.sut",
             "disguised.png",
             "disguised.drawer",
             "disguised.psd",
         ] {
             let path = dir.join(name);
-            let bytes = b"Unrecognized document payload";
+            let bytes = b"SQLite format 3\0unverified document/tool container";
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
             if app
                 .open_exchange_file(&ctx, &path)
@@ -89,7 +99,8 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
                 |ui| app.show(ui),
             );
             output.textures_delta.clear();
-            if app.status.as_deref() != Some(core::GUIDE)
+            if app.documents.len() != 1
+                || app.status.as_deref() != Some(core::GUIDE)
                 || app.documents[0].snapshot() != before
                 || app.documents[0].history_counts() != history
                 || std::fs::read(&path).unwrap() != bytes
@@ -102,6 +113,17 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     })();
     result.and(std::fs::remove_dir(dir).map_err(|e| e.to_string()))
 }
+
+pub(super) fn support_table(ui: &mut egui::Ui) {
+    ui.collapsing("Local document / tool format support",|ui|{
+        egui::Grid::new(ui.id().with("local-format-support")).striped(true).show(ui,|ui|{
+            for label in ["Application","Kind","Known extensions","Drawer support"]{ui.strong(label);}ui.end_row();
+            for r in core::SUPPORT{ui.label(r.application);ui.label(r.kind.label());ui.label(r.extensions);ui.label(r.status);ui.end_row();}
+        });
+        ui.label("Documents: export PNG/PSD in the original app. Tools: Drawer JSON/portable presets; verified ABR uses its own importer. Unknown tool suffixes are not guessed. No partial private-format import or file-name conversion.");
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

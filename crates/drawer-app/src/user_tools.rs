@@ -635,6 +635,7 @@ impl Drawer {
                 next.assets().len().saturating_sub(base.assets().len())
             ));
         }
+        super::exchange_guidance::support_table(ui);
         ui.label("Portable export creates a new Drawer-tool-bundle folder inside the chosen folder. Import validates every file and stages tools and materials together. Apply saves them; Cancel registers nothing.");
         ui.label("Group JSON remaps imported tool/category IDs and preserves empty categories. Material IDs reference the local image library; image files are not included in this group format.");
         let mut preview = current.clone();

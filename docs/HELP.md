@@ -1842,3 +1842,6 @@ Rename updates open document/source paths, protected imported paths, favorites a
 
 ### PDF·PSD/PSB 세부 옵션
 PDF 창의 추가 옵션에서 주석 이미지화, Left/Right binding과 From left/right, ZIP 또는 JPEG 다섯 품질, 단면/연속/맞쪽 보기 배치를 선택합니다. 입력은 정적인 외형만 이미지로 가져오며 스크립트·원격 참조를 거절합니다. PDF 제목·저자·언어는 Unicode로 저장하고 새 문서/출력은 원본과 독립입니다. PSD 검토의 합성 미리보기를 끄면 편집 레이어를 유지하되 다른 프로그램의 호환성이 낮아질 수 있습니다. 텍스트·말풍선은 손실을 확인한 래스터 대체이며 자체 문서 편집 상태는 그대로입니다.
+
+
+로컬 형식 호환 표: 파일 탐색 및 사용자 도구 화면에서 문서와 도구의 직접 지원 범위를 구분합니다. IllustStudio(.xpg), ComicStudio(.cpg/.cst/.csnf), ibisPaint(.ipv), kakooyo!(.kako) 문서와 .tos/.sut 전용 도구는 미검증·미지원입니다. 문서는 원앱의 PNG/PSD, 도구는 자체 JSON/휴대용 묶음으로 교환하세요. 알려지지 않은 도구 확장자를 추정하지 않으며 확장자 변경이나 일부 읽기로 호환 성공 처리하지 않습니다.

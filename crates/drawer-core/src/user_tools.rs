@@ -707,6 +707,7 @@ impl Library {
         Ok(group)
     }
     pub fn read(path: &Path) -> io::Result<Self> {
+        crate::exchange_guidance::reject_private(path).map_err(io::Error::other)?;
         let file = fs::File::open(path)?;
         if !file.metadata()?.is_file() || file.metadata()?.len() > FILE_LIMIT as u64 {
             return Err(io::Error::other("User tool group exceeds 4 MiB"));
@@ -715,6 +716,9 @@ impl Library {
         file.take(FILE_LIMIT as u64 + 1).read_to_end(&mut bytes)?;
         if bytes.len() > FILE_LIMIT {
             return Err(io::Error::other("User tool group grew beyond limit"));
+        }
+        if crate::exchange_guidance::private_container(&bytes).is_some() {
+            return Err(io::Error::other(crate::exchange_guidance::GUIDE));
         }
         let lib: Self = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
         if !lib.valid() {
@@ -725,6 +729,7 @@ impl Library {
         Ok(lib)
     }
     pub fn save(&self, path: &Path, overwrite: bool) -> io::Result<()> {
+        crate::exchange_guidance::reject_private(path).map_err(io::Error::other)?;
         if !self.valid() {
             return Err(io::Error::other("Invalid user tool group"));
         }

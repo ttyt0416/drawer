@@ -731,6 +731,7 @@ if ui.small_button("×").on_hover_text("Remove favorite only; keep files").click
             if let Some(t)=&p.ticket{ui.group(|ui|{ui.label(format!("Source: {}{}",t.source.path.display(),if t.source.directory{" (folder and contents)"}else{""}));ui.label(t.destination.as_ref().map_or("Move to the OS Recycle Bin only; no permanent-delete fallback".into(),|v|format!("New path: {}. Renaming does not convert the file format.",v.display())));for(key,label)in[("confirm-operation","Confirm physical operation"),("cancel-operation","Cancel operation")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});}
             if p.job.is_some(){ui.horizontal(|ui|{ui.spinner();let r=ui.button("Cancel job");p.controls.insert("cancel",r.rect);if r.clicked(){command=Some("cancel");}});}
             if p.blocked{ui.checkbox(&mut p.replace,"Replace unreadable browser settings when saving");}
+            super::exchange_guidance::support_table(ui);
             ui.label(&p.message);
             if let Some(list)=&p.listing{
                 if list.truncated{ui.colored_label(egui::Color32::YELLOW,"Showing the first8192 matches; narrow the name/type filter or enter a path directly.");}

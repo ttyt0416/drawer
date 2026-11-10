@@ -1171,3 +1171,5 @@ crates/drawer-core/src/pdf_annotations.rs
 crates/drawer-core/src/book_options_verify.rs
 crates/drawer-app/src/book_options_verify.rs
 docs/process/pdf-options.md
+crates/drawer-core/src/local_formats_verify.rs
+docs/process/local-format-support.md
