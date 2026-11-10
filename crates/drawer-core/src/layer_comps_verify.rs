@@ -150,7 +150,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "All comp fields native roundtrip",
     )?;
     let mut legacy = std::fs::read(&path).map_err(|e| e.to_string())?;
-    legacy[8..12].copy_from_slice(&57u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut legacy, 57);
     let legacy_path = root.join("layer-comps-invalid-version.drawer");
     std::fs::write(&legacy_path, legacy).map_err(|e| e.to_string())?;
     check(

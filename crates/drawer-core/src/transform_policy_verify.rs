@@ -378,7 +378,7 @@ pub fn editable_native(root: &std::path::Path) -> Result<(), String> {
         "Mesh archive/pixels one Undo/Redo",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&80u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 80);
     let old = root.join("fake-v80-mesh.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(

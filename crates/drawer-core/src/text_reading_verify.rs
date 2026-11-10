@@ -238,7 +238,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Reading mapping/style/native roundtrip",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&86u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 86);
     let fake = root.join("reading-fake86.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(
@@ -267,7 +267,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
     let basic_file = root.join("reading-basic86.drawer");
     crate::files::save(&mut d, &basic_file).map_err(|e| e.to_string())?;
     let mut bytes = std::fs::read(&basic_file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&86u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 86);
     std::fs::write(&basic_file, bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&basic_file, crate::document::DEFAULT_DOCUMENT_BUDGET).is_ok(),

@@ -684,7 +684,7 @@ pub fn native(root: &Path) -> Result<(), String> {
         "Native121 depends on source / loses usage text or keys",
     )?;
     let mut old = std::fs::read(&file).map_err(|e| e.to_string())?;
-    old[8..12].copy_from_slice(&120u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut old, 120);
     write(&root.join("old.drawer"), old)?;
     check(
         crate::files::open(&root.join("old.drawer"), B).is_err(),

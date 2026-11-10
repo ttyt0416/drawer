@@ -324,7 +324,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Corrupt reference payload accepted",
         )?;
         let mut bytes = std::fs::read(&path).unwrap();
-        bytes[8..12].copy_from_slice(&99u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 99);
         std::fs::write(dir.join("old.drawer"), bytes).unwrap();
         check(
             crate::files::open(&dir.join("old.drawer"), B).is_err(),

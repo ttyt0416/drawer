@@ -128,6 +128,7 @@ impl Model {
     }
     pub fn edit(&mut self, e: Edit) -> Result<(), String> {
         let mut work = self.work.clone();
+        work.generation = None;
         match e {
             Edit::Replace { id, path } => {
                 let index = self.index(id)?;
@@ -290,6 +291,9 @@ impl Model {
     }
     pub fn open_page(&mut self, id: u64, budget: usize) -> Result<Document, String> {
         let i = self.index(id)?;
+        if let Some(g) = &self.work.generation {
+            g.verify_page(id, &self.work.pages[i])?;
+        }
         let path = canonical(&self.work.pages[i])?;
         let doc = crate::files::open(&path, budget).map_err(|e| e.to_string())?;
         self.loads += 1;
@@ -388,6 +392,8 @@ pub fn snapshot(
     if bytes > 2 * 1024 * 1024 * 1024 {
         return Err("Project snapshot resource limit2GiB".into());
     }
+    let captured = crate::save_generation::capture(opened)?;
+    let opened = captured.iter().map(|(id, d)| (*id, d)).collect::<Vec<_>>();
     let nonce = format!(
         "{}-{}",
         std::process::id(),
@@ -400,7 +406,8 @@ pub fn snapshot(
         parent: parent.clone(),
         keep: false,
     };
-    let total = model.work.pages.len() + stamps.len() + 1;
+    let total = model.work.pages.len() * 2 + stamps.len() + 3;
+    let mut blocks = vec![];
     for (n, (id, source)) in model
         .work
         .page_ids
@@ -408,7 +415,7 @@ pub fn snapshot(
         .zip(&model.work.pages)
         .enumerate()
     {
-        tick(n, total)?;
+        tick(n * 2, total)?;
         let out = owned.path.join(format!("page-{id}.drawer"));
         if let Some((_, d)) = opened.iter().find(|(i, _)| i == id) {
             let mut copy = (**d).clone();
@@ -432,17 +439,22 @@ pub fn snapshot(
                 return Err(format!("Page {} changed while copying", source.display()));
             }
         }
+        crate::files::open(&out, DEFAULT_DOCUMENT_BUDGET / 4)
+            .map_err(|e| format!("Page {id}: {e}"))?;
+        blocks.push(crate::save_generation::inspect(*id, &out)?);
+        tick(n * 2 + 1, total)?;
     }
     for (n, (_, path, hash)) in stamps.iter().enumerate() {
-        tick(model.work.pages.len() + n, total)?;
+        tick(model.work.pages.len() * 2 + n, total)?;
         if digest(path)? != *hash {
             return Err("A closed project page changed; no snapshot published".into());
         }
     }
-    tick(total - 1, total)?;
+    tick(total - 3, total)?;
     let final_dir = parent.join(format!("Drawer-project-{nonce}"));
     fs::rename(&owned.path, &final_dir).map_err(|e| e.to_string())?;
     owned.path = final_dir;
+    tick(total - 2, total)?;
     let mut work = model.work.clone();
     work.next_page_id = work.next_page_id.max(model.high_water);
     work.pages = work
@@ -450,8 +462,16 @@ pub fn snapshot(
         .iter()
         .map(|id| owned.path.join(format!("page-{id}.drawer")))
         .collect();
+    work.generation = Some(crate::save_generation::Manifest {
+        schema: 1,
+        generation: nonce,
+        pages: blocks,
+    });
+    work.generation.as_ref().unwrap().verify(&work)?;
+    tick(total - 1, total)?;
     work.save(destination)?;
     owned.keep = true;
+    let _ = tick(total, total);
     Ok(work)
 }
 

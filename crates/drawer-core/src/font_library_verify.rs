@@ -81,7 +81,7 @@ pub fn lifecycle(root: &Path) -> Result<(), String> {
         "Local font native reference roundtrip",
     )?;
     let mut fake = std::fs::read(&file).map_err(|e| e.to_string())?;
-    fake[8..12].copy_from_slice(&88u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut fake, 88);
     let fake_file = root.join("local-font-fake88.drawer");
     std::fs::write(&fake_file, fake).map_err(|e| e.to_string())?;
     check(

@@ -424,7 +424,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native time snapshot lost",
         )?;
         let mut native = std::fs::read(&path).map_err(|e| e.to_string())?;
-        native[8..12].copy_from_slice(&102u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut native, 102);
         std::fs::write(dir.join("wrong.drawer"), native).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&dir.join("wrong.drawer"), 1024 * 1024).is_err(),

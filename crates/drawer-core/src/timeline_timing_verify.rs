@@ -170,7 +170,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native97 PCM backing/clip/range reload",
         )?;
         let mut bytes = std::fs::read(&path).unwrap();
-        bytes[8..12].copy_from_slice(&96u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 96);
         std::fs::write(dir.join("old.drawer"), bytes).unwrap();
         check(
             crate::files::open(&dir.join("old.drawer"), B).is_err(),

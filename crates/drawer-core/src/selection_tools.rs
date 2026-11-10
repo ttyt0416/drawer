@@ -844,7 +844,7 @@ mod transform_tests {
         let path = root.0.join("legacy.drawer");
         crate::files::save(&mut legacy, &path).unwrap();
         let mut bytes = std::fs::read(&path).unwrap();
-        bytes[8..12].copy_from_slice(&32u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 32);
         std::fs::write(&path, bytes).unwrap();
         let old = crate::files::open(&path, 4096).unwrap();
         assert!(old.scene.selections.is_default());

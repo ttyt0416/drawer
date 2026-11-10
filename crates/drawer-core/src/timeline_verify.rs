@@ -346,7 +346,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native96 cel IDs/content/labels lost",
         )?;
         let mut old = std::fs::read(&path).unwrap();
-        old[8..12].copy_from_slice(&95u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 95);
         std::fs::write(dir.join("old.drawer"), old).unwrap();
         check(
             crate::files::open(&dir.join("old.drawer"), B).is_err(),

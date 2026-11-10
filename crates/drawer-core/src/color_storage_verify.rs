@@ -151,7 +151,7 @@ mod tests {
         crate::files::save(&mut d, &file).unwrap();
         let bytes = std::fs::read(&file).unwrap();
         let mut old = bytes.clone();
-        old[8..12].copy_from_slice(&61u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 61);
         let path = root.0.join("precision-old.drawer");
         std::fs::write(&path, old).unwrap();
         assert!(crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET).is_err());

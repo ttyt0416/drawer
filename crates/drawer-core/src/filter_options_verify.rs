@@ -520,7 +520,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Native options roundtrip",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&82u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 82);
     let fake = root.join("filter-options-fake82.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(

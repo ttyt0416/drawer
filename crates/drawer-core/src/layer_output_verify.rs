@@ -138,7 +138,7 @@ pub fn run(root: &Path) -> Result<(), String> {
             return Err("Comp native123 roundtrip".into());
         }
         let mut downgraded = fs::read(&native).map_err(|e| e.to_string())?;
-        downgraded[8..12].copy_from_slice(&122u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut downgraded, 122);
         let bad = dir.join("old.drawer");
         fs::write(&bad, downgraded).map_err(|e| e.to_string())?;
         if crate::files::open(&bad, B).is_ok() {

@@ -865,7 +865,7 @@ pub fn files(root: &std::path::Path) -> Result<(), String> {
         let path = root.join("comic.drawer");
         crate::files::save(&mut d, &path).map_err(|e| e.to_string())?;
         let mut old = std::fs::read(&path).map_err(|e| e.to_string())?;
-        old[8..12].copy_from_slice(&92u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 92);
         let downgraded = root.join("old-header.drawer");
         std::fs::write(&downgraded, old).map_err(|e| e.to_string())?;
         check(

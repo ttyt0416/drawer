@@ -150,7 +150,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "SVG native paint/clip roundtrip",
         )?;
         let mut bytes = std::fs::read(&native).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&67u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 67);
         std::fs::write(&native, bytes).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&native, DEFAULT_DOCUMENT_BUDGET).is_err(),

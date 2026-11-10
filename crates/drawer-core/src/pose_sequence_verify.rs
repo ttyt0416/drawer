@@ -337,7 +337,7 @@ pub fn scopes_files_native(root: &Path) -> Result<(), String> {
         "Native115 sequence/placement/base pose differs",
     )?;
     let mut raw = std::fs::read(&native).map_err(|e| e.to_string())?;
-    raw[8..12].copy_from_slice(&114u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut raw, 114);
     std::fs::write(root.join("old.drawer"), raw).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&root.join("old.drawer"), B).is_err(),

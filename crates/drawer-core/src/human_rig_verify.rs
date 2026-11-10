@@ -310,7 +310,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Exported pose differs",
         )?;
         let mut b = std::fs::read(&p).map_err(|e| e.to_string())?;
-        b[8..12].copy_from_slice(&108u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut b, 108);
         std::fs::write(&p, b).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&p, B).is_err(),

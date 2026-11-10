@@ -15,6 +15,8 @@ use std::{
 pub struct Work {
     version: u32,
     pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<crate::save_generation::Manifest>,
     pub pages: Vec<PathBuf>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub page_ids: Vec<u64>,
@@ -37,6 +39,7 @@ impl Work {
     pub fn new(title: String, pages: Vec<PathBuf>) -> Result<Self, String> {
         let work = Self {
             version: 1,
+            generation: None,
             title,
             page_ids: (1..=pages.len() as u64).collect(),
             next_page_id: pages.len() as u64 + 1,
@@ -51,6 +54,10 @@ impl Work {
     }
     pub fn valid(&self) -> bool {
         self.version == 1
+            && self
+                .generation
+                .as_ref()
+                .is_none_or(|g| g.valid(&self.page_ids))
             && !self.title.trim().is_empty()
             && self.title.chars().count() <= 64
             && !self.title.chars().any(char::is_control)
@@ -97,6 +104,9 @@ impl Work {
         let work: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         if !work.valid() {
             return Err("Invalid local work manifest".into());
+        }
+        if let Some(g) = &work.generation {
+            g.verify(&work)?;
         }
         Ok(work)
     }

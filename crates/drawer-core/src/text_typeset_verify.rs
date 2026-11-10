@@ -226,7 +226,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Typography Unicode/ruby/spacing native roundtrip",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&90u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 90);
     std::fs::write(root.join("invalid-advanced.drawer"), bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(

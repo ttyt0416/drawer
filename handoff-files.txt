@@ -1182,3 +1182,8 @@ docs/process/work-library.md
 crates/drawer-core/src/history_audit.rs
 crates/drawer-app/src/history_audit.rs
 docs/process/session-history.md
+
+crates/drawer-core/src/native_integrity.rs
+crates/drawer-core/src/save_generation.rs
+crates/drawer-core/src/save_generation_verify.rs
+docs/process/native-generations.md

@@ -200,7 +200,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Angle/matrix native mismatch",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&79u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 79);
     let old = root.join("transform-handles-old.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(

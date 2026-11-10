@@ -206,7 +206,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
         )?;
         core::edit_content(&mut d, None)?;
         let mut bytes = std::fs::read(&path).unwrap();
-        bytes[8..12].copy_from_slice(&97u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 97);
         std::fs::write(dir.join("old.drawer"), bytes).unwrap();
         check(
             crate::files::open(&dir.join("old.drawer"), B).is_err(),

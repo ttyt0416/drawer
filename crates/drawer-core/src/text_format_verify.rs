@@ -219,7 +219,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Formatting native snapshot",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&87u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 87);
     let fake = root.join("format-fake87.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(

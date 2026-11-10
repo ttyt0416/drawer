@@ -316,7 +316,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Finishing geometry/audio/names changed after native reopen",
         )?;
         let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&105u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 105);
         std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&path, B).is_err(),

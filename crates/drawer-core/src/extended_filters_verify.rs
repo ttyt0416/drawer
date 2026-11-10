@@ -352,7 +352,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
     let file = root.join("finishing-new.drawer");
     crate::files::save(&mut d, &file).map_err(|e| e.to_string())?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&81u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 81);
     let fake = root.join("finishing-fake81.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(

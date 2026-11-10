@@ -324,7 +324,7 @@ pub fn persistence(root: &Path) -> Result<(), String> {
         "Native118 mannequin geometry or pixels differ",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&117u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 117);
     std::fs::write(root.join("old-fit.drawer"), bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&root.join("old-fit.drawer"), B).is_err(),

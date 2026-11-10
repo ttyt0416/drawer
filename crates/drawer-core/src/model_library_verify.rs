@@ -431,7 +431,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Topology / UV / normal / material did not survive native108",
         )?;
         let mut b = std::fs::read(&native).map_err(|e| e.to_string())?;
-        b[8..12].copy_from_slice(&107u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut b, 107);
         std::fs::write(&native, b).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&native, B).is_err(),

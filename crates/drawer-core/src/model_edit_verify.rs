@@ -701,7 +701,7 @@ pub fn timeline_native(root: &Path) -> Result<(), String> {
         "Native117 bone/pose output differs",
     )?;
     let mut bytes = std::fs::read(&native).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&116u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 116);
     std::fs::write(root.join("old.drawer"), bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&root.join("old.drawer"), B).is_err(),

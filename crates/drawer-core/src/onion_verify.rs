@@ -195,7 +195,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native99 did not preserve independent preferences",
         )?;
         let mut bytes = std::fs::read(&dest).unwrap();
-        bytes[8..12].copy_from_slice(&98u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 98);
         std::fs::write(dir.join("old.drawer"), bytes).unwrap();
         check(
             crate::files::open(&dir.join("old.drawer"), B).is_err(),

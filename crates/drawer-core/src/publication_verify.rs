@@ -216,7 +216,7 @@ pub fn exchange(root: &Path) -> Result<(), String> {
             "Native95 shot/cell round trip",
         )?;
         let mut bytes = std::fs::read(&native).unwrap();
-        bytes[8..12].copy_from_slice(&94u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 94);
         let old = dir.join("old.drawer");
         std::fs::write(&old, bytes).unwrap();
         check(

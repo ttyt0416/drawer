@@ -346,7 +346,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Blur native/one Undo/Redo",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&69u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 69);
     let fake = root.join("invalid-v69-blur.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(
@@ -356,7 +356,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     d.undo();
     crate::files::save(&mut d, &file).map_err(|e| e.to_string())?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&69u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 69);
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&fake, DEFAULT_DOCUMENT_BUDGET)

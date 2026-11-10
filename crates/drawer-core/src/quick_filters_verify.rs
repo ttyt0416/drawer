@@ -263,7 +263,7 @@ pub fn disk(root: &std::path::Path) -> Result<(), String> {
         "Quick native/cache reconstruction",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&84u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 84);
     let fake = root.join("quick-fake84.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(

@@ -242,7 +242,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Contained native payload roundtrip",
         )?;
         let mut old = bytes.clone();
-        old[8..12].copy_from_slice(&93u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 93);
         let path = dir.join("old-header.drawer");
         std::fs::write(&path, old).unwrap();
         check(

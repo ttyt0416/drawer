@@ -356,7 +356,7 @@ pub fn transfers(root: &Path) -> Result<(), String> {
         "Independent native asset snapshot after source removal",
     )?;
     let mut old = fs::read(&file).unwrap();
-    old[8..12].copy_from_slice(&121u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut old, 121);
     let old_path = root.join("false-121.drawer");
     fs::write(&old_path, old).map_err(|e| e.to_string())?;
     check(

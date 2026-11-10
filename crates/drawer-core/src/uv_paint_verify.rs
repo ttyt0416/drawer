@@ -105,7 +105,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native112 texture / rendered pixel differs",
         )?;
         let mut raw = std::fs::read(&native).map_err(|e| e.to_string())?;
-        raw[8..12].copy_from_slice(&111u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut raw, 111);
         std::fs::write(&native, raw).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&native, B).is_err(),

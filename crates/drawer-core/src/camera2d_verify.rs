@@ -289,7 +289,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native camera / guides / session transport roundtrip",
         )?;
         let mut bytes = std::fs::read(&dest).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&100u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 100);
         let spoof = dir.join("old.drawer");
         std::fs::write(&spoof, &bytes).map_err(|e| e.to_string())?;
         check(

@@ -112,7 +112,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             "Local color native roundtrip",
         )?;
         let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&76u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 76);
         let old = root.join("local-color-old.drawer");
         std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
         check(

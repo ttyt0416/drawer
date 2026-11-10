@@ -459,7 +459,7 @@ pub fn document_textures(root: &Path) -> Result<(), String> {
         "Native texture depends on source files",
     )?;
     let mut old = bytes(&path)?;
-    old[8..12].copy_from_slice(&112u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut old, 112);
     write(&root.join("old.drawer"), old)?;
     check(
         crate::files::open(&root.join("old.drawer"), B).is_err(),

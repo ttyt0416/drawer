@@ -202,7 +202,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     )?;
     let intact = std::fs::read(&path).map_err(|e| e.to_string())?;
     let mut legacy = intact.clone();
-    legacy[8..12].copy_from_slice(&58u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut legacy, 58);
     let legacy_path = root.join("linked-groups-old-version.drawer");
     std::fs::write(&legacy_path, legacy).map_err(|e| e.to_string())?;
     check(

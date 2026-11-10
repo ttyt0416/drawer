@@ -127,7 +127,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Mixed generations/native Unicode/transform changed",
     )?;
     let mut bytes = std::fs::read(&mixed).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&89u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 89);
     let invalid = root.join("invalid-text-version.drawer");
     std::fs::write(&invalid, bytes).map_err(|e| e.to_string())?;
     check(
@@ -218,7 +218,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let path = root.join("preserved-v89.drawer");
     crate::files::save(&mut old, &path).map_err(|e| e.to_string())?;
     let mut b = std::fs::read(&path).map_err(|e| e.to_string())?;
-    b[8..12].copy_from_slice(&89u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut b, 89);
     std::fs::write(&path, b).map_err(|e| e.to_string())?;
     let old_read = crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET).map_err(|e| e.to_string())?;
     check(

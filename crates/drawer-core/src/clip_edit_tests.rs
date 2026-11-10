@@ -194,7 +194,7 @@ fn clip_split_join_linked_boundary_labels_folders_bounds_native_and_undo() {
     let loaded = crate::files::open(&path, B).unwrap();
     assert_eq!(loaded.snapshot(), d.snapshot());
     let mut bytes = std::fs::read(&path).unwrap();
-    bytes[8..12].copy_from_slice(&104u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 104);
     std::fs::write(&path, bytes).unwrap();
     assert!(crate::files::open(&path, B).is_err());
     assert_eq!(track, d.scene.timing.clips[0].track);

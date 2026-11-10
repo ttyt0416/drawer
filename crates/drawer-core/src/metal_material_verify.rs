@@ -137,7 +137,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
         "Metal parameters and embedded texture native mismatch",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&78u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 78);
     let old = root.join("metallic-old.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(

@@ -1,12 +1,12 @@
 use crate::document::{Background, CanvasSpec, Document, MAX_DIMENSION, PlacedRaster, RasterLayer};
 use std::{
     fs,
-    io::{self, BufReader, BufWriter, Read, Write},
+    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 123;
+pub(crate) const VERSION: u32 = 124;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -99,7 +99,31 @@ pub(crate) fn read_native_snapshot(
     }
     read_native_reader(path, std::io::Cursor::new(bytes), budget)
 }
-fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::Result<Document> {
+fn read_native_reader(
+    path: &Path,
+    mut reader: impl Read + Seek,
+    budget: usize,
+) -> io::Result<Document> {
+    let length = reader.seek(SeekFrom::End(0))?;
+    reader.seek(SeekFrom::Start(8))?;
+    let version = read_u32(&mut reader)?;
+    reader.seek(SeekFrom::Start(0))?;
+    let limit = if version >= 124 {
+        length
+            .checked_sub(64)
+            .ok_or_else(|| invalid("Truncated native integrity footer"))?
+    } else {
+        length
+    };
+    let mut reader = crate::native_integrity::Reader::new(reader, limit);
+    read_native_body(path, &mut reader, budget)
+        .map_err(|e| io::Error::new(e.kind(), format!("Native byte {}: {e}", reader.count)))
+}
+fn read_native_body(
+    path: &Path,
+    mut reader: &mut crate::native_integrity::Reader<impl Read>,
+    budget: usize,
+) -> io::Result<Document> {
     let mut magic = [0; 8];
     reader.read_exact(&mut magic)?;
     let version = read_u32(&mut reader)?;
@@ -717,6 +741,13 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
     {
         return Err(invalid("Invalid embedded page sources or memory budget"));
     }
+    if let Some((revision, frame)) = reader.finish(version)? {
+        if frame >= document.animation.as_ref().map_or(1, |a| a.frames) {
+            return Err(invalid("Saved current frame is outside the timeline"));
+        }
+        document.revision = revision;
+        document.current_frame = frame;
+    }
     let mut trailing = [0];
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
@@ -777,6 +808,9 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
 }
 
 pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
+    if document.current_frame >= document.animation.as_ref().map_or(1, |a| a.frames) {
+        return Err(invalid("Current frame is outside the saved timeline"));
+    }
     if !crate::timelines::valid_document(document) || !crate::timelines::hashes(document) {
         return Err(invalid("Invalid saved timeline arrangements or PCM hashes"));
     }
@@ -907,6 +941,11 @@ pub(crate) fn native_bytes(document: &Document) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 fn write_payload(document: &Document, scene: &[u8], writer: &mut impl Write) -> io::Result<()> {
+    let mut checked = crate::native_integrity::Writer::new(writer);
+    write_body(document, scene, &mut checked)?;
+    checked.finish(document.revision, document.current_frame)
+}
+fn write_body(document: &Document, scene: &[u8], writer: &mut impl Write) -> io::Result<()> {
     writer.write_all(MAGIC)?;
     writer.write_all(&VERSION.to_le_bytes())?;
     writer.write_all(&document.width.to_le_bytes())?;
@@ -1040,7 +1079,7 @@ mod tests {
         legacy.extend_from_slice(&(json.len() as u32).to_le_bytes());
         legacy.extend_from_slice(&json);
         legacy.extend_from_slice(&bytes[offset + 4 + length..]);
-        legacy[8..12].copy_from_slice(&10u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut legacy, 10);
         fs::write(&path, legacy).unwrap();
         let mut expected = d.snapshot();
         expected.scene.mouse_strokes[0].style.material = Default::default();
@@ -1099,7 +1138,7 @@ mod tests {
         legacy.extend_from_slice(&(old_json.len() as u32).to_le_bytes());
         legacy.extend_from_slice(&old_json);
         legacy.extend_from_slice(&bytes[offset + 4 + length..]);
-        legacy[8..12].copy_from_slice(&9u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut legacy, 9);
         fs::write(&path, legacy).unwrap();
         let reopened = open(&path, 4096).unwrap();
         assert_eq!(reopened.layers, d.layers);
@@ -1171,7 +1210,7 @@ mod tests {
         let mut bytes = fs::read(&path).unwrap();
         let placement = 32 + 4 + doc.layers[0].name.len();
         bytes.drain(placement..placement + 8);
-        bytes[8..12].copy_from_slice(&1u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 1);
         bytes.truncate(32 + 4 + "Layer 1".len() + 8 + 8);
         fs::write(&path, &bytes).unwrap();
         let reopened = open(&path, 16).unwrap();
@@ -1192,7 +1231,7 @@ mod tests {
         let mut bytes = fs::read(&path).unwrap();
         let tag = 32 + 4 + doc.layers[0].name.len() + 4;
         bytes.drain(tag..tag + 4);
-        bytes[8..12].copy_from_slice(&6u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 6);
         fs::write(&path, bytes).unwrap();
         let legacy = open(&path, 16).unwrap();
         assert!(!legacy.layers[0].locked);
@@ -1207,7 +1246,7 @@ mod tests {
         doc.layers[0].locked = true;
         save(&mut doc, &path).unwrap();
         let mut bytes = fs::read(&path).unwrap();
-        bytes[8..12].copy_from_slice(&7u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 7);
         fs::write(&path, bytes).unwrap();
         assert!(open(&path, 16).unwrap().snapshot() == doc.snapshot());
     }
@@ -1225,7 +1264,7 @@ mod tests {
         scene.as_object_mut().unwrap().remove("grid");
         let json = serde_json::to_vec(&scene).unwrap();
         bytes.truncate(offset);
-        bytes[8..12].copy_from_slice(&2u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 2);
         bytes.extend_from_slice(&(json.len() as u32).to_le_bytes());
         bytes.extend_from_slice(&json);
         fs::write(&path, bytes).unwrap();

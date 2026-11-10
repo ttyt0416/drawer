@@ -384,7 +384,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native111 lost collider roles / settled positions",
         )?;
         let mut b = std::fs::read(&path).map_err(|e| e.to_string())?;
-        b[8..12].copy_from_slice(&110u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut b, 110);
         std::fs::write(&path, b).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&path, B).is_err(),

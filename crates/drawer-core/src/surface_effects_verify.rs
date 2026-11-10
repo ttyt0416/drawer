@@ -274,7 +274,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Effects native roundtrip",
     )?;
     let mut old = std::fs::read(&file).map_err(|e| e.to_string())?;
-    old[8..12].copy_from_slice(&73u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut old, 73);
     let bad = root.join("surface-effects-old.drawer");
     std::fs::write(&bad, old).map_err(|e| e.to_string())?;
     check(

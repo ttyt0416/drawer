@@ -299,7 +299,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "PNG differs from lit render",
         )?;
         let mut bytes = std::fs::read(&native).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&109u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 109);
         std::fs::write(&native, bytes).map_err(|e| e.to_string())?;
         check(
             crate::files::open(&native, B).is_err(),

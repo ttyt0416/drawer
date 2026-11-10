@@ -48,7 +48,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         "Paper identity/color native reopen",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&60u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 60);
     let old = root.join("paper-old-version.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(

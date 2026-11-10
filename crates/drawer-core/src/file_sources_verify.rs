@@ -218,7 +218,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     )?;
     let bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
     let mut old = bytes;
-    old[8..12].copy_from_slice(&62u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut old, 62);
     std::fs::write(&file, old).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&file, DEFAULT_DOCUMENT_BUDGET).is_err(),

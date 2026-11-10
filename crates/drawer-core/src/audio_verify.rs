@@ -220,7 +220,7 @@ pub fn verify(root: &Path) -> Result<(), String> {
             "Native audio settings / source / PCM roundtrip",
         )?;
         let mut old = std::fs::read(&native).map_err(|e| e.to_string())?;
-        old[8..12].copy_from_slice(&101u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 101);
         let spoof = dir.join("old.drawer");
         std::fs::write(&spoof, old).map_err(|e| e.to_string())?;
         check(

@@ -1461,7 +1461,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             "Inactive timeline PCM was not restored",
         )?;
         let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        bytes[8..12].copy_from_slice(&103u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut bytes, 103);
         let old = dir.join("old.drawer");
         std::fs::write(&old, &bytes).map_err(|e| e.to_string())?;
         check(

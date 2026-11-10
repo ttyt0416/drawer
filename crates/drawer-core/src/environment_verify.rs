@@ -309,7 +309,7 @@ pub fn native_and_precision(root: &Path) -> Result<(), String> {
         "Embedded panorama depends on source file",
     )?;
     let mut bytes = std::fs::read(&native).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&113u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 113);
     let old = root.join("old.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(

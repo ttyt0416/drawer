@@ -215,7 +215,7 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
         "Text native font/alignment/spacing roundtrip",
     )?;
     let mut bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&85u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 85);
     let fake = root.join("text-fake85.drawer");
     std::fs::write(&fake, bytes).map_err(|e| e.to_string())?;
     check(

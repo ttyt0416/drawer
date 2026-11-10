@@ -88,7 +88,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
             "Batch native roundtrip",
         )?;
         let mut old = std::fs::read(&path).map_err(|e| e.to_string())?;
-        old[8..12].copy_from_slice(&75u32.to_le_bytes());
+        crate::save_generation::verify::legacy_version(&mut old, 75);
         let path = root.join("batch-old.drawer");
         std::fs::write(&path, old).map_err(|e| e.to_string())?;
         check(

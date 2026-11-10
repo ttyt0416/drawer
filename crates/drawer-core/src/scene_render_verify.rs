@@ -539,7 +539,7 @@ pub fn persistence(root: &Path) -> Result<(), String> {
         "Native119 options/pixels differ",
     )?;
     let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&118u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 118);
     std::fs::write(root.join("old-render.drawer"), bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&root.join("old-render.drawer"), B).is_err(),

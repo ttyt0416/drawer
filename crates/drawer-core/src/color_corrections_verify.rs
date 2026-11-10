@@ -238,7 +238,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         u32::from_le_bytes(bytes[8..12].try_into().unwrap()) >= 69,
         "Inversion document version",
     )?;
-    bytes[8..12].copy_from_slice(&68u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 68);
     let old = root.join("downgraded-inversion.drawer");
     std::fs::write(&old, bytes).map_err(|e| e.to_string())?;
     check(
@@ -341,7 +341,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let mut plain = fixture()?;
     crate::files::save(&mut plain, &legacy_file).map_err(|e| e.to_string())?;
     let mut bytes = std::fs::read(&legacy_file).map_err(|e| e.to_string())?;
-    bytes[8..12].copy_from_slice(&68u32.to_le_bytes());
+    crate::save_generation::verify::legacy_version(&mut bytes, 68);
     std::fs::write(&legacy_file, bytes).map_err(|e| e.to_string())?;
     check(
         crate::files::open(&legacy_file, DEFAULT_DOCUMENT_BUDGET)

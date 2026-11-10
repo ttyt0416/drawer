@@ -150,7 +150,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
         check(reopened.snapshot() == after, "Mapping native roundtrip")?;
         if !layer.mapping.is_default() {
             let mut bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-            bytes[8..12].copy_from_slice(&62u32.to_le_bytes());
+            crate::save_generation::verify::legacy_version(&mut bytes, 62);
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
             check(
                 crate::files::open(&path, DEFAULT_DOCUMENT_BUDGET).is_err(),
