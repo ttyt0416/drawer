@@ -631,3 +631,5 @@ pub mod asset_catalog;
 pub mod file_browser;
 
 pub mod output_watermark;
+
+pub mod layer_output;

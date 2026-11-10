@@ -66,9 +66,21 @@ pub fn filename(
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("Invalid source title")?;
-    let stem = pattern
-        .replace("{title}", title)
-        .replace("{index}", &format!("{index:04}"));
+    let mut stem = String::new();
+    let mut rest = pattern;
+    while !rest.is_empty() {
+        if let Some(next) = rest.strip_prefix("{title}") {
+            stem.push_str(title);
+            rest = next;
+        } else if let Some(next) = rest.strip_prefix("{index}") {
+            stem.push_str(&format!("{index:04}"));
+            rest = next;
+        } else {
+            let ch = rest.chars().next().unwrap();
+            stem.push(ch);
+            rest = &rest[ch.len_utf8()..];
+        }
+    }
     let device = stem
         .split('.')
         .next()
@@ -258,6 +270,19 @@ pub fn prepare(
     })
 }
 impl Plan {
+    pub(crate) fn empty() -> Self {
+        Self {
+            files: vec![],
+            sources: vec![],
+            protected: vec![],
+        }
+    }
+    pub(crate) fn append(&mut self, other: Self) {
+        self.files.extend(other.files);
+        self.sources.extend(other.sources);
+        self.protected.extend(other.protected);
+    }
+
     pub fn matches(&self, docs: &[Document]) -> bool {
         self.sources.iter().all(|s| {
             docs.iter()

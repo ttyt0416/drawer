@@ -1129,3 +1129,8 @@ crates/drawer-core/src/output_watermark_verify.rs
 crates/drawer-app/src/output_watermark.rs
 crates/drawer-app/src/output_watermark_verify.rs
 docs/process/output-watermark.md
+
+crates/drawer-core/src/layer_output.rs
+crates/drawer-core/src/layer_output_verify.rs
+crates/drawer-app/src/layer_output_verify.rs
+docs/process/layer-output.md

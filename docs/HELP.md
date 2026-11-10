@@ -1824,3 +1824,5 @@ Rename updates open document/source paths, protected imported paths, favorites a
 출력 워터마크: still export의 Watermark, noise and output size 또는 출력 크기/이름 창에서 Output watermark / independent noise를 펼칩니다. 로컬 PNG 또는 텍스트, 합성/불투명도, 축별 배율/비율 고정/회전/앵커/여백/위치, 반복 방향/간격/엇갈림, 표지 포함과 독립 노이즈를 검토한 뒤 Prepare preview → Write reviewed new files를 사용합니다. Save local watermark preset은 명시적으로 저장하며 Close는 저장하지 않습니다. 비활성 입력의 값은 유지됩니다. 워터마크 PNG는 ICC가 있으면 sRGB로 변환한 뒤 출력 ICC에 맞춥니다. 출력 픽셀 좌표와 seed를 고정하므로 같은 크기의 여러 페이지/타임랩스 정지 프레임은 같은 노이즈를 사용합니다.
 
 애니메이션과 타임랩스 출력에서도 Use saved output watermark preset을 켜면 같은 로컬 워터마크 프리셋을 사용합니다. Capture 시 이미지/텍스트를 고정하며 출력 좌표와 seed가 프레임마다 같습니다. 이전 간단 PNG/노이즈 모드는 입력값을 보존한 채 비활성화됩니다.
+
+레이어/컴프별 출력: Layer comps → New-layer policy / batch output 또는 공통 출력 창의 Each layer / Each saved comp를 사용합니다. 이름에 {layer}나 {comp}와 {index}를 넣고 실제 출력 목록을 검토합니다. 개별 층은 외부 배경을 제외한 독립 소스이므로 하위 배경에 의존하는 합성은 달라질 수 있습니다. 전체 표시 상태를 보존하려면 컴프 출력을 사용합니다. 새 층은 All/Current 정책에 따라 기존 컴프에 등록되고 생성 취소 시 함께 제거됩니다. 정책은 그림 Undo와 분리되며 문서·로컬 기본에 저장됩니다. 현재 컴프/생성 정책은 Native123입니다.

@@ -15,6 +15,50 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Data {
     pub next: u64,
     pub comps: Vec<Comp>,
+    #[serde(default, skip_serializing_if = "Policy::is_all")]
+    pub policy: Policy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<u64>,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Policy {
+    #[default]
+    All,
+    Current,
+}
+impl Policy {
+    fn is_all(&self) -> bool {
+        *self == Self::All
+    }
+    pub fn load(storage: &crate::storage::UserStorage) -> Result<Self, String> {
+        let p = storage.root().join("settings/layer-comp-policy.json");
+        if !p.exists() {
+            return Ok(Self::All);
+        }
+        let bytes = crate::asset_catalog::bytes(&p, 1024)?;
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }
+    pub fn save(self, storage: &crate::storage::UserStorage) -> Result<(), String> {
+        use std::io::Write;
+        let p = storage.root().join("settings/layer-comp-policy.json");
+        let temp = p.with_extension("json.write.tmp");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|e| e.to_string())?;
+        let result = (|| {
+            file.write_all(&serde_json::to_vec(&self).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
+            drop(file);
+            std::fs::rename(&temp, p).map_err(|e| e.to_string())
+        })();
+        if temp.exists() {
+            let _ = std::fs::remove_file(temp);
+        }
+        result
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,7 +96,9 @@ impl Data {
         *self == Self::default()
     }
     pub fn valid(&self) -> bool {
-        self.comps.len() <= 64
+        self.current
+            .is_none_or(|id| self.comps.iter().any(|c| c.id == id))
+            && self.comps.len() <= 64
             && self.comps.iter().map(|c| c.entries.len()).sum::<usize>() <= 32768
             && self
                 .comps
@@ -169,6 +215,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
                 id
             };
             result.selected = Some(id);
+            result.state.scene.layer_comps.current = Some(id);
         }
         Command::Rename { id, name } => {
             if !name_valid(&name) {
@@ -193,6 +240,9 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
                 .position(|c| c.id == id)
                 .ok_or("Comp was deleted")?;
             data.comps.remove(n);
+            if data.current == Some(id) {
+                data.current = None;
+            }
         }
         Command::Apply(id) => {
             let comp = d
@@ -240,6 +290,7 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
                 }
             }
             result.selected = Some(id);
+            result.state.scene.layer_comps.current = Some(id);
         }
     }
     if !result.state.scene.valid()
@@ -257,4 +308,107 @@ pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
     }
     properties::validate_edit(d, &result.state)?;
     Ok(result)
+}
+fn identities(
+    scene: &crate::scene::Scene,
+    count: usize,
+    animation: Option<&crate::animation::Timeline>,
+) -> BTreeSet<Key> {
+    let mut keys = (0..count)
+        .map(|n| Key::Layer(Target::Raster(scene.layer_ids.id(n))))
+        .collect::<BTreeSet<_>>();
+    keys.extend(
+        scene
+            .lines
+            .layers
+            .iter()
+            .map(|l| Key::Layer(Target::Vector(l.id))),
+    );
+    keys.extend(
+        (0..scene.paper.folders.len())
+            .filter(|n| scene.paper.folder_active(*n))
+            .map(|n| Key::Layer(Target::Folder(n as u16))),
+    );
+    keys.extend((0..scene.objects.len()).map(|n| Key::Object(scene.catalog.objects.id(n))));
+    keys.extend((0..scene.worlds.len()).map(|n| Key::World(scene.catalog.worlds.id(n))));
+    keys.extend(scene.gradients.layers.iter().map(|l| Key::Gradient(l.id)));
+    if let Some(a) = animation {
+        for (n, t) in a.tracks.iter().enumerate() {
+            let track = scene.catalog.tracks.id(n);
+            keys.insert(Key::Track(track));
+            for (i, _) in t.cells.iter().enumerate() {
+                keys.insert(Key::Cell {
+                    track,
+                    cell: scene
+                        .catalog
+                        .cells
+                        .get(&track)
+                        .map_or(i as u64 + 1, |ids| ids.id(i)),
+                });
+            }
+        }
+    }
+    keys
+}
+/// Register creation identities centrally, including new folders, duplicates and paste.
+pub(crate) fn reconcile(d: &Document, state: &mut DocumentState) -> Result<(), String> {
+    if state.scene.layer_comps.comps.is_empty() {
+        return Ok(());
+    }
+    if !state.scene.valid()
+        || !state.scene.paper.valid_for(state.layers.len())
+        || !state
+            .scene
+            .catalog
+            .valid_animation(state.animation.as_ref())
+    {
+        return Err("Invalid layer-comp creation source".into());
+    }
+    let before = identities(&d.scene, d.layers.len(), d.animation.as_ref());
+    let next = identities(&state.scene, state.layers.len(), state.animation.as_ref());
+    if next.is_subset(&before) {
+        return Ok(());
+    }
+    let after = crate::layer_merge::preview(state, d.current_frame)?;
+    let mut added = vec![];
+    for (key, t) in live(&after)? {
+        if !before.contains(&key) {
+            let p = properties::properties(&after, t);
+            added.push(Entry {
+                key,
+                hidden: false,
+                opacity: p.opacity,
+                blend: p.blend,
+                through: if let Target::Folder(n) = t {
+                    Some(after.scene.paper.folders[n as usize].through)
+                } else {
+                    None
+                },
+            });
+        }
+    }
+    if added.is_empty() {
+        return Ok(());
+    }
+    let data = &mut state.scene.layer_comps;
+    if data.policy == Policy::Current && data.current.is_none() {
+        return Err(
+            "Apply a saved comp before creating layers with Current-comp-only policy".into(),
+        );
+    }
+    for comp in &mut data.comps {
+        for entry in &added {
+            let mut entry = entry.clone();
+            entry.hidden = data.policy == Policy::Current && data.current != Some(comp.id);
+            if let Some(old) = comp.entries.iter_mut().find(|v| v.key == entry.key) {
+                *old = entry;
+            } else {
+                comp.entries.push(entry);
+            }
+        }
+    }
+    if !data.valid() {
+        return Err("Layer-comp creation entries exceed limits".into());
+    }
+    Ok(())
 }

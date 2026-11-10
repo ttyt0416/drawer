@@ -20,6 +20,8 @@ pub(super) struct Panel {
     watermark_blocked: bool,
     watermark_replace: bool,
     all: bool,
+    mode: drawer_core::layer_output::Mode,
+    include_hidden: bool,
     reviewed: bool,
     plan: Option<Box<core::Plan>>,
     job: Option<Job>,
@@ -58,6 +60,20 @@ fn job(
     Ok(Job { cancel, rx })
 }
 impl Drawer {
+    pub(super) fn begin_layer_output(
+        &mut self,
+        mode: drawer_core::layer_output::Mode,
+    ) -> Result<(), String> {
+        self.begin_output_batch()?;
+        self.output_batch.mode = mode;
+        self.output_batch.settings.pattern = if mode == drawer_core::layer_output::Mode::Comps {
+            "{title}-{index}-{comp}"
+        } else {
+            "{title}-{index}-{layer}"
+        }
+        .into();
+        Ok(())
+    }
     pub(super) fn begin_output_batch(&mut self) -> Result<(), String> {
         self.finish_stroke();
         let d = &self.documents[self.active.ok_or("Open a source drawing")?];
@@ -117,6 +133,8 @@ impl Drawer {
             copy.source_path = d.source_path.clone();
             docs.push(copy);
         }
+        let mode = p.mode;
+        let hidden = p.include_hidden;
         let folder = PathBuf::from(&p.folder);
         let mut settings = p.settings.clone();
         p.plan = None;
@@ -129,8 +147,16 @@ impl Drawer {
                 available.saturating_sub(held),
                 c,
             )?;
-            core::prepare(&docs, &folder, &settings, available.saturating_sub(held), c)
-                .map(|p| Value::Plan(Box::new(p)))
+            drawer_core::layer_output::prepare(
+                &docs,
+                &folder,
+                &settings,
+                mode,
+                hidden,
+                available.saturating_sub(held),
+                c,
+            )
+            .map(|p| Value::Plan(Box::new(p)))
         })?);
         Ok(())
     }
@@ -202,7 +228,13 @@ impl Drawer {
                 ));
             }
         }
-        let before = (p.settings.clone(), p.folder.clone(), p.all);
+        let before = (
+            p.settings.clone(),
+            p.folder.clone(),
+            p.all,
+            p.mode,
+            p.include_hidden,
+        );
         let mut open = true;
         let mut action = "";
         let mut close = false;
@@ -213,6 +245,9 @@ impl Drawer {
             ui.add_enabled_ui(p.job.is_none(),|ui|{
                 ui.horizontal(|ui|{ui.label("Local output folder");ui.text_edit_singleline(&mut p.folder);if ui.button("Browse…").clicked()&&let Some(f)=rfd::FileDialog::new().pick_folder(){p.folder=f.display().to_string();}});
                 ui.checkbox(&mut p.all,"All open documents (max32); otherwise active document");
+                ui.horizontal(|ui|{for(key,label,mode)in[("composite","Full composite",drawer_core::layer_output::Mode::Composite),("layers","Each layer",drawer_core::layer_output::Mode::Layers),("comps","Each saved comp",drawer_core::layer_output::Mode::Comps)]{let r=ui.selectable_value(&mut p.mode,mode,label);p.controls.insert(key,r.rect);}});
+                if p.mode==drawer_core::layer_output::Mode::Layers{ui.checkbox(&mut p.include_hidden,"Include hidden layers");}
+                if p.mode!=drawer_core::layer_output::Mode::Composite{ui.small("Up to128 outputs. Add {layer}/{comp} and {index} to the filename; forbidden names/collisions are rejected. Independent layer output has no lower backdrop.");}
                 ui.horizontal(|ui|{ui.label("Filename stem");ui.text_edit_singleline(&mut p.settings.pattern);});ui.small("{title} = source title without extension; {index} =0001…; chosen format supplies the extension. Existing files are reported as failures and preserved.");
                 ui.horizontal_wrapped(|ui|{for f in Format::ALL{ui.selectable_value(&mut p.settings.encoding.format,f,f.extension());}});
                 let g=&mut p.settings.geometry;ui.checkbox(&mut g.resize,"Custom output pixels (source size otherwise)");ui.add_enabled_ui(g.resize,|ui|{ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut g.width).range(0..=32768).prefix("Width "));ui.add(egui::DragValue::new(&mut g.height).range(0..=32768).prefix("Height "));});});
@@ -248,7 +283,15 @@ impl Drawer {
             if let Some(plan)=&p.plan{for(f,t)in plan.files.iter().zip(&p.textures){ui.separator();ui.label(format!("{} · {}×{} · {:.5}DPI · {} bytes",f.path.display(),f.width,f.height,f.dpi,f.bytes.len()));ui.image((t.id(),t.size_vec2()));if !f.losses.is_empty(){ui.colored_label(egui::Color32::YELLOW,"Losses in this output; keep the editable source");for loss in &f.losses{ui.label(loss);}}for note in &f.notices{ui.small(note);}}}
             if let Some(r)=&p.report{for f in &r.files{ui.label(format!("{}: {}",f.path.display(),match &f.result{Ok(())=>"Written".into(),Err(e)=>format!("Failed / skipped: {e}")}));}}
         });
-        if before != (p.settings.clone(), p.folder.clone(), p.all) {
+        if before
+            != (
+                p.settings.clone(),
+                p.folder.clone(),
+                p.all,
+                p.mode,
+                p.include_hidden,
+            )
+        {
             p.plan = None;
             p.textures.clear();
             p.reviewed = false;
@@ -289,4 +332,10 @@ mod tests {
 mod watermark_verify;
 pub(super) fn watermark_smoke(root: &Path) -> Result<(), String> {
     watermark_verify::run(root)
+}
+
+#[path = "layer_output_verify.rs"]
+mod layer_verify;
+pub(super) fn layer_smoke(root: &Path) -> Result<(), String> {
+    layer_verify::run(root)
 }

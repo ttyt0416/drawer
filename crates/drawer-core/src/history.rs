@@ -266,6 +266,7 @@ impl Document {
         source_check.scene = after.clone();
         crate::clip_edit::reconcile(self, &mut source_check)?;
         crate::timelines::reconcile(self, &mut source_check)?;
+        crate::layer_comps::reconcile(self, &mut source_check)?;
         after = source_check.scene.clone();
         crate::keyframes::validate_edit(self, &source_check)?;
         crate::layer_properties::validate_scene(self, &after)?;
@@ -374,6 +375,7 @@ impl Document {
         crate::paper_background::prune(&mut after);
         crate::clip_edit::reconcile(self, &mut after)?;
         crate::timelines::reconcile(self, &mut after)?;
+        crate::layer_comps::reconcile(self, &mut after)?;
         crate::clipping::validate_state(self, &after)?;
         crate::layer_properties::validate_edit(self, &after)?;
         if !after.scene.keyframes.is_default()
@@ -470,10 +472,30 @@ impl Document {
                 .map(Edit::bytes)
                 .sum::<usize>()
     }
+    /// A creation preference is document metadata, independent of drawing Undo.
+    pub fn set_layer_comp_policy(
+        &mut self,
+        policy: crate::layer_comps::Policy,
+    ) -> Result<(), String> {
+        if policy == crate::layer_comps::Policy::Current
+            && !self.scene.layer_comps.comps.is_empty()
+            && self.scene.layer_comps.current.is_none()
+        {
+            return Err("Apply a saved comp before choosing Current-comp-only".into());
+        }
+        if self.scene.layer_comps.policy != policy {
+            self.scene.layer_comps.policy = policy;
+            self.history.saved = None;
+            self.revision = self.revision.wrapping_add(1);
+            self.refresh_dirty();
+        }
+        Ok(())
+    }
     pub fn undo(&mut self) -> bool {
         let Some(edit) = self.history.undo.pop() else {
             return false;
         };
+        let comp_policy = self.scene.layer_comps.policy;
         match &edit.kind {
             EditKind::Multi { layers, scene } => {
                 for (n, changes) in layers {
@@ -506,6 +528,7 @@ impl Document {
             EditKind::State { before, .. } => before.restore(self),
             EditKind::Scene { before, .. } => self.scene = before.as_ref().clone(),
         }
+        self.scene.layer_comps.policy = comp_policy;
         self.history.current = edit.from;
         self.history.redo.push(edit);
         self.history_changed();
@@ -515,6 +538,7 @@ impl Document {
         let Some(edit) = self.history.redo.pop() else {
             return false;
         };
+        let comp_policy = self.scene.layer_comps.policy;
         match &edit.kind {
             EditKind::Multi { layers, scene } => {
                 for (n, changes) in layers {
@@ -547,6 +571,7 @@ impl Document {
             EditKind::State { after, .. } => after.restore(self),
             EditKind::Scene { after, .. } => self.scene = after.as_ref().clone(),
         }
+        self.scene.layer_comps.policy = comp_policy;
         self.history.current = edit.to;
         self.history.undo.push(edit);
         self.history_changed();

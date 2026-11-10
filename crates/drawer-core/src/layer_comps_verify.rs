@@ -228,14 +228,14 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     d.commit_state(state)?;
     let p = core::prepare(&d, Command::Apply(comp))?;
     check(
-        p.missing == vec![Key::Object(1)] && p.unrecorded == 1,
+        p.missing == vec![Key::Object(1)] && p.unrecorded == 0,
         "Deleted/new comp layer report",
     )?;
     d.commit_state(p.state)?;
     check(
-        p::properties(&d, Target::Object(new)).opacity == 17
-            && p::properties(&d, Target::Object(new)).hidden,
-        "Unrecorded layer overwritten",
+        p::properties(&d, Target::Object(new)).opacity == 100
+            && !p::properties(&d, Target::Object(new)).hidden,
+        "New layer All-comp visibility policy was not applied",
     )?;
     let original = d.snapshot();
     for command in [

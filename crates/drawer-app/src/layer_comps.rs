@@ -13,6 +13,9 @@ struct Draft {
     frame: u32,
     selected: Option<u64>,
     name: String,
+    policy: core::Policy,
+    policy_blocked: bool,
+    policy_replace: bool,
     prepared: Option<core::Prepared>,
     images: Option<[egui::TextureHandle; 2]>,
 }
@@ -20,12 +23,26 @@ impl Drawer {
     pub(super) fn begin_layer_comps(&mut self) -> Result<(), String> {
         self.finish_stroke();
         let d = &self.documents[self.active.ok_or("Open a page first")?];
-        let c = d.scene.layer_comps.comps.first();
+        let c = d
+            .scene
+            .layer_comps
+            .comps
+            .iter()
+            .find(|v| Some(v.id) == d.scene.layer_comps.current)
+            .or_else(|| d.scene.layer_comps.comps.first());
+        let default = self.storage.as_ref().map(core::Policy::load).transpose();
         self.layer_comps.draft = Some(Box::new(Draft {
             id: d.id,
             revision: d.revision,
             frame: d.current_frame,
             selected: c.map(|c| c.id),
+            policy: if d.scene.layer_comps.comps.is_empty() {
+                default.as_ref().ok().and_then(|v| *v).unwrap_or_default()
+            } else {
+                d.scene.layer_comps.policy
+            },
+            policy_blocked: default.is_err(),
+            policy_replace: false,
             name: c.map_or_else(|| "Comp".into(), |c| c.name.clone()),
             prepared: None,
             images: None,
@@ -43,8 +60,13 @@ impl Drawer {
         if (d.id, d.revision, d.current_frame) != (e.id, e.revision, e.frame) {
             return Err("Page/frame changed; reopen layer comps".into());
         }
+        let initialize_policy =
+            matches!(command, Command::Capture { .. }) && d.scene.layer_comps.comps.is_empty();
         let p = core::prepare(d, command)?;
         self.documents[n].commit_state(p.state)?;
+        if initialize_policy {
+            self.documents[n].set_layer_comp_policy(e.policy)?;
+        }
         e.selected = p.selected;
         e.revision = self.documents[n].revision;
         e.prepared = None;
@@ -114,9 +136,11 @@ impl Drawer {
         let fresh = (d.revision, d.current_frame) == (e.revision, e.frame);
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut command, mut preview, mut apply, mut cancel) = (None, false, false, false);
-        egui::Window::new("Layer comps").open(&mut open).default_pos(egui::pos2(25.,20.)).default_width(480.).collapsible(false).show(ctx,|ui|{
+        let mut policy = false;
+        let mut export = None;
+        egui::Window::new("Layer comps").open(&mut open).default_pos(egui::pos2(25.,20.)).default_width(480.).max_height(620.).vscroll(true).collapsible(false).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen layer comps.");return;}
-            ui.label("Save each layer's own visibility, opacity and blend mode. New layers retain their current settings.");
+            ui.label("Save each layer's own visibility, opacity and blend mode. New identities follow the chosen new-layer policy.");
             egui::ScrollArea::vertical().max_height(110.).show(ui,|ui|{for c in &d.scene.layer_comps.comps{
                 if ui.selectable_label(e.selected==Some(c.id),&c.name).clicked(){e.selected=Some(c.id);e.name=c.name.clone();e.prepared=None;e.images=None;}
             }});
@@ -136,7 +160,46 @@ impl Drawer {
             }
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After comp",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}
             ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply comp"));self.layer_comps.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.collapsing("New-layer policy / batch output",|ui|{
+                ui.horizontal(|ui|{ui.selectable_value(&mut e.policy,core::Policy::All,"Show new layers in all comps");ui.selectable_value(&mut e.policy,core::Policy::Current,"Show only in current comp");});
+                if e.policy_blocked{ui.checkbox(&mut e.policy_replace,"Replace unreadable saved comp policy");}
+                policy=ui.add_enabled(!e.policy_blocked||e.policy_replace,egui::Button::new("Use policy and save local default")).clicked();
+                ui.horizontal(|ui|{if ui.button("Export each saved comp…").clicked(){export=Some(drawer_core::layer_output::Mode::Comps);}
+                if ui.button("Export each layer…").clicked(){export=Some(drawer_core::layer_output::Mode::Layers);}});
+                ui.small("Creation/duplication/paste registers new stable IDs in every comp. Policy choice is a setting; creation and its comp entries Undo together. Output never changes live visibility.");
+            });
+
         });
+        if policy {
+            let result = (|| {
+                if e.policy == core::Policy::Current
+                    && !self.documents[n].scene.layer_comps.comps.is_empty()
+                    && self.documents[n].scene.layer_comps.current.is_none()
+                {
+                    return Err("Apply a saved comp first".to_string());
+                }
+                e.policy
+                    .save(self.storage.as_ref().ok_or("Local storage unavailable")?)?;
+                self.documents[n].set_layer_comp_policy(e.policy)?;
+                Ok(())
+            })();
+            match result {
+                Ok(()) => {
+                    e.revision = self.documents[n].revision;
+                    e.policy_blocked = false;
+                    e.prepared = None;
+                    e.images = None;
+                }
+                Err(err) => self.status = Some(err),
+            }
+        }
+        if let Some(mode) = export {
+            if let Err(err) = self.begin_layer_output(mode) {
+                self.status = Some(err);
+            } else {
+                return;
+            }
+        }
         if open && !cancel {
             self.layer_comps.draft = Some(e);
         }

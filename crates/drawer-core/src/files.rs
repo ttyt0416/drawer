@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 122;
+pub(crate) const VERSION: u32 = 123;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -234,6 +234,14 @@ fn read_native_reader(path: &Path, mut reader: impl Read, budget: usize) -> io::
             && (document.scene.keyframes.camera_output || document.scene.camera_guides.is_some())
         {
             return Err(invalid("Final camera and path guides require native101"));
+        }
+        if version < 123
+            && (document.scene.layer_comps.current.is_some()
+                || document.scene.layer_comps.policy != crate::layer_comps::Policy::All)
+        {
+            return Err(invalid(
+                "Current layer comp and new-layer policy require native123",
+            ));
         }
         if version < 122 && crate::asset_catalog::requires_v122(&document.scene) {
             return Err(invalid(
