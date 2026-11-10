@@ -153,7 +153,8 @@ pub fn area(d: &Document, layers: &[u64], contained: bool) -> Result<Vec<Picked>
     }
     Ok(result)
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Transform {
     pub pivot: Point,
     pub translation: Point,

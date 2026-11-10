@@ -159,9 +159,7 @@ impl Drawer {
 
     pub(super) fn raster_export_window(&mut self, ctx: &egui::Context) {
         let mut p = std::mem::take(&mut self.raster_export);
-        if !p.open {
-            return;
-        }
+
         if let Some(job) = &p.job {
             ctx.request_repaint_after(std::time::Duration::from_millis(25));
             let result = match job.rx.try_recv() {
@@ -196,6 +194,10 @@ impl Drawer {
                     Err(e) => p.message = e,
                 }
             }
+        }
+        if !p.open {
+            self.raster_export = p;
+            return;
         }
         let before = p.options;
         let mut open = true;

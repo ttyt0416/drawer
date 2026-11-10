@@ -31,6 +31,15 @@ pub struct ToolRef {
 #[serde(tag = "command", content = "parameters", deny_unknown_fields)]
 pub enum Operation {
     Canvas(Canvas),
+    Transform {
+        layer: usize,
+        vector: bool,
+        settings: crate::vector_scope::Transform,
+        filter: crate::interpolation::Filter,
+    },
+    Scroll {
+        document: [f64; 2],
+    },
     Dpi(f64),
     NewRaster {
         name: String,
@@ -66,6 +75,10 @@ impl Operation {
             Self::Unsupported { command, tool } => {
                 name_valid(command) && tool.as_ref().is_none_or(|t| t.id > 0 && t.document > 0)
             }
+            Self::Transform {
+                layer, settings, ..
+            } => *layer < 256 && !settings.duplicate && settings.matrix().is_ok(),
+            Self::Scroll { document } => document.iter().all(|v| v.is_finite() && v.abs() <= 1e6),
             Self::Canvas(_) => true,
         }
     }
@@ -328,14 +341,28 @@ pub struct Prepared {
     frame: u32,
     pub state: DocumentState,
     pub label: String,
+    pub scroll: [f64; 2],
 }
 impl Prepared {
     pub fn commit(self, doc: &mut Document) -> Result<bool, String> {
+        self.commit_with_scale(doc, 1.)
+    }
+    pub fn commit_with_scale(self, doc: &mut Document, ppp: f64) -> Result<bool, String> {
         if doc.id != self.source || doc.revision != self.revision || doc.current_frame != self.frame
         {
             return Err("Document / revision / frame changed; replay again".into());
         }
-        doc.commit_state_named(self.state, &self.label)
+        let mut view = doc.view;
+        scroll(
+            &mut view,
+            [self.state.width as f64, self.state.height as f64],
+            self.scroll,
+            ppp,
+        )?;
+        let changed = doc.commit_state_named(self.state, &self.label)?;
+        let view_changed = view != doc.view;
+        doc.view = view;
+        Ok(changed || view_changed)
     }
 }
 pub fn prepare(
@@ -360,6 +387,7 @@ pub fn prepare(
         return Err("Auto action snapshot exceeds workspace memory".into());
     }
     let mut work = crate::layer_merge::preview(&doc.snapshot(), doc.current_frame)?;
+    let mut scroll = [0.; 2];
     for (n, step) in action.steps.iter().enumerate().filter(|(_, p)| p.enabled) {
         if cancel.load(Ordering::Relaxed) {
             return Err("Auto action canceled; document unchanged".into());
@@ -375,6 +403,11 @@ pub fn prepare(
             return Err("Auto action result exceeds workspace memory".into());
         }
         state.restore(&mut work);
+        if let Operation::Scroll { document } = step.operation {
+            for k in 0..2 {
+                scroll[k] += document[k];
+            }
+        }
     }
     if cancel.load(Ordering::Relaxed) {
         return Err("Auto action canceled; document unchanged".into());
@@ -388,6 +421,7 @@ pub fn prepare(
         revision: doc.revision,
         frame: doc.current_frame,
         state: work.snapshot(),
+        scroll,
         label,
     })
 }
@@ -486,10 +520,78 @@ pub fn prepare_operation(
                 Default::default(),
             )
         }
+        Operation::Transform {
+            layer,
+            vector,
+            settings,
+            filter,
+        } => {
+            let key = if *vector {
+                crate::layer_search::Key::Layer(p::Target::Vector(
+                    doc.scene
+                        .lines
+                        .layers
+                        .get(*layer)
+                        .ok_or("Missing vector slot")?
+                        .id,
+                ))
+            } else {
+                if *layer >= doc.layers.len() {
+                    return Err("Missing raster slot".into());
+                }
+                crate::layer_search::Key::Layer(p::raster(doc, *layer))
+            };
+            crate::affine_transform::prepare_with_progress(
+                doc,
+                key,
+                false,
+                *settings,
+                false,
+                *filter,
+                &mut || {
+                    if cancel.load(Ordering::Relaxed) {
+                        Err("Transform round canceled".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+            )
+            .map(|p| p.state)
+        }
+        Operation::Scroll { .. } => Ok(doc.snapshot()),
         Operation::Unsupported { command, .. } => {
             Err(format!("Unsupported / non-recordable command: {command}"))
         }
     }
+}
+/// A view command moves the viewport center in document pixels, independently
+/// of zoom/rotation/flip and without adding a drawing history entry.
+pub fn scroll(
+    view: &mut crate::view::View,
+    size: [f64; 2],
+    delta: [f64; 2],
+    ppp: f64,
+) -> Result<(), String> {
+    if delta == [0.; 2] {
+        return Ok(());
+    }
+    if !ppp.is_finite() || ppp <= 0. || delta.iter().any(|v| !v.is_finite() || v.abs() > 256e6) {
+        return Err("Invalid document scroll/display scale".into());
+    }
+    let center = view.screen_to_document([0.; 2], size, [0.; 2], ppp);
+    let target = [center[0] + delta[0], center[1] + delta[1]];
+    let mut next = *view;
+    next.center_on(target, size, [0.; 2], ppp);
+    let actual = next.screen_to_document([0.; 2], size, [0.; 2], ppp);
+    if actual
+        .iter()
+        .zip(target)
+        .any(|(a, b)| !a.is_finite() || (a - b).abs() > 1e-5)
+    {
+        return Err("Scroll exceeds the supported view range".into());
+    }
+    *view = next;
+    Ok(())
 }
 #[path = "auto_actions_io.rs"]
 mod io;

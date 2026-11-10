@@ -176,10 +176,7 @@ impl Drawer {
     }
     pub(super) fn output_batch_window(&mut self, ctx: &egui::Context) {
         let mut p = std::mem::take(&mut self.output_batch);
-        if !p.open {
-            self.output_batch = p;
-            return;
-        }
+
         if let Some(j) = &p.job {
             match j.rx.try_recv() {
                 Ok(r) => {
@@ -208,6 +205,10 @@ impl Drawer {
                     ctx.request_repaint_after(std::time::Duration::from_millis(25))
                 }
             }
+        }
+        if !p.open {
+            self.output_batch = p;
+            return;
         }
         if (p.textures.is_empty() || p.texture_source != p.show_source)
             && let Some(plan) = &p.plan

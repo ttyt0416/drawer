@@ -37,6 +37,8 @@ try {
     $workspaceSettings = Join-Path $dataRoot 'settings/workspaces.json'
     $workspaceBackup = Join-Path $dataRoot 'settings/workspace-before-apply.json'
     $interfaceSettings = Join-Path $dataRoot 'settings/interface.json'
+    $repeatSettings = Join-Path $dataRoot 'settings/action-repeat.json'
+    Set-Content -LiteralPath $repeatSettings -Value '{"version":1,"count":2,"wait_ms":50,"confirm":true}'
     $compPolicySettings = Join-Path $dataRoot 'settings/layer-comp-policy.json'
     Set-Content -LiteralPath $compPolicySettings -Value '"All"'
     $watermarkSettings = Join-Path $dataRoot 'settings/output-watermark.json'
@@ -48,7 +50,7 @@ try {
     $assetIndex = Join-Path $dataRoot 'asset-index.json'
     Set-Content -LiteralPath $assetIndex -Value '{"preserve":"local asset index"}'
     $referenceHashes = @{}
-    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex, $printSettings, $browserSettings, $watermarkSettings, $compPolicySettings) {
+    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex, $printSettings, $browserSettings, $watermarkSettings, $compPolicySettings, $repeatSettings) {
         if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
         $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
     }
@@ -60,11 +62,12 @@ try {
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex, $printSettings, $browserSettings, $watermarkSettings, $compPolicySettings) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex, $printSettings, $browserSettings, $watermarkSettings, $compPolicySettings, $repeatSettings) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
+    if($smokeResult -notmatch 'action_repeat=true'){throw '반복 액션/대기/계속/좌표/회차 취소 검증 실패'}
     if($smokeResult -notmatch 'clipboard_transfer=true'){throw '클립보드 개체/공개 래스터 교환 시작 시험 실패'}
     if($smokeResult -notmatch 'raster_channels=true'){throw '회색조/알파 채널 출력 시작 시험 실패'}
     if($smokeResult -notmatch 'layer_output=true'){throw '레이어/컴프 출력 시작 시험 실패'}
@@ -307,7 +310,7 @@ try {
     if ($smokeResult -notmatch 'tip_sequence=true') { throw '팁 순서·혼색 방식 시험 실패' }
     if ($smokeResult -notmatch 'pigment_independent=true') { throw '독립 혼색/희석/알파 제어 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 23개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 24개 보존.'
 } finally {
     if ($null -ne $process -and -not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
     $env:DRAWER_DATA_DIR = $oldData

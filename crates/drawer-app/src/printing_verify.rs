@@ -65,8 +65,10 @@ pub(super) fn run(root: &Path) -> Result<(), String> {
     let mut p = std::mem::take(&mut a.printing);
     a.print_action(&mut p, Some(path.clone()))?;
     a.printing = p;
+    // This is also the data-move drain path: no interactive window/frame is
+    // needed to collect the completed write and release its old-root writer.
     for _ in 0..4000 {
-        frame(&mut a, &mut time, vec![]);
+        a.quiesce_printing(&ctx);
         if a.printing.job.is_none() {
             break;
         }

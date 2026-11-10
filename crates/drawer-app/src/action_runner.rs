@@ -110,6 +110,7 @@ impl Drawer {
     }
     fn runner_command(&mut self, p: &mut Panel, key: &str) -> Result<(), String> {
         match key {
+            "repeat" => self.begin_action_repeat(p.action.clone().ok_or("Select an action")?),
             "document" | "batch" | "resume" => self.start_action_runner(p, key)?,
             "pause" => {
                 if let Some(job) = &p.job {
@@ -225,6 +226,7 @@ impl Drawer {
             });
             for(keys,enabled)in[(&[("document","Run on active document"),("batch","Run selected files")][..],p.job.is_none()&&p.run.is_none()),(&[("resume","Resume"),("skip-step","Skip current step"),("skip-file","Skip current file"),("apply","Apply document result"),("discard","Discard session")][..],p.job.is_none()&&p.run.is_some()),(&[("pause","Stop / pause")][..],p.job.is_some())]{ui.horizontal_wrapped(|ui|{for(key,label)in keys{let r=ui.add_enabled(enabled,egui::Button::new(*label));p.controls.insert(key,r.rect);if r.clicked(){command=Some(*key);}}});}
             if let Some(run)=&p.run{match run{Run::Single(s)=>{ui.label(format!("Step {} / {} · {} notices",s.cursor,s.action.steps.len(),s.issues.len()));for e in &s.issues{ui.small(e);}},Run::Batch(b)=>{ui.label(format!("File {} / {} · log {}",b.cursor,b.inputs.len(),b.log.display()));if let Some(s)=&b.current{ui.label(format!("Current step {} / {}",s.cursor,s.action.steps.len()));}for r in &b.results{ui.small(format!("{}: {}",r.input.display(),r.status));for e in &r.issues{ui.small(e);}}}}}
+            let r=ui.button("Repeat rounds / wait / confirm…");p.controls.insert("repeat",r.rect);if r.clicked(){command=Some("repeat");}
             ui.label(&p.message);
         });
         if pick && let Some(paths) = rfd::FileDialog::new().pick_files() {

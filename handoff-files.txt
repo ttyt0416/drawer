@@ -1155,3 +1155,9 @@ crates/drawer-core/src/storage_migration_verify.rs
 crates/drawer-app/src/data_maintenance.rs
 crates/drawer-app/src/data_maintenance_verify.rs
 docs/process/local-data-maintenance.md
+
+crates/drawer-core/src/action_repeat.rs
+crates/drawer-core/src/action_repeat_verify.rs
+crates/drawer-app/src/action_repeat.rs
+crates/drawer-app/src/action_repeat_verify.rs
+docs/process/action-repeats.md

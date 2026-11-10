@@ -89,6 +89,7 @@ impl Drawer {
         busy |= self.quiesce_printing(ctx);
         busy |= self.quiesce_animation_export(ctx);
         busy |= self.quiesce_action_runner(ctx);
+        busy |= self.quiesce_action_repeat(ctx);
         busy |= self.quiesce_auto_actions(ctx);
         busy |= self.quiesce_file_browser(ctx);
         busy |= self.quiesce_timelapse(ctx);

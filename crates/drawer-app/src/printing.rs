@@ -188,10 +188,7 @@ impl Drawer {
     }
     pub(super) fn printing_window(&mut self, ctx: &egui::Context) {
         let mut p = std::mem::take(&mut self.printing);
-        if !p.open {
-            self.printing = p;
-            return;
-        }
+
         if let Some(j) = &p.job {
             match j.rx.try_recv() {
                 Ok(r) => {
@@ -228,6 +225,10 @@ impl Drawer {
                     ctx.request_repaint_after(std::time::Duration::from_millis(25))
                 }
             }
+        }
+        if !p.open {
+            self.printing = p;
+            return;
         }
         if p.texture.is_none()
             && let (Some(pages), Some(plan)) = (&p.pages, &p.plan)

@@ -1,5 +1,6 @@
 use super::*;
 pub(super) fn run(root: &std::path::Path) -> Result<(), String> {
+    coordinate_recording(root)?;
     drawer_core::auto_actions_verify::verify(root)?;
     let dir = root.join("auto-actions-ui");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
@@ -213,4 +214,66 @@ pub(super) fn run(root: &std::path::Path) -> Result<(), String> {
         Ok(())
     })();
     result.and(std::fs::remove_dir_all(dir).map_err(|e| e.to_string()))
+}
+
+fn coordinate_recording(root: &std::path::Path) -> Result<(), String> {
+    let dir = root.join("action-coordinate-recording");
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let result = (|| {
+        let ctx = egui::Context::default();
+        let mut a = Drawer::new(&ctx, None)
+            .with_storage(UserStorage::at(dir.join("data")).map_err(|e| e.to_string())?);
+        a.add_document(drawer_core::png_io_verify::fixture()?);
+        a.interface.ppp = 2.;
+        let mut p = Panel::default();
+        let set = p.draft.add_set("座標".into())?;
+        let action = p.draft.add_action(set, "문서 좌표".into())?;
+        p.recording = Some(action);
+        p.operation = Operation::Scroll {
+            document: [7., -3.],
+        };
+        let before = a.documents[0].layers.clone();
+        let history = a.documents[0].history_counts();
+        let size = [a.documents[0].width as f64, a.documents[0].height as f64];
+        let center = a.documents[0]
+            .view
+            .screen_to_document([0.; 2], size, [0.; 2], 2.);
+        a.execute_auto_operation(&mut p)?;
+        let after = a.documents[0]
+            .view
+            .screen_to_document([0.; 2], size, [0.; 2], 2.);
+        if a.documents[0].layers != before
+            || a.documents[0].history_counts() != history
+            || (after[0] - center[0] - 7.).abs() > 1e-6
+            || (after[1] - center[1] + 3.).abs() > 1e-6
+            || p.draft.action(action).unwrap().steps.len() != 1
+        {
+            return Err(
+                "Recorded scroll changed pixels/history or lost document coordinates".into(),
+            );
+        }
+        p.operation = Operation::Transform {
+            layer: 0,
+            vector: false,
+            settings: drawer_core::vector_scope::Transform {
+                translation: [1., 0.],
+                ..Default::default()
+            },
+            filter: drawer_core::interpolation::Filter::Nearest,
+        };
+        a.execute_auto_operation(&mut p)?;
+        if a.documents[0].history_counts().0 != history.0 + 1
+            || p.draft.action(action).unwrap().steps.len() != 2
+        {
+            return Err("Transform recording/history".into());
+        }
+        p.draft.save(a.storage.as_ref().unwrap())?;
+        if Settings::load(a.storage.as_ref().unwrap())? != p.draft {
+            return Err("Coordinate action restart".into());
+        }
+        drop(a);
+        Ok(())
+    })();
+    drawer_core::asset_catalog::cleanup_verification(root, &dir)?;
+    result
 }

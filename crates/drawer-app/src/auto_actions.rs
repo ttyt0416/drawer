@@ -180,8 +180,22 @@ impl Drawer {
         }
         let state =
             core::prepare_operation(&self.documents[n], &p.operation, &AtomicBool::new(false))?;
-        let changed =
-            self.documents[n].commit_state_named(state, "Auto action recording command")?;
+        let changed = if let Operation::Scroll { document } = p.operation {
+            let before = self.documents[n].view;
+            let size = [
+                self.documents[n].width as f64,
+                self.documents[n].height as f64,
+            ];
+            core::scroll(
+                &mut self.documents[n].view,
+                size,
+                document,
+                self.interface.ppp,
+            )?;
+            before != self.documents[n].view
+        } else {
+            self.documents[n].commit_state_named(state, "Auto action recording command")?
+        };
         if changed && recording.is_some() {
             p.draft = recorded;
             p.message =
@@ -250,7 +264,7 @@ impl Drawer {
         {
             return Err("Playback result exceeds workspace memory".into());
         }
-        let changed = prepared.commit(&mut self.documents[n])?;
+        let changed = prepared.commit_with_scale(&mut self.documents[n], self.interface.ppp)?;
         p.message = if changed {
             "Action applied as one document Undo"
         } else {
@@ -552,6 +566,8 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
         Operation::Opacity { .. } => 4,
         Operation::Fill { .. } => 5,
         Operation::Unsupported { .. } => 6,
+        Operation::Transform { .. } => 7,
+        Operation::Scroll { .. } => 8,
     };
     let old = kind;
     egui::ComboBox::from_id_salt("action-command")
@@ -564,6 +580,8 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
                 "Layer opacity",
                 "Fill selection",
                 "Unavailable command",
+                "Document transform",
+                "View scroll in document pixels",
             ][kind],
         )
         .show_ui(ui, |ui| {
@@ -574,6 +592,9 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
                 "Rename raster",
                 "Layer opacity",
                 "Fill selection",
+                "Unavailable command",
+                "Document transform",
+                "View scroll in document pixels",
             ]
             .iter()
             .enumerate()
@@ -600,6 +621,17 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
                 rgba: [0, 0, 0, 255],
                 erase: false,
                 alpha_lock: false,
+            },
+            7 => Operation::Transform {
+                layer: 0,
+                vector: false,
+                settings: Default::default(),
+                filter: drawer_core::interpolation::Filter::Nearest,
+            },
+            8 => Operation::Scroll { document: [0.; 2] },
+            6 => Operation::Unsupported {
+                command: "Unavailable".into(),
+                tool: None,
             },
             _ => Operation::Canvas(Canvas::FlipHorizontal),
         };
@@ -643,6 +675,39 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
             ui.color_edit_button_srgba_unmultiplied(rgba);
             ui.checkbox(erase, "Erase");
             ui.checkbox(alpha_lock, "Lock alpha");
+        }
+        Operation::Transform {
+            layer,
+            vector,
+            settings,
+            filter,
+        } => {
+            ui.checkbox(vector, "Vector");
+            ui.label("Layer slot (0-based)");
+            ui.add(egui::DragValue::new(layer).range(0..=255));
+            for (label, values) in [
+                ("Document pivot", &mut settings.pivot),
+                ("Document movement", &mut settings.translation),
+                ("Scale", &mut settings.scale),
+            ] {
+                ui.label(label);
+                for value in values {
+                    ui.add(egui::DragValue::new(value).speed(0.1));
+                }
+            }
+            ui.label("Rotation degrees");
+            ui.add(egui::DragValue::new(&mut settings.degrees));
+            ui.checkbox(&mut settings.preserve_width, "Preserve stroke width");
+            for f in drawer_core::interpolation::Filter::ALL {
+                ui.selectable_value(filter, f, format!("{f:?}"));
+            }
+        }
+        Operation::Scroll { document } => {
+            ui.label("Move viewport center by document pixels");
+            for value in document {
+                ui.add(egui::DragValue::new(value).range(-1e6..=1e6));
+            }
+            ui.small("View command only; no drawing Undo entry");
         }
         Operation::Unsupported { command, .. } => {
             ui.label(format!("Unavailable: {command}"));

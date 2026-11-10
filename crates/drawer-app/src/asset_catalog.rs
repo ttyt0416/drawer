@@ -392,10 +392,7 @@ impl Drawer {
     }
     pub(super) fn asset_catalog_window(&mut self, ctx: &egui::Context) {
         let mut p = std::mem::take(&mut self.asset_catalog);
-        if !p.open {
-            self.asset_catalog = p;
-            return;
-        }
+
         if let Some(job) = &p.job {
             ctx.request_repaint_after(std::time::Duration::from_millis(25));
             let result = match job.rx.try_recv() {
@@ -444,6 +441,10 @@ impl Drawer {
                     Err(e) => p.message = e,
                 }
             }
+        }
+        if !p.open {
+            self.asset_catalog = p;
+            return;
         }
         let mut open = true;
         let mut action = None;

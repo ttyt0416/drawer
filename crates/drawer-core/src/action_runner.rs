@@ -25,6 +25,8 @@ pub struct Session {
     source: (u64, u64, u32),
     work: Document,
     available: usize,
+    initial: Box<crate::sizing::DocumentState>,
+    pub scroll: [f64; 2],
 }
 impl Session {
     pub fn new(doc: &Document, action: Action, available: usize) -> Result<Self, String> {
@@ -68,7 +70,21 @@ impl Session {
             issues: vec![],
             work,
             available,
+            initial: Box::new(doc.snapshot()),
+            scroll: [0.; 2],
         })
+    }
+    pub fn restart(&mut self) {
+        self.initial.as_ref().clone().restore(&mut self.work);
+        self.cursor = 0;
+        self.issues.clear();
+        self.scroll = [0.; 2];
+    }
+    fn next_round(&mut self) {
+        *self.initial = self.work.snapshot();
+        self.cursor = 0;
+        self.issues.clear();
+        self.scroll = [0.; 2];
     }
     pub fn complete(&self) -> bool {
         self.cursor == self.action.steps.len()
@@ -113,6 +129,11 @@ impl Session {
         match result {
             Ok(state) => {
                 state.restore(&mut self.work);
+                if let crate::auto_actions::Operation::Scroll { document } = step.operation {
+                    for (sum, delta) in self.scroll.iter_mut().zip(document) {
+                        *sum += delta;
+                    }
+                }
                 self.cursor += 1;
                 Ok(())
             }
@@ -135,6 +156,9 @@ impl Session {
         Ok(())
     }
     pub fn commit(self, doc: &mut Document) -> Result<bool, String> {
+        self.commit_with_scale(doc, 1.)
+    }
+    pub fn commit_with_scale(self, doc: &mut Document, ppp: f64) -> Result<bool, String> {
         if !self.complete() {
             return Err("Finish or explicitly skip remaining steps first".into());
         }
@@ -145,7 +169,17 @@ impl Session {
         while label.len() > 256 {
             label.pop();
         }
-        doc.commit_state_named(self.work.snapshot(), &label)
+        let mut view = doc.view;
+        crate::auto_actions::scroll(
+            &mut view,
+            [self.work.width as f64, self.work.height as f64],
+            self.scroll,
+            ppp,
+        )?;
+        let changed = doc.commit_state_named(self.work.snapshot(), &label)?;
+        let view_changed = view != doc.view;
+        doc.view = view;
+        Ok(changed || view_changed)
     }
 }
 #[derive(Clone, Debug, Serialize)]
@@ -167,6 +201,7 @@ pub struct Batch {
     notices: Vec<String>,
     log_hash: Option<String>,
     available: usize,
+    pub repeat: Option<crate::action_repeat::Schedule>,
 }
 static NEXT: AtomicU64 = AtomicU64::new(1);
 impl Batch {
@@ -235,6 +270,7 @@ impl Batch {
             notices: vec![],
             log_hash: None,
             available,
+            repeat: None,
         };
         batch.checkpoint()?;
         Ok(batch)
@@ -242,6 +278,19 @@ impl Batch {
     pub fn complete(&self) -> bool {
         self.cursor == self.inputs.len()
     }
+    pub fn set_repeat(&mut self, settings: crate::action_repeat::Settings) -> Result<(), String> {
+        if self.cursor > 0 || self.current.is_some() {
+            return Err("Set rounds before starting the batch".into());
+        }
+        self.repeat = Some(crate::action_repeat::Schedule::new(settings)?);
+        self.checkpoint()
+    }
+    pub fn resume_repeat(&mut self) {
+        if let Some(r) = &mut self.repeat {
+            r.resume();
+        }
+    }
+
     pub fn checkpoint(&mut self) -> Result<(), String> {
         #[derive(Serialize)]
         struct Log<'a> {
@@ -251,6 +300,8 @@ impl Batch {
             total: usize,
             step: Option<usize>,
             results: &'a [ResultFile],
+            repeat: Option<crate::action_repeat::Settings>,
+            completed_rounds: Option<u16>,
         }
         let bytes = serde_json::to_vec_pretty(&Log {
             version: 1,
@@ -259,6 +310,8 @@ impl Batch {
             total: self.inputs.len(),
             step: self.current.as_ref().map(|s| s.cursor),
             results: &self.results,
+            repeat: self.repeat.as_ref().map(|r| r.settings),
+            completed_rounds: self.repeat.as_ref().map(|r| r.completed),
         })
         .map_err(|e| e.to_string())?;
         if bytes.len() > 8 * 1024 * 1024 {
@@ -333,6 +386,11 @@ impl Batch {
         });
         self.cursor += 1;
         self.stamp = None;
+        if let Some(r) = &mut self.repeat {
+            r.completed = 0;
+            r.paused = false;
+            r.confirmation = r.settings.confirm && self.cursor < self.inputs.len();
+        }
     }
     pub fn skip_file(&mut self) -> Result<(), String> {
         if self.complete() {
@@ -343,8 +401,23 @@ impl Batch {
     }
     /// Completed outputs and cursor are retained even if writing the local log then fails.
     pub fn run(&mut self, steps: Errors, files: Errors, cancel: &AtomicBool) -> Result<(), String> {
+        if cancel.load(Ordering::Relaxed) && self.repeat.is_some() {
+            if let Some(s) = &mut self.current {
+                s.restart();
+            }
+            if let Some(r) = &mut self.repeat {
+                r.stop();
+            }
+        }
         self.checkpoint()?;
         while !self.complete() && !cancel.load(Ordering::Relaxed) {
+            if self
+                .repeat
+                .as_ref()
+                .is_some_and(|r| !r.complete() && !r.ready(crate::action_repeat::now()))
+            {
+                return Ok(());
+            }
             let result: Result<bool, String> = (|| {
                 if self.current.is_none() {
                     let stamp = crate::file_sources::Stamp::read(&self.inputs[self.cursor])?;
@@ -358,10 +431,33 @@ impl Batch {
                     self.current = Some(current);
                 }
                 let s = self.current.as_mut().unwrap();
-                s.run(steps, cancel)?;
+                let played = s.run(steps, cancel);
+                if self.repeat.is_some() && (played.is_err() || cancel.load(Ordering::Relaxed)) {
+                    s.restart();
+                    if let Some(r) = &mut self.repeat {
+                        r.stop();
+                    }
+                }
+                played?;
                 if cancel.load(Ordering::Relaxed) {
                     return Ok(false);
                 }
+                if let Some(round) = &mut self.repeat {
+                    if !round.complete() {
+                        round.finish(crate::action_repeat::now());
+                    }
+                    if !round.complete() {
+                        for issue in &s.issues {
+                            if self.notices.len() < 16 {
+                                self.notices.push(issue.chars().take(512).collect());
+                            }
+                        }
+                        s.next_round();
+                        self.checkpoint()?;
+                        return Ok(false);
+                    }
+                }
+                let s = self.current.as_ref().ok_or("Current round missing")?;
                 self.stamp
                     .as_ref()
                     .ok_or("Missing source fingerprint")?
@@ -381,9 +477,13 @@ impl Batch {
                 return Ok(());
             }
             match result {
-                Ok(true) => {
-                    self.finish_file("Written".into(), Some(self.outputs[self.cursor].clone()))
-                }
+                Ok(true) => self.finish_file(
+                    self.repeat.as_ref().map_or_else(
+                        || "Written".into(),
+                        |r| format!("Written ({} rounds)", r.settings.count),
+                    ),
+                    Some(self.outputs[self.cursor].clone()),
+                ),
                 Ok(false) => return Ok(()),
                 Err(e) => {
                     if files == Errors::Stop {
