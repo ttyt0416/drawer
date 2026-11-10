@@ -145,19 +145,16 @@ impl Drawer {
             .destination = Some(destination);
         Ok(())
     }
-    pub(super) fn choose_image_layer(&mut self, ctx: &egui::Context) -> Result<(), String> {
+    pub(super) fn choose_image_layer(&mut self, _ctx: &egui::Context) -> Result<(), String> {
         if self.active.is_none() {
             return Err("Open a page first".into());
         }
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter(
-                "Local image",
-                &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"],
-            )
-            .pick_file()
-        {
-            self.begin_import_layer(ctx, &path)?;
-        }
+        let d = &self.documents[self.active.unwrap()];
+        self.begin_file_browser(file_browser::Mode::Layer {
+            document: d.id,
+            revision: d.revision,
+            frame: d.current_frame,
+        })?;
         Ok(())
     }
     pub(super) fn document_from_clipboard(

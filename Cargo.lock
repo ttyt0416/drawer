@@ -892,6 +892,7 @@ dependencies = [
  "glow",
  "raw-window-handle",
  "windows",
+ "windows-core",
  "winit",
 ]
 

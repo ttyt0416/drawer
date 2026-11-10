@@ -117,6 +117,27 @@ impl RecentFiles {
         next.paths.truncate(LIMIT);
         self.apply(next, storage)
     }
+    /// Physical rename updates live references even if persisting the separate recent list fails.
+    pub fn remap(
+        &mut self,
+        old: &Path,
+        new: &Path,
+        storage: Option<&UserStorage>,
+    ) -> io::Result<()> {
+        let mut next = self.settings.clone();
+        for p in &mut next.paths {
+            if let Some(path) = crate::file_browser::remap(p, old, new) {
+                *p = path;
+            }
+        }
+        let mut keys = HashSet::new();
+        next.paths.retain(|p| keys.insert(p.clone()));
+        let result = self.apply(next.clone(), storage);
+        if result.is_err() {
+            self.settings = next;
+        }
+        result
+    }
     pub fn reset(&mut self, storage: Option<&UserStorage>) -> io::Result<()> {
         self.apply(Settings::default(), storage)
     }

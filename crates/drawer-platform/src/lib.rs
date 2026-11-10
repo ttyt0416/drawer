@@ -299,6 +299,10 @@ pub mod local_files;
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
+pub mod file_browser;
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
 pub mod book_pdf;
 #[cfg(windows)]
 #[allow(unsafe_code)]

@@ -628,3 +628,4 @@ pub mod exchange_guidance;
 pub mod palette_text;
 
 pub mod asset_catalog;
+pub mod file_browser;

@@ -8,6 +8,7 @@ rust-version.workspace = true
 drawer-core = { path = "../drawer-core" }
 
 [target.'cfg(windows)'.dependencies]
+windows-core = "=0.62.2"
 glow = "=0.17.0"
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06"] }
 raw-window-handle = "=0.6.2"

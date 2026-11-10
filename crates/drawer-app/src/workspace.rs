@@ -230,6 +230,10 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        if self.file_browser.mutating() {
+            return Err("Wait for the pending physical file operation before saving".into());
+        }
+
         if self.defer_transform_save(index, path) {
             return Err("Unconfirmed deformation/transform: choose Apply, Discard, or Keep editing in the save window".into());
         }
@@ -509,35 +513,14 @@ impl Drawer {
     pub(super) fn document_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             if crate::help::button(ui, "Open…", "files").clicked()
-                && let Some(paths) = rfd::FileDialog::new()
-                    .set_title("Open local drawings")
-                    .add_filter("Drawer document", &["drawer"])
-                    .add_filter(
-                        "Still images",
-                        &["png", "jpg", "jpeg", "bmp", "tga", "tif", "tiff", "webp"],
-                    )
-                    .add_filter("PSD / PSB RGB8 (raw / RLE)", &["psd", "psb"])
-                    .add_filter(
-                        "SAI / SAI2 / CLIP — unsupported; exchange via PSD / PNG",
-                        &["sai", "sai2", "clip"],
-                    )
-                    .pick_files()
+                && let Err(e) = self.begin_file_browser(file_browser::Mode::Open)
             {
-                for path in paths {
-                    if let Err(error) = self.open_exchange_file(ui.ctx(), &path) {
-                        self.status = Some(error);
-                    }
-                }
+                self.status = Some(e);
             }
             if crate::help::button(ui, "Image as new document…", "files").clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter(
-                        "PNG / JPEG / BMP / TGA / TIFF / WebP",
-                        &["png", "jpg", "jpeg", "tif", "tiff", "bmp", "tga", "webp"],
-                    )
-                    .pick_file()
+                && let Err(e) = self.begin_file_browser(file_browser::Mode::Image)
             {
-                self.begin_import(ui.ctx(), &path);
+                self.status = Some(e);
             }
             if crate::help::button(ui, "New from clipboard", "files").clicked()
                 && let Err(error) = self.document_from_clipboard(|| {

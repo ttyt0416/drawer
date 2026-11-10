@@ -773,6 +773,7 @@ impl Drawer {
                 "color-management" => self.begin_monitor_color(),
                 "asset-library" => self.begin_asset_catalog()?,
                 "template-bundle" => self.begin_template_bundle(),
+                "local-files" => self.begin_file_browser(file_browser::Mode::Open)?,
                 "output-batch" => self.begin_output_batch()?,
                 "print-preview" => self.begin_printing()?,
                 "raster-export" => self.begin_raster_export()?,
