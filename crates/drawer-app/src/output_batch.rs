@@ -253,7 +253,8 @@ impl Drawer {
                 let g=&mut p.settings.geometry;ui.checkbox(&mut g.resize,"Custom output pixels (source size otherwise)");ui.add_enabled_ui(g.resize,|ui|{ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut g.width).range(0..=32768).prefix("Width "));ui.add(egui::DragValue::new(&mut g.height).range(0..=32768).prefix("Height "));});});
                 ui.checkbox(&mut g.resolution,"Override output DPI (source DPI otherwise)");ui.add_enabled(g.resolution,egui::DragValue::new(&mut g.dpi).range(0.0..=4800.0).prefix("DPI "));
                 let o=&mut p.settings.encoding;
-                if o.format==Format::Jpeg{ui.add(egui::Slider::new(&mut o.quality,1..=100).text("JPEG luma quality"));ui.add(egui::Slider::new(&mut o.chroma_quality,1..=100).text("JPEG chroma quality"));ui.horizontal(|ui|{for v in[drawer_core::jpeg_output::Sampling::S444,drawer_core::jpeg_output::Sampling::S422,drawer_core::jpeg_output::Sampling::S420]{ui.selectable_value(&mut o.sampling,v,v.label());}});ui.small("Baseline sequential RGB8; progressive/arithmetic/custom tables are unavailable in this output adapter.");}else{ui.checkbox(&mut o.alpha,"Transparent output");}
+                ui.checkbox(&mut o.grayscale,"Grayscale output (PNG Gray/GrayAlpha; others equal RGB)");
+                if o.format==Format::Jpeg{ui.add(egui::Slider::new(&mut o.quality,1..=100).text("JPEG luma quality"));ui.add(egui::Slider::new(&mut o.chroma_quality,1..=100).text("JPEG chroma quality"));ui.horizontal(|ui|{for v in[drawer_core::jpeg_output::Sampling::S444,drawer_core::jpeg_output::Sampling::S422,drawer_core::jpeg_output::Sampling::S420]{ui.selectable_value(&mut o.sampling,v,v.label());}});ui.small("Baseline sequential RGB8; progressive/arithmetic/custom tables are unavailable in this output adapter.");}else{ui.checkbox(&mut o.alpha,if o.format==Format::Bmp{"BMP32 alpha (V5); off = BMP24 opaque (INFO)"}else{"Transparent output"});}
                 ui.add_enabled_ui(!o.applied().alpha,|ui|{ui.horizontal(|ui|{ui.label("Opaque background");ui.color_edit_button_srgb(&mut o.background);});});
                 if matches!(o.format,Format::Png|Format::Tiff){ui.horizontal(|ui|{ui.selectable_value(&mut o.depth,Depth::Eight,"8bit");ui.selectable_value(&mut o.depth,Depth::Sixteen,"16bit");});
 
@@ -261,18 +262,19 @@ impl Drawer {
                 }
                 if o.format==Format::Tga{ui.checkbox(&mut o.rle,"TGA RLE");}
                 ui.separator();let color=&mut p.settings.color;
-                ui.checkbox(&mut color.convert,"Convert pixel RGB to the output profile");
+                ui.add_enabled(!o.grayscale&&o.format!=Format::Bmp,egui::Checkbox::new(&mut color.convert,"Convert pixel RGB to the output profile"));
                 ui.add_enabled(drawer_core::export_color::supports_profile(o.format),egui::Checkbox::new(&mut color.embed,"Include ICC profile (separate from pixel conversion)"));
                 if !drawer_core::export_color::supports_profile(o.format){ui.small("This format adapter cannot embed ICC. The stored include choice is preserved but inactive.");}
-                ui.add_enabled_ui(color.convert||color.embed&&drawer_core::export_color::supports_profile(o.format),|ui|{
+                ui.add_enabled_ui(!o.grayscale&&o.format!=Format::Bmp&&(color.convert||color.embed&&drawer_core::export_color::supports_profile(o.format)),|ui|{
                     let mut value=color.profile.as_ref().map_or(String::new(),|v|v.display().to_string());
                     ui.horizontal(|ui|{ui.label("Output RGB ICC");if ui.text_edit_singleline(&mut value).changed(){color.profile=(!value.trim().is_empty()).then(||PathBuf::from(value.trim()));}
                         if ui.button("ICC…").clicked()&&let Some(f)=rfd::FileDialog::new().add_filter("RGB ICC",&["icc","icm"]).pick_file(){color.profile=Some(f);}
                         if ui.button("Default profile").clicked(){color.profile=None;}
                     });
                 });
+                if o.grayscale||o.format==Format::Bmp{ui.small("Grayscale/BMP uses standard sRGB colorimetry; RGB target/conversion/intent choices are preserved but inactive. Gray PNG embeds a matching Gray ICC when selected.");}
                 ui.small("Default: sRGB for conversion; document working RGB for embed-only. Embed-only leaves numeric RGB unchanged and may change interpretation. CMYK output is unsupported; CMYK canvas soft proof remains separate.");
-                ui.add_enabled_ui(color.convert,|ui|{ui.horizontal_wrapped(|ui|{for(intent,label)in[(drawer_core::soft_proof::Intent::Perceptual,"Perceptual"),(drawer_core::soft_proof::Intent::Relative,"Relative Colorimetric"),(drawer_core::soft_proof::Intent::Saturation,"Saturation"),(drawer_core::soft_proof::Intent::Absolute,"Absolute Colorimetric")]{ui.selectable_value(&mut color.intent,intent,label);}});});
+                ui.add_enabled_ui(!o.grayscale&&o.format!=Format::Bmp&&color.convert,|ui|{ui.horizontal_wrapped(|ui|{for(intent,label)in[(drawer_core::soft_proof::Intent::Perceptual,"Perceptual"),(drawer_core::soft_proof::Intent::Relative,"Relative Colorimetric"),(drawer_core::soft_proof::Intent::Saturation,"Saturation"),(drawer_core::soft_proof::Intent::Absolute,"Absolute Colorimetric")]{ui.selectable_value(&mut color.intent,intent,label);}});});
 
                 ui.collapsing("Output watermark / independent noise",|ui|{crate::output_watermark::editor(ui,&mut p.settings.watermark,&mut p.message);if p.watermark_blocked{ui.checkbox(&mut p.watermark_replace,"Replace unreadable saved watermark preferences");}
                 if ui.add_enabled(!p.watermark_blocked||p.watermark_replace,egui::Button::new("Save local watermark preset")).clicked(){p.message=match self.storage.as_ref().ok_or_else(||"Local storage unavailable".to_string()).and_then(|v|p.settings.watermark.save(v)){Ok(())=>{p.watermark_blocked=false;"Local preset saved; closing without Save preserves the previous preset".into()},Err(e)=>e};}});

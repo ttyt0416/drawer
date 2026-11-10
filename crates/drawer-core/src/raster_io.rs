@@ -40,9 +40,9 @@ impl Format {
     }
     pub fn label(self) -> &'static str {
         match self {
-            Self::Png => "PNG (lossless RGB/RGBA8/16)",
+            Self::Png => "PNG (RGB/RGBA/Gray/GrayAlpha8/16)",
             Self::Jpeg => "JPEG (lossy RGB8)",
-            Self::Bmp => "BMP (RGB/RGBA8)",
+            Self::Bmp => "BMP (RGB24 INFO / alpha32 V5)",
             Self::Tga => "TGA (RGB/RGBA8)",
             Self::Tiff => "TIFF (RGB/RGBA8/16)",
             Self::Webp => "WebP (lossless RGB/RGBA8)",
@@ -62,6 +62,7 @@ pub struct Options {
     pub format: Format,
     pub depth: Depth,
     pub alpha: bool,
+    pub grayscale: bool,
     pub background: [u8; 3],
     pub quality: u8,
     pub chroma_quality: u8,
@@ -75,6 +76,7 @@ impl Default for Options {
             format: Format::Jpeg,
             depth: Depth::Eight,
             alpha: false,
+            grayscale: false,
             background: [255; 3],
             quality: 90,
             chroma_quality: 90,
@@ -161,10 +163,27 @@ pub fn prepare_managed(
     settings: &crate::export_color::Settings,
     o: Options,
 ) -> Result<Prepared, String> {
-    let stage = crate::export_color::Stage::new(d, settings, o.format)?;
+    let standard = crate::export_color::Settings {
+        convert: true,
+        embed: settings.embed,
+        profile: None,
+        intent: crate::soft_proof::Intent::Relative,
+    };
+    let stage = crate::export_color::Stage::new(
+        d,
+        if o.grayscale || o.format == Format::Bmp {
+            &standard
+        } else {
+            settings
+        },
+        o.format,
+    )?;
     let matte = stage.matte(o.background)?;
     let mut p = prepare_inner(d, budget, c, Some(&stage))?;
     p.matte = Some(matte);
+    if o.grayscale || o.format == Format::Bmp {
+        p.color_notices.push("Grayscale/BMP uses standard sRGB colorimetry; saved manual RGB conversion/target/intent choices are inactive and preserved. Gray PNG uses a matching Gray ICC when inclusion is enabled.".into());
+    }
     Ok(p)
 }
 fn prepare_inner(
@@ -352,6 +371,15 @@ impl Prepared {
     }
     pub fn losses(&self, o: Options) -> Vec<String> {
         let mut losses = self.source_losses.losses();
+        if o.grayscale
+            && (self.pixels.iter().any(|p| p[0] != p[1] || p[1] != p[2])
+                || !o.alpha
+                    && (o.background[0] != o.background[1] || o.background[1] != o.background[2]))
+        {
+            losses.push(
+                "Color channels: grayscale discards color differences only in this output".into(),
+            );
+        }
         losses.extend(self.color_losses.clone());
         if self.source_depth == Depth::Sixteen && o.depth == Depth::Eight {
             losses.push(
@@ -379,6 +407,12 @@ impl Prepared {
             self.output_label
         )];
         s.extend(self.color_notices.clone());
+        if o.grayscale {
+            s.push("Grayscale: linear-light sRGB luminance, encoded with the sRGB tone curve; PNG stores Gray/GrayAlpha channels, other adapters store equal RGB channels. Source color/depth/profile unchanged.".into());
+        }
+        if o.format == Format::Bmp {
+            s.push(if o.alpha{"BMP32: BITMAPV5HEADER124 bytes, BI_BITFIELDS, BGRA bytes and explicit alpha mask; sRGB, no external profile references."}else{"BMP24: BITMAPINFOHEADER40 bytes, BI_RGB, padded BGR rows; selected opaque background, sRGB."}.into());
+        }
         if o.format == Format::Jpeg {
             s.push(format!("JPEG baseline RGB8: luma quality {}, chroma quality {}, sampling {}. Alpha is composited before encoding. The compression preview decodes the exact output bytes.",o.quality,o.chroma_quality,o.sampling.label()));
         } else if !o.alpha {
@@ -399,9 +433,12 @@ impl Prepared {
         if o.format == Format::Webp {
             s.push("Lossless WebP only; fully transparent hidden RGB may be normalized".into());
         }
-        if matches!(o.format, Format::Png | Format::Jpeg | Format::Tiff) {
+        if matches!(
+            o.format,
+            Format::Png | Format::Bmp | Format::Jpeg | Format::Tiff
+        ) {
             let actual = match o.format {
-                Format::Png => (self.dpi / 0.0254).round() * 0.0254,
+                Format::Png | Format::Bmp => (self.dpi / 0.0254).round() * 0.0254,
                 Format::Jpeg => self.dpi.round(),
                 _ => (self.dpi * 10000.).round() / 10000.,
             };
@@ -418,7 +455,7 @@ impl Prepared {
     }
     pub fn sample(&self, n: usize, o: Options) -> Result<Sample, String> {
         let p = Sample::from16(*self.pixels.get(n).ok_or("Export sample index")?);
-        if o.alpha {
+        let p = if o.alpha {
             Ok(p)
         } else {
             self.matte
@@ -426,6 +463,16 @@ impl Prepared {
                     Sample::from8([o.background[0], o.background[1], o.background[2], 255])
                 })
                 .over(p, crate::layer_blend::Mode::Normal, 1.)
+        }?;
+        let p = if o.grayscale || o.format == Format::Bmp {
+            self.display.as_ref().map_or(Ok(p), |t| t.map(p))?
+        } else {
+            p
+        };
+        if o.grayscale {
+            crate::raster_channels::gray(p)
+        } else {
+            Ok(p)
         }
     }
     pub fn preview_sample(&self, n: usize, o: Options) -> Result<Sample, String> {
@@ -435,7 +482,11 @@ impl Prepared {
         } else {
             Sample::from16(p.rgba16())
         };
-        self.display.as_ref().map_or(Ok(p), |t| t.map(p))
+        if o.grayscale || o.format == Format::Bmp {
+            Ok(p)
+        } else {
+            self.display.as_ref().map_or(Ok(p), |t| t.map(p))
+        }
     }
     pub fn encode(&self, o: Options, budget: usize, c: &AtomicBool) -> Result<Vec<u8>, String> {
         if !o.valid()
@@ -464,6 +515,20 @@ impl Prepared {
                 low.extend(&p.rgba8()[..channels]);
             }
         }
+        let output_icc = if o.grayscale {
+            self.icc
+                .as_ref()
+                .map(|_| {
+                    if o.format == Format::Png {
+                        crate::raster_channels::gray_profile()
+                    } else {
+                        crate::export_color::profile_bytes(&crate::color_profile::RgbProfile::Srgb)
+                    }
+                })
+                .transpose()?
+        } else {
+            self.icc.as_ref().map(|b| b.as_ref().clone())
+        };
         let mut bytes = vec![];
         let color = if o.alpha {
             image::ExtendedColorType::Rgba8
@@ -473,20 +538,23 @@ impl Prepared {
         match o.format {
             Format::Png => {
                 let mut info = png::Info::with_size(self.width, self.height);
-                info.color_type = if o.alpha {
-                    png::ColorType::Rgba
-                } else {
-                    png::ColorType::Rgb
+                info.color_type = match (o.grayscale, o.alpha) {
+                    (true, true) => png::ColorType::GrayscaleAlpha,
+                    (true, false) => png::ColorType::Grayscale,
+                    (false, true) => png::ColorType::Rgba,
+                    (false, false) => png::ColorType::Rgb,
                 };
                 info.bit_depth = if o.depth == Depth::Sixteen {
                     png::BitDepth::Sixteen
                 } else {
                     png::BitDepth::Eight
                 };
-                info.icc_profile = self
-                    .icc
+                info.icc_profile = output_icc
                     .as_ref()
-                    .map(|b| std::borrow::Cow::Owned(b.as_ref().clone()));
+                    .map(|b| std::borrow::Cow::Owned(b.clone()));
+                if o.grayscale && output_icc.is_none() {
+                    info.srgb = Some(png::SrgbRenderingIntent::RelativeColorimetric);
+                }
                 let ppm = (self.dpi / 0.0254).round() as u32;
                 info.pixel_dims = Some(png::PixelDimensions {
                     xppu: ppm,
@@ -501,6 +569,29 @@ impl Prepared {
                     png::Compression::Balanced
                 });
                 let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+                if o.grayscale {
+                    if o.depth == Depth::Sixteen {
+                        let mut packed =
+                            Vec::with_capacity(self.pixels.len() * if o.alpha { 2 } else { 1 });
+                        for p in high.chunks_exact(channels) {
+                            packed.push(p[0]);
+                            if o.alpha {
+                                packed.push(p[3]);
+                            }
+                        }
+                        high = packed;
+                    } else {
+                        let mut packed =
+                            Vec::with_capacity(self.pixels.len() * if o.alpha { 2 } else { 1 });
+                        for p in low.chunks_exact(channels) {
+                            packed.push(p[0]);
+                            if o.alpha {
+                                packed.push(p[3]);
+                            }
+                        }
+                        low = packed;
+                    }
+                }
                 let mut precise = Vec::new();
                 let data = if o.depth == Depth::Sixteen {
                     precise.reserve(high.len() * 2);
@@ -521,7 +612,7 @@ impl Prepared {
                         width: self.width,
                         height: self.height,
                         dpi: self.dpi,
-                        icc: self.icc.as_deref().map(Vec::as_slice),
+                        icc: output_icc.as_deref(),
                     },
                     crate::jpeg_output::Settings {
                         luma: o.quality,
@@ -532,9 +623,15 @@ impl Prepared {
                     c,
                 )?;
             }
-            Format::Bmp => image::codecs::bmp::BmpEncoder::new(&mut bytes)
-                .encode(&low, self.width, self.height, color)
-                .map_err(|e| e.to_string())?,
+            Format::Bmp => {
+                bytes = crate::raster_channels::bmp(
+                    &low,
+                    [self.width, self.height],
+                    o.alpha,
+                    self.dpi,
+                    c,
+                )?;
+            }
             Format::Tga => {
                 let e = image::codecs::tga::TgaEncoder::new(&mut bytes);
                 let e = if o.rle { e } else { e.disable_rle() };
@@ -543,8 +640,8 @@ impl Prepared {
             }
             Format::Webp => {
                 let mut e = image_webp::WebPEncoder::new(&mut bytes);
-                if let Some(icc) = &self.icc {
-                    e.set_icc_profile(icc.as_ref().clone());
+                if let Some(icc) = &output_icc {
+                    e.set_icc_profile(icc.clone());
                 }
                 e.encode(
                     &low,
@@ -569,7 +666,7 @@ impl Prepared {
                 let mut encoder = TiffEncoder::new(Cursor::new(&mut bytes))
                     .map_err(|e| e.to_string())?
                     .with_compression(compression);
-                let icc = self.icc.as_deref();
+                let icc = output_icc.as_ref();
                 macro_rules! write_tiff {
                     ($ty:ty,$data:expr) => {{
                         let mut image = encoder
@@ -684,7 +781,11 @@ impl Prepared {
                 let n = y * step as usize * self.width as usize + x * step as usize;
                 let value = if let Some(image) = &decoded {
                     let raw = Sample::from8(image.get_pixel(x as u32 * step, y as u32 * step).0);
-                    self.display.as_ref().map_or(Ok(raw), |t| t.map(raw))?
+                    if o.grayscale {
+                        raw
+                    } else {
+                        self.display.as_ref().map_or(Ok(raw), |t| t.map(raw))?
+                    }
                 } else {
                     self.preview_sample(n, o)?
                 };

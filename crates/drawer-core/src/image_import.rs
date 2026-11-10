@@ -492,6 +492,11 @@ pub(crate) fn convert_profile(
     gray: bool,
     cancel: &AtomicBool,
 ) -> io::Result<()> {
+    if (gray && crate::raster_channels::own_gray_profile(bytes))
+        || (!gray && crate::png_io::is_own_srgb_profile(bytes))
+    {
+        return Ok(());
+    }
     if bytes.len() > MAX_PROFILE_BYTES {
         return Err(invalid("ICC profile exceeds 1 MiB"));
     }

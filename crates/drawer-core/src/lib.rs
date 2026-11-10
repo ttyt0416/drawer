@@ -633,3 +633,5 @@ pub mod file_browser;
 pub mod output_watermark;
 
 pub mod layer_output;
+
+pub mod raster_channels;

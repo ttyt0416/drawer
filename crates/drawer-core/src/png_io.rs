@@ -131,10 +131,13 @@ pub(crate) fn finish16(
             "High precision image conversion exceeds memory budget",
         ));
     }
-    if let Some(bytes) = profile
-        .as_ref()
-        .filter(|bytes| gray || !is_own_srgb_profile(bytes))
-    {
+    if let Some(bytes) = profile.as_ref().filter(|bytes| {
+        if gray {
+            !crate::raster_channels::own_gray_profile(bytes)
+        } else {
+            !is_own_srgb_profile(bytes)
+        }
+    }) {
         if bytes.len() > 1024 * 1024 {
             return Err(invalid("ICC profile exceeds1MiB"));
         }

@@ -1134,3 +1134,8 @@ crates/drawer-core/src/layer_output.rs
 crates/drawer-core/src/layer_output_verify.rs
 crates/drawer-app/src/layer_output_verify.rs
 docs/process/layer-output.md
+
+crates/drawer-core/src/raster_channels.rs
+crates/drawer-core/src/raster_channels_verify.rs
+crates/drawer-app/src/raster_channels_verify.rs
+docs/process/raster-channels.md

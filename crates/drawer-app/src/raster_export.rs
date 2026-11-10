@@ -240,6 +240,7 @@ impl Drawer {
                         p.controls.insert(format.extension(), r.rect);
                     }
                 });
+                let r=ui.checkbox(&mut p.options.grayscale,"Grayscale output (PNG Gray/GrayAlpha; others equal RGB)");p.controls.insert("grayscale",r.rect);
                 if p.options.format == Format::Jpeg {
                     let r=ui.add(egui::Slider::new(&mut p.options.quality, 1..=100).text("JPEG luma quality"));p.controls.insert("jpeg-luma",r.rect);
                     let r=ui.add(egui::Slider::new(&mut p.options.chroma_quality,1..=100).text("JPEG chroma quality"));p.controls.insert("jpeg-chroma",r.rect);
@@ -247,7 +248,7 @@ impl Drawer {
                     if p.encoded.is_none() && p.job.is_none() && p.jpeg_attempt.is_some() && ui.button("Retry compression preview").clicked(){p.jpeg_attempt=None;}
                     let mut unsupported=false;ui.add_enabled(false,egui::Checkbox::new(&mut unsupported,"Progressive / arithmetic / custom tables"));ui.small("Unavailable in this adapter: only baseline sequential RGB8 and the reviewed quality-derived tables are supported.");
                 } else {
-                    let r = ui.checkbox(&mut p.options.alpha, "Preserve alpha");
+                    let r = ui.checkbox(&mut p.options.alpha, if p.options.format==Format::Bmp{"BMP32 alpha (V5); off = BMP24 opaque (INFO)"}else{"Preserve alpha"});
                     p.controls.insert("alpha", r.rect);
                 }
                 if !p.options.applied().alpha {
@@ -508,4 +509,10 @@ pub(super) fn loss_smoke(root: &std::path::Path) -> Result<(), String> {
 mod jpeg_verify;
 pub(super) fn jpeg_smoke(root: &std::path::Path) -> Result<(), String> {
     jpeg_verify::run(root)
+}
+
+#[path = "raster_channels_verify.rs"]
+mod channels_verify;
+pub(super) fn channels_smoke(root: &std::path::Path) -> Result<(), String> {
+    channels_verify::run(root)
 }
