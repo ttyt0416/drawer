@@ -131,21 +131,31 @@ impl Work {
             return Err("Work manifest limit4MiB".into());
         }
         let temp = path.with_extension("drawer-work-write.tmp");
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|e| e.to_string())?;
-        let result = (|| -> io::Result<()> {
-            f.write_all(&bytes)?;
-            f.sync_all()?;
-            drop(f);
-            fs::rename(&temp, path)
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(temp);
-        }
-        result.map_err(|e| e.to_string())
+        crate::atomic_file::publish(
+            path,
+            &temp,
+            |f| f.write_all(&bytes),
+            |p| {
+                let mut data = Vec::new();
+                fs::File::open(p)?
+                    .take(4 * 1024 * 1024 + 1)
+                    .read_to_end(&mut data)?;
+                if data.len() > 4 * 1024 * 1024 {
+                    return Err(io::Error::other("Work manifest limit4MiB"));
+                }
+                let work: Self = serde_json::from_slice(&data).map_err(io::Error::other)?;
+                if !work.valid() {
+                    return Err(io::Error::other("Invalid work manifest"));
+                }
+                if let Some(g) = &work.generation {
+                    g.verify(&work).map_err(io::Error::other)?;
+                }
+                Ok(())
+            },
+            &mut |_| Ok(()),
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
     }
 }
 #[derive(Clone, Debug, PartialEq)]

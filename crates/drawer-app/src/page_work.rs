@@ -32,6 +32,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
     drawer_core::page_work_verify::verify(root)?;
     drawer_core::save_generation::verify::run(root)?;
+    drawer_core::atomic_file::verify::run(root)?;
     let dir = root.join("page-ui-fixture");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let result = (|| {

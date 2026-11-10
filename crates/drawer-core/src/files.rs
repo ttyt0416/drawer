@@ -78,7 +78,7 @@ pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<Stri
         _ => Err(invalid(crate::exchange_guidance::GUIDE)),
     }
 }
-fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
+pub(crate) fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
     let file = fs::File::open(path)?;
     if file.metadata()?.len() > budget as u64 + MAX_SCENE_BYTES as u64 + 1024 * 1024 {
         return Err(invalid("Document exceeds memory budget"));
@@ -759,6 +759,27 @@ fn read_native_body(
 }
 
 pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
+    save_report(document, path).map(|_| ())
+}
+pub fn save_report(
+    document: &mut Document,
+    path: &Path,
+) -> io::Result<crate::atomic_file::Outcome> {
+    save_report_observed(document, path, &mut |_| Ok(()))
+}
+/// Fault/progress observer; errors after Published cannot undo a completed replacement.
+pub fn save_observed(
+    document: &mut Document,
+    path: &Path,
+    tick: &mut impl FnMut(crate::atomic_file::Stage) -> io::Result<()>,
+) -> io::Result<()> {
+    save_report_observed(document, path, tick).map(|_| ())
+}
+fn save_report_observed(
+    document: &mut Document,
+    path: &Path,
+    tick: &mut impl FnMut(crate::atomic_file::Stage) -> io::Result<()>,
+) -> io::Result<crate::atomic_file::Outcome> {
     crate::exchange_guidance::reject_private(path).map_err(invalid)?;
     if !path
         .extension()
@@ -774,7 +795,7 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
         path.file_name()
             .ok_or_else(|| invalid("Missing filename"))?,
     );
-    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+    if fs::symlink_metadata(&path).is_ok_and(|metadata| crate::asset_catalog::linked(&metadata)) {
         return Err(invalid("Choose a regular destination file"));
     }
     let path = if path.exists() {
@@ -787,24 +808,15 @@ pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     let mut temp_name = path.file_name().unwrap().to_owned();
     temp_name.push(".drawer-write.tmp");
     let temporary = path.with_file_name(temp_name);
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)?;
-    let mut writer = BufWriter::new(file);
-    let result = (|| {
-        write_payload(document, &scene, &mut writer)?;
-        writer.flush()?;
-        writer.get_ref().sync_all()
-    })();
-    drop(writer);
-    let result = result.and_then(|_| fs::rename(&temporary, &path));
-    if let Err(error) = result {
-        let _ = fs::remove_file(&temporary);
-        return Err(error);
-    }
+    let outcome = crate::atomic_file::publish(
+        &path,
+        &temporary,
+        |writer| write_payload(document, &scene, writer),
+        |p| read_native(p, crate::document::DEFAULT_DOCUMENT_BUDGET).map(|_| ()),
+        tick,
+    )?;
     document.mark_saved(path);
-    Ok(())
+    Ok(outcome)
 }
 
 pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {

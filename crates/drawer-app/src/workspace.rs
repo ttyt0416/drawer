@@ -277,7 +277,14 @@ impl Drawer {
             return Err("Choose another path to keep the imported source unchanged.".into());
         }
         self.settle_work_time();
-        drawer_core::files::save(&mut self.documents[index], &target).map_err(|e| e.to_string())?;
+        let saved = drawer_core::files::save_report(&mut self.documents[index], &target)
+            .map_err(|e| e.to_string())?;
+        if let Some(copy) = saved.preserved_unverified {
+            self.status = Some(format!(
+                "Saved. Previous unreadable bytes preserved separately: {}",
+                copy.display()
+            ));
+        }
         self.remember_file(&target);
         Ok(())
     }

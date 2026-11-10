@@ -1187,3 +1187,7 @@ crates/drawer-core/src/native_integrity.rs
 crates/drawer-core/src/save_generation.rs
 crates/drawer-core/src/save_generation_verify.rs
 docs/process/native-generations.md
+
+crates/drawer-core/src/atomic_file.rs
+crates/drawer-core/src/atomic_file_verify.rs
+docs/process/atomic-save.md

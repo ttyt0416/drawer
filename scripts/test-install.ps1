@@ -332,3 +332,5 @@ if($smokeResult -notmatch 'work_library=true'){throw '로컬 작품 목록/복�
 if($smokeResult -notmatch 'atomic_history=true'){throw '문서별 원자적 실행 취소/다시 실행 검증 실패'}
 
 if($smokeResult -notmatch 'native_generation=true'){throw 'Native generation verification failed'}
+
+if($smokeResult -notmatch 'atomic_save=true'){throw 'Verified atomic save failed'}
