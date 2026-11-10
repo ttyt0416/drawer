@@ -1109,3 +1109,7 @@ crates/drawer-core/src/action_runner_verify.rs
 crates/drawer-app/src/action_runner.rs
 crates/drawer-app/src/action_runner_verify.rs
 docs/process/action-runner.md
+crates/drawer-core/src/export_loss.rs
+crates/drawer-core/src/export_loss_verify.rs
+crates/drawer-app/src/export_loss_verify.rs
+docs/process/export-loss.md

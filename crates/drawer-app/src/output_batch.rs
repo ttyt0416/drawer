@@ -220,11 +220,11 @@ impl Drawer {
                 ui.small("Default: sRGB for conversion; document working RGB for embed-only. Embed-only leaves numeric RGB unchanged and may change interpretation. CMYK output is unsupported; CMYK canvas soft proof remains separate.");
                 ui.add_enabled_ui(color.convert,|ui|{ui.horizontal_wrapped(|ui|{for(intent,label)in[(drawer_core::soft_proof::Intent::Perceptual,"Perceptual"),(drawer_core::soft_proof::Intent::Relative,"Relative Colorimetric"),(drawer_core::soft_proof::Intent::Saturation,"Saturation"),(drawer_core::soft_proof::Intent::Absolute,"Absolute Colorimetric")]{ui.selectable_value(&mut color.intent,intent,label);}});});
 
-                ui.checkbox(&mut p.reviewed,"Reviewed output names, pixel/DPI settings and conversion notices");
+                ui.checkbox(&mut p.reviewed,"Reviewed output names, pixel/DPI settings, losses and output details");
             });
             if p.job.is_some(){ui.spinner();if ui.button("Cancel job").clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancel requested. Completed new files remain; pending files are reported canceled.".into();}}
             ui.label(&p.message);
-            if let Some(plan)=&p.plan{for(f,t)in plan.files.iter().zip(&p.textures){ui.separator();ui.label(format!("{} · {}×{} · {:.5}DPI · {} bytes",f.path.display(),f.width,f.height,f.dpi,f.bytes.len()));ui.image((t.id(),t.size_vec2()));for note in &f.notices{ui.small(note);}}}
+            if let Some(plan)=&p.plan{for(f,t)in plan.files.iter().zip(&p.textures){ui.separator();ui.label(format!("{} · {}×{} · {:.5}DPI · {} bytes",f.path.display(),f.width,f.height,f.dpi,f.bytes.len()));ui.image((t.id(),t.size_vec2()));if !f.losses.is_empty(){ui.colored_label(egui::Color32::YELLOW,"Losses in this output; keep the editable source");for loss in &f.losses{ui.label(loss);}}for note in &f.notices{ui.small(note);}}}
             if let Some(r)=&p.report{for f in &r.files{ui.label(format!("{}: {}",f.path.display(),match &f.result{Ok(())=>"Written".into(),Err(e)=>format!("Failed / skipped: {e}")}));}}
         });
         if before != (p.settings.clone(), p.folder.clone(), p.all) {

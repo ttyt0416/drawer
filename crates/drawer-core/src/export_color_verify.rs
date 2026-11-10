@@ -124,7 +124,7 @@ pub fn run(root: &Path) -> Result<(), String> {
             )?;
         }
         check(
-            p.losses(o)
+            p.notices(o)
                 .iter()
                 .any(|s| s.contains(&format!("{intent:?}"))),
             "Output intent hidden",
@@ -256,7 +256,7 @@ pub fn run(root: &Path) -> Result<(), String> {
     };
     let p = raster_io::prepare_managed(&wide, B, &c, &policy, o)?;
     check(
-        p.losses(o).iter().any(|n| n.contains("clipped")),
+        p.notices(o).iter().any(|n| n.contains("clipped")),
         "Out-of-gamut samples not reported",
     )?;
     let same = raster_io::prepare_managed(

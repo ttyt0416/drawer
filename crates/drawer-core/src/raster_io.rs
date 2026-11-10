@@ -92,6 +92,8 @@ impl Options {
 }
 #[derive(Clone)]
 pub struct Prepared {
+    source_losses: crate::export_loss::Source,
+    color_losses: Vec<String>,
     pub(crate) icc: Option<std::sync::Arc<Vec<u8>>>,
     pub(crate) display: Option<std::sync::Arc<crate::color_profile::Transform>>,
     pub(crate) matte: Option<Sample>,
@@ -187,7 +189,31 @@ fn prepare_inner(
             "{clipped} output samples exceed the RGB gamut and are clipped only in this file"
         ));
     }
+    let mut color_losses = stage.map_or_else(
+        || {
+            if d.color
+                .profile
+                .equivalent(&crate::color_profile::RgbProfile::Srgb)
+            {
+                vec![]
+            } else {
+                vec![
+                    "Color space: working RGB is converted to sRGB only in the exported composite"
+                        .into(),
+                ]
+            }
+        },
+        |s| s.losses.clone(),
+    );
+    color_losses.extend(
+        color_notices
+            .iter()
+            .filter(|s| s.contains("are clipped"))
+            .cloned(),
+    );
     Ok(Prepared {
+        source_losses: crate::export_loss::Source::new(d)?,
+        color_losses,
         icc: if let Some(s) = stage {
             s.icc.clone()
         } else {
@@ -262,6 +288,8 @@ impl Prepared {
             }
         }
         Ok(Self {
+            source_losses: self.source_losses.clone(),
+            color_losses: self.color_losses.clone(),
             icc: self.icc.clone(),
             display: self.display.clone(),
             matte: self.matte,
@@ -285,6 +313,27 @@ impl Prepared {
         }
     }
     pub fn losses(&self, o: Options) -> Vec<String> {
+        let mut losses = self.source_losses.losses();
+        losses.extend(self.color_losses.clone());
+        if self.source_depth == Depth::Sixteen && o.depth == Depth::Eight {
+            losses.push(
+                "Bit depth: 16-bit source channels are quantized to 8-bit in this file".into(),
+            );
+        }
+        if !o.alpha && self.pixels.iter().any(|p| p[3] < 65535) {
+            losses.push(
+                "Alpha: transparency is composited onto the selected opaque background".into(),
+            );
+        }
+        if o.format == Format::Jpeg {
+            losses.push(format!(
+                "Compression: JPEG quality {} uses lossy RGB8 encoding",
+                o.quality
+            ));
+        }
+        losses
+    }
+    pub fn notices(&self, o: Options) -> Vec<String> {
         let mut s = vec![format!(
             "Exported pixels use {}; source objects, metadata, monitor calibration and Undo history are not modified.",
             self.output_label
@@ -302,7 +351,10 @@ impl Prepared {
             s.push("8 to16 bit expands numbers without adding detail".into());
         }
         if o.format == Format::Tga {
-            s.push("TGA has no embedded ICC; these pixels are sRGB".into());
+            s.push(format!(
+                "TGA has no embedded ICC; numeric pixels use {}",
+                self.output_label
+            ));
         }
         if o.format == Format::Webp {
             s.push("Lossless WebP only; fully transparent hidden RGB may be normalized".into());
@@ -527,7 +579,7 @@ impl Prepared {
     ) -> Result<(), String> {
         crate::exchange_guidance::reject_private(path)?;
         self.check(d)?;
-        if !confirmed {
+        if !confirmed && !self.losses(o).is_empty() {
             return Err("Confirm the listed export losses".into());
         }
         let ext = path

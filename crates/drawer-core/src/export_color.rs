@@ -50,6 +50,7 @@ pub(crate) struct Stage {
     pub icc: Option<Arc<Vec<u8>>>,
     pub label: String,
     pub notices: Vec<String>,
+    pub losses: Vec<String>,
     target: RgbProfile,
     intent: Intent,
 }
@@ -92,6 +93,21 @@ impl Stage {
         } else {
             None
         };
+        let mut losses = vec![];
+        if s.convert && !d.color.profile.equivalent(&target) {
+            losses.push(format!(
+                "Color space: source {} RGB is converted to {}; numeric colors can change",
+                d.color.profile.label(),
+                target.label()
+            ));
+        } else if !s.convert && embed && !d.color.profile.equivalent(&target) {
+            losses.push("Color space: different ICC assignment preserves numeric RGB but changes its interpretation".into());
+        }
+        if !embed && !target.equivalent(&RgbProfile::Srgb) {
+            losses.push(
+                "Color space: omitting the non-sRGB ICC loses the output RGB interpretation".into(),
+            );
+        }
         let mut notices = vec![
             if s.convert {
                 format!(
@@ -118,6 +134,7 @@ impl Stage {
             icc,
             label: target.label().into(),
             notices,
+            losses,
             target,
             intent,
         })

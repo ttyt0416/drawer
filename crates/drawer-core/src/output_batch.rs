@@ -106,6 +106,7 @@ pub struct File {
     pub source_preview: Vec<[u8; 4]>,
     pub preview_size: [usize; 2],
     pub notices: Vec<String>,
+    pub losses: Vec<String>,
 }
 pub struct Plan {
     pub files: Vec<File>,
@@ -169,6 +170,7 @@ pub fn prepare(
             source_preview: vec![],
             preview_size: [0; 2],
             notices: vec![],
+            losses: vec![],
         });
     }
     for f in &files {
@@ -242,7 +244,8 @@ pub fn prepare(
         f.bytes = bytes;
         f.preview = preview;
         f.preview_size = [w, h];
-        f.notices = p.losses(s.encoding);
+        f.notices = p.notices(s.encoding);
+        f.losses = p.losses(s.encoding);
     }
     assets::canceled(c)?;
     Ok(Plan {

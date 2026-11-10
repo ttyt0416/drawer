@@ -133,7 +133,10 @@ impl Drawer {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let r = ui.add_enabled(
-                        p.prepared.is_some() && p.confirmed && !p.path.is_empty(),
+                        p.prepared
+                            .as_ref()
+                            .is_some_and(|v| p.confirmed || v.losses(p.options).is_empty())
+                            && !p.path.is_empty(),
                         egui::Button::new("Export image"),
                     );
                     p.controls.insert("export", r.rect);
@@ -142,6 +145,16 @@ impl Drawer {
                     p.controls.insert("cancel", r.rect);
                     cancel = r.clicked();
                 });
+                if p.prepared
+                    .as_ref()
+                    .is_some_and(|v| !v.losses(p.options).is_empty())
+                {
+                    let r = ui.checkbox(
+                        &mut p.confirmed,
+                        "I reviewed the losses in this exported copy",
+                    );
+                    p.controls.insert("confirm", r.rect);
+                }
                 ui.horizontal_wrapped(|ui| {
                     for format in Format::ALL {
                         let r = ui.selectable_value(&mut p.options.format, format, format.label());
@@ -202,20 +215,29 @@ impl Drawer {
                         "{} × {} pixels; source {:?}",
                         prepared.width, prepared.height, prepared.source_depth
                     ));
-                    for loss in prepared.losses(p.options) {
-                        ui.label(loss);
+                    let losses = prepared.losses(p.options);
+                    if losses.is_empty() {
+                        ui.small("No editing/pixel losses detected for these settings");
+                    } else {
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            "Losses in this exported copy; keep the editable source",
+                        );
+                        for loss in losses {
+                            ui.label(loss);
+                        }
                     }
+                    ui.collapsing("Output details", |ui| {
+                        for note in prepared.notices(p.options) {
+                            ui.small(note);
+                        }
+                    });
                 }
                 if ui.text_edit_singleline(&mut p.path).changed() {
                     p.replace = false;
                 }
                 browse = ui.button("Save as…").clicked();
                 ui.checkbox(&mut p.replace, "Replace this existing export file");
-                let r = ui.checkbox(
-                    &mut p.confirmed,
-                    "I reviewed the output conversion and losses",
-                );
-                p.controls.insert("confirm", r.rect);
                 ui.label(&p.message);
                 if let Some(texture) = &p.preview {
                     let size = texture.size_vec2();
@@ -287,7 +309,9 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         let ctx = egui::Context::default();
         let mut app = Drawer::new(&ctx, None);
         app.simple_view = true;
-        app.add_document(core::verify::fixture()?);
+        let mut fixture = core::verify::fixture()?;
+        fixture.layers.push(fixture.layers[0].clone());
+        app.add_document(fixture);
         let source = app.documents[0].snapshot();
         app.begin_raster_export()?;
         app.raster_export.options.format = Format::Tiff;
@@ -369,4 +393,10 @@ mod tests {
         let t = crate::tests::TestDirectory::new();
         super::smoke(&t.0).unwrap();
     }
+}
+
+#[path = "export_loss_verify.rs"]
+mod loss_verify;
+pub(super) fn loss_smoke(root: &std::path::Path) -> Result<(), String> {
+    loss_verify::run(root)
 }
