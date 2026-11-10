@@ -203,18 +203,8 @@ pub fn prepare(
             width.div_ceil(step) as usize,
             height.div_ceil(step) as usize,
         );
-        let mut preview = Vec::with_capacity(w * h);
-        for y in 0..h {
-            for x in 0..w {
-                preview.push(
-                    p.preview_sample(
-                        y * step as usize * width as usize + x * step as usize,
-                        s.encoding,
-                    )?
-                    .rgba8(),
-                );
-            }
-        }
+        let (preview_size, preview) =
+            p.preview_bytes(&bytes, s.encoding, [160, 100], available, c)?;
         let source_renderer = crate::render::Renderer::for_export(d)?;
         let mut source_preview = Vec::with_capacity(w * h);
         for y in 0..h {
@@ -243,7 +233,7 @@ pub fn prepare(
         f.dpi = dpi;
         f.bytes = bytes;
         f.preview = preview;
-        f.preview_size = [w, h];
+        f.preview_size = preview_size;
         f.notices = p.notices(s.encoding);
         f.losses = p.losses(s.encoding);
     }

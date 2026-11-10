@@ -3,7 +3,6 @@ use crate::{
     color_precision::{Depth, Sample},
     document::Document,
 };
-use image::ImageEncoder;
 use std::{
     fs,
     io::{Cursor, Write},
@@ -65,6 +64,8 @@ pub struct Options {
     pub alpha: bool,
     pub background: [u8; 3],
     pub quality: u8,
+    pub chroma_quality: u8,
+    pub sampling: crate::jpeg_output::Sampling,
     pub rle: bool,
     pub compression: Compression,
 }
@@ -76,6 +77,8 @@ impl Default for Options {
             alpha: false,
             background: [255; 3],
             quality: 90,
+            chroma_quality: 90,
+            sampling: Default::default(),
             rle: true,
             compression: Compression::Deflate,
         }
@@ -84,6 +87,7 @@ impl Default for Options {
 impl Options {
     pub fn valid(self) -> bool {
         (1..=100).contains(&self.quality)
+            && (1..=100).contains(&self.chroma_quality)
             && (self.format != Format::Jpeg || !self.alpha)
             && (matches!(self.format, Format::Tiff | Format::Png) || self.depth == Depth::Eight)
             && (self.format != Format::Png
@@ -107,6 +111,21 @@ pub struct Prepared {
     source: u64,
     revision: u64,
     frame: u32,
+}
+pub struct Encoded {
+    source: (u64, u64, u32),
+    options: Options,
+    bytes: Vec<u8>,
+    pub size: [usize; 2],
+    pub pixels: Vec<[u8; 4]>,
+}
+impl Encoded {
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    pub fn options(&self) -> Options {
+        self.options
+    }
 }
 fn cancel(c: &AtomicBool) -> Result<(), String> {
     if c.load(Ordering::Relaxed) {
@@ -327,8 +346,10 @@ impl Prepared {
         }
         if o.format == Format::Jpeg {
             losses.push(format!(
-                "Compression: JPEG quality {} uses lossy RGB8 encoding",
-                o.quality
+                "Compression: JPEG luma/chroma quality {}/{} and {} use lossy RGB8 encoding",
+                o.quality,
+                o.chroma_quality,
+                o.sampling.label()
             ));
         }
         losses
@@ -340,7 +361,7 @@ impl Prepared {
         )];
         s.extend(self.color_notices.clone());
         if o.format == Format::Jpeg {
-            s.push(format!("JPEG is lossy RGB8, quality {}. Alpha is composited on the selected background; preview does not simulate JPEG artifacts.",o.quality));
+            s.push(format!("JPEG baseline RGB8: luma quality {}, chroma quality {}, sampling {}. Alpha is composited before encoding. The compression preview decodes the exact output bytes.",o.quality,o.chroma_quality,o.sampling.label()));
         } else if !o.alpha {
             s.push("Alpha is composited on the selected background".into());
         }
@@ -475,17 +496,22 @@ impl Prepared {
                 writer.finish().map_err(|e| e.to_string())?;
             }
             Format::Jpeg => {
-                let mut e =
-                    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, o.quality);
-                e.set_pixel_density(image::codecs::jpeg::PixelDensity::dpi(
-                    self.dpi.round() as u16
-                ));
-                if let Some(icc) = &self.icc {
-                    e.set_icc_profile(icc.as_ref().clone())
-                        .map_err(|e| e.to_string())?;
-                }
-                e.encode(&low, self.width, self.height, color)
-                    .map_err(|e| e.to_string())?;
+                bytes = crate::jpeg_output::encode(
+                    crate::jpeg_output::Image {
+                        rgb: &low,
+                        width: self.width,
+                        height: self.height,
+                        dpi: self.dpi,
+                        icc: self.icc.as_deref().map(Vec::as_slice),
+                    },
+                    crate::jpeg_output::Settings {
+                        luma: o.quality,
+                        chroma: o.chroma_quality,
+                        sampling: o.sampling,
+                    },
+                    budget,
+                    c,
+                )?;
             }
             Format::Bmp => image::codecs::bmp::BmpEncoder::new(&mut bytes)
                 .encode(&low, self.width, self.height, color)
@@ -566,6 +592,89 @@ impl Prepared {
         }
         Ok(bytes)
     }
+    pub fn encoded_preview(
+        &self,
+        o: Options,
+        budget: usize,
+        c: &AtomicBool,
+    ) -> Result<Encoded, String> {
+        if o.format != Format::Jpeg {
+            return Err("Actual compression preview is for JPEG; lossless adapters use their exact prepared channel preview".into());
+        }
+        let bytes = self.encode(o, budget, c)?;
+        let (size, pixels) = self.preview_bytes(&bytes, o, [300, 100], budget, c)?;
+        Ok(Encoded {
+            source: (self.source, self.revision, self.frame),
+            options: o,
+            bytes,
+            size,
+            pixels,
+        })
+    }
+    pub fn preview_bytes(
+        &self,
+        bytes: &[u8],
+        o: Options,
+        max: [u32; 2],
+        budget: usize,
+        c: &AtomicBool,
+    ) -> Result<([usize; 2], Vec<[u8; 4]>), String> {
+        if max.contains(&0) || max.iter().any(|n| *n > 1024) {
+            return Err("Invalid preview dimensions".into());
+        }
+        cancel(c)?;
+        let decoded = if o.format == Format::Jpeg {
+            if bytes.len() > 64 * 1024 * 1024
+                || self
+                    .pixels
+                    .len()
+                    .saturating_mul(24)
+                    .saturating_add(bytes.len())
+                    > budget
+            {
+                return Err("JPEG readback exceeds current preview memory".into());
+            }
+            let mut reader =
+                image::ImageReader::with_format(Cursor::new(bytes), image::ImageFormat::Jpeg);
+            let mut limits = image::Limits::default();
+            limits.max_image_width = Some(self.width);
+            limits.max_image_height = Some(self.height);
+            limits.max_alloc = Some((budget / 2) as u64);
+            reader.limits(limits);
+            let image = reader.decode().map_err(|e| e.to_string())?.into_rgba8();
+            if image.dimensions() != (self.width, self.height) {
+                return Err("JPEG readback dimensions differ from output plan".into());
+            }
+            Some(image)
+        } else {
+            None
+        };
+        let step = self
+            .width
+            .div_ceil(max[0])
+            .max(self.height.div_ceil(max[1]))
+            .max(1);
+        let size = [
+            self.width.div_ceil(step) as usize,
+            self.height.div_ceil(step) as usize,
+        ];
+        let mut pixels = Vec::with_capacity(size[0] * size[1]);
+        for y in 0..size[1] {
+            cancel(c)?;
+            for x in 0..size[0] {
+                let n = y * step as usize * self.width as usize + x * step as usize;
+                let value = if let Some(image) = &decoded {
+                    let raw = Sample::from8(image.get_pixel(x as u32 * step, y as u32 * step).0);
+                    self.display.as_ref().map_or(Ok(raw), |t| t.map(raw))?
+                } else {
+                    self.preview_sample(n, o)?
+                };
+                pixels.push(value.rgba8());
+            }
+        }
+        cancel(c)?;
+        Ok((size, pixels))
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn write(
         &self,
@@ -576,6 +685,45 @@ impl Prepared {
         replace: bool,
         budget: usize,
         c: &AtomicBool,
+    ) -> Result<(), String> {
+        self.write_selected(d, path, o, confirmed, replace, budget, c, None)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_encoded(
+        &self,
+        d: &Document,
+        path: &Path,
+        encoded: &Encoded,
+        confirmed: bool,
+        replace: bool,
+        budget: usize,
+        c: &AtomicBool,
+    ) -> Result<(), String> {
+        if encoded.source != (self.source, self.revision, self.frame) {
+            return Err("Encoded preview belongs to another source snapshot".into());
+        }
+        self.write_selected(
+            d,
+            path,
+            encoded.options,
+            confirmed,
+            replace,
+            budget,
+            c,
+            Some(encoded),
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn write_selected(
+        &self,
+        d: &Document,
+        path: &Path,
+        o: Options,
+        confirmed: bool,
+        replace: bool,
+        budget: usize,
+        c: &AtomicBool,
+        encoded: Option<&Encoded>,
     ) -> Result<(), String> {
         crate::exchange_guidance::reject_private(path)?;
         self.check(d)?;
@@ -636,7 +784,17 @@ impl Prepared {
             Ok(())
         };
         check()?;
-        let bytes = self.encode(o, budget, c)?;
+        cancel(c)?;
+        let owned;
+        let bytes = if let Some(encoded) = encoded {
+            if encoded.bytes.len() > budget / 2 {
+                return Err("Encoded preview exceeds current workspace memory".into());
+            }
+            &encoded.bytes
+        } else {
+            owned = self.encode(o, budget, c)?;
+            &owned
+        };
         let mut name = path.file_name().unwrap().to_owned();
         name.push(".raster-write.tmp");
         let temp = path.with_file_name(name);

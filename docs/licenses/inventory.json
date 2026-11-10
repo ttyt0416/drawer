@@ -1,6 +1,6 @@
 {
   "target": "x86_64-pc-windows-msvc",
-  "cargo_lock_sha256": "307e7012491f0cc72844fe5ece0c9e8917f3b88aca419939dd0926c89b8e85af",
+  "cargo_lock_sha256": "4cc3e5cca5f5029f9648df0116a513125627b26c14ea79cacfc1f2cf62948d62",
   "libraries": [
     {
       "name": "accesskit",
@@ -2163,6 +2163,29 @@
         {
           "name": "LICENSE-MIT",
           "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
+        }
+      ],
+      "supplement_sources": []
+    },
+    {
+      "name": "jpeg-encoder",
+      "version": "0.7.1",
+      "source": "https://crates.io/crates/jpeg-encoder/0.7.1",
+      "repository": "https://github.com/vstroebel/jpeg-encoder",
+      "license": "(MIT OR Apache-2.0) AND IJG",
+      "crate_sha256": "a0370574b86f7eca156b9f298392b5e69a23f8c86f3f865add60bbc2e79467a6",
+      "notice_files": [
+        {
+          "name": "LICENSE-APACHE",
+          "sha256": "85a884980abd6032fc6b5439ba918ab16db9ac9051b5cf18db9c27c587df07c0"
+        },
+        {
+          "name": "LICENSE-IJG",
+          "sha256": "a21e92ec88aefc6823f0c51994783571a849e8d9b43d9ade61ec9d886776721e"
+        },
+        {
+          "name": "LICENSE-MIT",
+          "sha256": "4d022727ea392ebba2fe5e9a5f78c610a0eae506b491f3db29c78b6d430d6503"
         }
       ],
       "supplement_sources": []

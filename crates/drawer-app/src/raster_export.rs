@@ -19,18 +19,28 @@ pub(super) struct Panel {
     confirmed: bool,
     replace: bool,
     prepared: Option<core::Prepared>,
+    encoded: Option<core::Encoded>,
+    jpeg_attempt: Option<Options>,
     job: Option<Job>,
     preview: Option<egui::TextureHandle>,
     message: String,
     controls: BTreeMap<&'static str, egui::Rect>,
 }
+enum Value {
+    Source(core::Prepared),
+    Encoded(core::Encoded),
+}
 struct Job {
     cancel: Arc<AtomicBool>,
-    rx: mpsc::Receiver<Result<core::Prepared, String>>,
+    handle: Option<std::thread::JoinHandle<()>>,
+    rx: mpsc::Receiver<Result<Value, String>>,
 }
 impl Drop for Job {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 impl Drawer {
@@ -41,6 +51,7 @@ impl Drawer {
         }
         let n = self.active.ok_or("Open a document first")?;
         let d = &self.documents[n];
+        self.raster_export = Panel::default();
         let available = DEFAULT_DOCUMENT_BUDGET.saturating_sub(
             self.documents
                 .iter()
@@ -53,16 +64,20 @@ impl Drawer {
         let cancel = Arc::new(AtomicBool::new(false));
         let worker = cancel.clone();
         let (tx, rx) = mpsc::channel();
-        std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name("prepare-still-image".into())
             .spawn(move || {
-                let _ = tx.send(core::prepare(&copy, available, &worker));
+                let _ = tx.send(core::prepare(&copy, available, &worker).map(Value::Source));
             })
             .map_err(|e| e.to_string())?;
         self.raster_export = Panel {
             open: true,
             source: Some(d.id),
-            job: Some(Job { cancel, rx }),
+            job: Some(Job {
+                cancel,
+                rx,
+                handle: Some(handle),
+            }),
             message: "Preparing source composite…".into(),
             ..Default::default()
         };
@@ -77,16 +92,71 @@ impl Drawer {
         let target = self.export_target(n, &PathBuf::from(&p.path))?;
         let available = DEFAULT_DOCUMENT_BUDGET
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
-        prepared.write(
-            &self.documents[n],
-            &target,
-            p.options,
-            p.confirmed,
-            p.replace,
-            available,
-            &AtomicBool::new(false),
-        )
+        if p.options.format == Format::Jpeg {
+            let encoded = p
+                .encoded
+                .as_ref()
+                .filter(|v| v.options() == p.options)
+                .ok_or("Wait for the actual JPEG compression preview")?;
+            prepared.write_encoded(
+                &self.documents[n],
+                &target,
+                encoded,
+                p.confirmed,
+                p.replace,
+                available,
+                &AtomicBool::new(false),
+            )
+        } else {
+            prepared.write(
+                &self.documents[n],
+                &target,
+                p.options,
+                p.confirmed,
+                p.replace,
+                available,
+                &AtomicBool::new(false),
+            )
+        }
     }
+    fn prepare_jpeg_preview(&self, p: &mut Panel) -> Result<(), String> {
+        let prepared = p.prepared.as_ref().ok_or("Prepare the source first")?;
+        let available = DEFAULT_DOCUMENT_BUDGET
+            .saturating_sub(
+                self.documents
+                    .iter()
+                    .map(Document::resident_bytes)
+                    .sum::<usize>(),
+            )
+            .saturating_sub(prepared.pixels.len() * 8);
+        if prepared.pixels.len().saturating_mul(48) > available {
+            return Err("JPEG preview copy exceeds workspace memory".into());
+        }
+        let prepared = prepared.clone();
+        let o = p.options;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let worker = cancel.clone();
+        let (tx, rx) = mpsc::channel();
+        p.jpeg_attempt = Some(o);
+        let handle = std::thread::Builder::new()
+            .name("jpeg-compression-preview".into())
+            .spawn(move || {
+                let _ = tx.send(
+                    prepared
+                        .encoded_preview(o, available, &worker)
+                        .map(Value::Encoded),
+                );
+            })
+            .map_err(|e| e.to_string())?;
+        p.job = Some(Job {
+            cancel,
+            rx,
+            handle: Some(handle),
+        });
+        p.jpeg_attempt = Some(o);
+        Ok(())
+    }
+
     pub(super) fn raster_export_window(&mut self, ctx: &egui::Context) {
         let mut p = std::mem::take(&mut self.raster_export);
         if !p.open {
@@ -102,9 +172,26 @@ impl Drawer {
             if let Some(result) = result {
                 p.job = None;
                 match result {
-                    Ok(prepared) => {
+                    Ok(Value::Source(prepared)) => {
                         p.prepared = Some(prepared);
                         p.message = "Review format options and losses before exporting".into();
+                    }
+                    Ok(Value::Encoded(encoded)) => {
+                        if encoded.options() == p.options {
+                            p.preview = Some(ctx.load_texture(
+                                "actual-jpeg-preview",
+                                egui::ColorImage::from_rgba_unmultiplied(
+                                    encoded.size,
+                                    &encoded.pixels.iter().flatten().copied().collect::<Vec<_>>(),
+                                ),
+                                egui::TextureOptions::LINEAR,
+                            ));
+                            p.message = format!(
+                                "Actual JPEG: {} bytes. These exact reviewed bytes will be written.",
+                                encoded.bytes().len()
+                            );
+                            p.encoded = Some(encoded);
+                        }
                     }
                     Err(e) => p.message = e,
                 }
@@ -136,7 +223,8 @@ impl Drawer {
                         p.prepared
                             .as_ref()
                             .is_some_and(|v| p.confirmed || v.losses(p.options).is_empty())
-                            && !p.path.is_empty(),
+                            && !p.path.is_empty() && p.job.is_none()
+                            && (p.options.format!=Format::Jpeg || p.encoded.as_ref().is_some_and(|v|v.options()==p.options)),
                         egui::Button::new("Export image"),
                     );
                     p.controls.insert("export", r.rect);
@@ -149,10 +237,7 @@ impl Drawer {
                     .as_ref()
                     .is_some_and(|v| !v.losses(p.options).is_empty())
                 {
-                    let r = ui.checkbox(
-                        &mut p.confirmed,
-                        "I reviewed the losses in this exported copy",
-                    );
+                    let r = ui.add_enabled(p.options.format!=Format::Jpeg||p.encoded.is_some(),egui::Checkbox::new(&mut p.confirmed,"I reviewed the losses in this exported copy"));
                     p.controls.insert("confirm", r.rect);
                 }
                 ui.horizontal_wrapped(|ui| {
@@ -164,7 +249,11 @@ impl Drawer {
                 if p.options.format == Format::Jpeg {
                     p.options.alpha = false;
                     p.options.depth = Depth::Eight;
-                    ui.add(egui::Slider::new(&mut p.options.quality, 1..=100).text("JPEG quality"));
+                    let r=ui.add(egui::Slider::new(&mut p.options.quality, 1..=100).text("JPEG luma quality"));p.controls.insert("jpeg-luma",r.rect);
+                    let r=ui.add(egui::Slider::new(&mut p.options.chroma_quality,1..=100).text("JPEG chroma quality"));p.controls.insert("jpeg-chroma",r.rect);
+                    ui.horizontal(|ui|{for(key,v)in[("444",drawer_core::jpeg_output::Sampling::S444),("422",drawer_core::jpeg_output::Sampling::S422),("420",drawer_core::jpeg_output::Sampling::S420)]{let r=ui.selectable_value(&mut p.options.sampling,v,v.label());p.controls.insert(key,r.rect);}});
+                    if p.encoded.is_none() && p.job.is_none() && p.jpeg_attempt.is_some() && ui.button("Retry compression preview").clicked(){p.jpeg_attempt=None;}
+                    let mut unsupported=false;ui.add_enabled(false,egui::Checkbox::new(&mut unsupported,"Progressive / arithmetic / custom tables"));ui.small("Unavailable in this adapter: only baseline sequential RGB8 and the reviewed quality-derived tables are supported.");
                 } else {
                     let r = ui.checkbox(&mut p.options.alpha, "Preserve alpha");
                     p.controls.insert("alpha", r.rect);
@@ -248,8 +337,25 @@ impl Drawer {
         if p.options != before {
             p.confirmed = false;
             p.preview = None;
+            p.encoded = None;
+            p.jpeg_attempt = None;
+            if p.prepared.is_some()
+                && let Some(job) = &p.job
+            {
+                job.cancel.store(true, Ordering::Relaxed);
+            }
         }
-        if p.preview.is_none()
+        if p.options.format == Format::Jpeg
+            && p.encoded.is_none()
+            && p.jpeg_attempt.is_none()
+            && p.prepared.is_some()
+            && p.job.is_none()
+            && let Err(e) = self.prepare_jpeg_preview(&mut p)
+        {
+            p.message = e;
+        }
+        if p.options.format != Format::Jpeg
+            && p.preview.is_none()
             && let Some(prepared) = &p.prepared
         {
             let step = prepared
@@ -399,4 +505,10 @@ mod tests {
 mod loss_verify;
 pub(super) fn loss_smoke(root: &std::path::Path) -> Result<(), String> {
     loss_verify::run(root)
+}
+
+#[path = "jpeg_output_verify.rs"]
+mod jpeg_verify;
+pub(super) fn jpeg_smoke(root: &std::path::Path) -> Result<(), String> {
+    jpeg_verify::run(root)
 }

@@ -620,6 +620,7 @@ pub mod monitor_color;
 pub mod psd_exchange;
 
 pub mod export_loss;
+pub mod jpeg_output;
 pub mod raster_io;
 
 pub mod exchange_guidance;
