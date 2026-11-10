@@ -262,6 +262,7 @@ try {
     if ($smokeResult -notmatch 'file_browser=true' -or $smokeResult -notmatch 'data_maintenance=true') { throw '로컬 파일 선택·썸네일·설정·물리 파일 관리 검증 실패' }
     if ($smokeResult -notmatch 'jpeg_output=true') { throw 'JPEG 명도·색차 품질·샘플링·실제 압축 미리보기 검증 실패' }
     if ($smokeResult -notmatch 'export_loss=true') { throw '출력 손실 안내·무손실 확인 생략·원본 보존 검증 실패' }
+    if($smokeResult -notmatch 'print_options=true'){throw '인쇄 실치수/채널/포함/ICC 검증 실패'}
     if ($smokeResult -notmatch 'printing_preview=true') { throw '용지·인쇄 미리보기·가상 PDF 검증 실패' }
     if ($smokeResult -notmatch 'color_export=true') { throw 'ICC 포함·변환·렌더링 의도·미리보기 검증 실패' }
     if ($smokeResult -notmatch 'output_batch=true') { throw '출력 크기·DPI·이름·파일별 결과 검증 실패' }

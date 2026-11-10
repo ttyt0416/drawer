@@ -1836,3 +1836,5 @@ Rename updates open document/source paths, protected imported paths, favorites a
 로컬 데이터 관리(local-data): 현재 저장/색인/파일 작업이 끝난 뒤 새 로컬 폴더로 복사하고 파일 수·크기·해시와 소재 색인을 검사한 후 위치를 전환합니다. 이동 중 새 명령과 드롭은 대기합니다. 기존 위치는 남기며 사용자 문서 경로와 그림 픽셀·Undo 이력은 유지합니다. 타임랩스는 기록을 저장하고 멈추므로 새 위치의 기록 폴더를 다시 열어 이어서 기록하세요. 이전 위치가 변하지 않았다면 같은 검증으로 복귀할 수 있습니다. 이전 위치 정리는 별도 대상 확인 후 OS 휴지통으로만 보내며 열린 원본이 포함되면 거절합니다. 팁·질감 라이브러리 백업 복원은 현재 라이브러리 바이트를 남깁니다.
 
 액션 반복: Local auto actions → Action playback → Repeat rounds / wait / confirm에서 반복 수·대기시간·계속 확인을 선택합니다. 전체 성공한 문서 회차마다 자동으로 적용되며 각각 Undo 한 번으로 되돌립니다. 중지·오류 회차는 적용하지 않고 재개 때 그 회차 처음부터 실행합니다. 파일은 모든 회차가 끝난 뒤 새 .drawer로만 저장합니다. 명령 작성기의 Document transform은 문서 좌표, View scroll은 보기 중심의 문서 픽셀 이동량을 기록합니다. 보기 이동은 그림 Undo에 들어가지 않습니다.
+
+인쇄 추가 옵션: Print preview의 접힌 Content / channels / RGB ICC / physical screen calibration에서 밑그림·문자/번호·페이지 가이드와 등록 표시, RGB/알파 분판, 출력 RGB ICC와 렌더링 의도를 선택합니다. 이미 합성된 래스터에는 내용 분리 스위치가 적용되지 않습니다. 화면 눈금 양 끝 중심 사이를 자로 측정한 mm를 입력하고 Calibrate this screen을 누르면 Show active page at physical print size로 보기만 보정합니다. 다른 화면에서는 다시 측정하세요. 인쇄 설정 저장에 보정값을 포함하며 원문서 DPI/픽셀/Undo를 바꾸지 않습니다. ICC가 검토 후 변경되면 다시 검토해야 합니다. 실제 프린터·종이 길이/색은 실물로 확인합니다.

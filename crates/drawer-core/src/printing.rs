@@ -25,6 +25,8 @@ pub struct Settings {
     pub percent: f64,
     pub range: String,
     pub icm: bool,
+    #[serde(default)]
+    pub output: crate::print_options::Options,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -38,6 +40,7 @@ impl Default for Settings {
             percent: 100.,
             range: String::new(),
             icm: true,
+            output: Default::default(),
         }
     }
 }
@@ -58,6 +61,7 @@ impl Settings {
     pub fn valid(&self) -> bool {
         let p = self.paper_mm();
         self.version == 1
+            && self.output.valid()
             && self
                 .custom_mm
                 .iter()
@@ -146,6 +150,13 @@ pub fn plan(pages: &[Page], s: &Settings) -> Result<Plan, String> {
         return Err("Paper, margin, scale or settings version is invalid".into());
     }
     let paper = s.paper_mm();
+    if s.output.registration
+        && paper
+            .iter()
+            .any(|v| *v < 2. * (s.output.registration_inset_mm + 2.))
+    {
+        return Err("Paper is too small for the selected registration mark inset".into());
+    }
     let clip = Area {
         x: s.margins[0],
         y: s.margins[1],
@@ -237,6 +248,19 @@ pub fn virtual_pages(
     if !dpi.is_finite() || !(36.0..=300.).contains(&dpi) {
         return Err("Virtual print proof DPI must be36..300".into());
     }
+    let mapping = s.output.channel != crate::print_options::Channel::Composite
+        || s.icm && s.output.profile.is_some();
+    let mapped = if mapping {
+        if pages.iter().map(|p| p.image.memory_bytes()).sum::<usize>() > budget / 2 {
+            return Err("Print color/channel copy exceeds proof budget".into());
+        }
+        Some(crate::print_options::pages(
+            pages, &s.output, s.icm, true, c,
+        )?)
+    } else {
+        None
+    };
+    let pages = mapped.as_deref().unwrap_or(pages);
     let plan = plan(pages, s)?;
     let width = (plan.paper_mm[0] / 25.4 * dpi).round() as u32;
     let height = (plan.paper_mm[1] / 25.4 * dpi).round() as u32;
@@ -296,6 +320,11 @@ pub fn virtual_pages(
             },
             dpi,
         });
+    }
+    if s.output.registration {
+        for page in &mut out {
+            crate::print_options::draw_registration(page, s.output.registration_inset_mm);
+        }
     }
     book_io::check_cancel(c)?;
     Ok(out)

@@ -11,6 +11,7 @@ use windows::{
 #[link(name = "gdi32")]
 unsafe extern "system" {
     fn SetICMMode(dc: HDC, mode: i32) -> i32;
+    fn SetICMProfileW(dc: HDC, filename: *mut u16) -> i32;
 }
 struct Dialog(PRINTDLGW);
 impl Drop for Dialog {
@@ -35,6 +36,42 @@ struct Printer {
     pages: Vec<Placement>,
     pixels_mm: [f64; 2],
     offset: [i32; 2],
+    intent: drawer_core::soft_proof::Intent,
+    marks: Vec<([f64; 2], [f64; 2])>,
+}
+pub fn freeze_profile(
+    options: &drawer_core::print_options::Options,
+    enabled: bool,
+) -> Result<Option<drawer_core::print_options::FrozenProfile>, String> {
+    if !enabled || options.profile.is_none() {
+        return Ok(None);
+    }
+    if let Some(path) = &options.profile {
+        crate::file_browser::local_disk(path)?;
+    }
+    let root = std::env::temp_dir();
+    crate::file_browser::local_disk(&root)?;
+    drawer_core::print_options::FrozenProfile::capture(&root, options, enabled)
+}
+pub fn bitmap_header(
+    width: u32,
+    height: u32,
+    intent: drawer_core::soft_proof::Intent,
+) -> Result<BITMAPV5HEADER, String> {
+    if width == 0 || height == 0 || width > 32768 || height > 32768 {
+        return Err("Invalid print bitmap dimensions".into());
+    }
+    Ok(BITMAPV5HEADER {
+        bV5Size: std::mem::size_of::<BITMAPV5HEADER>() as u32,
+        bV5Width: width as i32,
+        bV5Height: -(height as i32),
+        bV5Planes: 1,
+        bV5BitCount: 32,
+        bV5Compression: BI_RGB,
+        bV5CSType: 0x73524742,
+        bV5Intent: drawer_core::print_options::gdi_intent(intent),
+        ..Default::default()
+    })
 }
 fn coordinate(v: f64) -> Result<i32, String> {
     if !v.is_finite() || !(i32::MIN as f64..=i32::MAX as f64).contains(&v) {
@@ -43,6 +80,33 @@ fn coordinate(v: f64) -> Result<i32, String> {
     Ok(v.round() as i32)
 }
 impl Printer {
+    fn draw_marks(&self) -> Result<(), String> {
+        for (a, b) in &self.marks {
+            let rect = self.rect(printing::Area {
+                x: a[0].min(b[0]),
+                y: a[1].min(b[1]),
+                width: (a[0] - b[0]).abs().max(0.1),
+                height: (a[1] - b[1]).abs().max(0.1),
+            })?;
+            // SAFETY: this is the live owned page DC; checked coordinates and BLACKNESS
+            // draw only the reviewed registration rectangles, after the image clip is restored.
+            if !unsafe {
+                PatBlt(
+                    self.dc,
+                    rect[0],
+                    rect[1],
+                    (rect[2] - rect[0]).max(1),
+                    (rect[3] - rect[1]).max(1),
+                    BLACKNESS,
+                )
+            }
+            .as_bool()
+            {
+                return Err("Printer could not draw registration marks".into());
+            }
+        }
+        Ok(())
+    }
     fn rect(&self, a: printing::Area) -> Result<[i32; 4], String> {
         Ok([
             coordinate(a.x * self.pixels_mm[0] - self.offset[0] as f64)?,
@@ -89,18 +153,9 @@ impl PrintSink for Printer {
             };
             bgra.extend([c(2), c(1), c(0), 0]);
         }
-        let info = BITMAPV4HEADER {
-            bV4Size: std::mem::size_of::<BITMAPV4HEADER>() as u32,
-            bV4Width: image.width as i32,
-            bV4Height: -(image.height as i32),
-            bV4Planes: 1,
-            bV4BitCount: 32,
-            bV4V4Compression: BI_RGB,
-            bV4CSType: 0x73524742,
-            ..Default::default()
-        };
-        // SAFETY: validated top-down BGRA matches the V4 header. The header declares sRGB,
-        // has no palette, and is passed through GDI's documented BITMAPINFO/V4-header ABI.
+        let info = bitmap_header(image.width, image.height, self.intent)?;
+        // SAFETY: validated top-down BGRA matches the V5 header. The header declares sRGB,
+        // has no palette, and is passed through GDI's documented BITMAPINFO/V5-header ABI.
         // Coordinates were checked; the saved DC restores the margin clip before ending the page.
         let ok = unsafe {
             if StartPage(self.dc) <= 0 {
@@ -126,13 +181,18 @@ impl PrintSink for Printer {
                     image.width as i32,
                     image.height as i32,
                     Some(bgra.as_ptr().cast()),
-                    (&info as *const BITMAPV4HEADER).cast::<BITMAPINFO>(),
+                    (&info as *const BITMAPV5HEADER).cast::<BITMAPINFO>(),
                     DIB_RGB_COLORS,
                     SRCCOPY,
                 )
             };
             let restored = RestoreDC(self.dc, saved).as_bool();
-            copied > 0 && restored && EndPage(self.dc) > 0
+            let marks = if copied > 0 && restored {
+                self.draw_marks().is_ok()
+            } else {
+                false
+            };
+            copied > 0 && restored && marks && EndPage(self.dc) > 0
         };
         if ok {
             Ok(())
@@ -177,6 +237,18 @@ pub fn show_with_settings(
     cancel: &AtomicBool,
 ) -> Result<bool, String> {
     let plan = printing::plan(pages, settings)?;
+    if settings.icm
+        && let Some(path) = &settings.output.profile
+    {
+        crate::file_browser::local_disk(path)?;
+    }
+    let frozen = freeze_profile(&settings.output, settings.icm)?;
+    let mut frozen_settings = settings.clone();
+    if let Some(profile) = &frozen {
+        frozen_settings.output.profile = Some(profile.path().to_owned());
+    }
+    let settings = &frozen_settings;
+
     drawer_core::book_io::check_cancel(cancel)?;
     let mut dialog = Dialog(PRINTDLGW {
         lStructSize: std::mem::size_of::<PRINTDLGW>() as u32,
@@ -237,6 +309,36 @@ pub fn show_with_settings(
         (physical[1] - offset[1] - printable[1]) as f64 / dpi[1] as f64 * 25.4,
     ];
     printing::driver_layout(settings, paper, margins)?;
+    let marks = if settings.output.registration {
+        drawer_core::print_options::registration_lines(paper, settings.output.registration_inset_mm)
+    } else {
+        vec![]
+    };
+    if marks.iter().any(|(a, b)| {
+        [a, b].iter().any(|p| {
+            p[0] < margins[0]
+                || p[1] < margins[1]
+                || p[0] + 0.1 > paper[0] - margins[2]
+                || p[1] + 0.1 > paper[1] - margins[3]
+        })
+    }) {
+        return Err("Reviewed registration marks lie outside this printer's printable area; increase their inset or disable them before retrying".into());
+    }
+
+    if settings.icm
+        && let Some(path) = &settings.output.profile
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let path = drawer_core::file_browser::checked(path)?;
+        let mut wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        // SAFETY: validated local RGB ICC path is NUL-terminated and stays alive
+        // for the synchronous DC configuration; no profile is associated system-wide.
+        if unsafe { SetICMProfileW(dialog.0.hDC, wide.as_mut_ptr()) } == 0 {
+            return Err(
+                "Printer could not select the reviewed output RGB ICC; no job submitted".into(),
+            );
+        }
+    }
     // SAFETY: configure color matching on this owned DC before StartDoc. SDK ICM_ON/OFF are2/1.
     if unsafe { SetICMMode(dialog.0.hDC, if settings.icm { 2 } else { 1 }) } == 0 {
         return Err(
@@ -244,18 +346,47 @@ pub fn show_with_settings(
                 .into(),
         );
     }
+    let channel_pages =
+        drawer_core::print_options::pages(pages, &settings.output, settings.icm, false, cancel)?;
     let mut sink = Printer {
         dc: dialog.0.hDC,
         started: false,
         pages: plan.pages,
         pixels_mm: [dpi[0] as f64 / 25.4, dpi[1] as f64 / 25.4],
         offset,
+        intent: settings.output.intent,
+        marks,
     };
-    printing::send(pages, settings, &mut sink, cancel)?;
+    printing::send(&channel_pages, settings, &mut sink, cancel)?;
     Ok(true)
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn print_v5_header_uses_explicit_srgb_top_down_and_selected_intent() {
+        use drawer_core::soft_proof::Intent;
+        for (intent, code) in [
+            (Intent::Perceptual, 4),
+            (Intent::Relative, 2),
+            (Intent::Saturation, 1),
+            (Intent::Absolute, 8),
+        ] {
+            let h = super::bitmap_header(2, 3, intent).unwrap();
+            assert_eq!(
+                (
+                    h.bV5Size,
+                    h.bV5Width,
+                    h.bV5Height,
+                    h.bV5BitCount,
+                    h.bV5CSType,
+                    h.bV5Intent
+                ),
+                (124, 2, -3, 32, 0x73524742, code)
+            );
+            assert_eq!((h.bV5ProfileData, h.bV5ProfileSize), (0, 0));
+        }
+        assert!(super::bitmap_header(0, 1, Intent::Relative).is_err());
+    }
     #[test]
     fn absent_printer_guidance_is_explicit_and_not_a_print_job() {
         assert!(super::dialog_error(0x1008).contains("No default"));

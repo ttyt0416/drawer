@@ -1161,3 +1161,8 @@ crates/drawer-core/src/action_repeat_verify.rs
 crates/drawer-app/src/action_repeat.rs
 crates/drawer-app/src/action_repeat_verify.rs
 docs/process/action-repeats.md
+
+crates/drawer-core/src/print_options.rs
+crates/drawer-core/src/print_options_verify.rs
+crates/drawer-app/src/print_options_verify.rs
+docs/process/print-options.md
