@@ -1,6 +1,7 @@
 use super::*;
 pub(super) fn run(root: &Path) -> Result<(), String> {
     core::verify::run(root)?;
+    drawer_core::export_color::verify::run(root)?;
     let dir = root.join("output-batch-ui");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let ctx = egui::Context::default();
@@ -65,6 +66,23 @@ pub(super) fn run(root: &Path) -> Result<(), String> {
     };
     click(&mut a, &mut time, "prepare")?;
     wait(&mut a, &mut time)?;
+    let before_bytes = a
+        .output_batch
+        .plan
+        .as_ref()
+        .ok_or_else(|| a.output_batch.message.clone())?
+        .files[0]
+        .bytes
+        .clone();
+    click(&mut a, &mut time, "source-preview")?;
+    if a.output_batch
+        .plan
+        .as_ref()
+        .is_none_or(|p| p.files[0].bytes != before_bytes)
+        || a.documents[0].snapshot() != before
+    {
+        return Err("Output proof toggle changed bytes/source".into());
+    }
     let path = a
         .output_batch
         .plan

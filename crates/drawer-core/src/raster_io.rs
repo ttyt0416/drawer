@@ -92,6 +92,11 @@ impl Options {
 }
 #[derive(Clone)]
 pub struct Prepared {
+    pub(crate) icc: Option<std::sync::Arc<Vec<u8>>>,
+    pub(crate) display: Option<std::sync::Arc<crate::color_profile::Transform>>,
+    pub(crate) matte: Option<Sample>,
+    pub(crate) output_label: String,
+    pub(crate) color_notices: Vec<String>,
     pub dpi: f64,
     pub width: u32,
     pub height: u32,
@@ -109,6 +114,27 @@ fn cancel(c: &AtomicBool) -> Result<(), String> {
     }
 }
 pub fn prepare(d: &Document, budget: usize, c: &AtomicBool) -> Result<Prepared, String> {
+    prepare_inner(d, budget, c, None)
+}
+pub fn prepare_managed(
+    d: &Document,
+    budget: usize,
+    c: &AtomicBool,
+    settings: &crate::export_color::Settings,
+    o: Options,
+) -> Result<Prepared, String> {
+    let stage = crate::export_color::Stage::new(d, settings, o.format)?;
+    let matte = stage.matte(o.background)?;
+    let mut p = prepare_inner(d, budget, c, Some(&stage))?;
+    p.matte = Some(matte);
+    Ok(p)
+}
+fn prepare_inner(
+    d: &Document,
+    budget: usize,
+    c: &AtomicBool,
+    stage: Option<&crate::export_color::Stage>,
+) -> Result<Prepared, String> {
     let count = d.width as usize * d.height as usize;
     if count > 4 * 1024 * 1024
         || count
@@ -122,23 +148,57 @@ pub fn prepare(d: &Document, budget: usize, c: &AtomicBool) -> Result<Prepared, 
     }
     let renderer = crate::render::Renderer::for_export(d)?;
     let mut pixels = Vec::with_capacity(count);
+    let space = crate::color_profile::WorkingSpace::new(&d.color.profile)?;
+    let mut clipped = 0usize;
     for y in 0..d.height {
         cancel(c)?;
         for x in 0..d.width {
             let point = [x as f64 + 0.5, y as f64 + 0.5];
-            let mut value = renderer.display_sample(point)?;
+            let mut value = if stage.is_some() {
+                renderer.sample(point)?
+            } else {
+                renderer.display_sample(point)?
+            };
             let page = &d.scene.comics.page;
             if page.include_guides || page.include_number {
+                let guide = Sample::from8(page.output_pixel(d, point));
                 value = value.over(
-                    Sample::from8(page.output_pixel(d, point)),
+                    if stage.is_some() {
+                        space.from_srgb(guide)?
+                    } else {
+                        guide
+                    },
                     crate::layer_blend::Mode::Normal,
                     1.,
                 )?;
             }
+            if let Some(stage) = stage {
+                value = stage.map(value)?;
+            }
+            if value.rgb().into_iter().any(|v| !(0.0..=1.0).contains(&v)) {
+                clipped += 1;
+            }
             pixels.push(value.rgba16());
         }
     }
+    let mut color_notices = stage.map_or_else(Vec::new, |s| s.notices.clone());
+    if clipped > 0 {
+        color_notices.push(format!(
+            "{clipped} output samples exceed the RGB gamut and are clipped only in this file"
+        ));
+    }
     Ok(Prepared {
+        icc: if let Some(s) = stage {
+            s.icc.clone()
+        } else {
+            Some(std::sync::Arc::new(crate::export_color::profile_bytes(
+                &crate::color_profile::RgbProfile::Srgb,
+            )?))
+        },
+        display: stage.map(|s| s.display.clone()),
+        matte: None,
+        output_label: stage.map_or_else(|| "sRGB".into(), |s| s.label.clone()),
+        color_notices,
         dpi: d.dpi,
         width: d.width,
         height: d.height,
@@ -202,6 +262,11 @@ impl Prepared {
             }
         }
         Ok(Self {
+            icc: self.icc.clone(),
+            display: self.display.clone(),
+            matte: self.matte,
+            output_label: self.output_label.clone(),
+            color_notices: self.color_notices.clone(),
             width,
             height,
             dpi,
@@ -220,7 +285,11 @@ impl Prepared {
         }
     }
     pub fn losses(&self, o: Options) -> Vec<String> {
-        let mut s=vec!["Exported pixels are sRGB; out-of-range RGB is clipped. Source objects, metadata, monitor calibration and Undo history are not exported or modified.".into()];
+        let mut s = vec![format!(
+            "Exported pixels use {}; source objects, metadata, monitor calibration and Undo history are not modified.",
+            self.output_label
+        )];
+        s.extend(self.color_notices.clone());
         if o.format == Format::Jpeg {
             s.push(format!("JPEG is lossy RGB8, quality {}. Alpha is composited on the selected background; preview does not simulate JPEG artifacts.",o.quality));
         } else if !o.alpha {
@@ -260,12 +329,21 @@ impl Prepared {
         if o.alpha {
             Ok(p)
         } else {
-            Sample::from8([o.background[0], o.background[1], o.background[2], 255]).over(
-                p,
-                crate::layer_blend::Mode::Normal,
-                1.,
-            )
+            self.matte
+                .unwrap_or_else(|| {
+                    Sample::from8([o.background[0], o.background[1], o.background[2], 255])
+                })
+                .over(p, crate::layer_blend::Mode::Normal, 1.)
         }
+    }
+    pub fn preview_sample(&self, n: usize, o: Options) -> Result<Sample, String> {
+        let p = self.sample(n, o)?;
+        let p = if o.depth == Depth::Eight {
+            Sample::from8(p.rgba8())
+        } else {
+            Sample::from16(p.rgba16())
+        };
+        self.display.as_ref().map_or(Ok(p), |t| t.map(p))
     }
     pub fn encode(&self, o: Options, budget: usize, c: &AtomicBool) -> Result<Vec<u8>, String> {
         if !o.valid()
@@ -295,20 +373,6 @@ impl Prepared {
             }
         }
         let mut bytes = vec![];
-        let icc = || -> Result<Vec<u8>, String> {
-            let mut p = moxcms::ColorProfile::new_srgb()
-                .encode()
-                .map_err(|e| e.to_string())?;
-            for (s, n) in p[24..36]
-                .as_chunks_mut::<2>()
-                .0
-                .iter_mut()
-                .zip([2000u16, 1, 1, 0, 0, 0])
-            {
-                s.copy_from_slice(&n.to_be_bytes());
-            }
-            Ok(p)
-        };
         let color = if o.alpha {
             image::ExtendedColorType::Rgba8
         } else {
@@ -327,7 +391,10 @@ impl Prepared {
                 } else {
                     png::BitDepth::Eight
                 };
-                info.icc_profile = Some(std::borrow::Cow::Owned(icc()?));
+                info.icc_profile = self
+                    .icc
+                    .as_ref()
+                    .map(|b| std::borrow::Cow::Owned(b.as_ref().clone()));
                 let ppm = (self.dpi / 0.0254).round() as u32;
                 info.pixel_dims = Some(png::PixelDimensions {
                     xppu: ppm,
@@ -361,7 +428,10 @@ impl Prepared {
                 e.set_pixel_density(image::codecs::jpeg::PixelDensity::dpi(
                     self.dpi.round() as u16
                 ));
-                e.set_icc_profile(icc()?).map_err(|e| e.to_string())?;
+                if let Some(icc) = &self.icc {
+                    e.set_icc_profile(icc.as_ref().clone())
+                        .map_err(|e| e.to_string())?;
+                }
                 e.encode(&low, self.width, self.height, color)
                     .map_err(|e| e.to_string())?;
             }
@@ -376,7 +446,9 @@ impl Prepared {
             }
             Format::Webp => {
                 let mut e = image_webp::WebPEncoder::new(&mut bytes);
-                e.set_icc_profile(icc()?);
+                if let Some(icc) = &self.icc {
+                    e.set_icc_profile(icc.as_ref().clone());
+                }
                 e.encode(
                     &low,
                     self.width,
@@ -400,7 +472,7 @@ impl Prepared {
                 let mut encoder = TiffEncoder::new(Cursor::new(&mut bytes))
                     .map_err(|e| e.to_string())?
                     .with_compression(compression);
-                let icc = icc()?;
+                let icc = self.icc.as_deref();
                 macro_rules! write_tiff {
                     ($ty:ty,$data:expr) => {{
                         let mut image = encoder
@@ -419,10 +491,12 @@ impl Prepared {
                                 .write_tag(tiff::tags::Tag::ExtraSamples, &[2u16][..])
                                 .map_err(|e| e.to_string())?;
                         }
-                        image
-                            .encoder()
-                            .write_tag(tiff::tags::Tag::IccProfile, icc.as_slice())
-                            .map_err(|e| e.to_string())?;
+                        if let Some(icc) = icc {
+                            image
+                                .encoder()
+                                .write_tag(tiff::tags::Tag::IccProfile, icc.as_slice())
+                                .map_err(|e| e.to_string())?;
+                        }
                         image.write_data($data).map_err(|e| e.to_string())?;
                     }};
                 }

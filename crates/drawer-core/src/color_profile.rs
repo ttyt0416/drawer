@@ -1,8 +1,6 @@
 //! Embedded RGB ICC boundaries. Alpha bypasses the CMS; no integer transform stages.
 use crate::color_precision::Sample;
-use moxcms::{
-    ColorProfile, DataColorSpace, Layout, ParsingOptions, TransformF64Executor, TransformOptions,
-};
+use moxcms::{ColorProfile, DataColorSpace, Layout, ParsingOptions};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,31 +72,36 @@ impl RgbProfile {
     }
     fn srgb(&self) -> bool {
         matches!(self, Self::Srgb | Self::AssumedSrgb)
+            || matches!(self,Self::Embedded{bytes,..} if crate::png_io::is_own_srgb_profile(bytes))
     }
 }
 pub struct Transform {
-    executor: Option<Arc<TransformF64Executor>>,
+    executor: Option<Arc<crate::icc_transform::Engine>>,
 }
 impl Transform {
     pub fn new(from: &RgbProfile, to: &RgbProfile) -> Result<Self, String> {
+        Self::with_intent(from, to, crate::soft_proof::Intent::Relative)
+    }
+    pub fn with_intent(
+        from: &RgbProfile,
+        to: &RgbProfile,
+        intent: crate::soft_proof::Intent,
+    ) -> Result<Self, String> {
         let source = from.parse()?;
         let target = to.parse()?;
         if from.equivalent(to) {
             return Ok(Self { executor: None });
         }
-        let executor = source
-            .create_transform_f64(
+        let executor = Arc::new(
+            crate::icc_transform::Engine::new(
+                &source,
                 Layout::Rgb,
                 &target,
                 Layout::Rgb,
-                TransformOptions {
-                    rendering_intent: moxcms::RenderingIntent::RelativeColorimetric,
-                    prefer_fixed_point: false,
-                    allow_extended_range_rgb_xyz: true,
-                    ..Default::default()
-                },
+                intent.cms(),
             )
-            .map_err(|e| format!("Unsupported RGB ICC transform: {e}"))?;
+            .map_err(|e| format!("Unsupported RGB ICC transform: {e}"))?,
+        );
         Ok(Self {
             executor: Some(executor),
         })

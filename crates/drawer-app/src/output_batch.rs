@@ -23,6 +23,8 @@ pub(super) struct Panel {
     job: Option<Job>,
     report: Option<core::Report>,
     textures: Vec<egui::TextureHandle>,
+    show_source: bool,
+    texture_source: bool,
     message: String,
     controls: BTreeMap<&'static str, egui::Rect>,
 }
@@ -162,11 +164,18 @@ impl Drawer {
                 }
             }
         }
-        if p.textures.is_empty()
+        if (p.textures.is_empty() || p.texture_source != p.show_source)
             && let Some(plan) = &p.plan
         {
+            p.textures.clear();
+            p.texture_source = p.show_source;
             for f in &plan.files {
-                let bytes = f.preview.iter().flatten().copied().collect::<Vec<_>>();
+                let pixels = if p.show_source {
+                    &f.source_preview
+                } else {
+                    &f.preview
+                };
+                let bytes = pixels.iter().flatten().copied().collect::<Vec<_>>();
                 p.textures.push(ctx.load_texture(
                     f.path.display().to_string(),
                     egui::ColorImage::from_rgba_unmultiplied(f.preview_size, &bytes),
@@ -181,6 +190,7 @@ impl Drawer {
         p.controls.clear();
         egui::Window::new("Output size, resolution and filename plan").default_pos(egui::pos2(25.,25.)).default_width(640.).max_height(680.).vscroll(true).open(&mut open).show(ctx,|ui|{
             ui.horizontal(|ui|{for(key,label,enabled)in[("prepare","Prepare preview",p.job.is_none()),("write","Write reviewed new files",p.job.is_none()&&p.plan.is_some()&&p.reviewed)]{let b=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key,b.rect);if b.clicked(){action=key;}}let b=ui.button("Close");p.controls.insert("close",b.rect);close=b.clicked();});
+            let b=ui.checkbox(&mut p.show_source,"Show source sRGB instead of output soft proof (view only)");p.controls.insert("source-preview",b.rect);
             ui.add_enabled_ui(p.job.is_none(),|ui|{
                 ui.horizontal(|ui|{ui.label("Local output folder");ui.text_edit_singleline(&mut p.folder);if ui.button("Browse…").clicked()&&let Some(f)=rfd::FileDialog::new().pick_folder(){p.folder=f.display().to_string();}});
                 ui.checkbox(&mut p.all,"All open documents (max32); otherwise active document");
@@ -196,6 +206,20 @@ impl Drawer {
                     ui.horizontal(|ui|{for c in [Compression::None,Compression::Deflate,Compression::Lzw,Compression::Packbits]{if o.format==Format::Png&&!matches!(c,Compression::None|Compression::Deflate){continue;}ui.selectable_value(&mut o.compression,c,format!("{c:?}"));}});
                 }else{o.depth=Depth::Eight;}
                 if o.format==Format::Tga{ui.checkbox(&mut o.rle,"TGA RLE");}
+                ui.separator();let color=&mut p.settings.color;
+                ui.checkbox(&mut color.convert,"Convert pixel RGB to the output profile");
+                ui.add_enabled(drawer_core::export_color::supports_profile(o.format),egui::Checkbox::new(&mut color.embed,"Include ICC profile (separate from pixel conversion)"));
+                if !drawer_core::export_color::supports_profile(o.format){ui.small("This format adapter cannot embed ICC. The stored include choice is preserved but inactive.");}
+                ui.add_enabled_ui(color.convert||color.embed&&drawer_core::export_color::supports_profile(o.format),|ui|{
+                    let mut value=color.profile.as_ref().map_or(String::new(),|v|v.display().to_string());
+                    ui.horizontal(|ui|{ui.label("Output RGB ICC");if ui.text_edit_singleline(&mut value).changed(){color.profile=(!value.trim().is_empty()).then(||PathBuf::from(value.trim()));}
+                        if ui.button("ICC…").clicked()&&let Some(f)=rfd::FileDialog::new().add_filter("RGB ICC",&["icc","icm"]).pick_file(){color.profile=Some(f);}
+                        if ui.button("Default profile").clicked(){color.profile=None;}
+                    });
+                });
+                ui.small("Default: sRGB for conversion; document working RGB for embed-only. Embed-only leaves numeric RGB unchanged and may change interpretation. CMYK output is unsupported; CMYK canvas soft proof remains separate.");
+                ui.add_enabled_ui(color.convert,|ui|{ui.horizontal_wrapped(|ui|{for(intent,label)in[(drawer_core::soft_proof::Intent::Perceptual,"Perceptual"),(drawer_core::soft_proof::Intent::Relative,"Relative Colorimetric"),(drawer_core::soft_proof::Intent::Saturation,"Saturation"),(drawer_core::soft_proof::Intent::Absolute,"Absolute Colorimetric")]{ui.selectable_value(&mut color.intent,intent,label);}});});
+
                 ui.checkbox(&mut p.reviewed,"Reviewed output names, pixel/DPI settings and conversion notices");
             });
             if p.job.is_some(){ui.spinner();if ui.button("Cancel job").clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancel requested. Completed new files remain; pending files are reported canceled.".into();}}

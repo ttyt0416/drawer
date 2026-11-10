@@ -14,7 +14,7 @@ pub enum Intent {
     Absolute,
 }
 impl Intent {
-    fn cms(self) -> moxcms::RenderingIntent {
+    pub(crate) fn cms(self) -> moxcms::RenderingIntent {
         match self {
             Self::Perceptual => moxcms::RenderingIntent::Perceptual,
             Self::Relative => moxcms::RenderingIntent::RelativeColorimetric,
@@ -207,12 +207,6 @@ impl Proof {
             ..Default::default()
         };
         let working = ColorProfile::new_srgb();
-        let forward = working
-            .create_transform_8bit(Layout::Rgb, &target, layout, options)
-            .map_err(|e| format!("No working-to-proof ICC transform: {e}"))?;
-        let reverse = target
-            .create_transform_8bit(layout, &working, Layout::Rgb, options)
-            .map_err(|e| format!("No proof-to-working ICC transform: {e}"))?;
         let mut input = Vec::with_capacity(N * N * N * 3);
         for r in 0..N {
             for g in 0..N {
@@ -221,14 +215,48 @@ impl Proof {
                 }
             }
         }
-        let mut stage = vec![0; N * N * N * channels];
         let mut output = vec![0; input.len()];
-        forward
-            .transform(&input, &mut stage)
-            .map_err(|e| e.to_string())?;
-        reverse
-            .transform(&stage, &mut output)
-            .map_err(|e| e.to_string())?;
+        if settings.intent == Intent::Absolute {
+            let forward = crate::icc_transform::Engine::new(
+                &working,
+                Layout::Rgb,
+                &target,
+                layout,
+                RenderingIntent::AbsoluteColorimetric,
+            )?;
+            let reverse = crate::icc_transform::Engine::new(
+                &target,
+                layout,
+                &working,
+                Layout::Rgb,
+                RenderingIntent::AbsoluteColorimetric,
+            )?;
+            let input = input.iter().map(|v| *v as f64 / 255.).collect::<Vec<_>>();
+            let mut stage = vec![0.; N * N * N * channels];
+            let mut rgb = vec![0.; input.len()];
+            forward.transform(&input, &mut stage)?;
+            for v in &mut stage {
+                *v = (*v * 255.).round().clamp(0., 255.) / 255.;
+            }
+            reverse.transform(&stage, &mut rgb)?;
+            for (a, b) in output.iter_mut().zip(rgb) {
+                *a = (b * 255.).round().clamp(0., 255.) as u8;
+            }
+        } else {
+            let forward = working
+                .create_transform_8bit(Layout::Rgb, &target, layout, options)
+                .map_err(|e| format!("No working-to-proof ICC transform: {e}"))?;
+            let reverse = target
+                .create_transform_8bit(layout, &working, Layout::Rgb, options)
+                .map_err(|e| format!("No proof-to-working ICC transform: {e}"))?;
+            let mut stage = vec![0; N * N * N * channels];
+            forward
+                .transform(&input, &mut stage)
+                .map_err(|e| e.to_string())?;
+            reverse
+                .transform(&stage, &mut output)
+                .map_err(|e| e.to_string())?;
+        }
         Ok(Self {
             tone: settings.tone.table(),
             lut: Some(output.as_chunks::<3>().0.to_vec()),
@@ -545,6 +573,34 @@ mod cmyk_tests {
             p.lut_a_to_b_perceptual = Some(lut(4, &xyz));
         }
         p.encode().unwrap()
+    }
+    #[test]
+    fn absolute_cmyk_proof_uses_media_white_and_preserves_alpha() {
+        let mut p =
+            moxcms::ColorProfile::new_from_slice(&fixture([16384, 8192, 4096], true)).unwrap();
+        p.lut_a_to_b_colorimetric = p.lut_a_to_b_perceptual.clone();
+        p.lut_b_to_a_colorimetric = p.lut_b_to_a_perceptual.clone();
+        p.media_white_point = Some(moxcms::Xyzd {
+            x: 0.5,
+            y: 0.5,
+            z: 0.5,
+        });
+        let s = Settings {
+            enabled: true,
+            intent: Intent::Absolute,
+            ..Default::default()
+        };
+        let a = Proof::from_bytes(&s, &p.encode().unwrap()).unwrap();
+        p.media_white_point = Some(moxcms::Xyzd {
+            x: 0.25,
+            y: 0.5,
+            z: 0.75,
+        });
+        let b = Proof::from_bytes(&s, &p.encode().unwrap()).unwrap();
+        let color = [200, 40, 80, 128];
+        assert_ne!(a.map(color), b.map(color));
+        assert_eq!(a.map(color)[3], 128);
+        assert_eq!(b.map(color)[3], 128);
     }
     #[test]
     fn bidirectional_cmyk_simulation_and_missing_direction_rejection() {

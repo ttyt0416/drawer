@@ -1095,3 +1095,7 @@ crates/drawer-core/src/output_batch_verify.rs
 crates/drawer-app/src/output_batch.rs
 crates/drawer-app/src/output_batch_verify.rs
 docs/process/output-batch.md
+crates/drawer-core/src/export_color.rs
+crates/drawer-core/src/export_color_verify.rs
+docs/process/export-color.md
+crates/drawer-core/src/icc_transform.rs

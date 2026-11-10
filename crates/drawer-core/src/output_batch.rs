@@ -32,6 +32,7 @@ impl Default for Geometry {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
+    pub color: crate::export_color::Settings,
     pub geometry: Geometry,
     pub encoding: Options,
     pub pattern: String,
@@ -39,6 +40,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            color: Default::default(),
             geometry: Default::default(),
             encoding: Options {
                 format: raster_io::Format::Png,
@@ -101,6 +103,7 @@ pub struct File {
     pub dpi: f64,
     pub bytes: Vec<u8>,
     pub preview: Vec<[u8; 4]>,
+    pub source_preview: Vec<[u8; 4]>,
     pub preview_size: [usize; 2],
     pub notices: Vec<String>,
 }
@@ -163,6 +166,7 @@ pub fn prepare(
             dpi: 0.,
             bytes: vec![],
             preview: vec![],
+            source_preview: vec![],
             preview_size: [0; 2],
             notices: vec![],
         });
@@ -178,7 +182,7 @@ pub fn prepare(
     for (f, d) in files.iter_mut().zip(docs) {
         assets::canceled(c)?;
         let available = budget.min(128 * 1024 * 1024).saturating_sub(used);
-        let p = raster_io::prepare(d, available, c)?;
+        let p = raster_io::prepare_managed(d, available, c, &s.color, s.encoding)?;
         let g = s.geometry;
         let (width, height) = if g.resize {
             (g.width, g.height)
@@ -201,7 +205,7 @@ pub fn prepare(
         for y in 0..h {
             for x in 0..w {
                 preview.push(
-                    p.sample(
+                    p.preview_sample(
                         y * step as usize * width as usize + x * step as usize,
                         s.encoding,
                     )?
@@ -209,6 +213,29 @@ pub fn prepare(
                 );
             }
         }
+        let source_renderer = crate::render::Renderer::for_export(d)?;
+        let mut source_preview = Vec::with_capacity(w * h);
+        for y in 0..h {
+            assets::canceled(c)?;
+            for x in 0..w {
+                let point = [
+                    (x as f64 + 0.5) / w as f64 * d.width as f64,
+                    (y as f64 + 0.5) / h as f64 * d.height as f64,
+                ];
+                let mut sample = source_renderer.display_sample(point)?;
+                if !s.encoding.alpha {
+                    sample = crate::color_precision::Sample::from8([
+                        s.encoding.background[0],
+                        s.encoding.background[1],
+                        s.encoding.background[2],
+                        255,
+                    ])
+                    .over(sample, crate::layer_blend::Mode::Normal, 1.)?;
+                }
+                source_preview.push(sample.rgba8());
+            }
+        }
+        f.source_preview = source_preview;
         f.width = width;
         f.height = height;
         f.dpi = dpi;
