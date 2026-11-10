@@ -17,6 +17,8 @@ pub(super) struct Panel {
     open: bool,
     folder: String,
     settings: core::Settings,
+    watermark_blocked: bool,
+    watermark_replace: bool,
     all: bool,
     reviewed: bool,
     plan: Option<Box<core::Plan>>,
@@ -59,9 +61,19 @@ impl Drawer {
     pub(super) fn begin_output_batch(&mut self) -> Result<(), String> {
         self.finish_stroke();
         let d = &self.documents[self.active.ok_or("Open a source drawing")?];
+        let saved = self
+            .storage
+            .as_ref()
+            .map(drawer_core::output_watermark::Settings::load)
+            .transpose();
         self.output_batch = Panel {
             open: true,
             settings: core::Settings {
+                watermark: saved
+                    .as_ref()
+                    .ok()
+                    .and_then(|v| v.clone())
+                    .unwrap_or_default(),
                 geometry: core::Geometry {
                     width: d.width,
                     height: d.height,
@@ -70,6 +82,8 @@ impl Drawer {
                 },
                 ..Default::default()
             },
+            watermark_blocked: saved.is_err(),
+            message: saved.err().unwrap_or_default(),
             ..Default::default()
         };
         Ok(())
@@ -104,12 +118,17 @@ impl Drawer {
             docs.push(copy);
         }
         let folder = PathBuf::from(&p.folder);
-        let settings = p.settings.clone();
+        let mut settings = p.settings.clone();
         p.plan = None;
         p.textures.clear();
         p.reviewed = false;
         p.report = None;
         p.job = Some(job(move |c| {
+            settings.watermark = drawer_core::output_watermark::frozen(
+                &settings.watermark,
+                available.saturating_sub(held),
+                c,
+            )?;
             core::prepare(&docs, &folder, &settings, available.saturating_sub(held), c)
                 .map(|p| Value::Plan(Box::new(p)))
         })?);
@@ -199,12 +218,12 @@ impl Drawer {
                 let g=&mut p.settings.geometry;ui.checkbox(&mut g.resize,"Custom output pixels (source size otherwise)");ui.add_enabled_ui(g.resize,|ui|{ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut g.width).range(0..=32768).prefix("Width "));ui.add(egui::DragValue::new(&mut g.height).range(0..=32768).prefix("Height "));});});
                 ui.checkbox(&mut g.resolution,"Override output DPI (source DPI otherwise)");ui.add_enabled(g.resolution,egui::DragValue::new(&mut g.dpi).range(0.0..=4800.0).prefix("DPI "));
                 let o=&mut p.settings.encoding;
-                if o.format==Format::Jpeg{o.alpha=false;o.depth=Depth::Eight;ui.add(egui::Slider::new(&mut o.quality,1..=100).text("JPEG luma quality"));ui.add(egui::Slider::new(&mut o.chroma_quality,1..=100).text("JPEG chroma quality"));ui.horizontal(|ui|{for v in[drawer_core::jpeg_output::Sampling::S444,drawer_core::jpeg_output::Sampling::S422,drawer_core::jpeg_output::Sampling::S420]{ui.selectable_value(&mut o.sampling,v,v.label());}});ui.small("Baseline sequential RGB8; progressive/arithmetic/custom tables are unavailable in this output adapter.");}else{ui.checkbox(&mut o.alpha,"Transparent output");}
-                ui.add_enabled_ui(!o.alpha,|ui|{ui.horizontal(|ui|{ui.label("Opaque background");ui.color_edit_button_srgb(&mut o.background);});});
+                if o.format==Format::Jpeg{ui.add(egui::Slider::new(&mut o.quality,1..=100).text("JPEG luma quality"));ui.add(egui::Slider::new(&mut o.chroma_quality,1..=100).text("JPEG chroma quality"));ui.horizontal(|ui|{for v in[drawer_core::jpeg_output::Sampling::S444,drawer_core::jpeg_output::Sampling::S422,drawer_core::jpeg_output::Sampling::S420]{ui.selectable_value(&mut o.sampling,v,v.label());}});ui.small("Baseline sequential RGB8; progressive/arithmetic/custom tables are unavailable in this output adapter.");}else{ui.checkbox(&mut o.alpha,"Transparent output");}
+                ui.add_enabled_ui(!o.applied().alpha,|ui|{ui.horizontal(|ui|{ui.label("Opaque background");ui.color_edit_button_srgb(&mut o.background);});});
                 if matches!(o.format,Format::Png|Format::Tiff){ui.horizontal(|ui|{ui.selectable_value(&mut o.depth,Depth::Eight,"8bit");ui.selectable_value(&mut o.depth,Depth::Sixteen,"16bit");});
-                    if o.format==Format::Png&&!matches!(o.compression,Compression::None|Compression::Deflate){o.compression=Compression::Deflate;}
+
                     ui.horizontal(|ui|{for c in [Compression::None,Compression::Deflate,Compression::Lzw,Compression::Packbits]{if o.format==Format::Png&&!matches!(c,Compression::None|Compression::Deflate){continue;}ui.selectable_value(&mut o.compression,c,format!("{c:?}"));}});
-                }else{o.depth=Depth::Eight;}
+                }
                 if o.format==Format::Tga{ui.checkbox(&mut o.rle,"TGA RLE");}
                 ui.separator();let color=&mut p.settings.color;
                 ui.checkbox(&mut color.convert,"Convert pixel RGB to the output profile");
@@ -220,6 +239,8 @@ impl Drawer {
                 ui.small("Default: sRGB for conversion; document working RGB for embed-only. Embed-only leaves numeric RGB unchanged and may change interpretation. CMYK output is unsupported; CMYK canvas soft proof remains separate.");
                 ui.add_enabled_ui(color.convert,|ui|{ui.horizontal_wrapped(|ui|{for(intent,label)in[(drawer_core::soft_proof::Intent::Perceptual,"Perceptual"),(drawer_core::soft_proof::Intent::Relative,"Relative Colorimetric"),(drawer_core::soft_proof::Intent::Saturation,"Saturation"),(drawer_core::soft_proof::Intent::Absolute,"Absolute Colorimetric")]{ui.selectable_value(&mut color.intent,intent,label);}});});
 
+                ui.collapsing("Output watermark / independent noise",|ui|{crate::output_watermark::editor(ui,&mut p.settings.watermark,&mut p.message);if p.watermark_blocked{ui.checkbox(&mut p.watermark_replace,"Replace unreadable saved watermark preferences");}
+                if ui.add_enabled(!p.watermark_blocked||p.watermark_replace,egui::Button::new("Save local watermark preset")).clicked(){p.message=match self.storage.as_ref().ok_or_else(||"Local storage unavailable".to_string()).and_then(|v|p.settings.watermark.save(v)){Ok(())=>{p.watermark_blocked=false;"Local preset saved; closing without Save preserves the previous preset".into()},Err(e)=>e};}});
                 ui.checkbox(&mut p.reviewed,"Reviewed output names, pixel/DPI settings, losses and output details");
             });
             if p.job.is_some(){ui.spinner();if ui.button("Cancel job").clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancel requested. Completed new files remain; pending files are reported canceled.".into();}}
@@ -262,4 +283,10 @@ mod tests {
         let t = crate::tests::TestDirectory::new();
         super::verify::run(&t.0).unwrap();
     }
+}
+
+#[path = "output_watermark_verify.rs"]
+mod watermark_verify;
+pub(super) fn watermark_smoke(root: &Path) -> Result<(), String> {
+    watermark_verify::run(root)
 }

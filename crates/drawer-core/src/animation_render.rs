@@ -327,6 +327,9 @@ pub fn frame(s: &Snapshot, frame: u32, cancel: &AtomicBool) -> Result<Vec<u8>, S
     if !(s.options.first..=s.options.last).contains(&frame) {
         return Err("Frame outside captured range".into());
     }
+    if s.options.output_watermark && s.output_watermark.is_none() {
+        return Err("Capture the saved output watermark preset before rendering".into());
+    }
     let mut d = crate::layer_merge::preview(&s.document().snapshot(), frame)?;
     apply(&mut d, s.options.view, true)?;
     let owned = crate::layer_roles::output_view(&d)?;
@@ -371,7 +374,9 @@ pub fn frame(s: &Snapshot, frame: u32, cancel: &AtomicBool) -> Result<Vec<u8>, S
                     .over(top, crate::layer_blend::Mode::Normal, 1.)?
                     .rgba8())
             };
-            if let Some(w) = &s.watermark {
+            if !s.options.output_watermark
+                && let Some(w) = &s.watermark
+            {
                 let xx = x as i64 - s.options.view.watermark_origin[0] as i64;
                 let yy = y as i64 - s.options.view.watermark_origin[1] as i64;
                 if xx >= 0 && yy >= 0 && xx < w.width as i64 && yy < w.height as i64 {
@@ -381,13 +386,14 @@ pub fn frame(s: &Snapshot, frame: u32, cancel: &AtomicBool) -> Result<Vec<u8>, S
                     p = overlay(p, w)?;
                 }
             }
-            if s.options.view.noise > 0 {
+            if !s.options.output_watermark && s.options.view.noise > 0 {
                 let n = noise(s.options.view.seed, x, y);
                 p = overlay(p, [n, n, n, s.options.view.noise])?;
             }
-            if !s.options.view.transparent
-                || s.options.format == Format::Movie
-                    && s.options.codec == crate::movie_export::Codec::H264
+            if !s.options.output_watermark
+                && (!s.options.view.transparent
+                    || s.options.format == Format::Movie
+                        && s.options.codec == crate::movie_export::Codec::H264)
             {
                 let m = s.options.view.matte;
                 let base = crate::color_precision::Sample::from8([m[0], m[1], m[2], 255]);
@@ -405,6 +411,37 @@ pub fn frame(s: &Snapshot, frame: u32, cancel: &AtomicBool) -> Result<Vec<u8>, S
                     .rgba8();
             }
             bytes.extend_from_slice(&p);
+        }
+    }
+    if s.options.output_watermark {
+        crate::output_watermark::frame(
+            &mut bytes,
+            [s.layout.width, s.layout.height],
+            s.output_watermark.as_ref().unwrap(),
+            preserve.then_some(&d.color.profile),
+            s.budget,
+            cancel,
+        )?;
+        if !s.options.view.transparent
+            || s.options.format == Format::Movie
+                && s.options.codec == crate::movie_export::Codec::H264
+        {
+            let m = s.options.view.matte;
+            let base = crate::color_precision::Sample::from8([m[0], m[1], m[2], 255]);
+            let base = if preserve {
+                space.from_srgb(base)?
+            } else {
+                base
+            };
+            for rgba in bytes.as_chunks_mut::<4>().0 {
+                *rgba = base
+                    .over(
+                        crate::color_precision::Sample::from8(*rgba),
+                        crate::layer_blend::Mode::Normal,
+                        1.,
+                    )?
+                    .rgba8();
+            }
         }
     }
     Ok(bytes)

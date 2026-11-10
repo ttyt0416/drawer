@@ -30,6 +30,7 @@ pub struct Options {
     pub view: crate::animation_render::View,
     pub codec: crate::movie_export::Codec,
     pub audio: bool,
+    pub output_watermark: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,6 +75,7 @@ struct Manifest {
     options: Options,
     rgba_bits: u8,
     watermark: Option<[u8; 32]>,
+    output_watermark: Option<[u8; 32]>,
     sources: Vec<(u64, [u8; 32])>,
     profile_hash: [u8; 32],
     selection_hash: [u8; 32],
@@ -87,11 +89,23 @@ pub struct Snapshot {
     pub revision: u64,
     pub layout: crate::animation_render::Layout,
     pub(crate) watermark: Option<crate::animation_render::Watermark>,
+    pub(crate) output_watermark: Option<crate::output_watermark::Settings>,
     pub(crate) encoder: Option<crate::movie_export::Verified>,
-    budget: usize,
+    pub(crate) budget: usize,
     protected: Vec<PathBuf>,
 }
 impl Snapshot {
+    pub fn set_output_watermark(
+        &mut self,
+        s: &crate::output_watermark::Settings,
+    ) -> Result<(), String> {
+        let frozen = crate::output_watermark::frozen(s, self.budget, &AtomicBool::new(false))?;
+        if let Some(p) = &s.path {
+            self.protected.push(p.clone());
+        }
+        self.output_watermark = Some(frozen);
+        Ok(())
+    }
     pub fn document(&self) -> &Document {
         &self.document
     }
@@ -115,6 +129,10 @@ impl Snapshot {
             options: self.options,
             rgba_bits: 8,
             watermark: self.watermark_hash(),
+            output_watermark: self
+                .output_watermark
+                .as_ref()
+                .map(|s| Sha256::digest(serde_json::to_vec(s).unwrap()).into()),
             sources: self
                 .document
                 .scene
@@ -306,6 +324,7 @@ pub fn prepare_with(
         revision: d.revision,
         layout,
         watermark,
+        output_watermark: None,
         encoder: encoder.cloned(),
         budget,
         protected,

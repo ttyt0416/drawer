@@ -1123,3 +1123,9 @@ crates/drawer-platform/src/file_browser.rs
 crates/drawer-app/src/file_browser.rs
 crates/drawer-app/src/file_browser_verify.rs
 docs/process/local-file-browser.md
+
+crates/drawer-core/src/output_watermark.rs
+crates/drawer-core/src/output_watermark_verify.rs
+crates/drawer-app/src/output_watermark.rs
+crates/drawer-app/src/output_watermark_verify.rs
+docs/process/output-watermark.md

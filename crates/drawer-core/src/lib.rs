@@ -629,3 +629,5 @@ pub mod palette_text;
 
 pub mod asset_catalog;
 pub mod file_browser;
+
+pub mod output_watermark;

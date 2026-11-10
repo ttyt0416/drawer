@@ -96,7 +96,7 @@ impl Drawer {
             let encoded = p
                 .encoded
                 .as_ref()
-                .filter(|v| v.options() == p.options)
+                .filter(|v| v.options() == p.options.applied())
                 .ok_or("Wait for the actual JPEG compression preview")?;
             prepared.write_encoded(
                 &self.documents[n],
@@ -111,7 +111,7 @@ impl Drawer {
             prepared.write(
                 &self.documents[n],
                 &target,
-                p.options,
+                p.options.applied(),
                 p.confirmed,
                 p.replace,
                 available,
@@ -133,7 +133,7 @@ impl Drawer {
             return Err("JPEG preview copy exceeds workspace memory".into());
         }
         let prepared = prepared.clone();
-        let o = p.options;
+        let o = p.options.applied();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker = cancel.clone();
         let (tx, rx) = mpsc::channel();
@@ -177,7 +177,7 @@ impl Drawer {
                         p.message = "Review format options and losses before exporting".into();
                     }
                     Ok(Value::Encoded(encoded)) => {
-                        if encoded.options() == p.options {
+                        if encoded.options() == p.options.applied() {
                             p.preview = Some(ctx.load_texture(
                                 "actual-jpeg-preview",
                                 egui::ColorImage::from_rgba_unmultiplied(
@@ -197,19 +197,12 @@ impl Drawer {
                 }
             }
         }
-        if p.options.format == Format::Png
-            && !matches!(
-                p.options.compression,
-                Compression::None | Compression::Deflate
-            )
-        {
-            p.options.compression = Compression::Deflate;
-        }
         let before = p.options;
         let mut open = true;
         let mut export = false;
         let mut cancel = false;
         let mut browse = false;
+        let mut watermark = false;
         p.controls.clear();
         egui::Window::new("Export still image — format and losses")
             .default_pos(egui::pos2(25., 25.))
@@ -222,9 +215,9 @@ impl Drawer {
                     let r = ui.add_enabled(
                         p.prepared
                             .as_ref()
-                            .is_some_and(|v| p.confirmed || v.losses(p.options).is_empty())
+                            .is_some_and(|v| p.confirmed || v.losses(p.options.applied()).is_empty())
                             && !p.path.is_empty() && p.job.is_none()
-                            && (p.options.format!=Format::Jpeg || p.encoded.as_ref().is_some_and(|v|v.options()==p.options)),
+                            && (p.options.format!=Format::Jpeg || p.encoded.as_ref().is_some_and(|v|v.options()==p.options.applied())),
                         egui::Button::new("Export image"),
                     );
                     p.controls.insert("export", r.rect);
@@ -235,11 +228,12 @@ impl Drawer {
                 });
                 if p.prepared
                     .as_ref()
-                    .is_some_and(|v| !v.losses(p.options).is_empty())
+                    .is_some_and(|v| !v.losses(p.options.applied()).is_empty())
                 {
                     let r = ui.add_enabled(p.options.format!=Format::Jpeg||p.encoded.is_some(),egui::Checkbox::new(&mut p.confirmed,"I reviewed the losses in this exported copy"));
                     p.controls.insert("confirm", r.rect);
                 }
+                watermark=ui.button("Watermark, noise and output size…").clicked();
                 ui.horizontal_wrapped(|ui| {
                     for format in Format::ALL {
                         let r = ui.selectable_value(&mut p.options.format, format, format.label());
@@ -247,8 +241,6 @@ impl Drawer {
                     }
                 });
                 if p.options.format == Format::Jpeg {
-                    p.options.alpha = false;
-                    p.options.depth = Depth::Eight;
                     let r=ui.add(egui::Slider::new(&mut p.options.quality, 1..=100).text("JPEG luma quality"));p.controls.insert("jpeg-luma",r.rect);
                     let r=ui.add(egui::Slider::new(&mut p.options.chroma_quality,1..=100).text("JPEG chroma quality"));p.controls.insert("jpeg-chroma",r.rect);
                     ui.horizontal(|ui|{for(key,v)in[("444",drawer_core::jpeg_output::Sampling::S444),("422",drawer_core::jpeg_output::Sampling::S422),("420",drawer_core::jpeg_output::Sampling::S420)]{let r=ui.selectable_value(&mut p.options.sampling,v,v.label());p.controls.insert(key,r.rect);}});
@@ -258,7 +250,7 @@ impl Drawer {
                     let r = ui.checkbox(&mut p.options.alpha, "Preserve alpha");
                     p.controls.insert("alpha", r.rect);
                 }
-                if !p.options.alpha {
+                if !p.options.applied().alpha {
                     ui.color_edit_button_srgb(&mut p.options.background);
                     ui.label("Opaque background RGB");
                 }
@@ -273,7 +265,7 @@ impl Drawer {
                         p.controls.insert("sixteen", r.rect);
                     });
                     egui::ComboBox::from_id_salt("still-compression")
-                        .selected_text(format!("{:?}", p.options.compression))
+                        .selected_text(format!("{:?}", p.options.applied().compression))
                         .show_ui(ui, |ui| {
                             for c in [
                                 Compression::None,
@@ -293,8 +285,6 @@ impl Drawer {
                                 );
                             }
                         });
-                } else {
-                    p.options.depth = Depth::Eight;
                 }
                 if p.options.format == Format::Tga {
                     ui.checkbox(&mut p.options.rle, "TGA RLE compression");
@@ -304,7 +294,7 @@ impl Drawer {
                         "{} × {} pixels; source {:?}",
                         prepared.width, prepared.height, prepared.source_depth
                     ));
-                    let losses = prepared.losses(p.options);
+                    let losses = prepared.losses(p.options.applied());
                     if losses.is_empty() {
                         ui.small("No editing/pixel losses detected for these settings");
                     } else {
@@ -317,7 +307,7 @@ impl Drawer {
                         }
                     }
                     ui.collapsing("Output details", |ui| {
-                        for note in prepared.notices(p.options) {
+                        for note in prepared.notices(p.options.applied()) {
                             ui.small(note);
                         }
                     });
@@ -371,7 +361,7 @@ impl Drawer {
             for y in 0..h {
                 for x in 0..w {
                     let n = (y * step * prepared.width + x * step) as usize;
-                    if let Ok(sample) = prepared.sample(n, p.options) {
+                    if let Ok(sample) = prepared.sample(n, p.options.applied()) {
                         bytes.extend(sample.rgba8());
                     }
                 }
@@ -392,6 +382,13 @@ impl Drawer {
         {
             p.path = path.display().to_string();
             p.replace = false;
+        }
+        if watermark {
+            if let Err(e) = self.begin_output_batch() {
+                p.message = e;
+            } else {
+                return;
+            }
         }
         if export {
             match self.save_raster_export(&p) {

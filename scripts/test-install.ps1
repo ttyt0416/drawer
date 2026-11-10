@@ -37,6 +37,8 @@ try {
     $workspaceSettings = Join-Path $dataRoot 'settings/workspaces.json'
     $workspaceBackup = Join-Path $dataRoot 'settings/workspace-before-apply.json'
     $interfaceSettings = Join-Path $dataRoot 'settings/interface.json'
+    $watermarkSettings = Join-Path $dataRoot 'settings/output-watermark.json'
+    Set-Content -LiteralPath $watermarkSettings -Value '{"version":1,"enabled":false}'
     $browserSettings = Join-Path $dataRoot 'settings/file-browser.json'
     Set-Content -LiteralPath $browserSettings -Value '{"version":1,"favorites":[],"view":"Details","sort":"Name","descending":false,"filter":"Supported","name":""}'
     $printSettings = Join-Path $dataRoot 'settings/printing.json'
@@ -44,7 +46,7 @@ try {
     $assetIndex = Join-Path $dataRoot 'asset-index.json'
     Set-Content -LiteralPath $assetIndex -Value '{"preserve":"local asset index"}'
     $referenceHashes = @{}
-    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex, $printSettings, $browserSettings) {
+    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex, $printSettings, $browserSettings, $watermarkSettings) {
         if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
         $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
     }
@@ -56,11 +58,12 @@ try {
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex, $printSettings, $browserSettings) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex, $printSettings, $browserSettings, $watermarkSettings) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
+    if($smokeResult -notmatch 'output_watermark=true'){throw '출력 워터마크 시작 시험 실패'}
     if ($smokeResult -notmatch 'canvases=4' -or $smokeResult -notmatch 'views=4' -or $smokeResult -notmatch 'close_cancel=true') { throw '문서 전환/닫기 취소 시작 시험 실패' }
     if ($smokeResult -notmatch 'sizing_dpi=true' -or $smokeResult -notmatch 'sizing_undo=true') { throw 'DPI 변경/취소 시작 시험 실패' }
     if ($smokeResult -notmatch 'reference_copy=true' -or $smokeResult -notmatch 'reference_document=true') { throw '참고 복사본/독립 문서 시작 시험 실패' }
@@ -299,7 +302,7 @@ try {
     if ($smokeResult -notmatch 'tip_sequence=true') { throw '팁 순서·혼색 방식 시험 실패' }
     if ($smokeResult -notmatch 'pigment_independent=true') { throw '독립 혼색/희석/알파 제어 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 21개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 22개 보존.'
 } finally {
     if ($null -ne $process -and -not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
     $env:DRAWER_DATA_DIR = $oldData

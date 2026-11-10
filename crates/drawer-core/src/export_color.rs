@@ -47,6 +47,7 @@ pub fn profile_bytes(p: &RgbProfile) -> Result<Vec<u8>, String> {
 pub(crate) struct Stage {
     transform: Transform,
     pub display: Arc<Transform>,
+    pub from_srgb: Arc<Transform>,
     pub icc: Option<Arc<Vec<u8>>>,
     pub label: String,
     pub notices: Vec<String>,
@@ -129,6 +130,7 @@ impl Stage {
             notices.push(format!("{:?} cannot embed an ICC in this adapter; the saved include option is inactive for this format",format));
         }
         Ok(Self {
+            from_srgb: Arc::new(Transform::with_intent(&RgbProfile::Srgb, &target, intent)?),
             transform,
             display,
             icc,

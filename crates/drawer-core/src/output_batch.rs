@@ -33,6 +33,7 @@ impl Default for Geometry {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub color: crate::export_color::Settings,
+    pub watermark: crate::output_watermark::Settings,
     pub geometry: Geometry,
     pub encoding: Options,
     pub pattern: String,
@@ -41,6 +42,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             color: Default::default(),
+            watermark: Default::default(),
             geometry: Default::default(),
             encoding: Options {
                 format: raster_io::Format::Png,
@@ -129,8 +131,9 @@ pub fn prepare(
     budget: usize,
     c: &AtomicBool,
 ) -> Result<Plan, String> {
+    let encoding = s.encoding.applied();
     crate::file_objects::local_path(folder)?;
-    if docs.is_empty() || docs.len() > 32 || !s.encoding.valid() {
+    if docs.is_empty() || docs.len() > 32 || !encoding.valid() {
         return Err("Choose 1..32 source documents and supported codec options".into());
     }
     let g = s.geometry;
@@ -151,7 +154,7 @@ pub fn prepare(
     let mut protected = Vec::new();
     for (n, d) in docs.iter().enumerate() {
         assets::canceled(c)?;
-        let name = filename(&s.pattern, &d.title, n + 1, s.encoding.format.extension())?;
+        let name = filename(&s.pattern, &d.title, n + 1, encoding.format.extension())?;
         if !names.insert(name.to_lowercase()) {
             return Err("Filename pattern creates duplicate output names; add {index}".into());
         }
@@ -181,10 +184,10 @@ pub fn prepare(
             return Err("Output would replace an input document".into());
         }
     }
-    for (f, d) in files.iter_mut().zip(docs) {
+    for (index, (f, d)) in files.iter_mut().zip(docs).enumerate() {
         assets::canceled(c)?;
         let available = budget.min(128 * 1024 * 1024).saturating_sub(used);
-        let p = raster_io::prepare_managed(d, available, c, &s.color, s.encoding)?;
+        let p = raster_io::prepare_managed(d, available, c, &s.color, encoding)?;
         let g = s.geometry;
         let (width, height) = if g.resize {
             (g.width, g.height)
@@ -192,8 +195,15 @@ pub fn prepare(
             (d.width, d.height)
         };
         let dpi = if g.resolution { g.dpi } else { d.dpi };
-        let p = p.resized(width, height, dpi, available, c)?;
-        let bytes = p.encode(s.encoding, available, c)?;
+        let mut p = p.resized(width, height, dpi, available, c)?;
+        crate::output_watermark::apply(
+            &mut p,
+            &s.watermark,
+            s.watermark.first_is_cover && index == 0,
+            available,
+            c,
+        )?;
+        let bytes = p.encode(encoding, available, c)?;
         used = used.saturating_add(bytes.len());
         if used > budget.min(64 * 1024 * 1024) {
             return Err("Prepared batch exceeds 64MiB output budget".into());
@@ -204,7 +214,7 @@ pub fn prepare(
             height.div_ceil(step) as usize,
         );
         let (preview_size, preview) =
-            p.preview_bytes(&bytes, s.encoding, [160, 100], available, c)?;
+            p.preview_bytes(&bytes, encoding, [160, 100], available, c)?;
         let source_renderer = crate::render::Renderer::for_export(d)?;
         let mut source_preview = Vec::with_capacity(w * h);
         for y in 0..h {
@@ -215,11 +225,11 @@ pub fn prepare(
                     (y as f64 + 0.5) / h as f64 * d.height as f64,
                 ];
                 let mut sample = source_renderer.display_sample(point)?;
-                if !s.encoding.alpha {
+                if !encoding.alpha {
                     sample = crate::color_precision::Sample::from8([
-                        s.encoding.background[0],
-                        s.encoding.background[1],
-                        s.encoding.background[2],
+                        encoding.background[0],
+                        encoding.background[1],
+                        encoding.background[2],
                         255,
                     ])
                     .over(sample, crate::layer_blend::Mode::Normal, 1.)?;
@@ -234,8 +244,8 @@ pub fn prepare(
         f.bytes = bytes;
         f.preview = preview;
         f.preview_size = preview_size;
-        f.notices = p.notices(s.encoding);
-        f.losses = p.losses(s.encoding);
+        f.notices = p.notices(encoding);
+        f.losses = p.losses(encoding);
     }
     assets::canceled(c)?;
     Ok(Plan {

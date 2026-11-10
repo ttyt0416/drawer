@@ -197,7 +197,7 @@ impl Drawer {
                 .map(Document::resident_bytes)
                 .sum::<usize>(),
         );
-        let snapshot = core::prepare_with(
+        let mut snapshot = core::prepare_with(
             d,
             self.animation_export.options,
             budget,
@@ -208,6 +208,12 @@ impl Drawer {
             },
             self.animation_export.encoder.as_ref(),
         )?;
+        if self.animation_export.options.output_watermark {
+            let settings = drawer_core::output_watermark::Settings::load(
+                self.storage.as_ref().ok_or("Local storage unavailable")?,
+            )?;
+            snapshot.set_output_watermark(&settings)?;
+        }
         let source = d.title.clone();
         let p = &mut self.animation_export;
         p.snapshot = Some(snapshot);
@@ -430,9 +436,12 @@ impl Drawer {
                 ui.horizontal_wrapped(|ui|{let r=ui.checkbox(&mut p.options.view.camera,"Apply 2D camera");p.camera=Some(r.rect);ui.checkbox(&mut p.options.view.drafts,"Include drafts");ui.checkbox(&mut p.options.view.frame_lines,"Include frame lines / print guides");ui.checkbox(&mut p.options.view.shadows,"Include live drop shadows");ui.checkbox(&mut p.options.view.transparent,"Transparent background (hide paper)");ui.checkbox(&mut p.options.view.icc,"Embed ICC where supported");});
                 ui.horizontal(|ui|{ui.label("Opaque matte / H.264 background");ui.color_edit_button_srgb(&mut p.options.view.matte);});
                 ui.collapsing("Captured local watermark / coordinate-stable noise",|ui|{
+                    ui.checkbox(&mut p.options.output_watermark,"Use saved output watermark preset (text/image, transform, repeat and noise)");
+                    ui.add_enabled_ui(!p.options.output_watermark,|ui|{
                     ui.horizontal(|ui|{ui.label("Static PNG");ui.text_edit_singleline(&mut p.watermark);if ui.button("Choose PNG").clicked() && let Some(path)=rfd::FileDialog::new().add_filter("PNG",&["png"]).pick_file(){p.watermark=path.to_string_lossy().into_owned();}});
                     ui.horizontal(|ui|{ui.label("Watermark opacity / output x / y");ui.add(egui::DragValue::new(&mut p.options.view.watermark_opacity).range(0..=255));for x in &mut p.options.view.watermark_origin{ui.add(egui::DragValue::new(x).range(-32768..=32768));}});
                     ui.horizontal(|ui|{ui.label("Noise opacity / seed (same pattern in every frame)");ui.add(egui::DragValue::new(&mut p.options.view.noise).range(0..=255));ui.add(egui::DragValue::new(&mut p.options.view.seed));});
+                    });
                 });
                 if p.options.format==Format::Movie {
                     ui.label("No bundled encoder or downloads. Without a verified encoder, use PNG sequence plus Timeline audio → WAV output.");

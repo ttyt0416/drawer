@@ -85,6 +85,22 @@ impl Default for Options {
     }
 }
 impl Options {
+    /// Active format restrictions never overwrite the remembered manual inputs.
+    pub fn applied(self) -> Self {
+        let mut o = self;
+        if o.format == Format::Jpeg {
+            o.alpha = false;
+        }
+        if !matches!(o.format, Format::Png | Format::Tiff) {
+            o.depth = Depth::Eight;
+        }
+        if o.format == Format::Png
+            && !matches!(o.compression, Compression::None | Compression::Deflate)
+        {
+            o.compression = Compression::Deflate;
+        }
+        o
+    }
     pub fn valid(self) -> bool {
         (1..=100).contains(&self.quality)
             && (1..=100).contains(&self.chroma_quality)
@@ -101,6 +117,7 @@ pub struct Prepared {
     pub(crate) icc: Option<std::sync::Arc<Vec<u8>>>,
     pub(crate) display: Option<std::sync::Arc<crate::color_profile::Transform>>,
     pub(crate) matte: Option<Sample>,
+    pub(crate) from_srgb: Option<std::sync::Arc<crate::color_profile::Transform>>,
     pub(crate) output_label: String,
     pub(crate) color_notices: Vec<String>,
     pub dpi: f64,
@@ -241,6 +258,7 @@ fn prepare_inner(
             )?))
         },
         display: stage.map(|s| s.display.clone()),
+        from_srgb: stage.map(|s| s.from_srgb.clone()),
         matte: None,
         output_label: stage.map_or_else(|| "sRGB".into(), |s| s.label.clone()),
         color_notices,
@@ -311,6 +329,7 @@ impl Prepared {
             color_losses: self.color_losses.clone(),
             icc: self.icc.clone(),
             display: self.display.clone(),
+            from_srgb: self.from_srgb.clone(),
             matte: self.matte,
             output_label: self.output_label.clone(),
             color_notices: self.color_notices.clone(),
