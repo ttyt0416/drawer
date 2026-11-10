@@ -676,21 +676,35 @@ impl Drawer {
                 {
                     self.copy_vector_scope(ctx, false, false)?
                 }
-                "paste-selection"
-                    if super::vector_scope::has_clipboard(ctx)
-                        && self.active.is_some_and(|n| {
-                            matches!(
-                                self.panels.targets.get(&self.documents[n].id),
-                                Some(drawer_core::thumbnail::Target::Vector(_))
-                            )
-                        }) =>
-                {
-                    self.paste_vector_scope(ctx)?
-                }
                 "copy-selection" => {
                     self.copy_selection_from(super::paste_dialog::write_clipboard)?
                 }
-                "paste-selection" => self.begin_paste(ctx, super::paste_dialog::read_clipboard)?,
+                "paste-selection" => self.paste_objects(ctx, false)?,
+                "paste-view-center" => self.paste_objects(ctx, true)?,
+                "copy-selection-bounds" => {
+                    if self.active.is_some_and(|n| {
+                        matches!(
+                            self.panels.targets.get(&self.documents[n].id),
+                            Some(drawer_core::thumbnail::Target::Vector(_))
+                        )
+                    }) {
+                        self.copy_vector_bounds(ctx)?;
+                    } else {
+                        self.copy_bounds_from(super::paste_dialog::write_clipboard)?;
+                    }
+                }
+                "cut-selection" => {
+                    if self.active.is_some_and(|n| {
+                        matches!(
+                            self.panels.targets.get(&self.documents[n].id),
+                            Some(drawer_core::thumbnail::Target::Vector(_))
+                        )
+                    }) {
+                        self.copy_vector_scope(ctx, false, true)?;
+                    } else {
+                        self.cut_raster_from(super::paste_dialog::write_clipboard)?;
+                    }
+                }
                 "move-selection-boundary" | "move-selected-pixels" => {
                     self.restore_locked_tool();
                     self.precision.target = if command == "move-selection-boundary" {

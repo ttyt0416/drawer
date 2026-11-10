@@ -6,7 +6,7 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 256] = [
+pub const EXTRA_COMMANDS: [&str; 259] = [
     "local-files",
     "print-preview",
     "output-batch",
@@ -187,6 +187,9 @@ pub const EXTRA_COMMANDS: [&str; 256] = [
     "move-selection-boundary",
     "move-selected-pixels",
     "copy-selection",
+    "copy-selection-bounds",
+    "cut-selection",
+    "paste-view-center",
     "paste-selection",
     "pick-next-layer",
     "bucket-tool",

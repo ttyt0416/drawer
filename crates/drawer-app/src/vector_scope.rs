@@ -4,7 +4,8 @@ use drawer_core::{
     vector_edit::Selection,
     vector_scope::{self as core, Picked, Transform},
 };
-const FORMAT: &str = "Drawer.LocalVector.v1";
+const FORMAT: &str = "Drawer.LocalVector.v2";
+const LEGACY_FORMAT: &str = "Drawer.LocalVector.v1";
 #[derive(Clone, Copy)]
 struct Clipboard {
     write: fn(&[u8], &drawer_core::paste::ClipboardImage) -> Result<(), String>,
@@ -17,7 +18,10 @@ pub(super) fn has_clipboard(ctx: &egui::Context) -> bool {
     {
         return true;
     }
-    clipboard_win::register_format(FORMAT).is_some_and(|f| clipboard_win::is_format_avail(f.get()))
+    [FORMAT, LEGACY_FORMAT].iter().any(|name| {
+        clipboard_win::register_format(name)
+            .is_some_and(|f| clipboard_win::is_format_avail(f.get()))
+    })
 }
 fn clipboard(ctx: &egui::Context) -> Clipboard {
     ctx.data(|d|d.get_temp(egui::Id::new("drawer-vector-clipboard"))).unwrap_or(Clipboard{
@@ -30,10 +34,12 @@ fn clipboard(ctx: &egui::Context) -> Clipboard {
         clipboard_win::raw::set_without_clear(format,bytes).map_err(|e|e.to_string())
     },
     read:||{
-        let format=clipboard_win::register_format(FORMAT).ok_or("Vector clipboard registration failed")?.get();
         let _lock=clipboard_win::Clipboard::new_attempts(10).map_err(|e|e.to_string())?;
-        if !clipboard_win::is_format_avail(format)||clipboard_win::size(format).is_none_or(|n|n.get()>4*1024*1024){return Err("No editable Drawer vector packet; use normal image paste for the raster fallback".into());}
-        clipboard_win::get(clipboard_win::formats::RawData(format)).map_err(|e|e.to_string())
+        for name in[FORMAT,LEGACY_FORMAT]{if let Some(format)=clipboard_win::register_format(name).map(|v|v.get())&&clipboard_win::is_format_avail(format){
+            if clipboard_win::size(format).is_none_or(|n|n.get()>4*1024*1024){continue;}
+            if let Ok(bytes)=clipboard_win::get::<Vec<u8>,_>(clipboard_win::formats::RawData(format))&&Packet::decode(&bytes).is_ok(){return Ok(bytes);}
+        }}
+        Err("No supported editable vector packet; public raster fallback is available through normal paste".into())
     }
 })
 }
@@ -302,11 +308,46 @@ impl Drawer {
         spans: bool,
         cut: bool,
     ) -> Result<(), String> {
+        self.copy_vector_bounds_mode(ctx, spans, cut, false)
+    }
+    pub(super) fn copy_vector_bounds(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        self.copy_vector_bounds_mode(ctx, false, false, true)
+    }
+    fn copy_vector_bounds_mode(
+        &mut self,
+        ctx: &egui::Context,
+        spans: bool,
+        cut: bool,
+        full_bounds: bool,
+    ) -> Result<(), String> {
         self.finish_stroke();
         self.vector_scope_observe()?;
         let n = self.active.unwrap();
         let d = &self.documents[n];
-        let scope = self.vector_scope.session.as_ref().unwrap().scope.clone();
+        let session = self.vector_scope.session.as_ref().unwrap();
+        let mut scope = session.scope.clone();
+        if scope.is_empty()
+            && let Some(id) = session.layer
+        {
+            scope = if d.scene.selection.is_some() || d.scene.selection_mask.is_some() {
+                core::area(d, &[id], false)?
+            } else {
+                let layer = d
+                    .scene
+                    .lines
+                    .layers
+                    .iter()
+                    .find(|l| l.id == id)
+                    .ok_or("Select a vector layer")?;
+                vec![Picked {
+                    layer: id,
+                    selection: Selection {
+                        controls: vec![],
+                        paths: layer.paths.iter().map(|p| p.id).collect(),
+                    },
+                }]
+            };
+        }
         if self
             .documents
             .iter()
@@ -320,7 +361,7 @@ impl Drawer {
         }
         let packet = transfer::copy(d, &scope, spans)?;
         let bytes = packet.encode()?;
-        let raster = packet.raster()?;
+        let raster = packet.raster_with_bounds(full_bounds)?;
         let delete = if cut {
             Some(transfer::cut(d, &scope, spans)?)
         } else {
@@ -332,6 +373,52 @@ impl Drawer {
             self.vector_scope_set(vec![], false)?;
         }
         self.status=Some(if spans{"Vector spans copied as editable outlines; pressure is interpolated at new endpoints. Raster fallback uses their rendered bounds."}else{"Whole strokes containing any selected control copied; geometry, handles, pressure and style retained. Raster fallback uses the copied strokes' rendered bounds."}.into());
+        Ok(())
+    }
+    pub(super) fn paste_vector_layers(
+        &mut self,
+        ctx: &egui::Context,
+        at_view: bool,
+    ) -> Result<(), String> {
+        self.finish_stroke();
+        let n = self.active.ok_or("Open a document before pasting")?;
+        let d = &self.documents[n];
+        let bytes = (clipboard(ctx).read)()?;
+        let packet = Packet::decode(&bytes)?;
+        if self
+            .documents
+            .iter()
+            .map(Document::resident_bytes)
+            .sum::<usize>()
+            .saturating_add(d.memory_bytes().saturating_mul(4))
+            .saturating_add(64 * 1024 * 1024)
+            > DEFAULT_DOCUMENT_BUDGET
+        {
+            return Err("Editable layer paste workspace memory limit".into());
+        }
+        let offset = if at_view {
+            let center =
+                drawer_core::clipboard_transfer::view_center(d, ctx.pixels_per_point() as f64)?;
+            let raster = packet.raster()?;
+            let origin = raster.origin.unwrap_or([0; 2]);
+            [
+                center[0] - origin[0] as f64 - raster.image.width as f64 / 2.,
+                center[1] - origin[1] as f64 - raster.image.height as f64 / 2.,
+            ]
+        } else {
+            [0.; 2]
+        };
+        let (state, selected) = transfer::paste_new(d, &packet, offset)?;
+        self.documents[n].commit_state(state)?;
+        if let Some(first) = selected.first() {
+            self.panels.targets.insert(
+                self.documents[n].id,
+                drawer_core::thumbnail::Target::Vector(first.layer),
+            );
+            self.drawing.vector_document = Some(self.documents[n].id);
+            self.drawing.vector_layer = Some(first.layer);
+        }
+        self.vector_scope_set(selected, false)?;
         Ok(())
     }
     pub(super) fn paste_vector_scope(&mut self, ctx: &egui::Context) -> Result<(), String> {
@@ -424,7 +511,7 @@ impl Drawer {
             preview=ui.add_enabled(fresh&&!e.scope.is_empty(),egui::Button::new("Prepare pivot transform preview")).clicked();
             if let Some(images)=&e.images{ui.horizontal(|ui|{for (label,image) in ["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}
             apply=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply vector transform")).clicked();
-            ui.separator();ui.horizontal_wrapped(|ui|{for (label,spans,cut) in [("Copy whole selected strokes",false,false),("Cut whole selected strokes",false,true),("Copy selected spans",true,false),("Cut selected spans",true,true)]{if ui.button(label).clicked(){clip=Some((spans,cut));}}if ui.button("Paste editable vectors").clicked(){paste=true;}});
+            ui.separator();ui.horizontal_wrapped(|ui|{for (label,spans,cut) in [("Copy whole selected strokes",false,false),("Cut whole selected strokes",false,true),("Copy selected spans",true,false),("Cut selected spans",true,true)]{if ui.button(label).clicked(){clip=Some((spans,cut));}}if ui.button("Paste vectors into active layer").clicked(){paste=true;}});
             ui.small("Standard vector copy includes whole strokes with any selected point. Span copy/cut requires adjacent selected anchors; it creates editable outline endpoints with interpolated pressure. Filled shapes require whole-stroke transfer. Clipboard write must succeed before cut deletes anything. Raster fallback includes copied content bounds. Editable paste keeps a matching page scale/rotation frame; other frames can use the raster fallback or SVG.");
             if ui.button("Open point / join / corner / smooth tools…").clicked(){editor=true;}
             clear=ui.button("Clear vector scope selection").clicked();
@@ -579,12 +666,26 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         ));
     }
     app.execute_command(&ctx, "paste-selection");
-    if app.documents[0].scene.lines.layers[0].paths.len() != 3
+    if app.documents[0].scene.lines.layers.len() != before.scene.lines.layers.len() + 1
+        || app.documents[0]
+            .scene
+            .lines
+            .layers
+            .last()
+            .is_none_or(|l| l.name != before.scene.lines.layers[0].name || l.paths.len() != 1)
+        || app.documents[0].scene.lines.layers[0].paths.len() != 2
         || !app.documents[0].undo()
         || app.documents[0].snapshot() != before
     {
         return Err(format!("Default vector paste/Undo: {:?}", app.status));
     }
+    app.panels.targets.insert(
+        app.documents[0].id,
+        drawer_core::thumbnail::Target::Vector(layer),
+    );
+    app.drawing.vector_document = Some(app.documents[0].id);
+    app.drawing.vector_layer = Some(layer);
+    app.vector_scope.session = None;
     app.drawing.vector_selection = selection.clone();
     app.vector_scope_observe()?;
     FAIL.set(true);

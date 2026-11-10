@@ -214,6 +214,7 @@ impl Drawer {
                 &context,
                 || {
                     Ok(drawer_core::paste::ClipboardImage {
+                        name: None,
                         color: preview.color,
                         image: preview.image,
                         origin: None,

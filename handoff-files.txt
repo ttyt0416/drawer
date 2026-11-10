@@ -1139,3 +1139,9 @@ crates/drawer-core/src/raster_channels.rs
 crates/drawer-core/src/raster_channels_verify.rs
 crates/drawer-app/src/raster_channels_verify.rs
 docs/process/raster-channels.md
+
+crates/drawer-core/src/clipboard_transfer.rs
+crates/drawer-core/src/clipboard_transfer_verify.rs
+crates/drawer-app/src/clipboard_transfer.rs
+crates/drawer-app/src/clipboard_transfer_verify.rs
+docs/process/clipboard-transfer.md

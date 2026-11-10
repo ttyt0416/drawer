@@ -3,52 +3,73 @@ use drawer_core::{
     document::PlacedRaster,
     paste::{self, ClipboardImage},
 };
-const FORMAT: &str = "Drawer.LocalRaster.v1";
-pub(super) fn read_clipboard() -> Result<ClipboardImage, String> {
-    let format = clipboard_win::register_format(FORMAT)
-        .ok_or("Cannot register clipboard format")?
-        .get();
+const FORMAT: &str = "Drawer.LocalRaster.v2";
+const LEGACY_FORMAT: &str = "Drawer.LocalRaster.v1";
+pub(super) fn read_public_clipboard(budget: usize) -> Result<ClipboardImage, String> {
+    let _lock = clipboard_win::Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+    public_locked(budget)
+}
+fn public_locked(budget: usize) -> Result<ClipboardImage, String> {
+    let png = clipboard_win::register_format("PNG").map(|f| f.get());
+    let mut errors = vec![];
+    for (format, is_png) in png
+        .into_iter()
+        .map(|f| (f, true))
+        .chain(std::iter::once((clipboard_win::formats::CF_DIBV5, false)))
     {
-        let _lock = clipboard_win::Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
-        if clipboard_win::is_format_avail(format) {
-            if clipboard_win::size(format)
-                .is_none_or(|n| n.get() > DEFAULT_DOCUMENT_BUDGET / 4 + 36)
-            {
-                return Err("Clipboard packet exceeds the paste budget".into());
+        if !clipboard_win::is_format_avail(format) {
+            continue;
+        }
+        if clipboard_win::size(format).is_none_or(|n| n.get() > budget.min(64 * 1024 * 1024)) {
+            errors.push("Public clipboard byte limit".to_string());
+            continue;
+        }
+        let bytes: Vec<u8> = match clipboard_win::get(clipboard_win::formats::RawData(format)) {
+            Ok(v) => v,
+            Err(e) => {
+                errors.push(e.to_string());
+                continue;
             }
-            let bytes: Vec<u8> = clipboard_win::get(clipboard_win::formats::RawData(format))
-                .map_err(|e| e.to_string())?;
-            return ClipboardImage::decode(&bytes, DEFAULT_DOCUMENT_BUDGET / 4 + 36);
+        };
+        let result = if is_png {
+            drawer_core::clipboard_transfer::decode_png(&bytes, budget)
+        } else {
+            drawer_core::clipboard_transfer::decode_dibv5(&bytes, budget)
+        };
+        match result {
+            Ok(v) => return Ok(v),
+            Err(e) => errors.push(e),
         }
     }
-    Ok(ClipboardImage {
-        color: None,
-        image: reference_pane::clipboard_image_with_budget(DEFAULT_DOCUMENT_BUDGET / 4)?,
-        origin: None,
-    })
+    Err(format!(
+        "No supported local clipboard PNG/DIBV5 image: {}",
+        errors.join("; ")
+    ))
+}
+pub(super) fn read_clipboard() -> Result<ClipboardImage, String> {
+    let _lock = clipboard_win::Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+    let budget = DEFAULT_DOCUMENT_BUDGET / 4;
+    for name in [FORMAT, LEGACY_FORMAT] {
+        if let Some(format) = clipboard_win::register_format(name).map(|f| f.get())
+            && clipboard_win::is_format_avail(format)
+        {
+            if clipboard_win::size(format).is_none_or(|n| n.get() > budget) {
+                continue;
+            }
+            if let Ok(bytes) =
+                clipboard_win::get::<Vec<u8>, _>(clipboard_win::formats::RawData(format))
+                && let Ok(packet) = ClipboardImage::decode(&bytes, budget)
+            {
+                return Ok(packet);
+            }
+        }
+    }
+    // Unsupported/corrupt private versions never execute data and may use the public raster fallback.
+    public_locked(budget)
 }
 pub(super) fn write_clipboard(packet: &ClipboardImage, budget: usize) -> Result<(), String> {
     let encoded = packet.encode(budget)?;
-    let rgba: Vec<u8> = if let Some(color) = &packet.color {
-        let transform = drawer_core::color_profile::Transform::new(
-            &color.profile,
-            &drawer_core::color_profile::RgbProfile::Srgb,
-        )?;
-        color
-            .pixels
-            .iter()
-            .map(|p| {
-                transform
-                    .map(drawer_core::color_precision::Sample::from16(*p))
-                    .map(|p| p.rgba8())
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect()
-    } else {
-        packet.image.pixels.iter().flatten().copied().collect()
-    };
+    let rgba = drawer_core::clipboard_transfer::public_rgba(packet, budget)?;
     arboard::Clipboard::new()
         .and_then(|mut c| {
             c.set_image(arboard::ImageData {
@@ -81,11 +102,8 @@ pub(super) struct PasteDialog {
     remainder: [f64; 2],
     canvas: canvas_view::CanvasView,
     error: Option<String>,
-    #[cfg(test)]
     pub apply_button: Option<egui::Rect>,
-    #[cfg(test)]
     pub cancel_button: Option<egui::Rect>,
-    #[cfg(test)]
     pub origin_button: Option<egui::Rect>,
 }
 impl PasteDialog {
@@ -236,7 +254,9 @@ impl Drawer {
         let budget = DEFAULT_DOCUMENT_BUDGET
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
             .saturating_sub(reserved);
-        let offset = paste::center(doc, &packet.image);
+        let offset = packet
+            .origin
+            .unwrap_or_else(|| paste::center(doc, &packet.image));
         let mut state = paste::prepare_packet(doc, &packet, offset, budget)?;
         super::layer_defaults::apply(
             doc,
@@ -275,11 +295,8 @@ impl Drawer {
             remainder: [offset[0] as f64, offset[1] as f64],
             canvas: canvas_view::CanvasView::new(ctx),
             error: None,
-            #[cfg(test)]
             apply_button: None,
-            #[cfg(test)]
             cancel_button: None,
-            #[cfg(test)]
             origin_button: None,
         });
         Ok(())
@@ -311,26 +328,21 @@ impl Drawer {
             .active
             .map(|i| &self.documents[i])
             .ok_or("Open a drawing before copying")?;
-        let layer = doc.layers.last().ok_or("No raster layer to copy")?;
-        let p = layer.extent(doc.width, doc.height);
+        let layer = doc
+            .layers
+            .len()
+            .checked_sub(1)
+            .ok_or("No raster layer to copy")?;
         let budget = DEFAULT_DOCUMENT_BUDGET
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
             / 4;
-        if !layer.valid(doc.width, doc.height) || layer.pixels.len() * 4 + 36 > budget {
-            return Err("Layer exceeds the clipboard transfer budget".into());
-        }
-        write(
-            &ClipboardImage {
-                color: None,
-                image: drawer_core::references::LocalImage {
-                    width: p.width,
-                    height: p.height,
-                    pixels: layer.pixels.clone(),
-                },
-                origin: Some(p.offset),
-            },
+        let packet = drawer_core::clipboard_transfer::copy(
+            doc,
+            layer,
+            drawer_core::clipboard_transfer::Bounds::Content,
             budget,
-        )
+        )?;
+        write(&packet, budget)
     }
     pub(super) fn copy_selection_from(
         &self,
@@ -352,7 +364,12 @@ impl Drawer {
         let budget = DEFAULT_DOCUMENT_BUDGET
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
             / 4;
-        let packet = drawer_core::selection_transfer::copy(doc, layer, budget)?;
+        let packet = drawer_core::clipboard_transfer::copy(
+            doc,
+            layer,
+            drawer_core::clipboard_transfer::Bounds::Content,
+            budget,
+        )?;
         write(&packet, budget)
     }
     pub(super) fn paste_controls(&mut self, ui: &mut egui::Ui) {
@@ -436,7 +453,6 @@ impl Drawer {
                     dialog.origin.is_some(),
                     egui::Button::new("Original position"),
                 );
-                #[cfg(test)]
                 {
                     dialog.origin_button = Some(origin.rect);
                 }
@@ -479,7 +495,6 @@ impl Drawer {
                 accept = apply.clicked();
                 let dismiss = crate::help::button(ui, "Cancel", "files");
                 cancel = dismiss.clicked();
-                #[cfg(test)]
                 {
                     dialog.apply_button = Some(apply.rect);
                     dialog.cancel_button = Some(dismiss.rect);

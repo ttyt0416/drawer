@@ -155,6 +155,9 @@ pub fn default_bindings() -> Vec<Binding> {
         ("J", false, true, "selection-erase-tool"),
         ("C", true, false, "copy-selection"),
         ("V", true, false, "paste-selection"),
+        ("X", true, false, "cut-selection"),
+        ("C", true, true, "copy-selection-bounds"),
+        ("V", true, true, "paste-view-center"),
     ]
     .into_iter()
     .map(|(key, ctrl, shift, command)| Binding {

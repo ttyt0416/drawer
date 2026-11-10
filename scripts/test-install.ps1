@@ -65,6 +65,7 @@ try {
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
+    if($smokeResult -notmatch 'clipboard_transfer=true'){throw '클립보드 개체/공개 래스터 교환 시작 시험 실패'}
     if($smokeResult -notmatch 'raster_channels=true'){throw '회색조/알파 채널 출력 시작 시험 실패'}
     if($smokeResult -notmatch 'layer_output=true'){throw '레이어/컴프 출력 시작 시험 실패'}
     if($smokeResult -notmatch 'output_watermark=true'){throw '출력 워터마크 시작 시험 실패'}

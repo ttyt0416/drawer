@@ -38,10 +38,7 @@ pub(super) fn clipboard_image() -> Result<LocalImage, String> {
     clipboard_image_with_budget(REFERENCE_BUDGET)
 }
 pub(super) fn clipboard_image_with_budget(budget: usize) -> Result<LocalImage, String> {
-    let data = arboard::Clipboard::new()
-        .and_then(|mut clipboard| clipboard.get_image())
-        .map_err(|e| format!("No readable image on the clipboard: {e}"))?;
-    LocalImage::from_rgba(data.width, data.height, &data.bytes, budget).map_err(|e| e.to_string())
+    Ok(paste_dialog::read_public_clipboard(budget)?.image)
 }
 impl Drawer {
     pub(super) fn paste_reference_from(

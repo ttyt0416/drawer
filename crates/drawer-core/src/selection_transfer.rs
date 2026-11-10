@@ -7,6 +7,14 @@ use crate::{
 };
 
 pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImage, String> {
+    copy_inner(doc, layer, budget, false)
+}
+pub(crate) fn copy_inner(
+    doc: &Document,
+    layer: usize,
+    budget: usize,
+    full_bounds: bool,
+) -> Result<ClipboardImage, String> {
     let raster = doc
         .layers
         .get(layer)
@@ -46,8 +54,13 @@ pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImag
             return Err("The selection is empty".into());
         }
         for i in 0..2 {
-            min[i] = min[i].max(bounds.min[i].floor() as i64);
-            max[i] = max[i].min(bounds.max[i].ceil() as i64);
+            if full_bounds {
+                min[i] = bounds.min[i].floor() as i64;
+                max[i] = bounds.max[i].ceil() as i64;
+            } else {
+                min[i] = min[i].max(bounds.min[i].floor() as i64);
+                max[i] = max[i].min(bounds.max[i].ceil() as i64);
+            }
         }
     }
     if (0..2).any(|i| min[i] >= max[i]) {
@@ -99,6 +112,7 @@ pub fn copy(doc: &Document, layer: usize, budget: usize) -> Result<ClipboardImag
         return Err("The selection contains no layer pixels".into());
     }
     Ok(ClipboardImage {
+        name: None,
         color: high.map(|pixels| crate::paste::ClipboardColor {
             profile: doc.color.profile.clone(),
             pixels,

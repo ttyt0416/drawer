@@ -129,6 +129,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     dense.pressure.control_positions.clear();
     check(
         clip::Packet {
+            groups: vec![],
             transform: Affine::default(),
             paths: vec![dense],
         }

@@ -5,7 +5,9 @@ use crate::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWCP\r\n";
+const NAMED_MAGIC: &[u8; 8] = b"DRAWCP2\n";
 pub struct ClipboardImage {
+    pub name: Option<String>,
     pub color: Option<ClipboardColor>,
     pub image: LocalImage,
     pub origin: Option<[i64; 2]>,
@@ -17,6 +19,14 @@ pub struct ClipboardColor {
 }
 impl ClipboardImage {
     pub fn encode(&self, budget: usize) -> Result<Vec<u8>, String> {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|n| n.is_empty() || n.len() > 4096 || n.contains('\0'))
+        {
+            return Err("Invalid clipboard layer name".into());
+        }
+        let named = self.name.as_ref().map_or(0, |n| 12 + n.len());
         if self.image.pixels.len() != self.image.width as usize * self.image.height as usize {
             return Err("Invalid clipboard image".into());
         }
@@ -30,9 +40,10 @@ impl ClipboardImage {
             .as_ref()
             .map(|c| serde_json::to_vec(&c.profile).map_err(|e| e.to_string()))
             .transpose()?;
-        let extra = profile.as_ref().map_or(0, |p| {
-            p.len() + 4 + self.image.pixels.len().saturating_mul(8)
-        });
+        let extra = named
+            + profile.as_ref().map_or(0, |p| {
+                p.len() + 4 + self.image.pixels.len().saturating_mul(8)
+            });
         if self.color.as_ref().is_some_and(|c| {
             !c.profile.valid()
                 || c.pixels.len() != self.image.pixels.len()
@@ -60,6 +71,11 @@ impl ClipboardImage {
         bytes
             .try_reserve_exact(self.image.pixels.len() * 4 + 36 + extra)
             .map_err(|e| e.to_string())?;
+        if let Some(name) = &self.name {
+            bytes.extend_from_slice(NAMED_MAGIC);
+            bytes.extend_from_slice(&(name.len() as u32).to_le_bytes());
+            bytes.extend_from_slice(name.as_bytes());
+        }
         bytes.extend_from_slice(MAGIC);
         bytes.extend_from_slice(&self.image.width.to_le_bytes());
         bytes.extend_from_slice(&self.image.height.to_le_bytes());
@@ -84,6 +100,28 @@ impl ClipboardImage {
         Ok(bytes)
     }
     pub fn decode(bytes: &[u8], budget: usize) -> Result<Self, String> {
+        if bytes.starts_with(NAMED_MAGIC) {
+            if bytes.len() < 12 || bytes.len() > budget {
+                return Err("Named clipboard packet limit".into());
+            }
+            let n = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+            if n == 0
+                || n > 4096
+                || bytes.len() < 12 + n + 36
+                || !bytes[12 + n..].starts_with(MAGIC)
+            {
+                return Err("Invalid named clipboard envelope".into());
+            }
+            let name = std::str::from_utf8(&bytes[12..12 + n])
+                .map_err(|e| e.to_string())?
+                .to_string();
+            if name.contains('\0') {
+                return Err("Invalid clipboard name".into());
+            }
+            let mut value = Self::decode(&bytes[12 + n..], budget.saturating_sub(12 + n))?;
+            value.name = Some(name);
+            return Ok(value);
+        }
         if bytes.len() < 36 || bytes.len() > budget || &bytes[..8] != MAGIC {
             return Err("Invalid Drawer clipboard packet".into());
         }
@@ -148,6 +186,7 @@ impl ClipboardImage {
             None
         };
         Ok(Self {
+            name: None,
             color,
             image,
             origin: (flag & 1 == 1).then_some(offset),
@@ -230,6 +269,12 @@ pub fn prepare_packet(
     budget: usize,
 ) -> Result<DocumentState, String> {
     let mut state = prepare(document, &packet.image, offset, budget)?;
+    if let Some(name) = &packet.name {
+        if name.is_empty() || name.len() > 4096 || name.contains('\0') {
+            return Err("Invalid pasted layer name".into());
+        }
+        state.layers.last_mut().unwrap().name = name.clone();
+    }
     if let Some(color) = &packet.color {
         if color.pixels.len() != packet.image.pixels.len() || !color.profile.valid() {
             return Err("Invalid precise paste".into());
@@ -273,6 +318,7 @@ mod tests {
         let before = doc.snapshot();
         let image = LocalImage::from_rgba(2, 1, &[100, 20, 40, 128, 30, 40, 50, 0], 8).unwrap();
         let packet = ClipboardImage {
+            name: None,
             color: None,
             image: image.clone(),
             origin: Some([-100, 500]),

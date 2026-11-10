@@ -1151,6 +1151,7 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     app.apply_timeline()?;
     let typed = drawer_core::timeline_verify::child();
     let packet = drawer_core::vector_clipboard::Packet {
+        groups: vec![],
         transform: Default::default(),
         paths: typed.scene.lines.layers[0].paths.clone(),
     };
@@ -1171,6 +1172,7 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     let pixels = [[120, 20, 30, 128], [0, 0, 0, 0]];
     let raster = app.timeline_clipboard_with(None, || {
         Ok(drawer_core::paste::ClipboardImage {
+            name: None,
             color: None,
             origin: None,
             image: drawer_core::references::LocalImage {

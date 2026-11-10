@@ -129,6 +129,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
                     _ => {
                         app.begin_paste(&ctx, || {
                             Ok(drawer_core::paste::ClipboardImage {
+                                name: None,
                                 color: None,
                                 image: drawer_core::references::LocalImage {
                                     width: 1,
@@ -224,7 +225,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         return Err("Copy changed source".into());
     }
     let p = packet.take().unwrap();
-    if p.image.pixels != vec![[11, 22, 33, 0], [40, 50, 60, 128]] {
+    if p.image.pixels != vec![[40, 50, 60, 128]] || p.origin != Some([1, 0]) {
         return Err("Copy ignored active raster/selection".into());
     }
     app.begin_paste(&ctx, || Ok(p))?;
@@ -240,7 +241,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         return Err("Paste discarded animation".into());
     }
     if d.layers.len() != 3
-        || d.layers[2].pixel(4, 2, -20, 10) != [11, 22, 33, 0]
+        || d.layers[2].pixel(4, 2, -20, 10) != [40, 50, 60, 128]
         || d.layers[0] != before.layers[0]
         || d.history_counts() != (1, 0)
     {

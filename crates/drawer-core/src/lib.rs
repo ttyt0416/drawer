@@ -635,3 +635,5 @@ pub mod output_watermark;
 pub mod layer_output;
 
 pub mod raster_channels;
+
+pub mod clipboard_transfer;

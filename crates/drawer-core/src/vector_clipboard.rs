@@ -9,9 +9,18 @@ use crate::{
 use serde::{Deserialize, Serialize};
 const LIMIT: usize = 4 * 1024 * 1024;
 const MAGIC: &[u8] = b"DRAWVEC1\n";
+const MAGIC2: &[u8] = b"DRAWVEC2\n";
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Group {
+    pub name: String,
+    pub count: usize,
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Packet {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
     pub transform: Affine,
     pub paths: Vec<Path>,
 }
@@ -77,6 +86,23 @@ fn fragment(path: &Path, a: f64, b: f64) -> Result<Path, String> {
 }
 impl Packet {
     fn valid(&self) -> bool {
+        if !self.groups.is_empty()
+            && (self.groups.len() > 32
+                || self.groups.iter().any(|g| {
+                    g.count == 0
+                        || g.count > 128
+                        || g.name.trim().is_empty()
+                        || g.name.chars().count() > 64
+                        || g.name.chars().any(char::is_control)
+                })
+                || self
+                    .groups
+                    .iter()
+                    .try_fold(0usize, |n, g| n.checked_add(g.count))
+                    != Some(self.paths.len()))
+        {
+            return false;
+        }
         if !self.transform.valid() || self.paths.is_empty() || self.paths.len() > 128 {
             return false;
         }
@@ -102,7 +128,7 @@ impl Packet {
         if !self.valid() {
             return Err("Invalid vector clipboard".into());
         }
-        let mut out = MAGIC.to_vec();
+        let mut out = MAGIC2.to_vec();
         out.extend(serde_json::to_vec(self).map_err(|e| e.to_string())?);
         if out.len() > LIMIT {
             return Err("Vector clipboard limit4MiB".into());
@@ -110,7 +136,7 @@ impl Packet {
         Ok(out)
     }
     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
-        if bytes.len() > LIMIT || !bytes.starts_with(MAGIC) {
+        if bytes.len() > LIMIT || !(bytes.starts_with(MAGIC) || bytes.starts_with(MAGIC2)) {
             return Err("Invalid vector clipboard header or size".into());
         }
         let p: Self = serde_json::from_slice(&bytes[MAGIC.len()..]).map_err(|e| e.to_string())?;
@@ -122,6 +148,9 @@ impl Packet {
     /// Standard raster clipboard uses the actual rendered subset bounds, even
     /// when the page area selection is much smaller than a whole copied stroke.
     pub fn raster(&self) -> Result<crate::paste::ClipboardImage, String> {
+        self.raster_with_bounds(false)
+    }
+    pub fn raster_with_bounds(&self, full: bool) -> Result<crate::paste::ClipboardImage, String> {
         if !self.valid() {
             return Err("Invalid vector clipboard".into());
         }
@@ -216,8 +245,21 @@ impl Packet {
                 data.push(pixel);
             }
         }
+        if full {
+            return Ok(crate::paste::ClipboardImage {
+                name: self.groups.first().map(|g| g.name.clone()),
+                color: None,
+                origin: Some(origin),
+                image: crate::references::LocalImage {
+                    width: size[0],
+                    height: size[1],
+                    pixels: data,
+                },
+            });
+        }
         if right == 0 {
             return Ok(crate::paste::ClipboardImage {
+                name: None,
                 color: None,
                 origin: Some(origin),
                 image: crate::references::LocalImage {
@@ -235,6 +277,7 @@ impl Packet {
             trimmed.extend_from_slice(&data[start..start + width as usize]);
         }
         Ok(crate::paste::ClipboardImage {
+            name: None,
             color: None,
             origin: Some([origin[0] + left as i64, origin[1] + top as i64]),
             image: crate::references::LocalImage {
@@ -248,6 +291,7 @@ impl Packet {
 pub fn copy(d: &Document, scope: &[Picked], spans: bool) -> Result<Packet, String> {
     vector_scope::validate(d, scope)?;
     let mut paths = vec![];
+    let mut groups = vec![];
     // Source layer/path order, independent of the order in the selection list.
     for entry in crate::render_order::normalized(&d.scene) {
         let crate::layer_search::Key::Layer(crate::layer_properties::Target::Vector(id)) =
@@ -257,6 +301,7 @@ pub fn copy(d: &Document, scope: &[Picked], spans: bool) -> Result<Packet, Strin
         };
         let layer = d.scene.lines.layers.iter().find(|l| l.id == id).unwrap();
         if let Some(s) = scope.iter().find(|s| s.layer == layer.id) {
+            let start = paths.len();
             for p in crate::vector_edit::selected(d, layer.id, &s.selection)? {
                 if spans && !s.selection.paths.contains(&p.id) {
                     for (a, b) in ranges(p, &s.selection)? {
@@ -266,9 +311,16 @@ pub fn copy(d: &Document, scope: &[Picked], spans: bool) -> Result<Packet, Strin
                     paths.push(p.clone());
                 }
             }
+            if paths.len() > start {
+                groups.push(Group {
+                    name: layer.name.clone(),
+                    count: paths.len() - start,
+                });
+            }
         }
     }
     let out = Packet {
+        groups,
         transform: d.scene.transform,
         paths,
     };
@@ -386,4 +438,67 @@ pub fn paste(
             },
         },
     ))
+}
+
+/// Paste keeps source layer names and groups; all layer/path IDs are freshly allocated.
+pub fn paste_new(
+    d: &Document,
+    packet: &Packet,
+    offset: [f64; 2],
+) -> Result<(DocumentState, Vec<Picked>), String> {
+    if !packet.valid()
+        || offset.iter().any(|v| !v.is_finite() || v.abs() > 1e9)
+        || packet.transform.0[..4] != d.scene.transform.0[..4]
+    {
+        return Err("Editable layer paste needs valid geometry and matching document scale/rotation frames; use the public raster fallback for other frames".into());
+    }
+    let groups = if packet.groups.is_empty() {
+        vec![Group {
+            name: "Copied vectors".into(),
+            count: packet.paths.len(),
+        }]
+    } else {
+        packet.groups.clone()
+    };
+    if d.scene.lines.layers.len() + groups.len() > 32
+        || d.memory_bytes().saturating_mul(4) > crate::document::DEFAULT_DOCUMENT_BUDGET
+    {
+        return Err("Vector layer paste memory/layer limit".into());
+    }
+    let matrix = packet
+        .transform
+        .then(Affine([1., 0., 0., 1., offset[0], offset[1]]))
+        .then(d.scene.transform.inverse());
+    let mut state = d.snapshot();
+    let mut result = vec![];
+    let mut cursor = 0;
+    for group in groups {
+        let id = state.scene.lines.id()?;
+        let mut paths = vec![];
+        let mut ids = vec![];
+        for path in &packet.paths[cursor..cursor + group.count] {
+            let mut path = path.clone();
+            vector_scope::whole(&mut path, matrix);
+            path.id = state.scene.lines.id()?;
+            ids.push(path.id);
+            paths.push(path);
+        }
+        cursor += group.count;
+        state.scene.lines.layers.push(Layer {
+            id,
+            name: group.name,
+            hidden: false,
+            locked: false,
+            fill: Default::default(),
+            paths,
+        });
+        result.push(Picked {
+            layer: id,
+            selection: crate::vector_edit::Selection {
+                controls: vec![],
+                paths: ids,
+            },
+        });
+    }
+    Ok((vector_scope::checked(d, state)?, result))
 }

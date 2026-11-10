@@ -1828,3 +1828,5 @@ Rename updates open document/source paths, protected imported paths, favorites a
 레이어/컴프별 출력: Layer comps → New-layer policy / batch output 또는 공통 출력 창의 Each layer / Each saved comp를 사용합니다. 이름에 {layer}나 {comp}와 {index}를 넣고 실제 출력 목록을 검토합니다. 개별 층은 외부 배경을 제외한 독립 소스이므로 하위 배경에 의존하는 합성은 달라질 수 있습니다. 전체 표시 상태를 보존하려면 컴프 출력을 사용합니다. 새 층은 All/Current 정책에 따라 기존 컴프에 등록되고 생성 취소 시 함께 제거됩니다. 정책은 그림 Undo와 분리되며 문서·로컬 기본에 저장됩니다. 현재 컴프/생성 정책은 Native123입니다.
 
 채널 출력: still export와 출력 계획 창의 Grayscale output을 켜면 PNG는 Gray/GrayAlpha8·16비트, 다른 형식은 RGB 동일값을 출력합니다. BMP는 alpha가 켜지면32비트 V5, 꺼지면24비트 INFO이며 선택 배경에 합성합니다. 회색조/BMP는 표준 sRGB 색 계산을 사용하고 별도의 RGB ICC 대상/변환 선택은 값을 보존한 채 비활성화됩니다. 회색조 PNG의 ICC는 Gray 채널에 맞는 프로파일을 사용합니다. PNG/BMP의 정수 pixels-per-meter와 JPEG의 정수 DPI 근사값은 원래 DPI와 함께 출력 상세에 표시하며 문서의 소수 DPI는 바뀌지 않습니다.
+
+클립보드 기본 단축키(기존 사용자 지정은 유지): Ctrl+C는 활성 층/선택의 유효 내용을, Ctrl+Shift+C는 래스터 선택 경계의 투명 여백(벡터는 선택한 전체 획 경계)을 포함해 복사합니다. Ctrl+X는 클립보드 기록 성공 후 한 번에 잘라냅니다. Ctrl+V는 내부 좌표/이름/편집성을 유지하고 Ctrl+Shift+V는 현재 보기 중심으로 붙여넣습니다. 벡터는 새 이름 있는 층/새 ID로, 래스터는 검토 후 적용하는 새 층으로 들어갑니다. 래스터 위치는 문서 픽셀 격자로 반올림합니다. 공개 PNG/DIBV5와 이전 내부 데이터도 읽으며 미지원 내부 형식은 공개 래스터 대체를 시도합니다. 그림 Undo는 시스템 클립보드를 되돌리지 않습니다.
