@@ -211,6 +211,19 @@ impl Document {
         if self.color != crate::color_storage::Config::legacy() {
             return Err("This pixel operation requires its high precision edit path".into());
         }
+        if after_scene
+            .as_ref()
+            .is_some_and(|scene| !scene.valid() || !scene.paper.valid_for(self.layers.len()))
+        {
+            return Err("Invalid stroke scene; document and history unchanged".into());
+        }
+        changes.sort_unstable_by_key(|change| change.offset);
+        if changes
+            .windows(2)
+            .any(|pair| pair[0].offset == pair[1].offset)
+        {
+            return Err("Duplicate stroke pixel offset; document and history unchanged".into());
+        }
         crate::layer_properties::paintable(self, layer)?;
         if crate::clipping::alpha_locked(self, layer) {
             for p in &mut changes {
@@ -611,6 +624,9 @@ impl Document {
         count
     }
 }
+
+#[path = "history_audit.rs"]
+pub mod audit;
 
 #[cfg(test)]
 mod tests {

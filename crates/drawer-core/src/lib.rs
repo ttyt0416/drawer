@@ -647,3 +647,5 @@ pub mod print_options;
 pub mod book_options;
 
 pub mod work_library;
+
+pub use history::audit as history_audit;

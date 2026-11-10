@@ -1179,3 +1179,6 @@ crates/drawer-core/src/work_library_verify.rs
 crates/drawer-app/src/work_library.rs
 crates/drawer-app/src/work_library_verify.rs
 docs/process/work-library.md
+crates/drawer-core/src/history_audit.rs
+crates/drawer-app/src/history_audit.rs
+docs/process/session-history.md
