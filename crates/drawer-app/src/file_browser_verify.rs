@@ -15,6 +15,7 @@ fn simulated_recycle(path: &Path, c: Arc<AtomicBool>) -> Result<(), String> {
 }
 pub(super) fn run(root: &Path) -> Result<(), String> {
     core::verify::run(root)?;
+    super::completion::run(root)?;
     drawer_platform::file_browser::verify(root)?;
     let dir = root.join("file-browser-ui");
     std::fs::create_dir(&dir).map_err(|e| e.to_string())?;

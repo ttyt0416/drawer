@@ -578,6 +578,40 @@ impl Document {
         true
     }
 }
+
+impl Document {
+    /// Physical file management is outside drawing Undo. Rebase retained snapshots
+    /// too, so a later Undo cannot resurrect an obsolete managed link.
+    pub fn remap_managed_files(&mut self, old: &std::path::Path, new: &std::path::Path) -> usize {
+        let count = crate::file_browser::remap_scene(&mut self.scene, old, new);
+        let mut historical = 0;
+        for edit in self.history.undo.iter_mut().chain(&mut self.history.redo) {
+            match &mut edit.kind {
+                EditKind::State { before, after } => {
+                    historical += crate::file_browser::remap_scene(&mut before.scene, old, new);
+                    historical += crate::file_browser::remap_scene(&mut after.scene, old, new);
+                }
+                EditKind::Scene { before, after } => {
+                    historical += crate::file_browser::remap_scene(before, old, new);
+                    historical += crate::file_browser::remap_scene(after, old, new);
+                }
+                EditKind::Multi { scene, .. } | EditKind::Pixels { scene, .. } => {
+                    if let Some((before, after)) = scene {
+                        historical += crate::file_browser::remap_scene(before, old, new);
+                        historical += crate::file_browser::remap_scene(after, old, new);
+                    }
+                }
+                EditKind::Pixel { .. } => {}
+            }
+        }
+        if count + historical > 0 {
+            self.history.saved = None;
+            self.history_changed();
+        }
+        count
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::document::{Background, CanvasSpec, Document};

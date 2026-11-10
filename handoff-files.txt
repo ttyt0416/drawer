@@ -1145,3 +1145,7 @@ crates/drawer-core/src/clipboard_transfer_verify.rs
 crates/drawer-app/src/clipboard_transfer.rs
 crates/drawer-app/src/clipboard_transfer_verify.rs
 docs/process/clipboard-transfer.md
+
+crates/drawer-core/src/file_browser_completion.rs
+crates/drawer-app/src/file_browser_completion.rs
+docs/process/file-browser-completion.md

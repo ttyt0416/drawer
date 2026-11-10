@@ -652,6 +652,37 @@ impl ReferenceSession {
     }
 }
 
+impl ReferenceSession {
+    pub fn remap_sources(
+        &mut self,
+        old: &Path,
+        new: &Path,
+        storage: Option<&UserStorage>,
+    ) -> io::Result<()> {
+        let mut changed = false;
+        for w in std::iter::once(&mut self.workspace)
+            .chain(std::iter::once(&mut self.saved))
+            .chain(&mut self.undo)
+            .chain(&mut self.redo)
+        {
+            for entry in &mut w.entries {
+                if let Some(path) = entry
+                    .source
+                    .as_ref()
+                    .and_then(|p| crate::file_browser::remap(p, old, new))
+                {
+                    entry.source = Some(path);
+                    changed = true;
+                }
+            }
+        }
+        if changed && let Some(storage) = storage {
+            save_workspace(storage, &self.workspace)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

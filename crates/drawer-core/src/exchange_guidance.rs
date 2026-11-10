@@ -41,6 +41,7 @@ pub fn probe(path: &Path) -> Result<(), String> {
         .take(32)
         .read_to_end(&mut head)
         .map_err(|e| e.to_string())?;
+    check_extension(path, &head)?;
     if head.starts_with(b"DRAWER\r\n")
         || head.starts_with(b"8BPS")
         || image::guess_format(&head).is_ok()
@@ -135,6 +136,39 @@ pub fn verify(root: &Path) -> Result<(), String> {
     })();
     result.and(std::fs::remove_dir(dir).map_err(|e| e.to_string()))
 }
+
+fn check_extension(path: &Path, head: &[u8]) -> Result<(), String> {
+    let allowed: &[&str] = if head.starts_with(b"DRAWER\r\n") {
+        &["drawer"]
+    } else if head.starts_with(b"8BPS") && head.len() >= 6 {
+        if head[4..6] == [0, 2] {
+            &["psb"]
+        } else {
+            &["psd"]
+        }
+    } else {
+        match image::guess_format(head) {
+            Ok(image::ImageFormat::Png) => &["png"],
+            Ok(image::ImageFormat::Jpeg) => &["jpg", "jpeg"],
+            Ok(image::ImageFormat::Bmp) => &["bmp"],
+            Ok(image::ImageFormat::Tiff) => &["tif", "tiff"],
+            Ok(image::ImageFormat::WebP) => &["webp"],
+            _ => &[],
+        }
+    };
+    if !allowed.is_empty()
+        && !path
+            .extension()
+            .is_some_and(|e| allowed.iter().any(|a| e.eq_ignore_ascii_case(a)))
+    {
+        return Err(format!(
+            "File contents require .{}; the selected name/filter does not match. Choose the matching file type or rename a copy explicitly. Renaming alone does not convert data; no file was changed.",
+            allowed.join("/.")
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

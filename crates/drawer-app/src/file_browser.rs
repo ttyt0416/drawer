@@ -250,7 +250,11 @@ impl Drawer {
     fn browser_event(&mut self, p: &mut Panel, event: core::Event) -> Result<(), String> {
         match event {
             core::Event::Renamed { old, new } => {
+                let mut unresolved = std::collections::BTreeSet::new();
+                let mut links = 0;
                 for d in &mut self.documents {
+                    links += d.remap_managed_files(&old, &new);
+                    unresolved.extend(core::unmapped(&d.scene, &old));
                     if d.path.as_ref().is_some_and(|q| core::same(q, &old)) {
                         if old
                             .file_name()
@@ -293,11 +297,20 @@ impl Drawer {
                 {
                     p.draft.folder = Some(path);
                 }
+                self.references.session.remap_sources(&old,&new,self.storage.as_ref()).map_err(|e|format!("Renamed; live references updated but local reference settings could not be saved: {e}"))?;
                 self.recent.remap(&old,&new,self.storage.as_ref()).map_err(|e|format!("File renamed; live paths updated, but recent settings could not be saved: {e}"))?;
                 p.message = format!(
-                    "Renamed to {}. File bytes and drawing Undo are unchanged.",
+                    "Renamed to {}. Updated {links} managed drawing links and local recent/favorite/reference paths. Drawing Undo counts are unchanged. Other applications' references cannot be enumerated.",
                     new.display()
                 );
+                if !unresolved.is_empty() {
+                    p.message.push_str(
+                        "\nKnown external references requiring manual reconnection (up to128):",
+                    );
+                    for path in unresolved {
+                        p.message.push_str(&format!("\n{}", path.display()));
+                    }
+                }
             }
             core::Event::Recycled(path) => {
                 for d in &mut self.documents {
@@ -863,3 +876,52 @@ mod tests {
         super::verify::run(&t.0).unwrap();
     }
 }
+
+impl Drawer {
+    pub(super) fn browser_drop(
+        &mut self,
+        ctx: &egui::Context,
+        paths: Vec<PathBuf>,
+    ) -> Result<(), String> {
+        if paths.is_empty() || paths.len() + self.file_browser.opens.len() > 128 {
+            return Err("Drop one folder or at most128 local files".into());
+        }
+        if self.file_browser.mutating() {
+            return Err("Wait for physical file management".into());
+        }
+        let mut files = Vec::with_capacity(paths.len());
+        let mut folders = vec![];
+        for path in paths {
+            drawer_platform::file_browser::local_disk(&path)?;
+            let path = core::checked(&path)?;
+            if path.is_dir() {
+                folders.push(path);
+            } else {
+                drawer_core::exchange_guidance::probe(&path)?;
+                files.push(path);
+            }
+        }
+        if !folders.is_empty() {
+            if folders.len() != 1 || !files.is_empty() {
+                return Err("Drop one folder for navigation, or files for opening; mixed targets were not opened".into());
+            }
+            self.begin_file_browser(Mode::Open)?;
+            self.file_browser.queue(folders.pop().unwrap());
+            return Ok(());
+        }
+        self.file_browser.mode = Mode::Open;
+        self.file_browser.opens.extend(files);
+        if self.import_dialog.is_none() && self.file_browser.job.is_none() {
+            let path = self
+                .file_browser
+                .opens
+                .pop_front()
+                .ok_or("No local files")?;
+            self.open_exchange_file(ctx, &path)?;
+        }
+        Ok(())
+    }
+}
+
+#[path = "file_browser_completion.rs"]
+mod completion;

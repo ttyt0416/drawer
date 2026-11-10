@@ -1,5 +1,6 @@
 use super::*;
 pub fn run(root: &Path) -> Result<(), String> {
+    super::completion::run(root)?;
     let dir = root.join("file-browser-core");
     fs::create_dir(&dir).map_err(|e| e.to_string())?;
     let result = (|| {

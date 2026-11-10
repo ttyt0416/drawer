@@ -390,7 +390,7 @@ impl Ticket {
         let destination = if let Some(name) = name {
             component(name)?;
             let path = parent.join(name);
-            if path.exists() {
+            if path.exists() && !case_target(&source.path, &path) {
                 return Err("Destination exists; no replacement is allowed".into());
             }
             Some(path)
@@ -421,6 +421,7 @@ impl Ticket {
                 false,
             )?
             .exists()
+                && !case_target(&self.source.path, to)
             {
                 return Err("Destination appeared; source preserved".into());
             }
@@ -555,3 +556,64 @@ pub fn modified_label(time: Option<SystemTime>) -> String {
         seconds % 60
     )
 }
+
+// Only the same existing sibling may receive a case-only rename. Distinct hard-link
+// names, different folders and unrelated occupied destinations remain collisions.
+fn case_target(source: &Path, target: &Path) -> bool {
+    source != target
+        && source.parent() == target.parent()
+        && source
+            .file_name()
+            .zip(target.file_name())
+            .is_some_and(|(a, b)| {
+                a.to_string_lossy()
+                    .eq_ignore_ascii_case(&b.to_string_lossy())
+            })
+        && target.canonicalize().ok().as_deref() == Some(source)
+}
+pub(crate) fn remap_scene(scene: &mut crate::scene::Scene, old: &Path, new: &Path) -> usize {
+    let mut count = 0;
+    for link in &mut scene.file_objects.entries {
+        if let Some(path) = remap(&link.path, old, new) {
+            link.path = path;
+            count += 1;
+        }
+    }
+    count
+}
+/// Informational references without a managed path adapter are listed, never
+/// silently rewritten as arbitrary text, and never opened during reconciliation.
+pub fn unmapped(scene: &crate::scene::Scene, old: &Path) -> Vec<PathBuf> {
+    fn visit(v: &serde_json::Value, old: &Path, paths: &mut BTreeSet<PathBuf>) {
+        if paths.len() >= 128 {
+            return;
+        }
+        match v {
+            serde_json::Value::String(s) => {
+                let p = Path::new(s);
+                if p.is_absolute() && remap(p, old, old).is_some() {
+                    paths.insert(p.to_owned());
+                }
+            }
+            serde_json::Value::Array(a) => {
+                for v in a {
+                    visit(v, old, paths);
+                }
+            }
+            serde_json::Value::Object(o) => {
+                for v in o.values() {
+                    visit(v, old, paths);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut paths = BTreeSet::new();
+    if let Ok(v) = serde_json::to_value(scene) {
+        visit(&v, old, &mut paths);
+    }
+    paths.into_iter().collect()
+}
+
+#[path = "file_browser_completion.rs"]
+mod completion;

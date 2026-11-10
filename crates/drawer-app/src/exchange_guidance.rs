@@ -32,10 +32,12 @@ impl Drawer {
     }
     pub(super) fn dropped_local_files(&mut self, ctx: &egui::Context) {
         let files = ctx.input(|i| i.raw.dropped_files.clone());
-        for file in files {
-            if let Err(error) = self.open_exchange_file(ctx, file.path()) {
-                self.status = Some(error);
-            }
+        if files.is_empty() {
+            return;
+        }
+        let paths = files.iter().map(|f| f.path().to_owned()).collect();
+        if let Err(error) = self.browser_drop(ctx, paths) {
+            self.status = Some(error);
         }
     }
 }
