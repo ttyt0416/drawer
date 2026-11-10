@@ -364,7 +364,7 @@ impl Drawer {
             }
             if p.draft.mode==Mode::Edit {
                 ui.horizontal_wrapped(|ui|{for(key,label)in[("copy-set","Duplicate set"),("delete-set","Delete set"),("copy-action","Duplicate action"),("delete-action","Delete action")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
-                ui.horizontal_wrapped(|ui|{for(key,label)in[("record","Start recording"),("stop","Stop recording"),("prepare","Prepare playback")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}if let Some(id)=p.recording{ui.label(format!("Recording action {id}"));}});
+                ui.horizontal_wrapped(|ui|{for(key,label)in[("record","Start recording"),("stop","Stop recording"),("prepare","Prepare playback"),("runner","Resumable playback / file batch")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}if let Some(id)=p.recording{ui.label(format!("Recording action {id}"));}});
                 if let Some(a)=p.action.and_then(|id|p.draft.action_mut(id).ok()) {
                     let mut edit=None;
                     egui::ScrollArea::vertical().id_salt("action-steps").max_height(150.).show(ui,|ui|{for(i,step)in a.steps.iter_mut().enumerate(){ui.horizontal_wrapped(|ui|{ui.checkbox(&mut step.enabled,format!("{} · #{}",i+1,step.id));ui.label(format!("{:?}",step.operation));for key in["↑","↓","Copy","Delete","Edit"]{if ui.small_button(key).clicked(){edit=Some((i,key));}}});}});
@@ -531,6 +531,13 @@ impl Drawer {
             p.import = None;
             if let Some(job) = &p.job {
                 job.cancel.store(true, Ordering::Relaxed);
+            }
+        }
+        if command == Some("runner") {
+            if let Some(action) = p.action.and_then(|id| p.draft.action(id)).cloned() {
+                self.begin_action_runner(action);
+            } else {
+                p.message = "Select an action first".into();
             }
         }
         self.auto_actions = p;

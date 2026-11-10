@@ -1104,3 +1104,8 @@ crates/drawer-core/src/printing_verify.rs
 crates/drawer-app/src/printing.rs
 crates/drawer-app/src/printing_verify.rs
 docs/process/printing.md
+crates/drawer-core/src/action_runner.rs
+crates/drawer-core/src/action_runner_verify.rs
+crates/drawer-app/src/action_runner.rs
+crates/drawer-app/src/action_runner_verify.rs
+docs/process/action-runner.md

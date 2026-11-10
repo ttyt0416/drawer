@@ -256,6 +256,7 @@ try {
     if ($smokeResult -notmatch 'raster_formats=true') { throw '정지 이미지 형식·알파·16비트·압축 검증 실패' }
     if ($smokeResult -notmatch 'color_management=true') { throw '문서·출력·모니터 ICC 분리 검증 실패' }
     if ($smokeResult -notmatch 'psd_exchange=true') { throw 'PSD/PSB 레이어·그룹·마스크·최소 변환 범위 검증 실패' }
+    if ($smokeResult -notmatch 'action_runner=true') { throw '오토 액션 중지·재개·파일 일괄 처리 검증 실패' }
     if ($smokeResult -notmatch 'auto_actions=true') { throw '오토 액션 기록·재생·취소·교환 검증 실패' }
     if ($smokeResult -notmatch 'preset_exchange=true') { throw '브러시·소재·색상표 교환/취소 검증 실패' }
     if ($smokeResult -notmatch 'png_io=true') { throw 'PNG 정밀도·투명 출력·손상 검사 실패' }
