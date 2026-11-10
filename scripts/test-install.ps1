@@ -37,10 +37,12 @@ try {
     $workspaceSettings = Join-Path $dataRoot 'settings/workspaces.json'
     $workspaceBackup = Join-Path $dataRoot 'settings/workspace-before-apply.json'
     $interfaceSettings = Join-Path $dataRoot 'settings/interface.json'
+    $printSettings = Join-Path $dataRoot 'settings/printing.json'
+    Set-Content -LiteralPath $printSettings -Value '{"version":1,"paper":"A4","custom_mm":[210,297],"landscape":false,"margins":[10,10,10,10],"fit":true,"percent":100,"range":"","icm":true}'
     $assetIndex = Join-Path $dataRoot 'asset-index.json'
     Set-Content -LiteralPath $assetIndex -Value '{"preserve":"local asset index"}'
     $referenceHashes = @{}
-    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex) {
+    foreach ($referenceFile in $referenceSettings,$referenceCopy,$aidSettings,$viewSettings,$recentSettings,$displaySettings,$presetSettings,$interpolationSettings,$layoutSettings,$navigatorSettings,$panelSettings,$interfaceSettings,$workspaceSettings,$workspaceBackup,$assetIndex, $printSettings) {
         if (-not (Test-Path -LiteralPath $referenceFile)) { throw '참고 설정/복사본 저장 실패' }
         $referenceHashes[$referenceFile] = (Get-FileHash -LiteralPath $referenceFile).Hash
     }
@@ -52,7 +54,7 @@ try {
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot
-    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex) {
+    foreach ($file in (Join-Path $dataRoot 'documents/user-picture.txt'), (Join-Path $dataRoot 'materials/user-brush.txt'), $preferences, (Join-Path $installRoot 'user-note.txt'), $referenceSettings, $referenceCopy, $aidSettings, $viewSettings, $recentSettings, $displaySettings, $presetSettings, $interpolationSettings, $layoutSettings, $navigatorSettings, $panelSettings, $interfaceSettings, $workspaceSettings, $workspaceBackup, $assetIndex, $printSettings) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "사용자 파일 보존 실패: $file" }
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
@@ -244,6 +246,7 @@ try {
     if ($smokeResult -notmatch 'human_rig=true') { throw 'Mannequin verification failed' }
     if ($smokeResult -notmatch 'local_models=true') { throw '로컬 모델/배치·복제·정렬 검증 실패' }
     if ($smokeResult -notmatch 'local_models_extended=true') { throw 'OBJ/glTF/GLB 모델·텍스처·리그 가져오기 검증 실패' }
+    if ($smokeResult -notmatch 'printing_preview=true') { throw '용지·인쇄 미리보기·가상 PDF 검증 실패' }
     if ($smokeResult -notmatch 'color_export=true') { throw 'ICC 포함·변환·렌더링 의도·미리보기 검증 실패' }
     if ($smokeResult -notmatch 'output_batch=true') { throw '출력 크기·DPI·이름·파일별 결과 검증 실패' }
     if ($smokeResult -notmatch 'template_bundles=true') { throw '로컬 템플릿 묶음 검증 실패' }
@@ -290,7 +293,7 @@ try {
     if ($smokeResult -notmatch 'tip_sequence=true') { throw '팁 순서·혼색 방식 시험 실패' }
     if ($smokeResult -notmatch 'pigment_independent=true') { throw '독립 혼색/희석/알파 제어 시험 실패' }
     Get-Content -LiteralPath $receipt
-    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 19개 보존.'
+    Write-Output '설치·실행·설정 저장·재설치·제거 시험 통과; 개발도구 PATH 없이 시작; 사용자 파일 20개 보존.'
 } finally {
     if ($null -ne $process -and -not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
     $env:DRAWER_DATA_DIR = $oldData

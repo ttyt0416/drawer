@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 254] = [
+pub const EXTRA_COMMANDS: [&str; 255] = [
+    "print-preview",
     "output-batch",
     "template-bundle",
     "asset-library",

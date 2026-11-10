@@ -38,6 +38,7 @@ impl Drop for Job {
     }
 }
 enum ResultValue {
+    PrintPreview(Vec<Page>),
     Pages(
         PathBuf,
         Vec<Page>,
@@ -306,22 +307,7 @@ impl Drawer {
                 drawer_core::epub_metadata::blank_after(&mut pages, after, budget)?;
             }
             if kind == 3 {
-                #[cfg(windows)]
-                {
-                    let sent = drawer_platform::book_print::show(&pages, cancel)?;
-                    return Ok(ResultValue::Output(
-                        if sent {
-                            "Selected pages submitted to the chosen printer"
-                        } else {
-                            "Print dialog cancelled"
-                        }
-                        .into(),
-                    ));
-                }
-                #[cfg(not(windows))]
-                {
-                    return Err("Printing requires Windows".into());
-                }
+                return Ok(ResultValue::PrintPreview(pages));
             }
             let path = path.ok_or("Choose an output filename")?;
             let bytes = if kind == 1 {
@@ -363,6 +349,12 @@ impl Drawer {
                             pages.len()
                         );
                         self.book_io.prepared = Some((path, pages));
+                    }
+                    Ok(ResultValue::PrintPreview(pages)) if !cancelled => {
+                        self.book_io.notice = match self.begin_print_pages(pages) {
+                            Ok(()) => "Print layout preview opened; no job submitted".into(),
+                            Err(e) => e,
+                        };
                     }
                     Ok(ResultValue::Output(s)) => self.book_io.notice = s,
                     Ok(_) => self.book_io.notice = "Import cancelled".into(),
@@ -409,7 +401,7 @@ impl Drawer {
                 ui.horizontal_wrapped(|ui|{if ui.button("Save composite PDF…").clicked(){action=3;}
 if ui.button("Save image EPUB…").clicked(){action=4;}
 if ui.button("Print selected pages…").clicked(){action=5;}});
-                ui.label("Print scales each page to the printable area on white paper. Choose the printer and copies in the Windows dialog.");
+                ui.label("Printing first opens a physical layout preview. Review paper/margins/scale/range, then choose matching driver settings in the Windows dialog.");
             });
             if working{ui.spinner();if ui.button("Cancel page operation").clicked(){p.job.as_ref().unwrap().cancel.store(true,Ordering::Relaxed);}}
             if !p.notice.is_empty(){ui.label(&p.notice);}

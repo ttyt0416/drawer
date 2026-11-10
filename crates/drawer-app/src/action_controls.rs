@@ -774,6 +774,7 @@ impl Drawer {
                 "asset-library" => self.begin_asset_catalog()?,
                 "template-bundle" => self.begin_template_bundle(),
                 "output-batch" => self.begin_output_batch()?,
+                "print-preview" => self.begin_printing()?,
                 "raster-export" => self.begin_raster_export()?,
                 "save" => {
                     if let Some(n) = self.active {

@@ -25,6 +25,7 @@ pub mod output_batch;
 pub mod panels;
 pub mod paste;
 pub mod png_export;
+pub mod printing;
 pub mod recent;
 pub mod references;
 pub mod render;

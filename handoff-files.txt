@@ -1099,3 +1099,8 @@ crates/drawer-core/src/export_color.rs
 crates/drawer-core/src/export_color_verify.rs
 docs/process/export-color.md
 crates/drawer-core/src/icc_transform.rs
+crates/drawer-core/src/printing.rs
+crates/drawer-core/src/printing_verify.rs
+crates/drawer-app/src/printing.rs
+crates/drawer-app/src/printing_verify.rs
+docs/process/printing.md
