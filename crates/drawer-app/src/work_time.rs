@@ -609,6 +609,41 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     let cleanup = std::fs::remove_dir_all(&dir).map_err(|e| e.to_string());
     result.and(cleanup)
 }
+
+impl Drawer {
+    pub(super) fn freeze_data_work_time(&mut self) -> Result<(), String> {
+        self.work_time.flush();
+        if let Some(e) = self
+            .work_time
+            .entries
+            .values()
+            .find_map(|e| e.error.as_ref())
+        {
+            return Err(format!("Work-time write failed; data move postponed: {e}"));
+        }
+        for e in self.work_time.entries.values_mut() {
+            e.journal = None;
+        }
+        self.work_time.clock.break_activity();
+        Ok(())
+    }
+    pub(super) fn resume_data_work_time(&mut self) {
+        let Some(storage) = &self.storage else {
+            return;
+        };
+        for e in self.work_time.entries.values_mut() {
+            e.journal = None;
+            match Journal::open(&storage.root().join("work-time"), &mut e.record) {
+                Ok(j) => {
+                    e.journal = Some(j);
+                    e.error = None;
+                }
+                Err(error) => e.error = Some(error),
+            }
+        }
+        self.work_time.clock.break_activity();
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

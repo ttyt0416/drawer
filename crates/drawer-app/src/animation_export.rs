@@ -707,6 +707,37 @@ pub(super) fn smoke_recorded_source(
     Ok(frames)
 }
 
+impl Drawer {
+    pub(super) fn quiesce_animation_export(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.animation_export.open;
+        self.animation_export.open = false;
+        self.animation_export_window(ctx);
+        self.animation_export.open = open;
+        self.animation_export.job.is_some()
+    }
+}
+
+impl Drawer {
+    pub(super) fn rebase_animation_export(
+        &mut self,
+        old: &std::path::Path,
+        new: &std::path::Path,
+    ) -> Result<(), String> {
+        self.animation_export.options = drawer_core::storage_migration::rebase_settings(
+            &self.animation_export.options,
+            old,
+            new,
+        )?;
+        if std::path::Path::new(&self.animation_export.watermark).is_absolute() {
+            self.animation_export.watermark = drawer_core::storage_migration::rebase_settings(
+                &self.animation_export.watermark,
+                old,
+                new,
+            )?;
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

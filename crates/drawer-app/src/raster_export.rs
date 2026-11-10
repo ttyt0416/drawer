@@ -490,6 +490,17 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     })();
     result.and(std::fs::remove_dir_all(dir).map_err(|e| e.to_string()))
 }
+
+impl Drawer {
+    pub(super) fn quiesce_raster_export(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.raster_export.open;
+        self.raster_export.open = false;
+        self.raster_export_window(ctx);
+        self.raster_export.open = open;
+        self.raster_export.job.is_some()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

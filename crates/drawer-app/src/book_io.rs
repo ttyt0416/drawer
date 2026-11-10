@@ -719,6 +719,15 @@ pub(super) fn metadata_smoke(root: &Path) -> Result<(), String> {
     result.and(cleanup)
 }
 
+impl Drawer {
+    pub(super) fn quiesce_book_io(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.book_io.open;
+        self.book_io.open = false;
+        self.book_io_window(ctx);
+        self.book_io.open = open;
+        self.book_io.job.is_some()
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

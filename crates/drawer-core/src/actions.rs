@@ -6,7 +6,8 @@ use std::{
     io,
 };
 
-pub const EXTRA_COMMANDS: [&str; 259] = [
+pub const EXTRA_COMMANDS: [&str; 260] = [
+    "local-data",
     "local-files",
     "print-preview",
     "output-batch",

@@ -46,6 +46,7 @@ mod color_selector;
 mod color_tables;
 mod comics;
 mod cursor_settings;
+mod data_maintenance;
 mod deform;
 mod detail_filter;
 mod display_pane;
@@ -229,6 +230,7 @@ struct Drawer {
     aids: aid_panel::AidPanel,
     recent: drawer_core::recent::RecentFiles,
     file_browser: file_browser::Panel,
+    data_maintenance: data_maintenance::Panel,
     import_dialog: Option<image_import_dialog::ImportDialog>,
     png_options: png_options::Panel,
     palette_exchange: palette_exchange::Panel,
@@ -448,6 +450,7 @@ impl Drawer {
             aids: Default::default(),
             recent: Default::default(),
             file_browser: Default::default(),
+            data_maintenance: Default::default(),
             import_dialog: None,
             png_options: Default::default(),
             palette_exchange: Default::default(),
@@ -813,6 +816,9 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        if self.data_maintenance_gate(ui) {
+            return;
+        }
         self.dropped_local_files(ui.ctx());
         self.sync_layer_identity();
         self.poll_screen_sample();
@@ -1164,8 +1170,13 @@ impl eframe::App for Drawer {
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.display.poll_monitors(ui.ctx(), frame);
+        if self.data_maintenance.busy() && ui.ctx().input(|i| i.viewport().close_requested()) {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
         if self.smoke_output.is_none()
             && !self.quit_ready
+            && !self.data_maintenance.busy()
             && ui.ctx().input(|input| input.viewport().close_requested())
             && (self.drawing.pending()
                 || self.documents.iter().any(|doc| doc.dirty)
@@ -2325,6 +2336,10 @@ impl eframe::App for Drawer {
                     eprintln!("Preset exchange: {error}");
                     fail_smoke();
                 }
+                if let Err(error) = data_maintenance::smoke(&acquisition_work) {
+                    eprintln!("Local data maintenance: {error}");
+                    fail_smoke();
+                }
                 if let Err(error) = file_browser::smoke(&acquisition_work) {
                     eprintln!("Local file browser: {error}");
                     fail_smoke();
@@ -2580,7 +2595,7 @@ impl eframe::App for Drawer {
                     validated,
                 );
                 let report = format!(
-                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\ncolor_deepen=true\nlocal_inference=true\nmetallic_material=true\ntransform_handles=true\ntransform_policy=true\nfinishing_filters=true\nfilter_options=true\ncleanup_filters=true\ntext_layout=true\ntext_ime=true\ntext_reading=true\ntext_format=true\nfont_library=true\ntext_version=true\ntext_typeset=true\ntext_extensions=true\nstory_text=true\ncomic_composition=true\nraster_books=true\npage_structure=true\nbook_production=true\nshot_exchange=true\nanimation_timeline=true\ntimeline_timing=true\nlayer_keyframes=true\nonion_skin=true\nlight_table=true\ncamera_2d=true\ntimeline_audio=true\nanimation_export=true\nanimation_delivery=true\ntimesheet_exchange=true\ntimelapse=true\nwork_time=true\nwork_time_csv=true\nline_tones=true\nuv_paint=true\nworld_physics=true\nlighting=true\nmodel_presets=true\nhuman_rig=true\nlocal_models=true\nlocal_models_extended=true\nworld3d=true\nworld_views=true\npose_sequences=true\ncamera_library=true\nmodel_controls=true\nmannequin_fit=true\nscene_render=true\nsurface_edit=true\nmodel_formats=true\npng_io=true\npreset_exchange=true\nauto_actions=true\naction_runner=true\npsd_exchange=true\ncolor_management=true\nraster_formats=true\nraster_channels=true\nclipboard_transfer=true\nexport_loss=true\njpeg_output=true\nfile_browser=true\nunsupported_documents=true\npreset_formats=true\nasset_catalog=true\ntemplate_bundles=true\noutput_batch=true\nlayer_output=true\noutput_watermark=true\ncolor_export=true\nprinting_preview=true\nenvironment=true\nanimation_finish=true\nanimation_graph=true\nclip_editing=true\nmultiple_timelines=true\nepub_metadata=true\npage_management=true\nquick_filters=true\neffect_source_delete=true\ntransform_review=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\naudio_device={audio_device_report}\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
+                    "{report}backend_switching=true\npen_click_controls=true\ntablet_mapping=true\nlocal_acquisition=true\ntouch_gestures=true\ncontroller_replay=true\nkeyboard_precision=true\nmouse_virtual_pressure=true\nbrush_parameters=true\nbasic_brushes=true\nstroke_spacing=true\nstroke_ends=true\nbrush_presets=true\nbrush_material=true\ntextures_psd=true\nextended_brushes=true\ntip_profile=true\nstroke_filter=true\npigment_independent=true\ntip_sequence=true\nbrush_dynamics=true\nbrush_pattern=true\nbrush_variation=true\nclone_stamp=true\nimage_materials=true\nabr_import=true\nbrush_composite=true\npixel_eyedropper=true\nvelocity_pressure=true\nuser_tools=true\ntool_modes=true\ntool_slots=true\nbrush_behavior=true\nbrush_color=true\ntip_texture=true\nline_references=true\ntonal_locks=true\ncolor_selector=true\ncolor_tables_mixing=true\nrelated_colors=true\ncolor_modes=true\nhsl_swatches=true\nscreen_sampling=true\nsoft_proof=true\npage_selections=true\nselected_paint=true\nselection_transfer=true\nbucket_fill=true\nselection_edit=true\ndrawing_rulers=true\nselection_geometry=true\nselection_filter=true\nquick_mask=true\ncolor_range=true\nselection_border=true\nfill_references=true\nenclosed_fill=true\ngradient_tools=true\ngradient_ramps=true\nshape_creation=true\nvector_creation=true\nvector_edit=true\nvector_erase=true\nvector_nodes=true\nvector_refine=true\nvector_tip=true\nvector_pressure_reset=true\nvector_scope=true\npath_draft=true\nvector_cleanup=true\naffine_transform=true\ntone_mapping=true\ngaussian_blur=true\nspatial_blur=true\ndetail_filters=true\npixel_effects=true\nstylized_effects=true\nsurface_effects=true\nwarp_filters=true\nbatch_filters=true\nlocal_color=true\ncolor_deepen=true\nlocal_inference=true\nmetallic_material=true\ntransform_handles=true\ntransform_policy=true\nfinishing_filters=true\nfilter_options=true\ncleanup_filters=true\ntext_layout=true\ntext_ime=true\ntext_reading=true\ntext_format=true\nfont_library=true\ntext_version=true\ntext_typeset=true\ntext_extensions=true\nstory_text=true\ncomic_composition=true\nraster_books=true\npage_structure=true\nbook_production=true\nshot_exchange=true\nanimation_timeline=true\ntimeline_timing=true\nlayer_keyframes=true\nonion_skin=true\nlight_table=true\ncamera_2d=true\ntimeline_audio=true\nanimation_export=true\nanimation_delivery=true\ntimesheet_exchange=true\ntimelapse=true\nwork_time=true\nwork_time_csv=true\nline_tones=true\nuv_paint=true\nworld_physics=true\nlighting=true\nmodel_presets=true\nhuman_rig=true\nlocal_models=true\nlocal_models_extended=true\nworld3d=true\nworld_views=true\npose_sequences=true\ncamera_library=true\nmodel_controls=true\nmannequin_fit=true\nscene_render=true\nsurface_edit=true\nmodel_formats=true\npng_io=true\npreset_exchange=true\nauto_actions=true\naction_runner=true\npsd_exchange=true\ncolor_management=true\nraster_formats=true\nraster_channels=true\nclipboard_transfer=true\nexport_loss=true\njpeg_output=true\nfile_browser=true\ndata_maintenance=true\nunsupported_documents=true\npreset_formats=true\nasset_catalog=true\ntemplate_bundles=true\noutput_batch=true\nlayer_output=true\noutput_watermark=true\ncolor_export=true\nprinting_preview=true\nenvironment=true\nanimation_finish=true\nanimation_graph=true\nclip_editing=true\nmultiple_timelines=true\nepub_metadata=true\npage_management=true\nquick_filters=true\neffect_source_delete=true\ntransform_review=true\nraster_deformation=true\nmesh_puppet=true\nadditional_color=true\nsvg_io=true\nobject_alignment=true\ndrawing_snapping=true\nlayer_selection=true\ntransparency_fill_wand=true\nselection_shortcuts=true\nmagnetic_lasso=true\nextended_fill=true\nauto_shape=true\nspecial_rulers=true\nalignment_detail=true\nlayer_management=true\nlayer_properties=true\nlayer_clipping=true\nlayer_blend=true\npaper_background=true\ndocument_color=true\ngpu_color=true\nlinked_layers=true\nlayer_movement=true\ntransfer_down=true\nlayer_masks=true\nlayer_comps=true\nextended_blend=true\nlayer_merge=true\nindividual_merge=true\nlayer_maintenance=true\nlayer_folders=true\nadjustment_layers=true\nlayer_search=true\nlayer_roles=true\nlayer_appearance=true\nexpression_thresholds=true\nlayer_defaults=true\nmaterial_layers=true\nadvanced_materials=true\nfile_objects=true\nraster_conversion=true\naudio_device={audio_device_report}\nnative_dial={native_dial}\nwintab_initialization={backend_check}\n"
                 );
                 if let Err(error) = std::fs::write(path, report) {
                     eprintln!("Smoke receipt: {error}");

@@ -459,10 +459,11 @@ impl Drawer {
                 }
                 let path = p.selected.as_ref().ok_or("Select a target")?;
                 drawer_platform::file_browser::local_disk(path)?;
-                if self.storage.as_ref().is_some_and(|s| {
-                    core::remap(s.root(), path, path).is_some()
-                        || core::remap(path, s.root(), s.root()).is_some()
-                }) {
+                if self
+                    .storage
+                    .as_ref()
+                    .is_some_and(|s| super::data_maintenance::protected_storage_target(s, path))
+                {
                     return Err("Active application data folders are managed separately; they cannot be renamed or recycled here".into());
                 }
                 p.ticket = Some(core::Ticket::new(
@@ -867,6 +868,39 @@ if let Some(t)=p.thumbs.get(&row.path)&&!t.notice.is_empty(){hover.push_str(&for
 mod verify;
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
     verify::run(root)
+}
+
+impl Drawer {
+    pub(super) fn quiesce_file_browser(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.file_browser.open;
+        self.file_browser.open = false;
+        self.file_browser_window(ctx);
+        self.file_browser.open = open;
+        self.file_browser.job.is_some()
+    }
+}
+
+impl Drawer {
+    pub(super) fn rebase_file_browser(&mut self, old: &Path, new: &Path) -> Result<(), String> {
+        let p = &mut self.file_browser;
+        p.draft = drawer_core::storage_migration::rebase_settings(&p.draft, old, new)?;
+        p.saved = drawer_core::storage_migration::rebase_settings(&p.saved, old, new)?;
+        if let Some(folder) = p.listing.as_ref().map(|l| l.folder.clone()) {
+            for source in drawer_core::storage_migration::asset_roots(old) {
+                let target = core::remap(&source, old, new).ok_or("Managed asset root")?;
+                if let Some(to) = core::remap(&folder, &source, &target) {
+                    p.queue(to);
+                    break;
+                }
+            }
+        }
+        for path in &mut p.opens {
+            if let Some(to) = core::remap(path, &old.join("materials"), &new.join("materials")) {
+                *path = to;
+            }
+        }
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {

@@ -654,6 +654,34 @@ mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::run(root)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_auto_actions(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.auto_actions.open;
+        self.auto_actions.open = false;
+        self.auto_actions_window(ctx);
+        self.auto_actions.open = open;
+        self.auto_actions.job.is_some()
+    }
+}
+
+impl Drawer {
+    pub(super) fn rebase_auto_actions(
+        &mut self,
+        old: &std::path::Path,
+        new: &std::path::Path,
+    ) -> Result<(), String> {
+        let p = &mut self.auto_actions;
+        for s in std::iter::once(&mut p.draft)
+            .chain(std::iter::once(&mut p.saved))
+            .chain(&mut p.undo)
+            .chain(&mut p.redo)
+        {
+            *s = drawer_core::storage_migration::rebase_settings(s, old, new)?;
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

@@ -1149,3 +1149,9 @@ docs/process/clipboard-transfer.md
 crates/drawer-core/src/file_browser_completion.rs
 crates/drawer-app/src/file_browser_completion.rs
 docs/process/file-browser-completion.md
+
+crates/drawer-core/src/storage_migration.rs
+crates/drawer-core/src/storage_migration_verify.rs
+crates/drawer-app/src/data_maintenance.rs
+crates/drawer-app/src/data_maintenance_verify.rs
+docs/process/local-data-maintenance.md

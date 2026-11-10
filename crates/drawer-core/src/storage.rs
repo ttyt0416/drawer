@@ -5,8 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Clone)]
 pub struct UserStorage {
     root: PathBuf,
+    anchor: PathBuf,
 }
 
 impl UserStorage {
@@ -21,9 +23,21 @@ impl UserStorage {
         Self::at(root)
     }
     pub fn at(root: PathBuf) -> io::Result<Self> {
+        let anchor = if root.is_absolute() {
+            root
+        } else {
+            env::current_dir()?.join(root)
+        };
+        let root = crate::storage_migration::resolve(&anchor).map_err(io::Error::other)?;
         fs::create_dir_all(root.join("settings"))?;
         fs::create_dir_all(root.join("materials"))?;
-        Ok(Self { root })
+        Ok(Self { root, anchor })
+    }
+    pub fn anchor(&self) -> &Path {
+        &self.anchor
+    }
+    pub(crate) fn relocated(root: PathBuf, anchor: PathBuf) -> Self {
+        Self { root, anchor }
     }
     pub fn root(&self) -> &Path {
         &self.root

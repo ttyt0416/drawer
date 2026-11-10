@@ -637,3 +637,5 @@ pub mod layer_output;
 pub mod raster_channels;
 
 pub mod clipboard_transfer;
+
+pub mod storage_migration;

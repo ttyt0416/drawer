@@ -604,6 +604,16 @@ mod verify;
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
     verify::run(root)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_asset_catalog(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.asset_catalog.open;
+        self.asset_catalog.open = false;
+        self.asset_catalog_window(ctx);
+        self.asset_catalog.open = open;
+        self.asset_catalog.job.is_some()
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

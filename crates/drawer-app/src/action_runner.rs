@@ -249,6 +249,16 @@ mod verify;
 pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     verify::run(root)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_action_runner(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.action_runner.open;
+        self.action_runner.open = false;
+        self.action_runner_window(ctx);
+        self.action_runner.open = open;
+        self.action_runner.job.is_some()
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

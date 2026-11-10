@@ -217,6 +217,9 @@ impl Drawer {
         }
     }
     pub(super) fn execute_command(&mut self, ctx: &egui::Context, command: &str) {
+        if self.data_maintenance.defer(command) {
+            return;
+        }
         self.auto_actions_nonrecordable(command);
         if self.drawing.has_path_draft() && matches!(command, "undo" | "redo") {
             self.drawing.path_history(command == "redo");
@@ -785,6 +788,7 @@ impl Drawer {
                 }
                 "auto-actions" => self.begin_auto_actions(),
                 "color-management" => self.begin_monitor_color(),
+                "local-data" => self.data_maintenance.open = true,
                 "asset-library" => self.begin_asset_catalog()?,
                 "template-bundle" => self.begin_template_bundle(),
                 "local-files" => self.begin_file_browser(file_browser::Mode::Open)?,

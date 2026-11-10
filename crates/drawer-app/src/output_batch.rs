@@ -321,6 +321,31 @@ mod verify;
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
     verify::run(root)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_output_batch(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.output_batch.open;
+        self.output_batch.open = false;
+        self.output_batch_window(ctx);
+        self.output_batch.open = open;
+        self.output_batch.job.is_some()
+    }
+}
+
+impl Drawer {
+    pub(super) fn rebase_output_batch(&mut self, old: &Path, new: &Path) -> Result<(), String> {
+        self.output_batch.settings.watermark = drawer_core::storage_migration::rebase_settings(
+            &self.output_batch.settings.watermark,
+            old,
+            new,
+        )?;
+        if let Some(path) = &self.output_batch.settings.color.profile {
+            let value = drawer_core::storage_migration::rebase_settings(path, old, new)?;
+            self.output_batch.settings.color.profile = Some(value);
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

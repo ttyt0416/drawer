@@ -319,6 +319,16 @@ mod verify;
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
     verify::run(root)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_printing(&mut self, ctx: &egui::Context) -> bool {
+        let open = self.printing.open;
+        self.printing.open = false;
+        self.printing_window(ctx);
+        self.printing.open = open;
+        self.printing.job.is_some()
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

@@ -580,6 +580,24 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     let clean = std::fs::remove_dir_all(&dir).map_err(|e| e.to_string());
     result.and(clean)
 }
+
+impl Drawer {
+    pub(super) fn quiesce_timelapse(&mut self, ctx: &egui::Context) -> bool {
+        if let Some(s) = &mut self.timelapse.session {
+            s.clock.pause(s.now());
+            s.collect(false);
+            if s.job.is_some() {
+                return true;
+            }
+        }
+        self.stop_timelapse();
+        let open = self.timelapse.open;
+        self.timelapse.open = false;
+        self.timelapse_window(ctx);
+        self.timelapse.open = open;
+        self.timelapse.export.is_some()
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]

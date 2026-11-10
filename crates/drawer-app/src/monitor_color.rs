@@ -219,6 +219,23 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
     })();
     result.and(std::fs::remove_dir_all(dir).map_err(|e| e.to_string()))
 }
+
+impl Drawer {
+    pub(super) fn rebase_monitor_color(
+        &mut self,
+        old: &std::path::Path,
+        new: &std::path::Path,
+    ) -> Result<(), String> {
+        let p = &mut self.monitor_color;
+        for s in std::iter::once(&mut p.draft)
+            .chain(std::iter::once(&mut p.saved))
+            .chain(&mut p.undo)
+        {
+            *s = drawer_core::storage_migration::rebase_settings(s, old, new)?;
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     #[test]
