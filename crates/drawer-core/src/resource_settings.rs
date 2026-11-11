@@ -8,6 +8,9 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
+    pub recovery_seconds: u32,
+    pub recovery_commands: u32,
+    pub recovery_keep: u32,
     pub history: crate::history_limits::Settings,
     pub version: u32,
     pub scratch: Option<PathBuf>,
@@ -19,6 +22,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            recovery_seconds: 60,
+            recovery_commands: 30,
+            recovery_keep: 5,
             history: Default::default(),
             version: 1,
             scratch: None,
@@ -31,7 +37,10 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(&self) -> Result<(), String> {
-        if !self.history.valid()
+        if !(5..=3600).contains(&self.recovery_seconds)
+            || !(1..=10000).contains(&self.recovery_commands)
+            || !(2..=32).contains(&self.recovery_keep)
+            || !self.history.valid()
             || self.version != 1
             || !(64..=256).contains(&self.ram_mib)
             || !(1..=32768).contains(&self.max_dimension)

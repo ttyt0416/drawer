@@ -965,6 +965,89 @@ impl Drawer {
     }
 }
 
+pub(super) type RecoveryProject = (drawer_core::page_work::Model, Vec<(u64, u64)>);
+impl Drawer {
+    pub(super) fn capture_recovery_project(&self) -> Result<Option<RecoveryProject>, String> {
+        let Some(book) = &self.page_work.book else {
+            return Ok(None);
+        };
+        let model = drawer_core::page_work::Model::new(book.work.clone())?;
+        let mapping = model
+            .work
+            .page_ids
+            .iter()
+            .zip(&model.work.pages)
+            .filter_map(|(page, path)| {
+                let id = self
+                    .page_work
+                    .loaded
+                    .get(page)
+                    .and_then(|id| self.documents.iter().find(|d| d.id == *id).map(|d| d.id))
+                    .or_else(|| {
+                        self.documents
+                            .iter()
+                            .find(|d| {
+                                d.path.as_ref() == Some(path)
+                                    || d.source_path.as_ref() == Some(path)
+                            })
+                            .map(|d| d.id)
+                    });
+                id.map(|id| (*page, id))
+            })
+            .collect();
+        Ok(Some((model, mapping)))
+    }
+    pub(super) fn immutable_project_page(&self, path: &std::path::Path) -> bool {
+        self.page_work
+            .book
+            .as_ref()
+            .is_some_and(|m| m.work.generation.is_some() && m.work.pages.iter().any(|p| p == path))
+    }
+    pub(super) fn register_project_document(&mut self, path: &std::path::Path, id: u64) {
+        if let Some(book) = &self.page_work.book
+            && let Some(n) = book.work.pages.iter().position(|p| p == path)
+        {
+            self.page_work.loaded.insert(book.work.page_ids[n], id);
+        }
+    }
+    pub(super) fn recovery_project_stamp(&self) -> Result<Option<String>, String> {
+        self.page_work
+            .book
+            .as_ref()
+            .map(|m| m.work.state_fingerprint())
+            .transpose()
+    }
+    pub(super) fn project_needs_recovery(&self) -> bool {
+        self.page_work
+            .book
+            .as_ref()
+            .is_some_and(|m| self.page_work.manifest.is_none() || m.work.generation.is_none())
+    }
+    pub(super) fn project_uses_recovery_session(&self, path: &std::path::Path) -> bool {
+        self.page_work
+            .book
+            .as_ref()
+            .is_some_and(|m| m.work.pages.iter().any(|p| p.starts_with(path)))
+    }
+    pub(super) fn open_recovered_project(
+        &mut self,
+        work: drawer_core::story_text::Work,
+    ) -> Result<(), String> {
+        if self.project_needs_recovery() {
+            return Err(
+                "Save the current project structure before opening a recovered project".into(),
+            );
+        }
+        for p in &work.pages {
+            self.protected_sources
+                .insert(p.canonicalize().map_err(|e| e.to_string())?);
+        }
+        self.set_project_structure_work(work)?;
+        self.page_work.open = true;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

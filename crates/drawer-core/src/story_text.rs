@@ -36,6 +36,12 @@ fn local(p: &Path) -> bool {
             .is_some_and(|e| e.eq_ignore_ascii_case("drawer"))
 }
 impl Work {
+    pub fn state_fingerprint(&self) -> Result<String, String> {
+        use sha2::Digest;
+        let data = serde_json::to_vec(self).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", sha2::Sha256::digest(data)))
+    }
+
     pub fn new(title: String, pages: Vec<PathBuf>) -> Result<Self, String> {
         let work = Self {
             version: 1,

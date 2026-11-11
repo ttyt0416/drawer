@@ -1232,3 +1232,9 @@ crates/drawer-core/src/resource_failure_verify.rs
 crates/drawer-app/src/resource_health.rs
 scripts/test-resource-permissions.ps1
 docs/process/resource-failures.md
+
+crates/drawer-core/src/recovery_maintenance.rs
+crates/drawer-core/src/recovery_generations_verify.rs
+crates/drawer-app/src/background_save.rs
+crates/drawer-app/src/background_save_verify.rs
+docs/process/background-save.md

@@ -4,6 +4,9 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 pub(super) struct Panel {
     pub open: bool,
+    last_success: bool,
+    retire: std::collections::BTreeSet<u64>,
+    work_stamp: Option<String>,
     session: Option<Session>,
     candidates: Vec<Candidate>,
     root: Option<PathBuf>,
@@ -20,6 +23,9 @@ impl Default for Panel {
     fn default() -> Self {
         Self {
             open: false,
+            last_success: false,
+            retire: Default::default(),
+            work_stamp: None,
             session: None,
             candidates: vec![],
             root: None,
@@ -86,6 +92,9 @@ impl Drawer {
         }
     }
     pub(super) fn retire_recovery_document(&mut self, id: u64) {
+        if self.background.busy() && self.recovery.session.is_none() {
+            self.recovery.retire.insert(id);
+        }
         if let Some(session) = &mut self.recovery.session
             && let Err(e) = session.forget(id)
         {
@@ -95,6 +104,7 @@ impl Drawer {
         }
     }
     pub(super) fn quiesce_recovery(&mut self) {
+        self.drain_background();
         // Retain the last complete snapshot while the data root is copied.
         self.recovery.session.take();
     }
@@ -113,6 +123,7 @@ impl Drawer {
     }
     pub(super) fn finish_recovery(&mut self) {
         if (self.quit_ready || self.documents.iter().all(|d| !d.dirty))
+            && !self.project_needs_recovery()
             && let Some(s) = self.recovery.session.take()
             && let Err(e) = s.finish()
         {
@@ -120,63 +131,38 @@ impl Drawer {
         }
     }
     pub(super) fn checkpoint_recovery(&mut self) -> Result<(), String> {
-        if self.drawing.pending() {
-            return Err("Finish the current stroke/path before a recovery checkpoint".into());
+        self.start_recovery_job()?;
+        self.drain_background();
+        if !self.recovery.last_success {
+            return Err(self
+                .recovery
+                .error
+                .clone()
+                .unwrap_or("Recovery did not complete".into()));
         }
-        let documents = self
-            .documents
-            .iter()
-            .filter(|d| d.dirty)
-            .collect::<Vec<_>>();
-        let session = self
-            .recovery
-            .session
-            .as_mut()
-            .ok_or("Local recovery storage is unavailable")?;
-        let root = self
-            .recovery
-            .root
-            .as_ref()
-            .ok_or("Scratch root unavailable")?;
-        drawer_platform::file_browser::available_space(root)
-            .and_then(|free| drawer_core::resource_settings::probe(root, free))?;
-        let used = drawer_core::resource_settings::recovery_usage(root)?;
-        let next = documents.iter().try_fold(65536u64, |n, d| {
-            drawer_core::files::estimate_native_bytes(d)
-                .map_err(|e| e.to_string())
-                .and_then(|b| n.checked_add(b).ok_or("Recovery size overflow".into()))
-        })?;
-        if used
-            .checked_add(next)
-            .is_none_or(|n| n > u64::from(self.resources.current.recovery_mib) * 1024 * 1024)
-        {
-            return Err("Recovery quota exceeded; previous snapshots preserved. Review closed-session recovery copies or raise the local quota".into());
-        }
-        session.checkpoint(&documents)?;
-        self.recovery.stamps = self
-            .documents
-            .iter()
-            .map(|d| (d.id, d.revision, d.dirty))
-            .collect();
-        self.recovery.last = Instant::now();
         Ok(())
     }
     fn reopen_recovery(&mut self, index: usize) -> Result<(), String> {
-        let d = self
+        let c = self
             .recovery
             .candidates
             .get(index)
-            .ok_or("Recovery entry removed")?
-            .open()?;
-        self.add_document(d);
-        Ok(())
+            .ok_or("Recovery entry removed")?;
+        if c.project {
+            let work = c.open_project()?;
+            self.open_recovered_project(work)
+        } else {
+            let d = c.open()?;
+            self.add_document(d);
+            Ok(())
+        }
     }
     pub(super) fn recovery_window(&mut self, ctx: &egui::Context) {
         if self.recovery.session.is_some() {
             ctx.request_repaint_after(Duration::from_secs(1));
         }
         if self.recovery.session.is_some()
-            && self.recovery.last.elapsed() >= Duration::from_secs(60)
+            && !self.background.busy()
             && !ctx.input(|i| i.pointer.any_down())
             && !self.drawing.pending()
         {
@@ -185,13 +171,31 @@ impl Drawer {
                 .iter()
                 .map(|d| (d.id, d.revision, d.dirty))
                 .collect::<Vec<_>>();
-            if stamps != self.recovery.stamps
-                && let Err(e) = self.checkpoint_recovery()
+            let commands = stamps
+                .iter()
+                .map(|(id, rev, _)| {
+                    self.recovery
+                        .stamps
+                        .iter()
+                        .find(|(old, _, _)| old == id)
+                        .map_or(rev.saturating_add(1), |(_, old, _)| rev.abs_diff(*old))
+                })
+                .sum::<u64>();
+            let work = self.recovery_project_stamp();
+            let changed = stamps != self.recovery.stamps
+                || work.as_ref().is_ok_and(|w| *w != self.recovery.work_stamp);
+            let elapsed = self.recovery.last.elapsed();
+            if changed
+                && (elapsed
+                    >= Duration::from_secs(u64::from(self.resources.current.recovery_seconds))
+                    || commands >= u64::from(self.resources.current.recovery_commands)
+                        && elapsed >= Duration::from_secs(1))
+                && let Err(e) = self.start_recovery_job()
             {
                 self.recovery.error = Some(e);
                 self.recovery.open = true;
+                self.recovery.last = Instant::now();
             }
-            self.recovery.last = Instant::now();
         }
         self.recovery.recover = None;
         self.recovery.cancel = None;
@@ -215,7 +219,7 @@ impl Drawer {
                 for (n,c) in self.recovery.candidates.iter().enumerate(){
                     ui.group(|ui|{ui.label(&c.title);if let Some(p)=&c.original{ui.small(format!("Original (display only): {}",p.display()));}
                         if let Some(e)=&c.error{ui.colored_label(egui::Color32::LIGHT_RED,e);}
-                        let r=ui.add_enabled(c.error.is_none(),egui::Button::new("Open as recovered document"));if n==0{self.recovery.recover=Some(r.rect);}
+                        let r=ui.add_enabled(c.error.is_none(),egui::Button::new(if c.project{"Open as recovered project"}else{"Open as recovered document"}));if n==0{self.recovery.recover=Some(r.rect);}
 if r.clicked(){recover=Some(n);}
                         let r=ui.button("Discard this session…");if n==0{self.recovery.discard=Some(r.rect);}
 if r.clicked(){discard=Some(c.session.clone());}
@@ -228,7 +232,7 @@ if r.clicked(){discard=Some(c.session.clone());}
         if rescan && let Some(root) = self.recovery.root.clone() {
             self.recovery.candidates = self.resource_recovery_candidates(&root);
         }
-        if checkpoint && let Err(e) = self.checkpoint_recovery() {
+        if checkpoint && let Err(e) = self.start_recovery_job() {
             self.recovery.error = Some(e);
         }
         if let Some(n) = recover {
@@ -245,6 +249,11 @@ if r.clicked(){discard=Some(c.session.clone());}
                 let r=ui.button("Discard snapshots permanently");self.recovery.accept=Some(r.rect);confirmed=r.clicked();keep=ui.button("Keep snapshots").clicked();
             });
             if confirmed {
+                if self.project_uses_recovery_session(&path) {
+                    self.recovery.error=Some("Save the recovered project to a separate local project before discarding its backing recovery session".into());
+                    self.recovery.confirm = None;
+                    return;
+                }
                 match core::discard(&path) {
                     Ok(()) => {
                         self.recovery.candidates.retain(|c| c.session != path);
@@ -262,3 +271,6 @@ if r.clicked(){discard=Some(c.session.clone());}
 
 #[path = "recovery_verify.rs"]
 pub(super) mod verify;
+
+#[path = "background_save.rs"]
+pub(super) mod jobs;

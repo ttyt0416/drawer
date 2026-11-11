@@ -26,10 +26,20 @@ struct Entry {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Project {
+    file: String,
+    title: String,
+    bytes: u64,
+    sha256: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Index {
     version: u32,
     generation: String,
     documents: Vec<Entry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project: Option<Project>,
 }
 fn read<T: serde::de::DeserializeOwned>(p: &Path) -> Result<T, String> {
     let p = crate::file_browser::checked(p)?;
@@ -59,7 +69,7 @@ fn owned(path: &Path) -> Result<PathBuf, String> {
 }
 fn load_index(path: &Path) -> Result<Index, String> {
     let index: Index = read(path)?;
-    if index.version != 1
+    if !matches!(index.version, 1 | 2)
         || !index.generation.starts_with("generation-")
         || index.generation.len() > 64
         || !index
@@ -69,6 +79,16 @@ fn load_index(path: &Path) -> Result<Index, String> {
         || index.documents.len() > 256
     {
         return Err("Unknown/invalid recovery index".into());
+    }
+    if let Some(p) = &index.project
+        && (index.version < 2
+            || p.file != "project.drawer-work"
+            || p.title.len() > 1024
+            || p.title.chars().any(char::is_control)
+            || p.bytes > 1024 * 1024
+            || !crate::asset_catalog::valid_hash(&p.sha256))
+    {
+        return Err("Invalid recovery project metadata".into());
     }
     let mut seen = std::collections::BTreeSet::new();
     for e in &index.documents {
@@ -126,9 +146,23 @@ pub struct Candidate {
     pub original: Option<PathBuf>,
     pub file: Option<PathBuf>,
     pub error: Option<String>,
+    pub project: bool,
+    expected_project: Option<Project>,
     expected: Option<Page>,
 }
 impl Candidate {
+    pub fn open_project(&self) -> Result<crate::story_text::Work, String> {
+        owned(&self.session)?;
+        let p = self.file.as_ref().ok_or("Recovery project missing")?;
+        let expected = self
+            .expected_project
+            .as_ref()
+            .ok_or("Recovery project identity missing")?;
+        if maintenance::stamp(p)? != (expected.bytes, expected.sha256.clone()) {
+            return Err("Recovery project changed; original preserved".into());
+        }
+        maintenance::load_project(p)
+    }
     pub fn open(&self) -> Result<Document, String> {
         owned(&self.session)?;
         let path = self
@@ -152,6 +186,8 @@ pub struct Session {
     pub directory: PathBuf,
     lease: Option<fs::File>,
     generation: u64,
+    keep: usize,
+    maintenance_warning: Option<String>,
 }
 impl Session {
     pub fn create(storage: &Path) -> Result<Self, String> {
@@ -191,6 +227,8 @@ impl Session {
             directory,
             lease: Some(held),
             generation: 0,
+            keep: 5,
+            maintenance_warning: None,
         })
     }
     pub fn checkpoint(&mut self, documents: &[&Document]) -> Result<(), String> {
@@ -218,6 +256,15 @@ impl Session {
             |w| w.write_all(&data),
             |p| {
                 let index = load_index(p).map_err(std::io::Error::other)?;
+                if let Some(project) = &index.project {
+                    let p = self.directory.join(&index.generation).join(&project.file);
+                    if maintenance::stamp(&p).map_err(std::io::Error::other)?
+                        != (project.bytes, project.sha256.clone())
+                    {
+                        return Err(std::io::Error::other("Recovery project hash mismatch"));
+                    }
+                    maintenance::load_project(&p).map_err(std::io::Error::other)?;
+                }
                 for e in &index.documents {
                     let file = self
                         .directory
@@ -240,6 +287,22 @@ impl Session {
     pub fn checkpoint_observed(
         &mut self,
         documents: &[&Document],
+        tick: &mut impl FnMut(usize) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.checkpoint_inner(documents, None, tick)
+    }
+    pub fn checkpoint_project(
+        &mut self,
+        documents: &[&Document],
+        model: &crate::page_work::Model,
+        mapping: &[(u64, u64)],
+    ) -> Result<(), String> {
+        self.checkpoint_inner(documents, Some((model, mapping)), &mut |_| Ok(()))
+    }
+    fn checkpoint_inner(
+        &mut self,
+        documents: &[&Document],
+        project: Option<(&crate::page_work::Model, &[(u64, u64)])>,
         tick: &mut impl FnMut(usize) -> Result<(), String>,
     ) -> Result<(), String> {
         owned(&self.directory)?;
@@ -292,8 +355,32 @@ impl Session {
             });
             tick(n * 2 + 1)?;
         }
+        let project = if let Some((model, mapping)) = project {
+            let mut opened = vec![];
+            for (page, id) in mapping {
+                let d = captured
+                    .iter()
+                    .find(|d| d.id == *id)
+                    .ok_or("Project open-page snapshot missing")?;
+                opened.push((*page, d));
+            }
+            let path = owner.directory.join("project.drawer-work");
+            crate::page_work::snapshot(model, &path, &opened, &mut |_, _| Ok(()))?;
+            maintenance::make_project_portable(&path, &owner.directory)?;
+            let (bytes, sha256) = maintenance::stamp(&path)?;
+            Some(Project {
+                file: "project.drawer-work".into(),
+                title: model.work.title.clone(),
+                bytes,
+                sha256,
+            })
+        } else {
+            None
+        };
+        maintenance::seal(&owner.directory)?;
         let index = Index {
-            version: 1,
+            version: if project.is_some() { 2 } else { 1 },
+            project,
             generation: name.clone(),
             documents: entries,
         };
@@ -311,6 +398,15 @@ impl Session {
             |w| w.write_all(&data),
             |p| {
                 let index = load_index(p).map_err(std::io::Error::other)?;
+                if let Some(project) = &index.project {
+                    let p = self.directory.join(&index.generation).join(&project.file);
+                    if maintenance::stamp(&p).map_err(std::io::Error::other)?
+                        != (project.bytes, project.sha256.clone())
+                    {
+                        return Err(std::io::Error::other("Recovery project hash mismatch"));
+                    }
+                    maintenance::load_project(&p).map_err(std::io::Error::other)?;
+                }
                 for e in &index.documents {
                     let file = self
                         .directory
@@ -329,6 +425,9 @@ impl Session {
         )
         .map_err(|e| e.to_string())?;
         owner.keep = true;
+        if let Err(e) = self.prune_generations() {
+            self.maintenance_warning = Some(e);
+        }
         let _ = tick(captured.len() * 2 + 2);
         Ok(())
     }
@@ -385,7 +484,7 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
     let mut out = vec![];
     for (n, e) in fs::read_dir(&base).map_err(|e| e.to_string())?.enumerate() {
         if n >= 128 {
-            out.push(Candidate{session:base.clone(),title:"Recovery inventory limit reached".into(),original:None,file:None,error:Some("Only the first128 directory entries were inspected. No files removed; review/archive resolved sessions before rescanning".into()),expected:None});
+            out.push(Candidate{project:false,expected_project:None,session:base.clone(),title:"Recovery inventory limit reached".into(),original:None,file:None,error:Some("Only the first128 directory entries were inspected. No files removed; review/archive resolved sessions before rescanning".into()),expected:None});
             break;
         }
         let e = e.map_err(|e| e.to_string())?;
@@ -398,6 +497,8 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(e) => {
                 out.push(Candidate {
+                    project: false,
+                    expected_project: None,
                     session: path.clone(),
                     title: "Recovery session lock unavailable".into(),
                     original: None,
@@ -410,6 +511,28 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
         };
         match load_index(&path.join("index.json")) {
             Ok(index) => {
+                if let Some(project) = index.project {
+                    let file = path.join(&index.generation).join(&project.file);
+                    let error = maintenance::stamp(&file)
+                        .and_then(|actual| {
+                            if actual == (project.bytes, project.sha256.clone()) {
+                                maintenance::load_project(&file).map(|_| ())
+                            } else {
+                                Err("Recovery project hash mismatch".into())
+                            }
+                        })
+                        .err();
+                    out.push(Candidate {
+                        session: path.clone(),
+                        title: format!("Recovered project: {}", project.title),
+                        original: None,
+                        file: Some(file),
+                        error,
+                        project: true,
+                        expected_project: Some(project),
+                        expected: None,
+                    });
+                }
                 for entry in index.documents {
                     let file = path
                         .join(&index.generation)
@@ -420,6 +543,8 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
                         Err(e) => Some(e),
                     };
                     out.push(Candidate {
+                        project: false,
+                        expected_project: None,
                         session: path.clone(),
                         title: entry.title,
                         original: entry.original,
@@ -430,6 +555,8 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
                 }
             }
             Err(error) => out.push(Candidate {
+                project: false,
+                expected_project: None,
                 session: path.clone(),
                 title: "Incomplete/corrupt recovery metadata".into(),
                 original: None,
@@ -445,3 +572,9 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
 
 #[path = "recovery_verify.rs"]
 pub mod verify;
+
+#[path = "recovery_maintenance.rs"]
+mod maintenance;
+
+#[path = "recovery_generations_verify.rs"]
+pub mod generations_verify;

@@ -107,6 +107,7 @@ pub(crate) fn run(root: &Path) -> Result<(), String> {
         let timed = app.documents[1].snapshot();
         app.recovery.last = std::time::Instant::now() - std::time::Duration::from_secs(61);
         step(&mut app, &mut time, vec![]);
+        app.drain_background();
         let session = app
             .recovery
             .session

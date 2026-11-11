@@ -351,3 +351,5 @@ if($smokeResult -notmatch 'resource_settings=true'){throw 'Local resource settin
 if($smokeResult -notmatch 'history_limits=true'){throw 'History limit verification failed'}
 
 if($smokeResult -notmatch 'resource_failures=true'){throw 'Resource failure protection verification failed'}
+
+if($smokeResult -notmatch 'background_save=true'){throw 'Background save/recovery verification failed'}

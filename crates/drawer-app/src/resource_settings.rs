@@ -11,7 +11,10 @@ pub(super) struct Panel {
 }
 impl Drawer {
     pub(super) fn resource_budget(&self) -> usize {
-        self.resources.current.budget()
+        self.resources
+            .current
+            .budget()
+            .saturating_sub(self.background.bytes)
     }
     pub(super) fn load_resources(&mut self, storage: &UserStorage) {
         match Settings::load(storage) {
@@ -33,7 +36,9 @@ impl Drawer {
             .as_ref()
             .ok_or("Local settings storage unavailable")?
             .clone();
-        if self.documents.iter().any(|d| d.dirty)
+        if self.project_needs_recovery()
+            || self.background.busy()
+            || self.documents.iter().any(|d| d.dirty)
             || self.drawing.pending()
             || self.file_browser.mutating()
         {
@@ -86,6 +91,8 @@ impl Drawer {
             && !self.drawing.pending()
             && !ctx.input(|i| i.pointer.any_down())
             && !self.file_browser.mutating()
+            && !self.background.busy()
+            && !self.project_needs_recovery()
         {
             let next = self.resources.pending.take().unwrap();
             if let Err(e) = self.apply_resources(next) {
@@ -115,6 +122,9 @@ impl Drawer {
             ui.horizontal(|ui|{ui.label("Working memory MiB (64–256)");ui.add(egui::DragValue::new(&mut self.resources.draft.ram_mib).range(64..=256));});
             ui.horizontal(|ui|{ui.label("Maximum canvas dimension (1–32768)");ui.add(egui::DragValue::new(&mut self.resources.draft.max_dimension).range(1..=32768));});
             ui.horizontal(|ui|{ui.label("Recovery storage MiB (16–4096)");ui.add(egui::DragValue::new(&mut self.resources.draft.recovery_mib).range(16..=4096));});
+            ui.horizontal(|ui|{ui.label("Automatic recovery seconds (5–3600)");ui.add(egui::DragValue::new(&mut self.resources.draft.recovery_seconds).range(5..=3600));});
+            ui.horizontal(|ui|{ui.label("Recovery after edit revisions (1–10000)");ui.add(egui::DragValue::new(&mut self.resources.draft.recovery_commands).range(1..=10000));});
+            ui.horizontal(|ui|{ui.label("Local recovery/backup generations (2–32)");ui.add(egui::DragValue::new(&mut self.resources.draft.recovery_keep).range(2..=32));});
             ui.horizontal(|ui|{ui.label("Undo steps (1–1000)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.steps).range(1..=1000));});
             ui.horizontal(|ui|{ui.label("History MiB (1–64)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.memory_mib).range(1..=64));});
             ui.horizontal(|ui|{ui.label("Explicit command group interval ms (0–5000;0 disables)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.group_ms).range(0..=5000));});

@@ -254,10 +254,18 @@ impl Drawer {
                 self.resources.current.max_dimension
             ));
         }
+        if self.protected_sources.contains(&path) {
+            let title = document.title.clone();
+            document.mark_recovered(title);
+        }
         document.view = self.default_view;
         self.documents.try_reserve(1).map_err(|e| e.to_string())?;
         self.tabs.try_reserve(1).map_err(|e| e.to_string())?;
+        let id = document.id;
         self.add_document(document);
+        if self.documents.iter().any(|d| d.id == id) {
+            self.register_project_document(&path, id);
+        }
         self.remember_file(&path);
         Ok(())
     }
@@ -270,6 +278,23 @@ impl Drawer {
         path: &Path,
         free: Option<u64>,
     ) -> Result<(), String> {
+        self.save_to_mode(index, path, free, false)
+    }
+    pub(super) fn save_in_background(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        self.save_to_mode(index, path, None, true)
+    }
+    fn save_to_mode(
+        &mut self,
+        index: usize,
+        path: &Path,
+        free: Option<u64>,
+        background: bool,
+    ) -> Result<(), String> {
+        if self.background.busy() {
+            return Err(
+                "A local save/recovery job is still writing; retry after it finishes".into(),
+            );
+        }
         if self.file_browser.mutating() {
             return Err("Wait for the pending physical file operation before saving".into());
         }
@@ -331,10 +356,13 @@ impl Drawer {
         {
             return Err("That file is open in another document. Choose another name.".into());
         }
-        if self.protected_sources.contains(&target) {
+        if self.protected_sources.contains(&target) || self.immutable_project_page(&target) {
             return Err("Choose another path to keep the imported source unchanged.".into());
         }
         self.settle_work_time();
+        if background {
+            return self.queue_native_save(index, &target, None);
+        }
         let saved = drawer_core::files::save_report(&mut self.documents[index], &target)
             .map_err(|e| e.to_string())?;
         if let Some(copy) = saved.preserved_unverified {
@@ -411,6 +439,9 @@ impl Drawer {
         }
 
         if let Some(path) = self.documents[index].path.clone() {
+            if self.immutable_project_page(&path) {
+                return self.save_as(index);
+            }
             self.save_to(index, &path)?;
             Ok(true)
         } else {
@@ -637,6 +668,25 @@ impl Drawer {
                     && let Err(error) = self.save_as(active)
                 {
                     self.status = Some(error);
+                }
+                if ui
+                    .add_enabled(
+                        !self.background.busy(),
+                        egui::Button::new("Save in background…"),
+                    )
+                    .clicked()
+                {
+                    let path = self.documents[active].path.clone().or_else(|| {
+                        rfd::FileDialog::new()
+                            .set_title("Save captured revision in background")
+                            .add_filter("Drawer document", &["drawer"])
+                            .save_file()
+                    });
+                    if let Some(path) = path
+                        && let Err(e) = self.save_in_background(active, &path)
+                    {
+                        self.status = Some(e);
+                    }
                 }
                 let (undo, redo) = self.documents[active].history_counts();
                 if ui
