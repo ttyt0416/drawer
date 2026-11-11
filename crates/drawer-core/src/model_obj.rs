@@ -405,26 +405,19 @@ fn resolve(root: &Path, name: &str) -> Result<Option<PathBuf>, String> {
     if !mesh::relative(name) {
         return Err("External assets must stay inside the local model folder".into());
     }
-    let p = root.join(name);
-    let parent = match p.parent().unwrap().canonicalize() {
-        Ok(p) => p,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
-    if !parent.starts_with(root) || !crate::font_library::local(&parent) {
+    let root = crate::file_browser::folder(root)?;
+    let p = crate::file_browser::new_path(&root.join(name))?;
+    if !p.starts_with(&root) {
         return Err("Asset path escapes model folder".into());
     }
-    match p.canonicalize() {
-        Ok(p) => {
-            if !p.starts_with(root) || !crate::font_library::local(&p) || !p.is_file() {
-                Err("Asset reference is not a local regular model-folder file".into())
-            } else {
-                Ok(Some(p))
-            }
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
+    if !p.try_exists().map_err(|e| e.to_string())? {
+        return Ok(None);
     }
+    let p = crate::file_browser::checked(&p)?;
+    if !p.starts_with(&root) || !p.is_file() {
+        return Err("Asset reference is not a regular model-folder file".into());
+    }
+    Ok(Some(p))
 }
 pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, String> {
     crate::book_io::check_cancel(cancel)?;
@@ -437,7 +430,7 @@ pub fn load(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Asset, St
     if path.is_absolute() && !crate::font_library::local(path) {
         return Err("Choose a local drive model".into());
     }
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    let path = crate::file_browser::checked(path)?;
     let root = path.parent().ok_or("Model folder missing")?;
     let data = crate::book_io::read_local(&path, MAX_FILE.min(budget / 32))?;
     let Parsed {

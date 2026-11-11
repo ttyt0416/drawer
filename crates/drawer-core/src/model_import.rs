@@ -209,7 +209,7 @@ pub(crate) fn local_path(path: &Path) -> Result<PathBuf, String> {
     if path.is_absolute() && !crate::font_library::local(path) {
         return Err("Choose a local drive model".into());
     }
-    let p = path.canonicalize().map_err(|e| e.to_string())?;
+    let p = crate::file_browser::checked(path)?;
     if !p.is_file() || !crate::font_library::local(&p) {
         return Err("Choose a local regular model file".into());
     }

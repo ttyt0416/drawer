@@ -67,10 +67,10 @@ pub fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 pub fn inspect(path: &Path, task: Task) -> Result<(Manifest, Vec<u8>), String> {
+    let path = drawer_core::file_browser::checked(path).map_err(|e| format!("{GUIDE} ({e})"))?;
     if !path.is_file() {
         return Err(GUIDE.into());
     }
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
     let parent = path.parent().ok_or("Missing model folder")?;
     let m: Manifest = serde_json::from_slice(&read_bytes(&path, 16384)?)
         .map_err(|e| format!("Invalid model manifest: {e}"))?;
@@ -104,10 +104,7 @@ pub fn inspect(path: &Path, task: Task) -> Result<(Manifest, Vec<u8>), String> {
         {
             return Err("A lowercase SHA-256 is required for weights and license".into());
         }
-        let p = parent
-            .join(name)
-            .canonicalize()
-            .map_err(|e| e.to_string())?;
+        let p = drawer_core::file_browser::checked(&parent.join(name))?;
         if p.parent() != Some(parent) {
             return Err("Model files must remain inside their bundle".into());
         }

@@ -37,3 +37,6 @@ jpeg-encoder = { version = "=0.7.1", default-features = false, features = ["std"
 
 [lints]
 workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winsafe = { version = "=0.0.29", features = ["kernel"] }

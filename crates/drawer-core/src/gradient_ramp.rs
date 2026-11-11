@@ -307,7 +307,7 @@ impl Library {
             return Err("Only Drawer gradient JSON is supported".into());
         }
         let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
-        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let path = crate::file_browser::checked(path)?;
         if !meta.is_file() || meta.file_type().is_symlink() || !crate::font_library::local(&path) {
             return Err("Choose a regular local gradient JSON".into());
         }

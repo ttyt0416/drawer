@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "executableSha256": "f66c00aef1ae4f24a6f12f347791cf058da940d45df032ad5da0c2b4d95099b3",
+  "actualLocalJunction": true,
+  "rejectedBeforeParsing": true,
+  "targetFilesUnchanged": true,
+  "httpHttpsFileUriUncParentTraversalRefused": true,
+  "blockedSvgReferencesReported": true,
+  "missingNativeCacheOpened": true,
+  "explicitLocalRelinkUndo": true,
+  "limits": "Mapped-network drive classification uses a deterministic policy test; no host mappings were added. No remote UNC server was accessed."
+}

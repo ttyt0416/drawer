@@ -77,6 +77,7 @@ pub(super) fn setup_ui_font(ctx: &egui::Context) -> bool {
     }
     let loaded = (|| -> Option<()> {
         let path = PathBuf::from(std::env::var_os("WINDIR")?).join("Fonts/malgun.ttf");
+        let path = drawer_core::file_browser::checked(&path).ok()?;
         if std::fs::metadata(&path).ok()?.len() > 32 * 1024 * 1024 {
             return None;
         }

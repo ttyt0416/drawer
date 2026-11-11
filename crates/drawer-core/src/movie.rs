@@ -27,13 +27,13 @@ impl Decoder {
             .find_map(|dir| Self::at(dir.join("ffmpeg.exe")).ok())
     }
     pub fn at(ffmpeg: PathBuf) -> Result<Self, String> {
-        let ffmpeg = ffmpeg
-            .canonicalize()
+        let ffmpeg = crate::file_browser::checked(&ffmpeg)
             .map_err(|e| format!("Local FFmpeg missing: {e}"))?;
         let ffprobe = ffmpeg
             .parent()
             .ok_or("Missing codec directory")?
             .join("ffprobe.exe");
+        let ffprobe = crate::file_browser::checked(&ffprobe)?;
         if !ffmpeg.is_file() || !ffprobe.is_file() {
             return Err(
                 "Select a local FFmpeg executable with FFprobe in the same directory".into(),
@@ -44,6 +44,7 @@ impl Decoder {
     pub fn verify(&self, cancel: &AtomicBool) -> Result<String, String> {
         let mut versions = Vec::new();
         for (path, name) in [(&self.ffmpeg, "ffmpeg"), (&self.ffprobe, "ffprobe")] {
+            let path = crate::file_browser::checked(path)?;
             let result = run(Command::new(path).arg("-version"), 65536, cancel)?;
             let text = String::from_utf8(result).map_err(|_| "Invalid codec version response")?;
             let version = text.split_whitespace().nth(2).unwrap_or_default();
@@ -65,7 +66,7 @@ pub struct Source {
 }
 impl Source {
     pub fn read(path: &Path, budget: usize) -> Result<Self, String> {
-        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let path = crate::file_browser::checked(path)?;
         let extension = path
             .extension()
             .and_then(|e| e.to_str())

@@ -28,7 +28,9 @@ impl UserStorage {
         } else {
             env::current_dir()?.join(root)
         };
+        let anchor = crate::file_browser::new_path(&anchor).map_err(io::Error::other)?;
         let root = crate::storage_migration::resolve(&anchor).map_err(io::Error::other)?;
+        let root = crate::file_browser::new_path(&root).map_err(io::Error::other)?;
         fs::create_dir_all(root.join("settings"))?;
         fs::create_dir_all(root.join("materials"))?;
         Ok(Self { root, anchor })

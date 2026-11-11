@@ -166,7 +166,7 @@ pub fn read_local(path: &Path, budget: usize) -> Result<Vec<u8>, String> {
     if path.is_absolute() && !crate::font_library::local(path) {
         return Err("Choose a local drive file".into());
     }
-    let p = path.canonicalize().map_err(|e| e.to_string())?;
+    let p = crate::file_browser::checked(path)?;
     if !crate::font_library::local(&p) || !p.is_file() {
         return Err("Choose a regular local file".into());
     }

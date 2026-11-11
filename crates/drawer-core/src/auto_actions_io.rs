@@ -26,7 +26,7 @@ impl Settings {
         if !m.is_file() || m.file_type().is_symlink() || m.len() > LIMIT as u64 {
             return Err("Choose a regular auto action file up to 2 MiB".into());
         }
-        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let path = crate::file_browser::checked(path)?;
         if !crate::font_library::local(&path) {
             return Err("Choose a local auto action file".into());
         }

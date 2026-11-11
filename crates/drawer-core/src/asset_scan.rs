@@ -271,7 +271,7 @@ pub fn scan(
     if !crate::font_library::local(&absolute) {
         return Err("Choose an offline folder on a local disk".into());
     }
-    let root = match absolute.canonicalize() {
+    let root = match crate::file_browser::folder(&absolute) {
         Ok(p) => p,
         Err(e) => {
             if let Some(old) = previous

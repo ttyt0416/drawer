@@ -27,7 +27,7 @@ pub fn open(path: &Path, budget: usize) -> io::Result<Document> {
 }
 pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<String>)> {
     crate::exchange_guidance::probe(path).map_err(invalid)?;
-    let path = path.canonicalize()?;
+    let path = crate::file_browser::checked(path).map_err(invalid)?;
     let ext = path
         .extension()
         .unwrap_or_default()
@@ -79,11 +79,12 @@ pub fn open_report(path: &Path, budget: usize) -> io::Result<(Document, Vec<Stri
     }
 }
 pub(crate) fn read_native(path: &Path, budget: usize) -> io::Result<Document> {
-    let file = fs::File::open(path)?;
+    let path = crate::file_browser::checked(path).map_err(invalid)?;
+    let file = fs::File::open(&path)?;
     if file.metadata()?.len() > budget as u64 + MAX_SCENE_BYTES as u64 + 1024 * 1024 {
         return Err(invalid("Document exceeds memory budget"));
     }
-    read_native_reader(path, BufReader::new(file), budget)
+    read_native_reader(&path, BufReader::new(file), budget)
 }
 pub(crate) fn read_native_snapshot(
     path: &Path,
@@ -830,22 +831,22 @@ fn save_report_observed(
     {
         return Err(invalid("Editable documents must be saved as .drawer"));
     }
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let path = parent.canonicalize()?.join(
-        path.file_name()
-            .ok_or_else(|| invalid("Missing filename"))?,
-    );
-    if fs::symlink_metadata(&path).is_ok_and(|metadata| crate::asset_catalog::linked(&metadata)) {
-        return Err(invalid("Choose a regular destination file"));
-    }
-    let path = if path.exists() {
-        path.canonicalize()?
+    let absolute = if path.is_absolute() {
+        path.to_owned()
     } else {
-        path
+        std::env::current_dir()?.join(path)
     };
+    let path = crate::file_browser::new_path(&absolute).map_err(invalid)?;
+    let path = crate::file_browser::folder(
+        path.parent()
+            .ok_or_else(|| invalid("Missing destination parent"))?,
+    )
+    .map_err(invalid)?
+    .join(
+        path.file_name()
+            .ok_or_else(|| invalid("Missing destination filename"))?,
+    );
+
     crate::light_table::save_destination(document, &path).map_err(invalid)?;
     let scene = native_scene(document)?;
     let mut temp_name = path.file_name().unwrap().to_owned();

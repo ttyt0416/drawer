@@ -250,7 +250,7 @@ fn read(path: &Path) -> Result<Vec<u8>, String> {
 }
 pub fn load(path: &Path, raw: Option<Raw>, linked: bool) -> Result<Input, String> {
     let bytes = read(path)?;
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    let path = crate::file_browser::checked(path)?;
     let source = Source {
         path: path.clone(),
         raw,

@@ -60,14 +60,17 @@ impl Default for Settings {
 }
 pub fn lexical(p: &Path) -> Result<(), String> {
     crate::file_objects::local_path(p)?;
-    if p.components().any(|c| matches!(c, Component::ParentDir)) {
+    if p.components().any(|c| matches!(c, Component::ParentDir))
+        || p.to_str()
+            .is_some_and(|s| s.split(['\\', '/']).any(|part| part == ".."))
+    {
         return Err("Use an absolute local path without parent traversal".into());
     }
     Ok(())
 }
 /// Inspect each component before resolving it; a local junction must not trigger remote access.
 pub fn checked(p: &Path) -> Result<PathBuf, String> {
-    lexical(p)?;
+    local_drive(p)?;
     let mut current = PathBuf::new();
     for c in p.components() {
         current.push(c);
@@ -82,6 +85,57 @@ pub fn checked(p: &Path) -> Result<PathBuf, String> {
     let path = p.canonicalize().map_err(|e| e.to_string())?;
     lexical(&path)?;
     Ok(path)
+}
+/// Classify the drive without opening a path on it. Cached reference metadata uses lexical only.
+pub fn local_drive(p: &Path) -> Result<(), String> {
+    lexical(p)?;
+    #[cfg(windows)]
+    {
+        let text = p
+            .to_str()
+            .ok_or("Non-Unicode path")?
+            .trim_start_matches(r"\\?\");
+        let root = format!("{}:\\", text.as_bytes()[0] as char);
+        drive_kind(winsafe::GetDriveType(Some(&root)))?;
+    }
+    Ok(())
+}
+#[cfg(windows)]
+fn drive_kind(kind: winsafe::co::DRIVE) -> Result<(), String> {
+    use winsafe::co::DRIVE;
+    match kind {
+        DRIVE::REMOVABLE | DRIVE::FIXED | DRIVE::CDROM | DRIVE::RAMDISK => Ok(()),
+        DRIVE::REMOTE => Err("Mapped network drives are not accessed".into()),
+        _ => Err("Local drive unavailable or disconnected".into()),
+    }
+}
+/// Admit an existing path or a new suffix before any create/resolve operation.
+pub fn new_path(p: &Path) -> Result<PathBuf, String> {
+    local_drive(p)?;
+    let mut current = PathBuf::new();
+    let mut missing = false;
+    for c in p.components() {
+        if let Component::Normal(name) = c {
+            component(name.to_str().ok_or("Non-Unicode path component")?)?;
+        }
+        current.push(c);
+        if missing || matches!(c, Component::Prefix(_)) || !current.is_absolute() {
+            continue;
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(m) if assets::linked(&m) => {
+                return Err("Links/reparse points are not followed by local storage".into());
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => missing = true,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    if missing {
+        Ok(p.to_owned())
+    } else {
+        checked(p)
+    }
 }
 pub fn folder(p: &Path) -> Result<PathBuf, String> {
     let path = checked(p)?;
@@ -617,3 +671,18 @@ pub fn unmapped(scene: &crate::scene::Scene, old: &Path) -> Vec<PathBuf> {
 
 #[path = "file_browser_completion.rs"]
 mod completion;
+
+#[cfg(all(test, windows))]
+mod drive_policy_tests {
+    #[test]
+    fn mapped_network_and_disconnected_drives_are_refused_before_path_io() {
+        use super::drive_kind;
+        use winsafe::co::DRIVE;
+        assert!(drive_kind(DRIVE::REMOTE).is_err());
+        assert!(drive_kind(DRIVE::UNKNOWN).is_err());
+        assert!(drive_kind(DRIVE::NO_ROOT_DIR).is_err());
+        for kind in [DRIVE::REMOVABLE, DRIVE::FIXED, DRIVE::CDROM, DRIVE::RAMDISK] {
+            assert!(drive_kind(kind).is_ok());
+        }
+    }
+}

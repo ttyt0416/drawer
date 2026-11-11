@@ -1392,3 +1392,9 @@ crates/drawer-platform/src/local_errors.rs
 scripts/test-network-attempts.py
 docs/process/network-attempts.md
 docs/process/network-attempts-evidence.json
+crates/drawer-app/src/local_references.rs
+crates/drawer-core/src/local_paths_verify.rs
+scripts/test-local-references.ps1
+docs/process/local-references.md
+docs/process/local-references-evidence.json
+docs/process/local-references-network.json

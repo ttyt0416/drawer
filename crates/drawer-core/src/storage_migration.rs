@@ -68,10 +68,11 @@ fn side(anchor: &Path, suffix: &str) -> Result<PathBuf> {
     Ok(parent.join(format!(".{name}.drawer-{suffix}.json")))
 }
 fn read<T: serde::de::DeserializeOwned>(p: &Path) -> Result<Option<T>> {
-    if !p.exists() {
+    let p = browser::new_path(p)?;
+    if !p.try_exists().map_err(err)? {
         return Ok(None);
     }
-    let bytes = assets::bytes(p, 32 * 1024 * 1024)?;
+    let bytes = assets::bytes(&p, 32 * 1024 * 1024)?;
     serde_json::from_slice(&bytes).map(Some).map_err(err)
 }
 fn write<T: Serialize>(p: &Path, value: &T) -> Result<()> {
@@ -281,7 +282,7 @@ impl Journal {
 }
 /// Resolve the atomic commit record. An interrupted copy never becomes writable.
 pub fn resolve(anchor: &Path) -> Result<PathBuf> {
-    browser::lexical(anchor)?;
+    browser::new_path(anchor)?;
     if anchor.parent().is_some_and(|p| !p.exists()) {
         return Ok(anchor.to_owned());
     }

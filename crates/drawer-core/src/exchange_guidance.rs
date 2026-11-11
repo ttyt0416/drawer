@@ -110,7 +110,7 @@ pub fn probe(path: &Path) -> Result<(), String> {
     if !crate::font_library::local(&absolute) {
         return Err("Choose a local file on this computer".into());
     }
-    let absolute = absolute.canonicalize().map_err(|e| e.to_string())?;
+    let absolute = crate::file_browser::checked(&absolute)?;
     if !crate::font_library::local(&absolute) {
         return Err("Choose a local file on this computer".into());
     }

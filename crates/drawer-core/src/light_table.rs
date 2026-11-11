@@ -387,8 +387,8 @@ pub fn self_reference(d: &Document, source: &Source, cell: Option<u64>) -> bool 
     }
 }
 pub fn same_file(a: &Path, b: &Path) -> bool {
-    let a = a.canonicalize().unwrap_or_else(|_| a.to_path_buf());
-    let b = b.canonicalize().unwrap_or_else(|_| b.to_path_buf());
+    let a = crate::file_browser::checked(a).unwrap_or_else(|_| a.to_path_buf());
+    let b = crate::file_browser::checked(b).unwrap_or_else(|_| b.to_path_buf());
     a.to_string_lossy()
         .eq_ignore_ascii_case(&b.to_string_lossy())
 }
@@ -430,7 +430,7 @@ fn load(d: &Document, path: &Path) -> Result<(PathBuf, LocalImage), String> {
     if !local_path(path) {
         return Err("Choose an absolute local file path".into());
     }
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    let path = crate::file_browser::checked(path)?;
     if d.path
         .iter()
         .chain(&d.source_path)

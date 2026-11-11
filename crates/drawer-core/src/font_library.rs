@@ -118,6 +118,7 @@ fn identity(prefix: &Sha256, index: u32) -> [u8; 32] {
 }
 fn read_font(path: &Path) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
+    let path = crate::file_browser::checked(path).map_err(std::io::Error::other)?;
     let f = std::fs::File::open(path)?;
     let mut data = Vec::new();
     f.take(32 * 1024 * 1024 + 1).read_to_end(&mut data)?;
@@ -180,6 +181,10 @@ impl Catalog {
                 result.failures += 1;
                 continue;
             }
+            let Ok(root) = crate::file_browser::folder(root) else {
+                result.failures += 1;
+                continue;
+            };
             let Ok(entries) = std::fs::read_dir(root) else {
                 continue;
             };
@@ -201,6 +206,10 @@ impl Catalog {
         files.sort();
         files.dedup();
         for path in files {
+            let Ok(path) = crate::file_browser::checked(&path) else {
+                result.failures += 1;
+                continue;
+            };
             if cancel() || result.entries.len() >= 1024 {
                 break;
             }

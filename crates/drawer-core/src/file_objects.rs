@@ -89,6 +89,7 @@ pub fn local_path(path: &Path) -> Result<(), String> {
         || normal.starts_with("//")
         || normal.starts_with("UNC\\")
         || normal.contains("://")
+        || normal[2..].contains(':')
         || !path.is_absolute()
         || normal.chars().any(char::is_control)
     {
@@ -100,12 +101,7 @@ pub fn local_path(path: &Path) -> Result<(), String> {
 }
 pub fn source_folder(path: &Path) -> Result<PathBuf, String> {
     local_path(path)?;
-    let parent = path
-        .parent()
-        .ok_or("Missing source folder")?
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    local_path(&parent)?;
+    let parent = crate::file_browser::folder(path.parent().ok_or("Missing source folder")?)?;
     if !parent.is_dir() {
         return Err("Source folder is unavailable".into());
     }
@@ -493,24 +489,21 @@ impl Conversion {
 }
 fn destination(d: &Document, path: &Path) -> Result<PathBuf, String> {
     local_path(path)?;
-    let parent = path
-        .parent()
-        .ok_or("Missing destination folder")?
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    local_path(&parent)?;
-    let path = parent.join(path.file_name().ok_or("Missing filename")?);
+    let path = crate::file_browser::new_path(path)?;
+    let path = crate::file_browser::folder(path.parent().ok_or("Missing destination parent")?)?
+        .join(path.file_name().ok_or("Missing filename")?);
+
     if !path
         .extension()
         .is_some_and(|s| s.eq_ignore_ascii_case("drawer"))
     {
         return Err("Choose a .drawer source document".into());
     }
-    let actual = path.canonicalize().unwrap_or_else(|_| path.clone());
+    let actual = crate::file_browser::checked(&path).unwrap_or_else(|_| path.clone());
     if [d.path.as_ref(), d.source_path.as_ref()]
         .into_iter()
         .flatten()
-        .any(|p| p.canonicalize().unwrap_or_else(|_| p.clone()) == actual)
+        .any(|p| crate::file_browser::checked(p).unwrap_or_else(|_| p.clone()) == actual)
     {
         return Err("The source destination would overwrite the current document".into());
     }

@@ -58,7 +58,7 @@ pub fn checked(root: &Path, rel: &Path, exists: bool) -> Result<PathBuf, String>
     if !relative(rel) {
         return Err("Asset path must stay relative to its local folder".into());
     }
-    let canonical = root.canonicalize().map_err(|e| e.to_string())?;
+    let canonical = crate::file_browser::folder(root)?;
     if !crate::font_library::local(&canonical)
         || linked(&fs::symlink_metadata(root).map_err(|e| e.to_string())?)
     {
@@ -97,7 +97,8 @@ pub fn checked(root: &Path, rel: &Path, exists: bool) -> Result<PathBuf, String>
     }
 }
 pub(super) fn bytes(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
-    let m = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    let path = crate::file_browser::checked(path)?;
+    let m = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
     if !m.is_file() || linked(&m) || m.len() > limit as u64 {
         return Err(format!(
             "Choose a regular local asset up to{}MiB",

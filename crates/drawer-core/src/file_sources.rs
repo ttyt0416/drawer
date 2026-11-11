@@ -61,7 +61,7 @@ pub struct Stamp {
 impl Stamp {
     pub fn read(path: &Path) -> Result<Self, String> {
         links::local_path(path)?;
-        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let path = crate::file_browser::checked(path)?;
         links::local_path(&path)?;
         let mut f = fs::File::open(&path).map_err(|e| e.to_string())?;
         let before = f.metadata().map_err(|e| e.to_string())?;
@@ -233,7 +233,7 @@ fn read_checked(
     if !selection.valid() {
         return Err("Invalid source layer/comp/frame selection".into());
     }
-    let owner = owner.map(|p| p.canonicalize().unwrap_or_else(|_| p.to_owned()));
+    let owner = owner.map(|p| crate::file_browser::checked(p).unwrap_or_else(|_| p.to_owned()));
     let mut stamps = vec![];
     dependencies(path, owner.as_deref(), &mut vec![], &mut stamps)?;
     let path = stamps

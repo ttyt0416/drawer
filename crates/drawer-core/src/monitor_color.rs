@@ -94,7 +94,7 @@ pub fn read_profile(path: &Path) -> Result<Vec<u8>, String> {
     if !m.is_file() || m.file_type().is_symlink() || m.len() > 4 * 1024 * 1024 {
         return Err("Choose a regular RGB monitor ICC up to 4 MiB".into());
     }
-    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    let path = crate::file_browser::checked(path)?;
     if !crate::font_library::local(&path) {
         return Err("Choose a local monitor ICC".into());
     }

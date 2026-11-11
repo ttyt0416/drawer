@@ -867,6 +867,7 @@ dependencies = [
  "unicode-script",
  "unicode-segmentation",
  "usvg",
+ "winsafe",
  "zip",
 ]
 

@@ -297,8 +297,8 @@ fn local_file(href: &str, root: Option<&Path>) -> Option<Vec<u8>> {
     {
         return None;
     }
-    let root = root?.canonicalize().ok()?;
-    let path = root.join(path).canonicalize().ok()?;
+    let root = crate::file_browser::folder(root?).ok()?;
+    let path = crate::file_browser::checked(&root.join(path)).ok()?;
     if !path.starts_with(root) || !path.is_file() {
         return None;
     }
