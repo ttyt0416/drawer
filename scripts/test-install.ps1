@@ -349,3 +349,5 @@ if($smokeResult -notmatch 'history_navigation=true'){throw 'History navigation v
 if($smokeResult -notmatch 'resource_settings=true'){throw 'Local resource settings verification failed'}
 
 if($smokeResult -notmatch 'history_limits=true'){throw 'History limit verification failed'}
+
+if($smokeResult -notmatch 'resource_failures=true'){throw 'Resource failure protection verification failed'}

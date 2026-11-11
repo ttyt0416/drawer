@@ -226,15 +226,11 @@ impl Document {
             from: 0,
             to: 0,
         };
-        if bytes.bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
-            || bytes.bytes().saturating_add(self.resident_bytes())
-                > crate::document::DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Multi-layer undo memory budget".into());
-        }
+        self.admit_undo_cost(bytes.bytes(), self.allocation_bytes())?;
         let mut tiled_candidates = std::collections::BTreeMap::new();
         if let EditKind::Multi { layers, .. } = &bytes.kind {
-            let mut budget = crate::document::DEFAULT_DOCUMENT_BUDGET
+            let mut budget = self
+                .working_budget
                 .saturating_sub(self.resident_bytes())
                 .saturating_sub(bytes.bytes());
             for (n, changes) in layers {
@@ -333,13 +329,9 @@ impl Document {
             + scene
                 .as_ref()
                 .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes());
-        if bytes > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
-            || bytes + self.resident_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET
-        {
-            return Err("Stroke exceeds the undo memory budget".into());
-        }
+        self.admit_undo_cost(bytes, self.allocation_bytes())?;
         let tile_budget = self.tile_budget(layer).min(
-            crate::document::DEFAULT_DOCUMENT_BUDGET
+            self.working_budget
                 .saturating_sub(self.resident_bytes())
                 .saturating_add(self.layers[layer].allocation_bytes())
                 .saturating_sub(bytes),
@@ -396,6 +388,16 @@ impl Document {
         {
             return Err("Invalid or oversized page geometry.".into());
         }
+        let cost = self
+            .scene
+            .size_bytes()
+            .saturating_add(after.size_bytes())
+            .saturating_add(std::mem::size_of::<Edit>());
+        let image = self
+            .allocation_bytes()
+            .saturating_sub(self.scene.size_bytes())
+            .saturating_add(after.size_bytes());
+        self.admit_undo_cost(cost, image)?;
         if self.scene == after {
             return Ok(false);
         }
@@ -456,7 +458,12 @@ impl Document {
         if x >= self.width || y >= self.height {
             return false;
         }
-        let tile_budget = self.tile_budget(layer);
+        let record = std::mem::size_of::<Edit>();
+        if let Err(e) = self.admit_undo_cost(record, self.allocation_bytes()) {
+            self.resource_error = Some(e);
+            return false;
+        }
+        let tile_budget = self.tile_budget(layer).saturating_sub(record);
         let protected = crate::clipping::alpha_locked(self, layer);
         let Some(layer_data) = self.layers.get_mut(layer) else {
             return false;
@@ -576,6 +583,7 @@ impl Document {
             return Err("Change exceeds dense Undo memory budget".into());
         }
         let retained = crate::tiled_raster::change_bytes(self, &after);
+        self.admit_undo_cost(retained.saturating_add(256), after.allocation_bytes())?;
         if retained > self.working_budget.saturating_sub(after.allocation_bytes()) {
             return Err("Not enough working memory to retain the complete Undo command".into());
         }
@@ -592,6 +600,17 @@ impl Document {
         if before == after {
             return Ok(false);
         }
+        let mut cost = crate::tiled_raster::history_bytes(&before, &after);
+        if group.is_some()
+            && let Some(last) = self.history.undo.last()
+            && last.group == group
+            && let EditKind::State {
+                before: original, ..
+            } = &last.kind
+        {
+            cost = cost.max(crate::tiled_raster::history_bytes(original, &after));
+        }
+        self.admit_undo_cost(cost.saturating_add(256), after.allocation_bytes())?;
         after.restore(self);
         if group.is_some()
             && self.history.limits.group_ms > 0
@@ -897,3 +916,20 @@ pub mod navigation;
 
 #[path = "history_limits.rs"]
 pub mod limits;
+
+impl Document {
+    fn admit_undo_cost(&self, cost: usize, image: usize) -> Result<(), String> {
+        let history = self.history.limits.bytes();
+        if cost > history
+            || image
+                .checked_add(cost)
+                .is_none_or(|n| n > self.working_budget)
+        {
+            return Err(format!(
+                "New edit stopped: complete Undo needs {cost} bytes, history limit {history}, image {image}, working limit {}. Current picture preserved; free memory or raise limits",
+                self.working_budget
+            ));
+        }
+        Ok(())
+    }
+}

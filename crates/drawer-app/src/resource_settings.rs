@@ -2,6 +2,7 @@ use super::*;
 use drawer_core::resource_settings::{self as core, Settings};
 #[derive(Default)]
 pub(super) struct Panel {
+    pub health: resource_health::Health,
     pub open: bool,
     pub current: Settings,
     draft: Settings,
@@ -94,9 +95,22 @@ impl Drawer {
         if !self.resources.open {
             return;
         }
+        if self
+            .resources
+            .health
+            .checked
+            .is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(10))
+            && !self.drawing.pending()
+            && !ctx.input(|i| i.pointer.any_down())
+        {
+            self.check_resource_health();
+        }
         let mut open = true;
         let mut apply = false;
         egui::Window::new("Local resources").open(&mut open).default_width(470.).show(ctx,|ui|{
+            if ui.button("Check scratch permissions and free space now").clicked(){self.check_resource_health();}
+            if let Some(free)=self.resources.health.free{ui.small(format!("Scratch free {free} bytes; recovery {} bytes / {}MiB",self.resources.health.recovery,self.resources.current.recovery_mib));}
+            self.resource_health_banner(ui);
             ui.label("Limits apply to known drawing buffers, not the entire process. Changes wait until all drawings are saved and input/file work is idle.");
             ui.horizontal(|ui|{ui.label("Working memory MiB (64–256)");ui.add(egui::DragValue::new(&mut self.resources.draft.ram_mib).range(64..=256));});
             ui.horizontal(|ui|{ui.label("Maximum canvas dimension (1–32768)");ui.add(egui::DragValue::new(&mut self.resources.draft.max_dimension).range(1..=32768));});

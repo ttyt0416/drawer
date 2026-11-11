@@ -1227,3 +1227,8 @@ docs/process/resource-settings.md
 crates/drawer-core/src/history_limits.rs
 crates/drawer-core/src/history_limits_verify.rs
 docs/process/history-limits.md
+
+crates/drawer-core/src/resource_failure_verify.rs
+crates/drawer-app/src/resource_health.rs
+scripts/test-resource-permissions.ps1
+docs/process/resource-failures.md

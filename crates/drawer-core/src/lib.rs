@@ -670,3 +670,5 @@ pub use history::navigation as history_navigation;
 pub mod resource_settings;
 
 pub use history::limits as history_limits;
+
+pub mod resource_failure_verify;

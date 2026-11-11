@@ -578,6 +578,7 @@ impl Drawer {
         self.quit_approved.clear();
     }
     pub(super) fn document_controls(&mut self, ui: &mut egui::Ui) {
+        self.resource_health_banner(ui);
         if let Some(n) = self.active
             && self.documents[n].layers.iter().any(|l| l.tiled.is_some())
         {
