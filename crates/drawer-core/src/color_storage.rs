@@ -66,10 +66,14 @@ impl Document {
             .saturating_mul(spec.height as usize)
             .saturating_mul(if color.depth == Depth::Sixteen { 12 } else { 4 })
             .saturating_add(color.memory_bytes());
-        if bytes > memory_budget {
+        if bytes > memory_budget
+            && !(color.depth == Depth::Eight
+                && bytes > DEFAULT_DOCUMENT_BUDGET
+                && memory_budget >= 65536)
+        {
             return Err(CreateError::ResourceLimit);
         }
-        let mut d = Self::create(spec, memory_budget)?;
+        let mut d = Self::create(spec, memory_budget.saturating_sub(color.memory_bytes()))?;
         if color.depth == Depth::Sixteen {
             let pixels = d.layers[0]
                 .pixels
@@ -209,10 +213,16 @@ pub(crate) fn edit_pixel8(
         target.pixels[n] = Sample::from16(value).rgba8();
     } else {
         let value = value.map(|v| v as u8);
-        if target.pixels[n] == value {
+        if target.read_at(n) == Some(value) {
             return Ok(false);
         }
-        target.pixels[n] = value;
+        if let Some(image) =
+            target.prepare_pixels(std::iter::once((n, value)), d.tile_budget(layer))?
+        {
+            target.tiled = Some(image);
+        } else {
+            target.pixels[n] = value;
+        }
     }
     d.commit_state(state)
 }
@@ -468,7 +478,7 @@ pub(crate) fn read(d: &mut Document, r: &mut impl Read, budget: usize) -> std::i
             r.read_exact(&mut name)?;
             let name = String::from_utf8(name).map_err(invalid)?;
             let n = u32_in(r)? as usize;
-            if n > 4 * 1024 * 1024 || d.memory_bytes().saturating_add(n) > budget {
+            if n > 4 * 1024 * 1024 || d.allocation_bytes().saturating_add(n) > budget {
                 return Err(invalid("ICC byte budget"));
             }
             let mut bytes = vec![0; n];
@@ -477,7 +487,7 @@ pub(crate) fn read(d: &mut Document, r: &mut impl Read, budget: usize) -> std::i
         }
         _ => return Err(invalid("Invalid RGB profile tag")),
     };
-    let mut used = d.memory_bytes().saturating_add(profile.memory_bytes());
+    let mut used = d.allocation_bytes().saturating_add(profile.memory_bytes());
     for l in &mut d.layers {
         match byte(r)? {
             0 => {}

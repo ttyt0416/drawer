@@ -338,3 +338,5 @@ if($smokeResult -notmatch 'atomic_save=true'){throw 'Verified atomic save failed
 if($smokeResult -notmatch 'local_recovery=true'){throw 'Local recovery verification failed'}
 
 if($smokeResult -notmatch 'saved_state=true'){throw 'Saved state/close verification failed'}
+
+if($smokeResult -notmatch 'sparse_raster=true'){throw 'Sparse raster verification failed'}

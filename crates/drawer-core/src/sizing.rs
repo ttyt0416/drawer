@@ -15,6 +15,12 @@ pub struct DocumentState {
     pub animation: Option<crate::animation::Timeline>,
 }
 impl DocumentState {
+    pub fn allocation_bytes(&self) -> usize {
+        crate::tiled_raster::allocated_layers(&self.layers)
+            + self.color.memory_bytes()
+            + self.scene.size_bytes()
+            + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
+    }
     pub fn memory_bytes(&self) -> usize {
         self.layers
             .iter()
@@ -267,6 +273,7 @@ pub fn plan(source: &DocumentState, change: Change, budget: usize) -> Result<Pla
         );
         for cell in animation.tracks.iter().flat_map(|t| &t.cells) {
             let layer = RasterLayer {
+                tiled: None,
                 precise: None,
                 locked: false,
                 name: cell.name.clone(),
@@ -393,6 +400,7 @@ pub fn prepare(
                 height: extent.height,
                 dpi: source.dpi,
                 layers: vec![RasterLayer {
+                    tiled: None,
                     placement: None,
                     ..layer.clone()
                 }],
@@ -500,6 +508,7 @@ pub fn prepare(
             }
         }
         result.layers.push(RasterLayer {
+            tiled: None,
             precise,
             locked: layer.locked,
             name: layer.name.clone(),
@@ -536,6 +545,7 @@ pub fn prepare(
                 height: source.height,
                 dpi: source.dpi,
                 layers: vec![RasterLayer {
+                    tiled: None,
                     precise: None,
                     name: cell.name.clone(),
                     locked: false,

@@ -213,7 +213,7 @@ pub fn active(doc: &Document, t: Target) -> bool {
 fn finish(doc: &Document, state: DocumentState) -> Result<DocumentState, String> {
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
-        || state.memory_bytes().saturating_add(doc.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+        || crate::tiled_raster::change_bytes(doc, &state) > DEFAULT_DOCUMENT_BUDGET / 4
         || serde_json::to_vec(&state.scene)
             .map_err(|e| e.to_string())?
             .len()
@@ -229,7 +229,7 @@ pub fn prepare(
     alpha: Option<bool>,
     clip: Option<bool>,
 ) -> Result<DocumentState, String> {
-    if doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
+    if doc.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
         || selected.is_empty()
         || selected.len() > 11000
         || selected.iter().collect::<BTreeSet<_>>().len() != selected.len()
@@ -315,7 +315,7 @@ pub fn solo(doc: &Document, folder: Option<usize>) -> Result<DocumentState, Stri
     if doc.scene.layer_groups.solo.is_some() {
         return Err("Restore linked-layer solo visibility first".into());
     }
-    if doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+    if doc.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Solo snapshot budget".into());
     }
     let mut state = doc.snapshot();

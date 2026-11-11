@@ -216,6 +216,8 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raster_tiles: Option<Vec<crate::tiled_raster::Stored>>,
     #[serde(default, skip_serializing_if = "crate::world3d::Data::is_default")]
     pub world3d: Box<crate::world3d::Data>,
     #[serde(default, skip_serializing_if = "crate::timelines::Data::is_default")]
@@ -350,6 +352,9 @@ impl Scene {
         self.valid_images(true)
     }
     fn valid_images(&self, missing: bool) -> bool {
+        if self.raster_tiles.is_some() {
+            return false;
+        }
         if !self.world3d.valid(self) {
             return false;
         }

@@ -657,3 +657,5 @@ pub mod save_generation;
 pub mod atomic_file;
 
 pub mod recovery;
+
+pub mod tiled_raster;

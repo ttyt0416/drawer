@@ -520,6 +520,16 @@ impl Drawer {
         self.quit_approved.clear();
     }
     pub(super) fn document_controls(&mut self, ui: &mut egui::Ui) {
+        if let Some(n) = self.active
+            && self.documents[n].layers.iter().any(|l| l.tiled.is_some())
+        {
+            let d = &self.documents[n];
+            ui.small(format!(
+                "Drawing + Undo memory: {:.2} MiB / full-image processing: {:.0} MiB",
+                d.resident_bytes() as f64 / 1048576.,
+                d.memory_bytes() as f64 / 1048576.
+            ));
+        }
         ui.horizontal_wrapped(|ui| {
             if crate::help::button(ui, "Open…", "files").clicked()
                 && let Err(e) = self.begin_file_browser(file_browser::Mode::Open)

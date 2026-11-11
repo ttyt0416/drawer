@@ -1,0 +1,9 @@
+# Sparse raster memory
+
+Large8-bit canvases use sparse64x64 RGBA tiles with a default pixel for untouched space. Copy-on-write tile buffers keep captured state immutable. Memory estimates deduplicate shared tile backing across layers and count Undo payload capacities. Current image content is never removed by history eviction. Operations that require a contiguous raster still use the dense projected cost and refuse costs above their operation budget; sparse storage does not imply an unlimited dense filter/export workspace.
+
+Native125 packs stored tiles into ordinary bounded native raster blocks and stores validated tile coordinates/default pixels in native metadata. Dense native wire layout is unchanged; older supported versions remain readable. The reader validates bounds, duplicates, packing dimensions, memory and native integrity before exposing the hydrated image. Native/recovery state contains no Undo stack. Tile metadata is transport-only and cannot remain in the live Scene.
+
+Pixel and brush commits prepare every touched tile on detached candidates before publishing. Undo/Redo stage sparse candidates before changing live content; memory failures preserve the record and current state with a resource error.8-bit floating composition uses the same tile-backed samples. Layer creation, duplication and empty-layer checks account for sparse contents. Shared pixel data and metadata are counted separately from the logical dense processing size.
+
+Verification covers blank32K canvases, distant pixels, tile/history allocation estimates, Native125 semantic reopen, many sparse/dense layers, repeated Undo/Redo, a small tile budget failure with no mutation, floating8-bit brush painting, and real pointer replay of a large canvas stroke plus Undo/Redo/save/reopen. Measurements cover the engine image/Undo estimates; process working set includes code, fonts, UI, drivers and other components and is not claimed equal to the document budget.

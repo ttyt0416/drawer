@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 124;
+pub(crate) const VERSION: u32 = 125;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -216,6 +216,7 @@ fn read_native_body(
             }
         }
         document.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked,
             name,
@@ -231,6 +232,12 @@ fn read_native_body(
         let mut bytes = vec![0; length];
         reader.read_exact(&mut bytes)?;
         document.scene = serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+        if let Some(stored) = document.scene.raster_tiles.take() {
+            if version < 125 {
+                return Err(invalid("Sparse raster metadata requires Native125"));
+            }
+            crate::tiled_raster::hydrate(&mut document, stored, budget).map_err(invalid)?;
+        }
         if version < 82 && crate::extended_filters::active(&document.scene) {
             return Err(invalid("Finishing filter recipes require native version82"));
         }
@@ -421,6 +428,11 @@ fn read_native_body(
         }
         document.work_time = document.scene.work_time.take();
         document.camera_guides = document.scene.camera_guides.take().unwrap_or_default();
+        if document.scene.raster_tiles.is_some() {
+            return Err(invalid(
+                "Sparse raster transport cannot be stored in live Scene",
+            ));
+        }
         if document.scene.work_time.is_some()
             || document.work_time.as_ref().is_some_and(|s| !s.valid())
         {
@@ -657,7 +669,7 @@ fn read_native_body(
             document.scene.valid()
         }) || !document.scene.layer_ids.matches(document.layers.len())
             || !document.scene.paper.valid_for(document.layers.len())
-            || document.memory_bytes() > budget
+            || document.allocation_bytes() > budget
         {
             return Err(invalid("Invalid or oversized page geometry"));
         }
@@ -673,7 +685,7 @@ fn read_native_body(
             }
             _ => return Err(invalid("Invalid animation tag")),
         }
-        if document.memory_bytes() > budget {
+        if document.allocation_bytes() > budget {
             return Err(invalid("Animation exceeds document memory budget"));
         }
     }
@@ -687,7 +699,7 @@ fn read_native_body(
         document.scene.metadata_valid()
     } else {
         document.scene.valid()
-    }) || document.memory_bytes() > budget
+    }) || document.allocation_bytes() > budget
     {
         return Err(invalid("Invalid material image payload or budget"));
     }
@@ -731,13 +743,21 @@ fn read_native_body(
     if version >= 104 {
         crate::timelines::read(&mut document, &mut reader, budget)?;
     }
+    if document
+        .layers
+        .iter()
+        .any(|l| !l.valid(document.width, document.height))
+        || !document.color.valid_layers(&document.layers)
+    {
+        return Err(invalid("Invalid final raster/tile precision layout"));
+    }
     if !document.scene.valid()
         || !crate::keyframes::valid_document(&document)
         || !crate::timeline_timing::valid_document(&document)
         || !crate::cels::valid_document(&document)
         || !crate::shot_exchange::valid_document(&document)
         || !crate::timelines::valid_document(&document)
-        || document.memory_bytes() > budget
+        || document.allocation_bytes() > budget
     {
         return Err(invalid("Invalid embedded page sources or memory budget"));
     }
@@ -915,6 +935,8 @@ pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
         #[serde(flatten)]
         scene: &'a crate::scene::Scene,
         #[serde(skip_serializing_if = "Option::is_none")]
+        raster_tiles: Option<Vec<crate::tiled_raster::Stored>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         work_time: Option<&'a crate::work_time::Snapshot>,
         #[serde(skip_serializing_if = "Option::is_none")]
         onion: Option<crate::timeline_view::Onion>,
@@ -925,6 +947,7 @@ pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
     }
     let scene = serde_json::to_vec(&Metadata {
         scene: &document.scene,
+        raster_tiles: crate::tiled_raster::metadata(document),
         work_time: document.work_time.as_ref(),
         camera_guides: (document.camera_guides != Default::default())
             .then_some(document.camera_guides),
@@ -941,7 +964,7 @@ pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
 }
 
 pub(crate) fn native_bytes(document: &Document) -> io::Result<Vec<u8>> {
-    if document.memory_bytes() > 64 * 1024 * 1024 {
+    if document.allocation_bytes() > 64 * 1024 * 1024 {
         return Err(invalid("Contained native page exceeds64MiB"));
     }
     let scene = native_scene(document)?;
@@ -967,23 +990,49 @@ fn write_body(document: &Document, scene: &[u8], writer: &mut impl Write) -> io:
     for layer in &document.layers {
         writer.write_all(&(layer.name.len() as u32).to_le_bytes())?;
         writer.write_all(layer.name.as_bytes())?;
-        if let Some(p) = layer.placement {
+        if let Some(tiled) = &layer.tiled {
+            let tiles = tiled.stored();
+            let (width, height) = if tiles.is_empty() {
+                (1, 1)
+            } else {
+                (crate::tiled_raster::PIXELS as u32, tiles.len() as u32)
+            };
             writer.write_all(&1u32.to_le_bytes())?;
-            writer.write_all(&p.width.to_le_bytes())?;
-            writer.write_all(&p.height.to_le_bytes())?;
-            writer.write_all(&p.offset[0].to_le_bytes())?;
-            writer.write_all(&p.offset[1].to_le_bytes())?;
-        } else {
-            writer.write_all(&0u32.to_le_bytes())?;
-        }
-        writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
-        writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
-        for chunk in layer.pixels.chunks(4096) {
-            let mut buffer = [0u8; 16384];
-            for (bytes, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(chunk) {
-                bytes.copy_from_slice(pixel);
+            writer.write_all(&width.to_le_bytes())?;
+            writer.write_all(&height.to_le_bytes())?;
+            writer.write_all(&[0; 16])?;
+            writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
+            writer.write_all(&(u64::from(width) * u64::from(height) * 4).to_le_bytes())?;
+            if tiles.is_empty() {
+                writer.write_all(&tiled.default)?;
+            } else {
+                for (_, pixels) in tiles {
+                    let mut buffer = [0u8; 16384];
+                    for (out, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
+                        out.copy_from_slice(pixel);
+                    }
+                    writer.write_all(&buffer)?;
+                }
             }
-            writer.write_all(&buffer[..chunk.len() * 4])?;
+        } else {
+            if let Some(p) = layer.placement {
+                writer.write_all(&1u32.to_le_bytes())?;
+                writer.write_all(&p.width.to_le_bytes())?;
+                writer.write_all(&p.height.to_le_bytes())?;
+                writer.write_all(&p.offset[0].to_le_bytes())?;
+                writer.write_all(&p.offset[1].to_le_bytes())?;
+            } else {
+                writer.write_all(&0u32.to_le_bytes())?;
+            }
+            writer.write_all(&u32::from(layer.locked).to_le_bytes())?;
+            writer.write_all(&(layer.pixels.len() as u64 * 4).to_le_bytes())?;
+            for chunk in layer.pixels.chunks(4096) {
+                let mut buffer = [0u8; 16384];
+                for (bytes, pixel) in buffer.as_chunks_mut::<4>().0.iter_mut().zip(chunk) {
+                    bytes.copy_from_slice(pixel);
+                }
+                writer.write_all(&buffer[..chunk.len() * 4])?;
+            }
         }
     }
     writer.write_all(&(scene.len() as u32).to_le_bytes())?;
@@ -1169,6 +1218,7 @@ mod tests {
         document.layers[0].name = "원본 레이어".into();
         document.edit_pixel(0, 1, 0, [20, 40, 60, 255]);
         document.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Second".into(),

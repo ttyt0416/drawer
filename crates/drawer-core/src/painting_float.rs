@@ -532,6 +532,18 @@ impl Stroke {
         } else {
             None
         };
+        if let Some(image) = &mut target.tiled {
+            if doc.color.depth == Depth::Sixteen {
+                return Err("Sparse painting requires8-bit channels".into());
+            }
+            let budget = doc.tile_budget(self.layer);
+            image.prepare(
+                std::iter::once(&self)
+                    .chain(self.arms.iter().map(|a| a.stroke.as_ref()))
+                    .flat_map(|s| s.changes.iter().map(|p| p.offset)),
+                budget,
+            )?;
+        }
         let mut seen = std::collections::HashSet::new();
         let mut changed = false;
         let source = std::iter::once(&self).chain(self.arms.iter().map(|a| a.stroke.as_ref()));
@@ -558,18 +570,25 @@ impl Stroke {
                 changed |= if doc.color.depth == Depth::Sixteen {
                     doc.layers[self.layer].sample_at(n).rgba16() != stored
                 } else {
-                    target.pixels[n] != stored.map(|v| v as u8)
+                    target.read_at(n) != Some(stored.map(|v| v as u8))
                 };
                 if let Some(precise) = &mut precise {
                     precise[n] = stored;
                     target.pixels[n] = Sample::from16(stored).rgba8();
                 } else {
-                    target.pixels[n] = stored.map(|v| v as u8);
+                    if let Some(image) = &mut target.tiled {
+                        image.set_prepared(n, stored.map(|v| v as u8));
+                    } else {
+                        target.pixels[n] = stored.map(|v| v as u8);
+                    }
                 }
             }
         }
         if !changed {
             return Ok(false);
+        }
+        if let Some(image) = &mut target.tiled {
+            image.compact();
         }
         target.precise = precise;
         if let Some(metadata) = metadata {

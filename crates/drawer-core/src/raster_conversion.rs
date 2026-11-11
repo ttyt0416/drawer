@@ -391,6 +391,7 @@ fn rasterize(d: &Document, key: Key, t: Target, value: Expression) -> Result<Pre
     state.scene.paper.roots = state.scene.paper.root_nodes(state.layers.len());
     state.scene.paper.roots.push(crate::paper::Node::Raster(n));
     state.layers.push(RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name,

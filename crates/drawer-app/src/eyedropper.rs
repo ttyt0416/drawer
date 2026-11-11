@@ -105,6 +105,7 @@ pub(super) fn smoke(root: &std::path::Path) -> Result<(), String> {
         }
     }
     app.documents[0].layers.push(RasterLayer {
+        tiled: None,
         precise: None,
         locked: true,
         name: "Composite overlay".into(),

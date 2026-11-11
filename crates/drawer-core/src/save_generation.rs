@@ -138,7 +138,10 @@ pub fn capture(opened: &[(u64, &Document)]) -> Result<Vec<(u64, Document)>, Stri
     if sum > crate::document::DEFAULT_DOCUMENT_BUDGET / 4 {
         return Err("Project snapshot capture memory limit".into());
     }
-    Ok(opened.iter().map(|(id, d)| (*id, (*d).clone())).collect())
+    Ok(opened
+        .iter()
+        .map(|(id, d)| (*id, d.current_copy()))
+        .collect())
 }
 #[path = "save_generation_verify.rs"]
 pub mod verify;

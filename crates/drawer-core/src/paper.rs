@@ -568,6 +568,7 @@ impl Graph {
                 offset: min,
             };
             let mut layer = RasterLayer {
+                tiled: None,
                 precise: None,
                 locked: false,
                 name: match node {
@@ -597,6 +598,7 @@ impl Graph {
             Node::Folder(n) => self.folders[n].name.clone(),
         };
         Ok(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name,
@@ -902,6 +904,7 @@ pub fn verify() -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     d.layers[0].pixels.fill([220, 140, 60, 96]);
     d.layers.push(RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Top".into(),
@@ -972,6 +975,7 @@ mod tests {
             offset: [-2, 1],
         });
         d.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Above".into(),
@@ -991,6 +995,7 @@ mod tests {
             ..Default::default()
         };
         d.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Unreferenced top".into(),
@@ -1166,6 +1171,7 @@ mod tests {
     fn huge_merge_extent_and_budget_reject_without_partial_history() {
         let mut d = doc();
         d.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Far away".into(),

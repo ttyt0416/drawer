@@ -1203,3 +1203,8 @@ crates/drawer-core/src/saved_revision_verify.rs
 crates/drawer-app/src/save_status.rs
 crates/drawer-app/src/save_status_verify.rs
 docs/process/saved-state.md
+
+crates/drawer-core/src/tiled_raster.rs
+crates/drawer-core/src/tiled_raster_verify.rs
+crates/drawer-app/src/tiled_raster.rs
+docs/process/tiled-memory.md

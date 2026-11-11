@@ -260,6 +260,7 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let mut d = document()?;
     d.layers[0].pixels.fill([50, 100, 200, 255]);
     d.layers.push(crate::document::RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Eraser child".into(),

@@ -541,6 +541,7 @@ impl Builder<'_> {
             offset: [x as i64, y as i64],
         };
         let mut layer = crate::document::RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "SVG embedded raster".into(),

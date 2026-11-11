@@ -405,7 +405,7 @@ pub fn prepare_patch(
     {
         return Err("Choose unique layers and a valid opacity".into());
     }
-    if doc.memory_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8 {
+    if doc.snapshot_bytes() > crate::document::DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Layer property snapshot budget".into());
     }
     let available = targets(doc)

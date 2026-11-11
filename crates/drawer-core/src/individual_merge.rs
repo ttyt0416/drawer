@@ -84,6 +84,7 @@ pub(crate) fn pixels(
         }
     }
     let mut raster = RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Combined raw pixels and mask".into(),

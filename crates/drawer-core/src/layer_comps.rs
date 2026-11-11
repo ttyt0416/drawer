@@ -160,7 +160,7 @@ fn live(d: &Document) -> Result<BTreeMap<Key, Target>, String> {
         .collect())
 }
 pub fn prepare(d: &Document, command: Command) -> Result<Prepared, String> {
-    if d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+    if d.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Layer comp snapshot exceeds document budget".into());
     }
     if matches!(command, Command::Capture { .. } | Command::Apply(_))

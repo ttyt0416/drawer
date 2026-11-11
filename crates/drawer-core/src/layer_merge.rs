@@ -281,6 +281,7 @@ pub fn prepare(
             }
         }
         let mut raster = RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Merged layers".into(),
@@ -512,6 +513,7 @@ fn flatten(doc: &Document, settings: Settings) -> Result<Prepared, String> {
     after.scene.layer_ids.next = id.checked_add(1).ok_or("Raster identity limit")?;
     after.scene.layer_ids.rasters = vec![id];
     after.layers = vec![RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Flattened page".into(),

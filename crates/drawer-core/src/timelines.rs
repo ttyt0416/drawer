@@ -1110,11 +1110,11 @@ pub(crate) fn read(d: &mut Document, r: &mut impl Read, budget: usize) -> io::Re
             .map(|s| s.count as usize)
             .collect::<Vec<_>>();
         for (i, count) in counts.into_iter().enumerate() {
-            let samples = pcm(r, count, budget.saturating_sub(d.memory_bytes()))?;
+            let samples = pcm(r, count, budget.saturating_sub(d.allocation_bytes()))?;
             d.scene.timelines.entries[n].saved.as_mut().unwrap().audio[i].samples = samples;
         }
         for (i, count) in originals.into_iter().enumerate() {
-            let samples = pcm(r, count, budget.saturating_sub(d.memory_bytes()))?;
+            let samples = pcm(r, count, budget.saturating_sub(d.allocation_bytes()))?;
             d.scene.timelines.entries[n]
                 .saved
                 .as_mut()

@@ -382,8 +382,9 @@ pub(crate) fn write(s: &Scene, w: &mut impl Write) -> io::Result<()> {
 pub(crate) fn read(d: &mut Document, r: &mut impl Read, budget: usize) -> io::Result<()> {
     for n in 0..d.scene.cels.definitions.len() {
         let p = d.scene.cels.definitions[n].clone();
-        d.scene.cels.definitions[n] = p.read_source(r, budget.saturating_sub(d.memory_bytes()))?;
-        if d.memory_bytes() > budget {
+        d.scene.cels.definitions[n] =
+            p.read_source(r, budget.saturating_sub(d.allocation_bytes()))?;
+        if d.allocation_bytes() > budget {
             return Err(io::Error::other("Cel source budget"));
         }
     }

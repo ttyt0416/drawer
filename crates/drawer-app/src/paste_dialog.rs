@@ -137,6 +137,7 @@ impl PasteDialog {
                 height: e.height,
                 dpi: self.preview.dpi,
                 layers: vec![drawer_core::document::RasterLayer {
+                    tiled: None,
                     placement: None,
                     ..self.original.as_ref().clone()
                 }],

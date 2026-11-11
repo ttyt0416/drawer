@@ -137,6 +137,7 @@ mod tests {
             ..Default::default()
         };
         d.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: true,
             name: "Top blue".into(),

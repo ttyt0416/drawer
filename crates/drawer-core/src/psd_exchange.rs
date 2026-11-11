@@ -267,6 +267,7 @@ impl Image {
                 }
                 let n = d.layers.len();
                 d.layers.push(RasterLayer {
+                    tiled: None,
                     precise: None,
                     locked: false,
                     name: layer.name.clone(),

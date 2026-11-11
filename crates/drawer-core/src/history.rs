@@ -47,7 +47,7 @@ impl Edit {
                 EditKind::Multi { layers, scene } => {
                     layers
                         .iter()
-                        .map(|(_, p)| p.len() * std::mem::size_of::<PixelChange>())
+                        .map(|(_, p)| p.capacity() * std::mem::size_of::<PixelChange>())
                         .sum::<usize>()
                         + std::mem::size_of::<Self>()
                         + scene
@@ -55,14 +55,16 @@ impl Edit {
                             .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
                 }
                 EditKind::Pixels { changes, scene, .. } => {
-                    changes.len() * std::mem::size_of::<PixelChange>()
+                    changes.capacity() * std::mem::size_of::<PixelChange>()
                         + std::mem::size_of::<Self>()
                         + scene
                             .as_ref()
                             .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
                 }
                 EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
-                EditKind::State { before, after } => before.memory_bytes() + after.memory_bytes(),
+                EditKind::State { before, after } => {
+                    crate::tiled_raster::history_bytes(before, after)
+                }
                 EditKind::Scene { before, after } => {
                     before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
                 }
@@ -109,6 +111,54 @@ impl History {
         }
     }
 }
+fn staged_history_tiles(
+    doc: &Document,
+    edit: &Edit,
+    before: bool,
+) -> Result<std::collections::BTreeMap<usize, crate::tiled_raster::Image>, String> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut budget = crate::document::DEFAULT_DOCUMENT_BUDGET
+        .saturating_sub(doc.resident_bytes())
+        .saturating_sub(edit.bytes());
+    let mut stage = |layer: usize, changes: &[PixelChange]| -> Result<(), String> {
+        let raster = &doc.layers[layer];
+        if let Some(image) = raster.prepare_pixels(
+            changes
+                .iter()
+                .map(|p| (p.offset, if before { p.before } else { p.after })),
+            budget
+                .saturating_add(raster.allocation_bytes())
+                .min(doc.tile_budget(layer)),
+        )? {
+            budget = budget.saturating_sub(image.bytes().saturating_sub(raster.allocation_bytes()));
+            out.insert(layer, image);
+        }
+        Ok(())
+    };
+    match &edit.kind {
+        EditKind::Multi { layers, .. } => {
+            for (layer, pixels) in layers {
+                stage(*layer, pixels)?;
+            }
+        }
+        EditKind::Pixels { layer, changes, .. } => stage(*layer, changes)?,
+        EditKind::Pixel {
+            layer,
+            offset,
+            before,
+            after,
+        } => stage(
+            *layer,
+            &[PixelChange {
+                offset: *offset,
+                before: *before,
+                after: *after,
+            }],
+        )?,
+        _ => {}
+    }
+    Ok(out)
+}
 impl Document {
     pub(crate) fn commit_multi(
         &mut self,
@@ -141,7 +191,7 @@ impl Document {
             if changes.windows(2).any(|p| p[0].offset == p[1].offset)
                 || changes
                     .iter()
-                    .any(|p| layer.pixels.get(p.offset) != Some(&p.before))
+                    .any(|p| layer.read_at(p.offset) != Some(p.before))
             {
                 return Err("Stale or duplicate pixel delta".into());
             }
@@ -173,10 +223,35 @@ impl Document {
         {
             return Err("Multi-layer undo memory budget".into());
         }
+        let mut tiled_candidates = std::collections::BTreeMap::new();
+        if let EditKind::Multi { layers, .. } = &bytes.kind {
+            let mut budget = crate::document::DEFAULT_DOCUMENT_BUDGET
+                .saturating_sub(self.resident_bytes())
+                .saturating_sub(bytes.bytes());
+            for (n, changes) in layers {
+                if let Some(image) = self.layers[*n].prepare_pixels(
+                    changes.iter().map(|p| (p.offset, p.after)),
+                    budget
+                        .saturating_add(self.layers[*n].allocation_bytes())
+                        .min(self.tile_budget(*n)),
+                )? {
+                    budget = budget.saturating_sub(
+                        image
+                            .bytes()
+                            .saturating_sub(self.layers[*n].allocation_bytes()),
+                    );
+                    tiled_candidates.insert(*n, image);
+                }
+            }
+        }
         if let EditKind::Multi { layers, scene } = &bytes.kind {
             for (n, changes) in layers {
-                for p in changes {
-                    self.layers[*n].pixels[p.offset] = p.after;
+                if let Some(image) = tiled_candidates.remove(n) {
+                    self.layers[*n].tiled = Some(image);
+                } else {
+                    for p in changes {
+                        self.layers[*n].pixels[p.offset] = p.after;
+                    }
                 }
             }
             if let Some((_, after)) = scene {
@@ -254,6 +329,12 @@ impl Document {
         {
             return Err("Stroke exceeds the undo memory budget".into());
         }
+        let tile_budget = self.tile_budget(layer).min(
+            crate::document::DEFAULT_DOCUMENT_BUDGET
+                .saturating_sub(self.resident_bytes())
+                .saturating_add(self.layers[layer].allocation_bytes())
+                .saturating_sub(bytes),
+        );
         let raster = self
             .layers
             .get_mut(layer)
@@ -263,12 +344,18 @@ impl Document {
         }
         if changes
             .iter()
-            .any(|p| raster.pixels.get(p.offset) != Some(&p.before))
+            .any(|p| raster.read_at(p.offset) != Some(p.before))
         {
             return Err("The layer changed during the stroke".into());
         }
-        for p in &changes {
-            raster.pixels[p.offset] = p.after;
+        if let Some(image) =
+            raster.prepare_pixels(changes.iter().map(|p| (p.offset, p.after)), tile_budget)?
+        {
+            raster.tiled = Some(image);
+        } else {
+            for p in &changes {
+                raster.pixels[p.offset] = p.after;
+            }
         }
         if let Some((_, after)) = &scene {
             self.scene = after.as_ref().clone();
@@ -316,13 +403,43 @@ impl Document {
             || self.history.meta != self.history.saved_meta
             || self.light_table.dirty();
     }
+    pub(crate) fn trim_history_memory(&mut self) {
+        let budget = self
+            .working_budget
+            .saturating_sub(self.allocation_bytes())
+            .min(crate::document::DEFAULT_DOCUMENT_BUDGET / 4);
+        while self
+            .history
+            .undo
+            .iter()
+            .chain(&self.history.redo)
+            .map(Edit::bytes)
+            .sum::<usize>()
+            > budget
+        {
+            if !self.history.undo.is_empty() {
+                self.history.undo.remove(0);
+            } else if !self.history.redo.is_empty() {
+                self.history.redo.remove(0);
+            } else {
+                break;
+            }
+        }
+    }
     fn history_changed(&mut self) {
+        self.trim_history_memory();
         self.refresh_dirty();
         self.revision += 1;
     }
     pub fn edit_pixel(&mut self, layer: usize, x: u32, y: u32, after: [u8; 4]) -> bool {
         if self.color != crate::color_storage::Config::legacy() {
-            return crate::color_storage::edit_pixel8(self, layer, x, y, after).unwrap_or(false);
+            return match crate::color_storage::edit_pixel8(self, layer, x, y, after) {
+                Ok(v) => v,
+                Err(e) => {
+                    self.resource_error = Some(e);
+                    false
+                }
+            };
         }
         if crate::layer_properties::paintable(self, layer).is_err() {
             return false;
@@ -330,6 +447,7 @@ impl Document {
         if x >= self.width || y >= self.height {
             return false;
         }
+        let tile_budget = self.tile_budget(layer);
         let protected = crate::clipping::alpha_locked(self, layer);
         let Some(layer_data) = self.layers.get_mut(layer) else {
             return false;
@@ -341,7 +459,7 @@ impl Document {
         else {
             return false;
         };
-        let before = layer_data.pixels[offset];
+        let before = layer_data.read_at(offset).unwrap_or([0; 4]);
         let after = if protected {
             crate::clipping::preserve(before, after)
         } else {
@@ -350,7 +468,14 @@ impl Document {
         if before == after {
             return false;
         }
-        layer_data.pixels[offset] = after;
+        match layer_data.prepare_pixels(std::iter::once((offset, after)), tile_budget) {
+            Ok(Some(image)) => layer_data.tiled = Some(image),
+            Ok(None) => layer_data.pixels[offset] = after,
+            Err(e) => {
+                self.resource_error = Some(e);
+                return false;
+            }
+        }
         self.history.push(EditKind::Pixel {
             layer,
             offset,
@@ -431,12 +556,30 @@ impl Document {
         {
             return Err("Invalid image state.".into());
         }
-        if self.memory_bytes().saturating_add(after.memory_bytes())
-            > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
-        {
-            return Err("Change exceeds the undo memory budget.".into());
+        let dense = self
+            .layers
+            .iter()
+            .chain(&after.layers)
+            .filter(|l| l.tiled.is_none())
+            .map(crate::document::RasterLayer::allocation_bytes)
+            .sum::<usize>();
+        if dense > crate::document::DEFAULT_DOCUMENT_BUDGET / 4 {
+            return Err("Change exceeds dense Undo memory budget".into());
+        }
+        let retained = crate::tiled_raster::change_bytes(self, &after);
+        if retained > self.working_budget.saturating_sub(after.allocation_bytes()) {
+            return Err("Not enough working memory to retain the complete Undo command".into());
         }
         let before = self.snapshot();
+        if crate::tiled_raster::history_bytes(&before, &after)
+            > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+            || after.allocation_bytes().saturating_add(
+                self.resident_bytes()
+                    .saturating_sub(self.allocation_bytes()),
+            ) > self.working_budget
+        {
+            return Err("Change exceeds the image/Undo memory budget".into());
+        }
         if before == after {
             return Ok(false);
         }
@@ -487,11 +630,14 @@ impl Document {
         }
         .and_then(|e| e.group)
     }
+    pub fn take_resource_error(&mut self) -> Option<String> {
+        self.resource_error.take()
+    }
     pub fn history_counts(&self) -> (usize, usize) {
         (self.history.undo.len(), self.history.redo.len())
     }
     pub fn resident_bytes(&self) -> usize {
-        self.memory_bytes()
+        self.allocation_bytes()
             + self
                 .history
                 .undo
@@ -524,12 +670,24 @@ impl Document {
         let Some(edit) = self.history.undo.pop() else {
             return false;
         };
+        let mut tiled = match staged_history_tiles(self, &edit, true) {
+            Ok(tiled) => tiled,
+            Err(e) => {
+                self.history.undo.push(edit);
+                self.resource_error = Some(e);
+                return false;
+            }
+        };
         let comp_policy = self.scene.layer_comps.policy;
         match &edit.kind {
             EditKind::Multi { layers, scene } => {
                 for (n, changes) in layers {
-                    for p in changes {
-                        self.layers[*n].pixels[p.offset] = p.before;
+                    if let Some(image) = tiled.remove(n) {
+                        self.layers[*n].tiled = Some(image);
+                    } else {
+                        for p in changes {
+                            self.layers[*n].pixels[p.offset] = p.before;
+                        }
                     }
                 }
                 if let Some((before, _)) = scene {
@@ -541,8 +699,12 @@ impl Document {
                 changes,
                 scene,
             } => {
-                for p in changes {
-                    self.layers[*layer].pixels[p.offset] = p.before;
+                if let Some(image) = tiled.remove(layer) {
+                    self.layers[*layer].tiled = Some(image);
+                } else {
+                    for p in changes {
+                        self.layers[*layer].pixels[p.offset] = p.before;
+                    }
                 }
                 if let Some((before, _)) = scene {
                     self.scene = before.as_ref().clone();
@@ -553,7 +715,13 @@ impl Document {
                 offset,
                 before,
                 ..
-            } => self.layers[*layer].pixels[*offset] = *before,
+            } => {
+                if let Some(image) = tiled.remove(layer) {
+                    self.layers[*layer].tiled = Some(image);
+                } else {
+                    self.layers[*layer].pixels[*offset] = *before;
+                }
+            }
             EditKind::State { before, .. } => before.restore(self),
             EditKind::Scene { before, .. } => self.scene = before.as_ref().clone(),
         }
@@ -567,12 +735,24 @@ impl Document {
         let Some(edit) = self.history.redo.pop() else {
             return false;
         };
+        let mut tiled = match staged_history_tiles(self, &edit, false) {
+            Ok(tiled) => tiled,
+            Err(e) => {
+                self.history.redo.push(edit);
+                self.resource_error = Some(e);
+                return false;
+            }
+        };
         let comp_policy = self.scene.layer_comps.policy;
         match &edit.kind {
             EditKind::Multi { layers, scene } => {
                 for (n, changes) in layers {
-                    for p in changes {
-                        self.layers[*n].pixels[p.offset] = p.after;
+                    if let Some(image) = tiled.remove(n) {
+                        self.layers[*n].tiled = Some(image);
+                    } else {
+                        for p in changes {
+                            self.layers[*n].pixels[p.offset] = p.after;
+                        }
                     }
                 }
                 if let Some((_, after)) = scene {
@@ -584,8 +764,12 @@ impl Document {
                 changes,
                 scene,
             } => {
-                for p in changes {
-                    self.layers[*layer].pixels[p.offset] = p.after;
+                if let Some(image) = tiled.remove(layer) {
+                    self.layers[*layer].tiled = Some(image);
+                } else {
+                    for p in changes {
+                        self.layers[*layer].pixels[p.offset] = p.after;
+                    }
                 }
                 if let Some((_, after)) = scene {
                     self.scene = after.as_ref().clone();
@@ -596,7 +780,13 @@ impl Document {
                 offset,
                 after,
                 ..
-            } => self.layers[*layer].pixels[*offset] = *after,
+            } => {
+                if let Some(image) = tiled.remove(layer) {
+                    self.layers[*layer].tiled = Some(image);
+                } else {
+                    self.layers[*layer].pixels[*offset] = *after;
+                }
+            }
             EditKind::State { after, .. } => after.restore(self),
             EditKind::Scene { after, .. } => self.scene = after.as_ref().clone(),
         }

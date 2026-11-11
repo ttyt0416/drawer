@@ -38,7 +38,7 @@ fn check(d: &Document) -> Result<(), String> {
         || !d.scene.paper.valid_for(d.layers.len())
         || !d.color.valid_layers(&d.layers)
         || d.layers.iter().any(|l| !l.valid(d.width, d.height))
-        || d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
+        || d.allocation_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
         || d.scene.clipping.solo.is_some()
         || d.scene.layer_groups.solo.is_some()
     {
@@ -84,6 +84,9 @@ fn empty(d: &Document, row: &Row) -> bool {
                     })
                 {
                     return false;
+                }
+                if let Some(image) = &d.layers[n].tiled {
+                    return image.is_transparent();
                 }
                 return d.layers[n].precise.as_ref().map_or_else(
                     || d.layers[n].pixels.iter().all(|v| v[3] == 0),
@@ -243,7 +246,7 @@ fn visible_copy(d: &Document) -> Result<Prepared, String> {
     let count = d.width as usize * d.height as usize;
     if count > 4 * 1024 * 1024
         || d.resident_bytes()
-            .saturating_add(d.memory_bytes().saturating_mul(3))
+            .saturating_add(d.allocation_bytes().saturating_mul(3))
             .saturating_add(count.saturating_mul(44))
             .saturating_add(32 * 1024 * 1024)
             > DEFAULT_DOCUMENT_BUDGET
@@ -288,7 +291,10 @@ fn visible_copy(d: &Document) -> Result<Prepared, String> {
         });
     p::validate_edit(d, &state)?;
     if !state.scene.valid()
-        || state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+        || state
+            .allocation_bytes()
+            .saturating_add(d.allocation_bytes())
+            > DEFAULT_DOCUMENT_BUDGET / 4
     {
         return Err("Visible copy exceeds scene/Undo budget".into());
     }

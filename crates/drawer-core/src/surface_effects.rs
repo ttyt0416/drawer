@@ -721,6 +721,7 @@ pub fn rasterize(
     }
     drop(renderer);
     let mut raster = crate::document::RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Surface effect result".into(),
@@ -864,6 +865,7 @@ fn rasterize_run(
     }
     drop(renderer);
     let mut raster = crate::document::RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Surface effect clipping run".into(),

@@ -25,7 +25,7 @@ pub fn prepare(
     selection: &Selection,
     edit: Edit,
 ) -> Result<Prepared, String> {
-    if d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+    if d.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Search edit snapshot limit".into());
     }
     let rows = c::rows(d)?;
@@ -178,7 +178,7 @@ fn finish(d: &Document, mut state: DocumentState) -> Result<DocumentState, Strin
             .scene
             .catalog
             .valid_animation(state.animation.as_ref())
-        || state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+        || crate::tiled_raster::change_bytes(d, &state) > DEFAULT_DOCUMENT_BUDGET / 4
         || serde_json::to_vec(&state.scene)
             .map_err(|e| e.to_string())?
             .len()

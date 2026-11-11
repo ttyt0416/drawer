@@ -236,6 +236,7 @@ pub fn prepare(
     }
     let mut state = document.snapshot();
     state.layers.push(RasterLayer {
+        tiled: None,
         precise: None,
         locked: false,
         name: "Pasted image".into(),

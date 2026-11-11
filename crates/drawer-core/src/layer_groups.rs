@@ -211,7 +211,7 @@ pub fn content_members(d: &Document, keys: &[Key]) -> Result<Vec<Key>, String> {
         .collect())
 }
 pub fn preflight(d: &Document, keys: &[Key], op: Operation) -> Result<(), String> {
-    if !d.scene.valid() || d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+    if !d.scene.valid() || d.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Invalid linked document or snapshot limit".into());
     }
     for key in content_members(d, keys)? {
@@ -250,7 +250,7 @@ pub fn move_linked(d: &Document, keys: &[Key], delta: [i64; 2]) -> Result<Docume
 pub fn finish(d: &Document, state: &DocumentState) -> Result<(), String> {
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
-        || state.memory_bytes().saturating_add(d.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+        || crate::tiled_raster::change_bytes(d, state) > DEFAULT_DOCUMENT_BUDGET / 4
         || serde_json::to_vec(&state.scene)
             .map_err(|e| e.to_string())?
             .len()
@@ -262,7 +262,7 @@ pub fn finish(d: &Document, state: &DocumentState) -> Result<(), String> {
     p::validate_edit(d, state)
 }
 pub fn prepare(d: &Document, command: Command) -> Result<DocumentState, String> {
-    if d.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
+    if d.snapshot_bytes() > DEFAULT_DOCUMENT_BUDGET / 8 {
         return Err("Group snapshot limit".into());
     }
     let available = live(d)?;

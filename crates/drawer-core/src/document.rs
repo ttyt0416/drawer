@@ -44,6 +44,7 @@ impl std::error::Error for CreateError {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RasterLayer {
+    pub tiled: Option<crate::tiled_raster::Image>,
     pub precise: Option<Vec<[u16; 4]>>,
     pub locked: bool,
     pub name: String,
@@ -68,7 +69,43 @@ impl PlacedRaster {
     }
 }
 impl RasterLayer {
+    pub(crate) fn prepare_pixels(
+        &self,
+        changes: impl Iterator<Item = (usize, [u8; 4])> + Clone,
+        budget: usize,
+    ) -> Result<Option<crate::tiled_raster::Image>, String> {
+        let Some(source) = &self.tiled else {
+            return Ok(None);
+        };
+        let mut image = source.clone();
+        image.prepare(changes.clone().map(|(n, _)| n), budget)?;
+        for (n, p) in changes {
+            image.set_prepared(n, p);
+        }
+        image.compact();
+        Ok(Some(image))
+    }
+    pub fn allocation_bytes(&self) -> usize {
+        self.tiled.as_ref().map_or_else(
+            || {
+                self.pixels.capacity().saturating_mul(4)
+                    + self
+                        .precise
+                        .as_ref()
+                        .map_or(0, |v| v.capacity().saturating_mul(8))
+            },
+            crate::tiled_raster::Image::bytes,
+        )
+    }
+    pub fn read_at(&self, n: usize) -> Option<[u8; 4]> {
+        self.tiled
+            .as_ref()
+            .map_or_else(|| self.pixels.get(n).copied(), |t| t.get(n))
+    }
     pub fn memory_bytes(&self) -> usize {
+        if let Some(t) = &self.tiled {
+            return t.width as usize * t.height as usize * 4;
+        }
         self.pixels.len().saturating_mul(4)
             + self
                 .precise
@@ -86,6 +123,9 @@ impl RasterLayer {
             .map_or_else(Default::default, |n| self.sample_at(n))
     }
     pub fn sample_at(&self, n: usize) -> crate::color_precision::Sample {
+        if let Some(t) = &self.tiled {
+            return crate::color_precision::Sample::from8(t.get(n).unwrap_or([0; 4]));
+        }
         self.precise
             .as_ref()
             .and_then(|v| v.get(n))
@@ -96,6 +136,11 @@ impl RasterLayer {
             })
     }
     pub fn same_color(&self, other: &Self) -> bool {
+        if self.tiled.is_some() || other.tiled.is_some() {
+            return self.tiled == other.tiled
+                && self.pixels == other.pixels
+                && self.precise == other.precise;
+        }
         if self.pixels.len() != other.pixels.len() {
             return false;
         }
@@ -131,6 +176,16 @@ impl RasterLayer {
         })
     }
     pub fn valid(&self, width: u32, height: u32) -> bool {
+        if let Some(t) = &self.tiled {
+            return t.width == width
+                && t.height == height
+                && t.valid()
+                && self.pixels.is_empty()
+                && self.precise.is_none()
+                && self.placement.is_none()
+                && !self.name.is_empty()
+                && self.name.len() <= 4096;
+        }
         let p = self.extent(width, height);
         p.valid()
             && (1..=4096).contains(&self.name.len())
@@ -151,13 +206,15 @@ impl RasterLayer {
     }
     pub fn pixel(&self, width: u32, height: u32, x: i64, y: i64) -> [u8; 4] {
         self.pixel_index(width, height, x, y)
-            .and_then(|i| self.pixels.get(i))
-            .copied()
+            .and_then(|i| self.read_at(i))
             .unwrap_or([0; 4])
     }
 }
 #[derive(Clone)]
 pub struct Document {
+    pub(crate) working_budget: usize,
+    pub(crate) raster_budget: usize,
+    pub(crate) resource_error: Option<String>,
     pub work_time: Option<crate::work_time::Snapshot>,
     pub id: u64,
     pub color: crate::color_storage::Config,
@@ -186,6 +243,9 @@ impl Document {
     /// Freeze editable current state without cloning session Undo/Redo caches.
     pub fn current_copy(&self) -> Self {
         Self {
+            working_budget: self.working_budget,
+            raster_budget: self.raster_budget,
+            resource_error: None,
             work_time: self.work_time.clone(),
             id: self.id,
             color: self.color.clone(),
@@ -229,7 +289,8 @@ impl Document {
             .checked_mul(spec.height as usize)
             .ok_or(CreateError::ResourceLimit)?;
         let bytes = count.checked_mul(4).ok_or(CreateError::ResourceLimit)?;
-        if bytes > memory_budget {
+        let sparse = bytes > DEFAULT_DOCUMENT_BUDGET && memory_budget >= 65536;
+        if bytes > memory_budget && !sparse {
             return Err(CreateError::ResourceLimit);
         }
         let color = match spec.background {
@@ -238,12 +299,15 @@ impl Document {
         };
         let mut pixels = Vec::new();
         pixels
-            .try_reserve_exact(count)
+            .try_reserve_exact(if sparse { 0 } else { count })
             .map_err(|_| CreateError::Allocation)?;
-        pixels.resize(count, color);
+        pixels.resize(if sparse { 0 } else { count }, color);
         static NEXT_ID: AtomicU64 = AtomicU64::new(1);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
+            working_budget: DEFAULT_DOCUMENT_BUDGET,
+            raster_budget: memory_budget,
+            resource_error: None,
             work_time: None,
             id,
             color: crate::color_storage::Config::legacy(),
@@ -253,6 +317,8 @@ impl Document {
             height: spec.height,
             dpi: spec.dpi,
             layers: vec![RasterLayer {
+                tiled: sparse
+                    .then(|| crate::tiled_raster::Image::new(spec.width, spec.height, color)),
                 precise: None,
                 locked: false,
                 name: "Layer 1".into(),
@@ -273,6 +339,35 @@ impl Document {
             keyframe_content: None,
             history: Default::default(),
         })
+    }
+    pub(crate) fn tile_budget(&self, layer: usize) -> usize {
+        let other = crate::tiled_raster::allocated_layers(&self.layers)
+            .saturating_sub(self.layers[layer].allocation_bytes());
+        self.raster_budget.saturating_sub(other).min(
+            self.working_budget
+                .saturating_sub(self.resident_bytes())
+                .saturating_add(self.layers[layer].allocation_bytes()),
+        )
+    }
+    pub fn image_budget(&self) -> usize {
+        self.raster_budget
+    }
+    pub fn set_working_budget(&mut self, bytes: usize) {
+        self.working_budget = bytes.min(DEFAULT_DOCUMENT_BUDGET);
+        self.trim_history_memory();
+    }
+    pub(crate) fn snapshot_bytes(&self) -> usize {
+        crate::tiled_raster::clone_layers_bytes(&self.layers)
+            + self.color.memory_bytes()
+            + self.scene.size_bytes()
+            + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
+    }
+    pub fn allocation_bytes(&self) -> usize {
+        crate::tiled_raster::allocated_layers(&self.layers)
+            + self.color.memory_bytes()
+            + self.light_table.bytes()
+            + self.scene.size_bytes()
+            + self.animation.as_ref().map_or(0, |a| a.memory_bytes())
     }
     pub fn memory_bytes(&self) -> usize {
         self.layers
@@ -429,6 +524,7 @@ mod tests {
         let mut document = Document::create(spec(), 4).unwrap();
         document.layers[0].pixels[0] = [255, 0, 0, 128];
         document.layers.push(RasterLayer {
+            tiled: None,
             precise: None,
             locked: false,
             name: "Top".into(),
@@ -467,7 +563,7 @@ mod tests {
             ..spec()
         };
         assert!(matches!(
-            Document::create(candidate, DEFAULT_DOCUMENT_BUDGET),
+            Document::create(candidate, 65535),
             Err(CreateError::ResourceLimit)
         ));
         assert!(matches!(

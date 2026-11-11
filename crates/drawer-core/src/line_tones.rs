@@ -329,6 +329,7 @@ fn append(
         offset: [0, 0],
     };
     let mut layer = RasterLayer {
+        tiled: None,
         name: name.into(),
         pixels,
         precise: None,

@@ -248,7 +248,7 @@ impl Session {
         }
         let bytes = documents
             .iter()
-            .try_fold(0usize, |n, d| n.checked_add(d.memory_bytes()))
+            .try_fold(0usize, |n, d| n.checked_add(d.allocation_bytes()))
             .ok_or("Recovery capture memory overflow")?;
         if bytes > B {
             return Err(

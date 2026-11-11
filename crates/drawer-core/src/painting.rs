@@ -361,13 +361,15 @@ impl Stroke {
         layer
             .pixel_index(doc.width, doc.height, x, y)
             .map_or([0; 4], |offset| {
-                self.lookup.get(&offset).map_or(layer.pixels[offset], |n| {
-                    if raw {
-                        self.unmasked[*n]
-                    } else {
-                        self.changes[*n].after
-                    }
-                })
+                self.lookup
+                    .get(&offset)
+                    .map_or(layer.read_at(offset).unwrap_or([0; 4]), |n| {
+                        if raw {
+                            self.unmasked[*n]
+                        } else {
+                            self.changes[*n].after
+                        }
+                    })
             })
     }
     pub fn material(
@@ -726,7 +728,7 @@ impl Stroke {
             } else {
                 [0; 4]
             };
-            let original = layer.pixels[offset];
+            let original = layer.read_at(offset).unwrap_or([0; 4]);
             let current = self.candidate_value(doc, x, y, true);
             if self.style.material.alpha_lock && original[3] == 0 {
                 continue;
@@ -1755,7 +1757,9 @@ impl Stroke {
                 }
                 let offset = layer.pixel_index(doc.width, doc.height, x, y).unwrap();
                 let old = self.lookup.get(&offset).copied();
-                let original = old.map_or(layer.pixels[offset], |n| self.changes[n].before);
+                let original = old.map_or(layer.read_at(offset).unwrap_or([0; 4]), |n| {
+                    self.changes[n].before
+                });
                 if self.style.material.alpha_lock
                     && if self.floating.is_some() {
                         layer.sample_at(offset).alpha() == 0.

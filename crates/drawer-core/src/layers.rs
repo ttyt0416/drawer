@@ -303,7 +303,7 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
     if !doc.scene.valid()
         || !doc.scene.layer_ids.matches(doc.layers.len())
         || !doc.scene.paper.valid_for(doc.layers.len())
-        || doc.memory_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
+        || doc.allocation_bytes() > DEFAULT_DOCUMENT_BUDGET / 8
     {
         return Err("Invalid layer document or snapshot memory limit".into());
     }
@@ -344,7 +344,10 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
             materialize(&mut state.scene.paper, state.layers.len());
             let index = state.layers.len();
             let floating = doc.color != crate::color_storage::Config::legacy();
-            let count = if floating {
+            let sparse = doc.width as usize * doc.height as usize * 4 > DEFAULT_DOCUMENT_BUDGET;
+            let count = if sparse {
+                0
+            } else if floating {
                 doc.width as usize * doc.height as usize
             } else {
                 1
@@ -356,18 +359,20 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
                     4
                 },
             );
-            if bytes.saturating_add(doc.memory_bytes().saturating_mul(2))
+            if bytes.saturating_add(doc.allocation_bytes().saturating_mul(2))
                 > DEFAULT_DOCUMENT_BUDGET / 4
             {
                 return Err("New raster exceeds Undo memory".into());
             }
             state.layers.push(RasterLayer {
+                tiled: sparse
+                    .then(|| crate::tiled_raster::Image::new(doc.width, doc.height, [0; 4])),
                 precise: (floating && doc.color.depth == crate::color_precision::Depth::Sixteen)
                     .then(|| vec![[0; 4]; count]),
                 locked: false,
                 name: n,
                 pixels: vec![[0; 4]; count],
-                placement: if floating {
+                placement: if floating || sparse {
                     None
                 } else {
                     Some(PlacedRaster {
@@ -689,7 +694,10 @@ pub fn prepare(doc: &Document, command: Command) -> Result<Prepared, String> {
     if !state.scene.valid()
         || !state.scene.paper.valid_for(state.layers.len())
         || !state.scene.layer_ids.matches(state.layers.len())
-        || state.memory_bytes().saturating_add(doc.memory_bytes()) > DEFAULT_DOCUMENT_BUDGET / 4
+        || state
+            .allocation_bytes()
+            .saturating_add(doc.allocation_bytes())
+            > DEFAULT_DOCUMENT_BUDGET / 4
         || serde_json::to_vec(&state.scene)
             .map_err(|e| e.to_string())?
             .len()
