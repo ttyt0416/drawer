@@ -231,6 +231,13 @@ impl Session {
     pub fn mark_saved(&mut self) {
         self.saved = self.current;
     }
+    pub(crate) fn mark_saved_checkpoint(&mut self, instance: u64, token: u64) -> bool {
+        if instance != self.instance || token > self.next {
+            return false;
+        }
+        self.saved = token;
+        true
+    }
     pub fn bytes(&self) -> usize {
         let mut pointers = BTreeSet::new();
         std::iter::once(&self.data)

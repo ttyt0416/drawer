@@ -1,0 +1,9 @@
+# Saved state and close decisions
+
+Dirty state uses the logical history state, independent metadata generation and light-table state. Save checkpoints capture document identity, logical state and a monotonic request serial. Completion marks only that captured state, keeps later edits dirty and refuses consumed/canceled, wrong-document, changed-destination and superseded results. Capturing a save fences explicit command coalescing so a later grouped edit cannot silently mutate the captured state under the same identity. Work-time/view metadata keeps its existing independent policy.
+
+Current synchronous Save and the existing Save/Discard/Cancel modal remain the production entry points. The checkpoint contract is ready for the separate background-writer item; it does not itself start an asynchronous file writer. Undo to the saved logical state is clean even though the render revision is monotonic. Non-Undo metadata changes remain dirty. A separate light-table instance cannot be declared saved by an older result.
+
+Close Cancel and save failure preserve current drawing/selection/view/path/history. Save retries publish the latest complete document before closing. Discard affects only that document. Saving or closing a document retires its entry from the active recovery index without recopying other drawings; old blocks remain protected until session cleanup. Retirement errors retain recoverable data and are reported separately from a successful save/close decision.
+
+Core verification covers late edits, saved-state Undo/Redo, canceled/duplicate/stale results, grouped command fences, independent metadata, cross-document rejection, physical path changes and failed writes. App replay uses actual modal pointer input for Cancel, failed Save/retry, Save and Discard, checks other-document history and source bytes, and verifies saved/discarded documents do not return as unresolved recovery candidates.

@@ -196,6 +196,47 @@ impl Session {
     pub fn checkpoint(&mut self, documents: &[&Document]) -> Result<(), String> {
         self.checkpoint_observed(documents, &mut |_| Ok(()))
     }
+    /// Retire a saved or explicitly discarded document without recopying other drawings.
+    pub fn forget(&mut self, id: u64) -> Result<(), String> {
+        owned(&self.directory)?;
+        if self.lease.is_none() {
+            return Err("Recovery session is paused".into());
+        }
+        let path = self.directory.join("index.json");
+        if !path.exists() {
+            return Ok(());
+        }
+        let mut index = load_index(&path)?;
+        if !index.documents.iter().any(|e| e.page.id == id) {
+            return Ok(());
+        }
+        index.documents.retain(|e| e.page.id != id);
+        let data = serde_json::to_vec(&index).map_err(|e| e.to_string())?;
+        crate::atomic_file::publish(
+            &path,
+            &self.directory.join("index-write.tmp"),
+            |w| w.write_all(&data),
+            |p| {
+                let index = load_index(p).map_err(std::io::Error::other)?;
+                for e in &index.documents {
+                    let file = self
+                        .directory
+                        .join(&index.generation)
+                        .join(format!("document-{}.drawer", e.page.id));
+                    if crate::save_generation::inspect(e.page.id, &file)
+                        .map_err(std::io::Error::other)?
+                        != e.page
+                    {
+                        return Err(std::io::Error::other("Recovery retirement hash mismatch"));
+                    }
+                }
+                Ok(())
+            },
+            &mut |_| Ok(()),
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    }
     pub fn checkpoint_observed(
         &mut self,
         documents: &[&Document],

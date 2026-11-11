@@ -285,6 +285,7 @@ impl Drawer {
                 copy.display()
             ));
         }
+        self.retire_recovery_document(self.documents[index].id);
         self.remember_file(&target);
         Ok(())
     }
@@ -459,6 +460,7 @@ impl Drawer {
             .iter()
             .any(|tab| tab.document_id == removed.document_id)
         {
+            self.retire_recovery_document(removed.document_id);
             self.documents.retain(|doc| doc.id != removed.document_id);
         }
         self.active_tab = None;
@@ -681,6 +683,7 @@ impl Drawer {
         }
     }
     pub(super) fn close_dialog(&mut self, ctx: &egui::Context) {
+        self.save_status.close = [None; 3];
         let Some(id) = self.pending_close else {
             return;
         };
@@ -718,6 +721,7 @@ impl Drawer {
                 if cancel.clicked() {
                     action = Some(2);
                 }
+                self.save_status.close = [Some(save.rect), Some(discard.rect), Some(cancel.rect)];
                 #[cfg(test)]
                 {
                     self.discard_close_button = Some(discard.rect);

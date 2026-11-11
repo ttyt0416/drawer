@@ -76,10 +76,18 @@ pub(crate) struct History {
     current: u64,
     next: u64,
     saved: Option<u64>,
+    meta: u64,
+    saved_meta: u64,
+    save_serial: u64,
+    saved_serial: u64,
+    inflight: std::collections::BTreeMap<u64, u64>,
 }
 impl History {
     pub(crate) fn mark_saved(&mut self) {
         self.saved = Some(self.current);
+        self.saved_meta = self.meta;
+        self.save_serial = self.save_serial.saturating_add(1);
+        self.saved_serial = self.save_serial;
     }
     fn push(&mut self, kind: EditKind) {
         self.next += 1;
@@ -304,7 +312,9 @@ impl Document {
         Ok(true)
     }
     pub(crate) fn refresh_dirty(&mut self) {
-        self.dirty = self.history.saved != Some(self.history.current) || self.light_table.dirty();
+        self.dirty = self.history.saved != Some(self.history.current)
+            || self.history.meta != self.history.saved_meta
+            || self.light_table.dirty();
     }
     fn history_changed(&mut self) {
         self.refresh_dirty();
@@ -434,6 +444,11 @@ impl Document {
         if group.is_some()
             && self.history.redo.is_empty()
             && self.history.saved != Some(self.history.current)
+            && !self
+                .history
+                .inflight
+                .values()
+                .any(|t| *t == self.history.current)
             && let Some(last) = self.history.undo.last_mut()
             && last.group == group
             && last.to == self.history.current
@@ -499,6 +514,7 @@ impl Document {
         if self.scene.layer_comps.policy != policy {
             self.scene.layer_comps.policy = policy;
             self.history.saved = None;
+            self.history.meta = self.history.meta.wrapping_add(1);
             self.revision = self.revision.wrapping_add(1);
             self.refresh_dirty();
         }
@@ -619,6 +635,7 @@ impl Document {
         }
         if count + historical > 0 {
             self.history.saved = None;
+            self.history.meta = self.history.meta.wrapping_add(1);
             self.history_changed();
         }
         count
@@ -627,6 +644,8 @@ impl Document {
 
 #[path = "history_audit.rs"]
 pub mod audit;
+#[path = "saved_revision.rs"]
+pub mod saved_revision;
 
 #[cfg(test)]
 mod tests {

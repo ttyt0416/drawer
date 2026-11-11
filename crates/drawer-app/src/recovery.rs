@@ -44,7 +44,7 @@ impl Drawer {
         }
         self.init_recovery(storage.root());
     }
-    fn init_recovery(&mut self, root: &Path) {
+    pub(super) fn init_recovery(&mut self, root: &Path) {
         self.recovery.root = Some(root.to_path_buf());
         match core::scan(root) {
             Ok(c) => {
@@ -56,6 +56,15 @@ impl Drawer {
         match Session::create(root) {
             Ok(s) => self.recovery.session = Some(s),
             Err(e) => self.recovery.error = Some(e),
+        }
+    }
+    pub(super) fn retire_recovery_document(&mut self, id: u64) {
+        if let Some(session) = &mut self.recovery.session
+            && let Err(e) = session.forget(id)
+        {
+            self.status = Some(format!(
+                "Document decision completed; recovery record retained after cleanup error: {e}"
+            ));
         }
     }
     pub(super) fn quiesce_recovery(&mut self) {
@@ -82,7 +91,7 @@ impl Drawer {
             self.status = Some(e);
         }
     }
-    fn checkpoint_recovery(&mut self) -> Result<(), String> {
+    pub(super) fn checkpoint_recovery(&mut self) -> Result<(), String> {
         if self.drawing.pending() {
             return Err("Finish the current stroke/path before a recovery checkpoint".into());
         }
