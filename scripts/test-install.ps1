@@ -11,7 +11,7 @@ $oldPath = $env:PATH
 $oldDiagnostics = $env:DRAWER_SMOKE_DIAGNOSTICS
 $process = $null
 try {
-    & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot
+    & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot -ExpectedManifestSha256 (Get-FileHash -LiteralPath (Join-Path $packageRoot 'PACKAGE.json')).Hash -AllowUnsigned
     $env:DRAWER_DATA_DIR = $dataRoot
     $env:DRAWER_SMOKE_DIAGNOSTICS = $testRoot
     $env:PATH = Join-Path $env:SystemRoot 'System32'
@@ -58,7 +58,7 @@ try {
     Set-Content -LiteralPath (Join-Path $dataRoot 'documents/user-picture.txt') -Value 'keep document'
     Set-Content -LiteralPath (Join-Path $dataRoot 'materials/user-brush.txt') -Value 'keep material'
     Set-Content -LiteralPath (Join-Path $installRoot 'user-note.txt') -Value 'keep extra file'
-    & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot
+    & (Join-Path $packageRoot 'Install.ps1') -InstallDir $installRoot -ExpectedManifestSha256 (Get-FileHash -LiteralPath (Join-Path $packageRoot 'PACKAGE.json')).Hash -AllowUnsigned
     if ((Get-FileHash -LiteralPath $preferences).Hash -ne $before) { throw '재설치가 설정을 변경했습니다.' }
     foreach ($referenceFile in $referenceHashes.Keys) { if ((Get-FileHash -LiteralPath $referenceFile).Hash -ne $referenceHashes[$referenceFile]) { throw '재설치가 참고 설정/복사본을 변경했습니다.' } }
     & (Join-Path $packageRoot 'Uninstall.ps1') -InstallDir $installRoot

@@ -35,5 +35,7 @@ try {
     foreach ($required in 'Drawer.exe', 'THIRD-PARTY-NOTICES.txt', 'COMPONENTS.json', 'Cargo.lock', 'OWN-ASSETS.md') {
         if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $required) -PathType Leaf)) { throw "배포 파일 누락: $required" }
     }
+    python -X utf8 -B scripts/package-manifest.py
+    if ($LASTEXITCODE -ne 0) { throw '배포 무결성 명세 생성 실패' }
     Write-Output "배포 묶음 준비: $packageRoot"
 } finally { Pop-Location }

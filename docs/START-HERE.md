@@ -91,3 +91,6 @@ Language, IME and confirmations에서 로컬 튜토리얼/도구 설명 언어�
 Tool input behavior → Tip images and minimum outputs에서 브러시별 최소 굵기/농도와 독자 둥근/사각 팁을 선택한다. 최소100%는 압력0에서도 최대값이며 필압 연결은 Brush pressure에서 켠다. 가장자리 부드러움은 Tool properties의 Hardness다.
 
 Tool input behavior의 Independent position and device pressure filters에서 위치 보정과 장치 필압 평활을 따로 켠다. 필압 강도는 실제 입력 표본마다 한 번 적용하고 보정 곡선·최소 출력과 별도로 저장한다.
+
+
+수동 설치/업데이트: 검토한 로컬 Install.ps1에 배포 기록에서 확인한 PACKAGE.json SHA256을 ExpectedManifestSha256으로 전달합니다. 현재 서명 없는 자체 빌드는 AllowUnsigned를 명시해야 합니다. 설치는 전체 파일 해시와 오프라인 서명 상태를 검사하고 이전 앱/추가 파일을 보존하며 사용자 문서·설정은 변경하지 않습니다. 낮은 버전은 AllowDowngrade 확인이 필요합니다. 새 문서 형식은 이전 앱에서 열리지 않을 수 있어 원본을 보관하세요.

@@ -8,9 +8,9 @@ $oldData=$env:DRAWER_DATA_DIR; $oldDiagnostics=$env:DRAWER_SMOKE_DIAGNOSTICS; $o
 $acl=$null; $child=$null
 try {
     [void](New-Item -ItemType Directory -Path $base)
-    & (Join-Path $package 'Install.ps1') -InstallDir $program
+    & (Join-Path $package 'Install.ps1') -InstallDir $program -ExpectedManifestSha256 (Get-FileHash -LiteralPath (Join-Path $package 'PACKAGE.json')).Hash -AllowUnsigned
     $before=@{}; Get-ChildItem -LiteralPath $program -File -Force | ForEach-Object { $before[$_.Name]=(Get-FileHash -LiteralPath $_.FullName).Hash }
-    if($before.Count -ne 13){throw '설치 파일12개와 소유 기록 누락'}
+    if($before.Count -ne 14){throw '설치 파일13개와 소유 기록 누락'}
     $acl=Get-Acl -LiteralPath $program
     $locked=Get-Acl -LiteralPath $program
     $deny=[Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User,[Security.AccessControl.FileSystemRights]::Write,[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Deny)
@@ -31,7 +31,7 @@ try {
     if($after.Count -ne $before.Count){throw '설치 폴더 쓰기 발생'}
     foreach($file in $after){if(-not $before.ContainsKey($file.Name) -or (Get-FileHash -LiteralPath $file.FullName).Hash -ne $before[$file.Name]){throw '설치 파일 변경'}}
     foreach($path in 'settings/preferences.txt','materials/references/reference-1.png'){if(-not (Test-Path -LiteralPath (Join-Path $data $path) -PathType Leaf)){throw '사용자 저장소 분리 실패'}}
-    $report=[ordered]@{version=1;executableSha256=$before['Drawer.exe'].ToLowerInvariant();packageFiles=12;installedFilesIncludingOwnership=13;actualWriteDenied=$denied;programBytesUnchanged=$true;separateUserData=$true;systemOnlyPath=$true;functionalChecks=$flags;optionalKoreanFont='Windows installed Malgun; embedded four fonts remain available without it';limitations='Current Windows host; not the fresh offline environment of item272'}
+    $report=[ordered]@{version=1;executableSha256=$before['Drawer.exe'].ToLowerInvariant();packageFiles=13;installedFilesIncludingOwnership=14;actualWriteDenied=$denied;programBytesUnchanged=$true;separateUserData=$true;systemOnlyPath=$true;functionalChecks=$flags;optionalKoreanFont='Windows installed Malgun; embedded four fonts remain available without it';limitations='Current Windows host; not the fresh offline environment of item272'}
     $report|ConvertTo-Json -Depth 6|Set-Content -LiteralPath (Join-Path $repo $Evidence) -Encoding utf8
     Write-Output '읽기전용 설치 자원 검증 통과'
 } finally {

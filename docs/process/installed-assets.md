@@ -21,3 +21,5 @@ test-installed-assets.ps1은 실제 Windows ACL 쓰기 거부 대조군을 확�
 읽기전용 설치 디렉터리를 작업 위치로 전체 내장 기능 시험을 실행한다.
 설치 전후13파일의 SHA256/목록 동일, 별도 사용자 설정/소재 저장을 검사한다.
 결과는 installed-assets-evidence.json이며272의 새 오프라인 PC 시험을 대신하지 않는다.
+
+277부터 PACKAGE.json이 추가되어 현재 배포13파일/설치 기록 포함14파일이다. 274의 evidence는 당시12/13파일 배포 해시의 기록으로 보존한다.

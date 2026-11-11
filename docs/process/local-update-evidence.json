@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "executableSha256": "1bbf1d4f80d46a98418e63884cdf9e962a278a738daa4704a9802cb30677b68c",
+  "manifestSha256": "0127652a50520c86be9141a1e1b91ea916f9cda2018f2134e3aa22cbeef51618",
+  "packageFiles": 13,
+  "unsignedDefaultRefused": true,
+  "incorrectManifestRefused": true,
+  "tamperedFileRefused": true,
+  "invalidEmbeddedSignatureRefused": true,
+  "promotionFailureRollback": true,
+  "promotionFailure": "deterministic operation-boundary injection after real old-root rename",
+  "previousApplicationRetained": true,
+  "extraFilesPreserved": true,
+  "settingsBytesPreservedByInstaller": true,
+  "olderSettingsStarted": true,
+  "windowsPowerShell5InstallReinstallUninstall": true,
+  "implicitDowngradeRefused": true,
+  "explicitDowngradePassed": true,
+  "trustFlags": "WTD_CACHE_ONLY_URL_RETRIEVAL | WTD_REVOCATION_CHECK_NONE",
+  "limitations": "No publisher certificate supplied; signed-release success not claimed. Current host, not fresh-PC272."
+}

@@ -1384,3 +1384,7 @@ docs/process/local-storage-evidence.json
 crates/drawer-core/src/storage_backup.rs
 crates/drawer-core/src/storage_backup_verify.rs
 docs/process/local-backup.md
+scripts/package-manifest.py
+scripts/test-local-update.ps1
+docs/process/local-update.md
+docs/process/local-update-evidence.json

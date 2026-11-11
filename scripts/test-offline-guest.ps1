@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$OwnerToken,[switch]$ShutdownGuest)
+﻿param([Parameter(Mandatory=$true)][string]$OwnerToken,[switch]$ShutdownGuest)
 $ErrorActionPreference='Stop'
 $evidence='C:\DrawerEvidence'
 $ownerPath='C:\DrawerTask\owner.json'
@@ -26,7 +26,7 @@ try{
     $package='C:\DrawerPackage'
     $hash=(Get-FileHash -LiteralPath (Join-Path $package 'Drawer.exe') -Algorithm SHA256).Hash
     if($hash -ne $owner.expectedExeSha256){throw '패키지 무결성 불일치'}
-    & (Join-Path $package 'Install.ps1') -InstallDir $program
+    & (Join-Path $package 'Install.ps1') -InstallDir $program -ExpectedManifestSha256 (Get-FileHash -LiteralPath (Join-Path $package 'PACKAGE.json')).Hash -AllowUnsigned
     $env:DRAWER_DATA_DIR=$data
     $env:DRAWER_SMOKE_DIAGNOSTICS=$evidence
     $env:PATH=Join-Path $env:WINDIR 'System32'
