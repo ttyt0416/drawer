@@ -11,6 +11,8 @@ use std::{
 };
 type Result<T> = std::result::Result<T, String>;
 const LIMIT: u64 = 16 * 1024 * 1024 * 1024;
+#[path = "storage_backup.rs"]
+pub mod backup;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct File {

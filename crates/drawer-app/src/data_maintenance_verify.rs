@@ -145,6 +145,88 @@ pub(super) fn run(root: &Path) -> Result<(), String> {
         {
             return Err("Browser could mutate the bootstrap pointer".into());
         }
+        let bundle = dir.join("full-backup");
+        app.save_to(0, &dir.join("current-app.drawer"))?;
+        app.data_maintenance.snapshot_operation = Some(SnapshotOperation::Create {
+            target: bundle.clone(),
+            documents: vec![original.clone()],
+        });
+        app.data_maintenance.pending = true;
+        for _ in 0..8000 {
+            frame(&mut app, &mut t, vec![]);
+            if !app.data_maintenance.busy() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if !bundle.join("bundle.json").is_file()
+            || !app
+                .data_maintenance
+                .message
+                .starts_with("Verified local backup:")
+        {
+            return Err(format!(
+                "Full backup worker: {}",
+                app.data_maintenance.message
+            ));
+        }
+        let before_restore = app
+            .storage
+            .as_ref()
+            .ok_or("Current storage")?
+            .root()
+            .to_owned();
+        std::fs::write(
+            before_restore.join("settings/before-restore.guard"),
+            b"keep current",
+        )
+        .map_err(|e| e.to_string())?;
+        let restored = dir.join("full-restored");
+        app.data_maintenance.snapshot_operation = Some(SnapshotOperation::Restore {
+            bundle,
+            target: restored.clone(),
+        });
+        app.data_maintenance.pending = true;
+        for _ in 0..8000 {
+            frame(&mut app, &mut t, vec![]);
+            if app.data_maintenance.restart_required || !app.data_maintenance.busy() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if !app.data_maintenance.restart_required
+            || !drawer_core::file_browser::same(
+                UserStorage::at(
+                    app.storage
+                        .as_ref()
+                        .ok_or("Current storage")?
+                        .anchor()
+                        .into(),
+                )
+                .map_err(|e| e.to_string())?
+                .root(),
+                &restored,
+            )
+            || std::fs::read(
+                dir.join("full-restored-before-restore/userdata/settings/before-restore.guard"),
+            )
+            .map_err(|e| e.to_string())?
+                != b"keep current"
+            || std::fs::read(restored.join("restored-documents/원본.drawer"))
+                .map_err(|e| e.to_string())?
+                != bytes
+            || std::fs::read(&original).map_err(|e| e.to_string())? != bytes
+        {
+            return Err(format!(
+                "Full restore/preserved settings/document/restart gate: {}",
+                app.data_maintenance.message
+            ));
+        }
+        app.data_maintenance.commands.push_back("zoom-in".into());
+        frame(&mut app, &mut t, vec![]);
+        if app.data_maintenance.commands.len() != 1 || app.documents[0].layers != layers {
+            return Err("Restore restart gate allowed a drawing command".into());
+        }
         drop(app);
         Ok(())
     })();

@@ -12,6 +12,8 @@ enum Value {
     Moved(core::Outcome),
     Restored,
     Recycled(PathBuf),
+    Snapshot(PathBuf),
+    SnapshotRestored(core::backup::Restored),
 }
 struct Job {
     cancel: Arc<AtomicBool>,
@@ -27,6 +29,16 @@ impl Drop for Job {
         }
     }
 }
+enum SnapshotOperation {
+    Create {
+        target: PathBuf,
+        documents: Vec<PathBuf>,
+    },
+    Restore {
+        bundle: PathBuf,
+        target: PathBuf,
+    },
+}
 #[derive(Default)]
 pub(super) struct Panel {
     pub(super) open: bool,
@@ -39,6 +51,11 @@ pub(super) struct Panel {
     commands: VecDeque<String>,
     drops: Vec<PathBuf>,
     backup: Option<PathBuf>,
+    snapshot_documents: Vec<PathBuf>,
+    snapshot_bundle: Option<PathBuf>,
+    snapshot_confirm: bool,
+    snapshot_operation: Option<SnapshotOperation>,
+    restart_required: bool,
     cleanup: Option<PathBuf>,
     confirm_cleanup: bool,
     controls: BTreeMap<&'static str, egui::Rect>,
@@ -143,6 +160,17 @@ impl Drawer {
     pub(super) fn data_maintenance_gate(&mut self, ui: &mut egui::Ui) -> bool {
         let ctx = ui.ctx().clone();
         let mut p = std::mem::take(&mut self.data_maintenance);
+        if p.restart_required {
+            ui.label(&p.message);
+            if ui
+                .button("Close and restart Drawer to use restored settings")
+                .clicked()
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            self.data_maintenance = p;
+            return true;
+        }
         let had_job = p.job.is_some();
         if let Some(j) = &p.job {
             let result = match j.rx.try_recv() {
@@ -163,6 +191,21 @@ impl Drawer {
                             self.load_materials(&s);
                         }
                         p.message="Brush tips and textures restored by their saved IDs; previous library bytes were retained. Existing drawing pixels and embedded stroke definitions are unchanged.".into();
+                    }
+                    Ok(Value::Snapshot(path)) => {
+                        self.resume_data_work_time();
+                        p.message = format!(
+                            "Verified local backup: {}. Selected saved documents included; external source files unchanged.",
+                            path.display()
+                        );
+                    }
+                    Ok(Value::SnapshotRestored(out)) => {
+                        p.message = format!(
+                            "Restored into {}. Current settings/materials retained in {} and original data root. Close and restart to load restored settings; editing is paused.",
+                            out.root.display(),
+                            out.previous_backup.display()
+                        );
+                        p.restart_required = true;
                     }
                     Ok(Value::Recycled(path)) => {
                         p.message = format!(
@@ -200,6 +243,15 @@ impl Drawer {
                     if ui.button("Manage local folders…").clicked(){action=Some("folders");}
                     if ui.button("Choose brush-tip / texture library backup…").clicked(){action=Some("backup");}
                     if let Some(path)=&p.backup{ui.label(path.display().to_string());if ui.button("Restore library; retain current bytes").clicked(){action=Some("restore");}}
+                    ui.separator();
+                    ui.label("Full local backup: settings, presets, materials and selected saved document files.");
+                    ui.label(format!("{} additional document files selected; save pending edits first.",p.snapshot_documents.len()));
+                    if ui.button("Select saved document files…").clicked(){action=Some("snapshot-documents");}
+                    if ui.button("Create full local backup…").clicked(){action=Some("snapshot-create");}
+                    if ui.button("Choose full local backup folder…").clicked(){action=Some("snapshot-choose");}
+                    if let Some(bundle)=&p.snapshot_bundle {ui.label(bundle.display().to_string());}
+                    ui.checkbox(&mut p.snapshot_confirm,"Back up current settings first; restore to a new folder and restart");
+                    if ui.add_enabled(p.snapshot_bundle.is_some()&&p.snapshot_confirm,egui::Button::new("Restore full backup…")).clicked(){action=Some("snapshot-restore");}
                     ui.separator();
                     if let Some(storage)=&self.storage {
                         match core::retained(storage) {
@@ -252,6 +304,45 @@ impl Drawer {
                 }
                 Some("catalog") => self.begin_asset_catalog()?,
                 Some("folders") => self.begin_file_browser(super::file_browser::Mode::Open)?,
+                Some("snapshot-documents") => {
+                    if let Some(files) = rfd::FileDialog::new().pick_files() {
+                        p.snapshot_documents = files;
+                    }
+                }
+                Some("snapshot-choose") => {
+                    p.snapshot_bundle = rfd::FileDialog::new().pick_folder();
+                    p.snapshot_confirm = false;
+                }
+                Some("snapshot-create" | "snapshot-restore") => {
+                    if self.documents.iter().any(|d| d.dirty) || self.project_needs_recovery() {
+                        return Err(
+                            "Save all drawing and project changes before full backup or restore"
+                                .into(),
+                        );
+                    }
+                    let restore = action == Some("snapshot-restore");
+                    if let Some(target) = rfd::FileDialog::new()
+                        .set_file_name(if restore {
+                            "Drawer-restored"
+                        } else {
+                            "Drawer-backup"
+                        })
+                        .save_file()
+                    {
+                        drawer_platform::file_browser::local_disk(&target)?;
+                        p.snapshot_operation = Some(if restore {
+                            let bundle = p.snapshot_bundle.clone().ok_or("Choose a full backup")?;
+                            drawer_platform::file_browser::local_disk(&bundle)?;
+                            SnapshotOperation::Restore { bundle, target }
+                        } else {
+                            SnapshotOperation::Create {
+                                target,
+                                documents: p.snapshot_documents.clone(),
+                            }
+                        });
+                        p.pending = true;
+                    }
+                }
                 Some("backup") => {
                     p.backup = rfd::FileDialog::new()
                         .add_filter("Drawer tip and texture library", &["json"])
@@ -358,6 +449,38 @@ impl Drawer {
                     let storage = self.storage.clone().ok_or("Local storage unavailable")?;
                     let path = PathBuf::from(p.destination.trim());
                     let reset = p.reset_index;
+                    let operation = p.snapshot_operation.take();
+                    if let Some(operation) = operation {
+                        // Recheck after finishing a pending stroke and draining writers.
+                        if self.documents.iter().any(|d| d.dirty) || self.project_needs_recovery() {
+                            return Err("Save all drawing and project changes before full backup or restore".into());
+                        }
+                        let target = match &operation {
+                            SnapshotOperation::Create { target, .. }
+                            | SnapshotOperation::Restore { target, .. } => target,
+                        };
+                        drawer_platform::file_browser::local_disk(storage.root())?;
+                        let available = drawer_platform::file_browser::available_space(
+                            target.parent().ok_or("Missing destination parent")?,
+                        )?;
+                        if let SnapshotOperation::Create { documents, .. } = &operation {
+                            for path in documents {
+                                drawer_platform::file_browser::local_disk(path)?;
+                            }
+                        }
+                        return worker(move |cancel, progress| match operation {
+                            SnapshotOperation::Create { target, documents } => {
+                                core::backup::create(
+                                    &storage, &target, &documents, available, &cancel, &progress,
+                                )
+                                .map(Value::Snapshot)
+                            }
+                            SnapshotOperation::Restore { bundle, target } => core::backup::restore(
+                                &storage, &bundle, &target, available, &cancel, &progress,
+                            )
+                            .map(Value::SnapshotRestored),
+                        });
+                    }
                     worker(move |cancel, progress| {
                         let plan =
                             core::Plan::prepare_cancellable(&storage, &path, reset, &cancel)?;
@@ -379,6 +502,7 @@ impl Drawer {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
             busy = p.busy();
         }
+        busy |= p.restart_required;
         let command = if !busy { p.commands.pop_front() } else { None };
         let drops = if !busy {
             std::mem::take(&mut p.drops)
