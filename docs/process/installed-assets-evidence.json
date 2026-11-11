@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "executableSha256": "695ec0c1e8cef36cfc81cd1ada4d1c203c02564a92b9b37ab6d5537cab4d143d",
+  "packageFiles": 12,
+  "installedFilesIncludingOwnership": 13,
+  "actualWriteDenied": true,
+  "programBytesUnchanged": true,
+  "separateUserData": true,
+  "systemOnlyPath": true,
+  "functionalChecks": [
+    "basic_brushes=true",
+    "embedded_tips=7",
+    "cursor_assets=true",
+    "local_help=true",
+    "local_help_licenses=true",
+    "local_korean_font=true",
+    "brush_presets=true",
+    "image_materials=true",
+    "local_recovery=true",
+    "saved_state=true",
+    "background_save=true"
+  ],
+  "optionalKoreanFont": "Windows installed Malgun; embedded four fonts remain available without it",
+  "limitations": "Current Windows host; not the fresh offline environment of item272"
+}

@@ -1375,3 +1375,6 @@ vendor/moxcms/src/trc.rs
 vendor/moxcms/src/writer.rs
 vendor/moxcms/src/xyy.rs
 vendor/moxcms/src/yrg.rs
+scripts/test-installed-assets.ps1
+docs/process/installed-assets.md
+docs/process/installed-assets-evidence.json
