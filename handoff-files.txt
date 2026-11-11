@@ -1378,3 +1378,6 @@ vendor/moxcms/src/yrg.rs
 scripts/test-installed-assets.ps1
 docs/process/installed-assets.md
 docs/process/installed-assets-evidence.json
+scripts/test-local-storage.ps1
+docs/process/local-storage.md
+docs/process/local-storage-evidence.json

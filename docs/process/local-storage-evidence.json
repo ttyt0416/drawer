@@ -1,0 +1,4616 @@
+{
+  "version": 1,
+  "executableSha256": "695ec0c1e8cef36cfc81cd1ada4d1c203c02564a92b9b37ab6d5537cab4d143d",
+  "networkAttempts": 0,
+  "ownedProcessesRemaining": 0,
+  "networkApiCount": 53,
+  "storage": "fresh synthetic local user directory",
+  "writes": [
+    {
+      "relativePath": "abr-check/converted-brush.json",
+      "bytes": 3019,
+      "sha256": "d7e2886c915f698f976bb013a469814439c9ebd2dfd0fe44d87731a2cead8955"
+    },
+    {
+      "relativePath": "abr-check/converted-materials.json",
+      "bytes": 172,
+      "sha256": "f29b8592e17f342f59b06d9accdfb1379f306d26104d69ac89addc0ab22c4637"
+    },
+    {
+      "relativePath": "abr-check/independent-brush.abr",
+      "bytes": 87,
+      "sha256": "6eda47fb1ef6d1c3a519a935ceffd8ff54465490b6d1060634ce076e7f2fa4b5"
+    },
+    {
+      "relativePath": "abr-check/user/materials/library.json",
+      "bytes": 172,
+      "sha256": "f29b8592e17f342f59b06d9accdfb1379f306d26104d69ac89addc0ab22c4637"
+    },
+    {
+      "relativePath": "abr-check/user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "abr-check/user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "abr-check/user/settings/workspaces.json",
+      "bytes": 288353,
+      "sha256": "310e71ad74d5cc5b58e6f52de36f8c02604e3eaecead86ebd5dc0b40c0d0dc80"
+    },
+    {
+      "relativePath": "abr-check/user/work-time/4f1aa8669f91a792d33e8bfaf1b2f9bb0a8e2c569bcf7d1ad67e041c0c6b01a8.json",
+      "bytes": 279,
+      "sha256": "2491b5b988f5147b3d43cd2d7058dd52ee862e0d94661810cf67e5d3032d0619"
+    },
+    {
+      "relativePath": "abr-check/user/work-time/4f1aa8669f91a792d33e8bfaf1b2f9bb0a8e2c569bcf7d1ad67e041c0c6b01a8.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "adjust-zero-after.png",
+      "bytes": 145,
+      "sha256": "0d14bc7985eac4fe21af1b6c772234b309016203c1ec52949ba51483ac732301"
+    },
+    {
+      "relativePath": "adjust-zero-before.png",
+      "bytes": 145,
+      "sha256": "0d14bc7985eac4fe21af1b6c772234b309016203c1ec52949ba51483ac732301"
+    },
+    {
+      "relativePath": "advanced-text.drawer",
+      "bytes": 154939,
+      "sha256": "9baa4b54567e299052aa1baca63c751bc870d9a2946517786141cfd1e363baf2"
+    },
+    {
+      "relativePath": "affine-pixels.drawer",
+      "bytes": 1025,
+      "sha256": "b84c76858b61c54196e2e1884166a534ea7b9ccdbab02d856d2c0fb55cee339b"
+    },
+    {
+      "relativePath": "affine-transform-app.drawer",
+      "bytes": 1174,
+      "sha256": "6ecc3160fe953cfcf17aff9133da37e2448a994777fdb1e7a7fba0e5d3f410bd"
+    },
+    {
+      "relativePath": "alignment-CentersHorizontal.drawer",
+      "bytes": 704,
+      "sha256": "ed0d3f03ea408aa341dc87753304b9b4abda6eed6ff064aa222d7af61f81910e"
+    },
+    {
+      "relativePath": "alignment-CentersVertical.drawer",
+      "bytes": 706,
+      "sha256": "5df97e5b26b4324b54769cac5ed027adcf688bba4915a8653bca3cf1442ed596"
+    },
+    {
+      "relativePath": "alignment-detail-ui.drawer",
+      "bytes": 17311,
+      "sha256": "a9630fa5e97a9fc1a43d4c5891f3ff86188a94f6da62f80fa0bf0584878cf638"
+    },
+    {
+      "relativePath": "alignment-edge-Bottom.drawer",
+      "bytes": 17166,
+      "sha256": "4b6b5e319c4c062a60dbd8f4bd3cd4350995c08fb29837ab0c93dcf50e791c9e"
+    },
+    {
+      "relativePath": "alignment-edge-Center.drawer",
+      "bytes": 17166,
+      "sha256": "a51c4d78abcf8ce8a94e914d2423fdf29bf5e05783335269a6c3b2c88b0288c8"
+    },
+    {
+      "relativePath": "alignment-edge-Left.drawer",
+      "bytes": 17166,
+      "sha256": "6d0a4876a5babe436385cc5af437c9a1c2606d591032eef0685f5222bc10763f"
+    },
+    {
+      "relativePath": "alignment-edge-Middle.drawer",
+      "bytes": 17166,
+      "sha256": "46012261fdbf67f5ece5cfe06875c77b122b0bf4d1cb2f0d6a353076fbdf2851"
+    },
+    {
+      "relativePath": "alignment-edge-Right.drawer",
+      "bytes": 17166,
+      "sha256": "e7a1607d6fac0fc324b9634c3d419f0c335c8210097ace752563320df8818cfc"
+    },
+    {
+      "relativePath": "alignment-edge-Top.drawer",
+      "bytes": 17166,
+      "sha256": "e56f7f6244028db02fda7e0466a870844b0279482dd993a58a8e49eb1d2d5d4d"
+    },
+    {
+      "relativePath": "alignment-GapsHorizontal.drawer",
+      "bytes": 704,
+      "sha256": "49f31d43f487c381c12030edd6185b5f3483cf979496f9c06bd652660d4adf1f"
+    },
+    {
+      "relativePath": "alignment-GapsVertical.drawer",
+      "bytes": 706,
+      "sha256": "23085c01b36ab7ea45ea00291b380ab12b56c3ed4a873183a9e559af55f716a9"
+    },
+    {
+      "relativePath": "alpha-protection.drawer",
+      "bytes": 683,
+      "sha256": "f2e144fa18bda36e3aadf76e62e141c0c0b9f96ccd0c694460f14c94e5e5823d"
+    },
+    {
+      "relativePath": "animation-output-fill.drawer",
+      "bytes": 842,
+      "sha256": "e6badd127343dbf0c1ac4da3151a1bca59f87fe69a6753760f68b82de59afd57"
+    },
+    {
+      "relativePath": "app-export.svg",
+      "bytes": 679,
+      "sha256": "043165bfea3faef37c19bd0e86f0faef295280982886c79e7f3dc465ec75f278"
+    },
+    {
+      "relativePath": "app-pressure-reset.drawer",
+      "bytes": 8210,
+      "sha256": "289d69e35c81d45b9de61909dea7a0f8b8fd17822873f73414cc29ffe500ae92"
+    },
+    {
+      "relativePath": "app-pressure-reset.drawer.drawer-last-good",
+      "bytes": 8373,
+      "sha256": "dd3486423671731a81424a61364271be92934b4f4c0eaf124bbd82b7ea97857c"
+    },
+    {
+      "relativePath": "app-transparent-shape.drawer",
+      "bytes": 5498,
+      "sha256": "4437fe76a6f98eebdf1cb9c90613793a02d35f76afde3812bf3e5b079a26c4c5"
+    },
+    {
+      "relativePath": "app-vector-scope.drawer",
+      "bytes": 17944,
+      "sha256": "2aed00a46a69ab56a198eea26afa94ce283d381981e8997334d7503450c9e933"
+    },
+    {
+      "relativePath": "appearance-ui.drawer",
+      "bytes": 951,
+      "sha256": "f262c49ec0b6a710b5c79aca20a9bb4e27b0cf6179168848fa983ddd777a3964"
+    },
+    {
+      "relativePath": "applied-detail.drawer",
+      "bytes": 809,
+      "sha256": "2918a9f703e8b727a9faaaa354551f91b31afebae2d2e283ecf707a20b9898f2"
+    },
+    {
+      "relativePath": "applied-detail.drawer.drawer-last-good",
+      "bytes": 806,
+      "sha256": "d293bc3bff4e9599d1fc82cf2e5e5361cb6b85cc2af9228aab62d9913c392676"
+    },
+    {
+      "relativePath": "applied-pixel.drawer",
+      "bytes": 941,
+      "sha256": "514617a2f9c4106016553de254c0ec88d0f5aaff013072f13cfd685fb0ae13b6"
+    },
+    {
+      "relativePath": "applied-pixel.drawer.drawer-last-good",
+      "bytes": 820,
+      "sha256": "b259c332ba6c25f5f85df3cbdaeed1b0e2f3def41534b0ad2bdff82d2f7c4008"
+    },
+    {
+      "relativePath": "applied-spatial-blur.drawer",
+      "bytes": 3669,
+      "sha256": "56d68632c07213dfbc36d882e9636f6de2471142299827531c77f0247b3a7222"
+    },
+    {
+      "relativePath": "applied-spatial-blur.drawer.drawer-last-good",
+      "bytes": 3254,
+      "sha256": "0f04fedb9bdfd49b10ca360ff82c91221ed7594859f390d4f80bdb25020ede28"
+    },
+    {
+      "relativePath": "applied-style.drawer",
+      "bytes": 744,
+      "sha256": "b7a0a86a402da76869cf3d1a06efe922bb7135613948e96105e7250ebb6c4d6c"
+    },
+    {
+      "relativePath": "applied-style.drawer.drawer-last-good",
+      "bytes": 789,
+      "sha256": "ab4cc6cd690ad9320acf52e477c270cd541d2604f22fd76b0032101425a60bf8"
+    },
+    {
+      "relativePath": "auto-shape-Circle-false.drawer",
+      "bytes": 16738,
+      "sha256": "8464f354824b3b7d1b876bf9f34743a87970b499db4d5c85d64607a72ed72378"
+    },
+    {
+      "relativePath": "auto-shape-Circle-true.drawer",
+      "bytes": 20994,
+      "sha256": "51a63ac23937a236196398591c687057eebedb298e9bc7c633eccf004bea6733"
+    },
+    {
+      "relativePath": "auto-shape-Curve-false.drawer",
+      "bytes": 16738,
+      "sha256": "a28361992234b0319dd2cc90f23827f3a4bc2a671377a739859f631ec4a2b540"
+    },
+    {
+      "relativePath": "auto-shape-Curve-true.drawer",
+      "bytes": 19954,
+      "sha256": "2d8a349bc6a7b4427de725fd319afc1abb0fd7a39afaba044bae5b4ede799da2"
+    },
+    {
+      "relativePath": "auto-shape-Ellipse-false.drawer",
+      "bytes": 16738,
+      "sha256": "8464f354824b3b7d1b876bf9f34743a87970b499db4d5c85d64607a72ed72378"
+    },
+    {
+      "relativePath": "auto-shape-Ellipse-true.drawer",
+      "bytes": 20984,
+      "sha256": "89b9f203a5fc29905cb263321d91fa9658f67091d8d876cf32edecf3c7222dba"
+    },
+    {
+      "relativePath": "auto-shape-input-false-false-0.drawer",
+      "bytes": 16887,
+      "sha256": "40b31432e8f0da041ab28a4d1f588127b0c5bbc740560b368eb0d1dc0e28b28a"
+    },
+    {
+      "relativePath": "auto-shape-input-false-false-1.drawer",
+      "bytes": 17797,
+      "sha256": "c9afbd33dfa88cd284ad31eaa14e6fd0580f70a7df0655b05adf87e445165fbb"
+    },
+    {
+      "relativePath": "auto-shape-input-false-true-0.drawer",
+      "bytes": 18543,
+      "sha256": "1908a1d17db4ee420ca118aac5d80617afb832c70c4ef564402558b7470fa94c"
+    },
+    {
+      "relativePath": "auto-shape-input-false-true-1.drawer",
+      "bytes": 17244,
+      "sha256": "a6f924550140d5e27d3bb4602e0d5ba301c61080c35a093be4f232d226230a1d"
+    },
+    {
+      "relativePath": "auto-shape-input-true-false-0.drawer",
+      "bytes": 16886,
+      "sha256": "7897828eb05c2df21fae5e5571be82888b4f62b0abe7d36a2272e175d99ab341"
+    },
+    {
+      "relativePath": "auto-shape-input-true-false-1.drawer",
+      "bytes": 17797,
+      "sha256": "8c32759835a252f7dfb486880b8b6b7357e096e2a0c6187ca21c85456c8a098a"
+    },
+    {
+      "relativePath": "auto-shape-input-true-true-0.drawer",
+      "bytes": 18612,
+      "sha256": "9e3bb447b939c50a255304a8ea731d02d034fe49cb71362e0c768f2ed60fe4d5"
+    },
+    {
+      "relativePath": "auto-shape-input-true-true-1.drawer",
+      "bytes": 17311,
+      "sha256": "980803112aca95b6e207c0ad3e1d784ce8f20f40a9df0a8a218a207e22c6ec00"
+    },
+    {
+      "relativePath": "auto-shape-Line-false.drawer",
+      "bytes": 16738,
+      "sha256": "814efc70c83669ca17cb81f93734055197e78b4bf8226ad703e360abb88e88ea"
+    },
+    {
+      "relativePath": "auto-shape-Line-true.drawer",
+      "bytes": 17413,
+      "sha256": "bf67418e3eb2ba03446b583781196d4567a1960c6babf61ad9a2ddce181023ae"
+    },
+    {
+      "relativePath": "auto-shape-Polygon-false.drawer",
+      "bytes": 16738,
+      "sha256": "458a764c65943cc8d32e73a4cff96f810e2b07a39dafad3fe6545fd2e11267fb"
+    },
+    {
+      "relativePath": "auto-shape-Polygon-true.drawer",
+      "bytes": 17458,
+      "sha256": "8d610e8469204442b03e8840fe3144a2b1fff48cb260e5b504ff29c13ecdd94e"
+    },
+    {
+      "relativePath": "auto-shape-Rectangle-false.drawer",
+      "bytes": 16738,
+      "sha256": "93dafc3a62ae5b6b128a9e58d1694d24cf5f6d415f405f2b3c74590607b80c44"
+    },
+    {
+      "relativePath": "auto-shape-Rectangle-true.drawer",
+      "bytes": 18037,
+      "sha256": "6af629a3deb56591fdf6a9f24381b3700d8b81b9d433d4fc3faa44da0ab19bd1"
+    },
+    {
+      "relativePath": "auto-shape-settings.json",
+      "bytes": 283655,
+      "sha256": "11c467e9c4c4e58e546455643733cd373c0948b47efd248bd2e0b20dd9ca7c27"
+    },
+    {
+      "relativePath": "auto-shape-Triangle-false.drawer",
+      "bytes": 16738,
+      "sha256": "813dfb3b2b74cda80e2fe48748887045a66d3e31e791458e74d9a1d93fea1387"
+    },
+    {
+      "relativePath": "auto-shape-Triangle-true.drawer",
+      "bytes": 17434,
+      "sha256": "ff6af76b8435817d03f789d6cab562906ad10c12a890cc4ed355b3db9b70439d"
+    },
+    {
+      "relativePath": "bad-file.drawer",
+      "bytes": 14,
+      "sha256": "08f42856dcf2342cbf576be4e72e49527b7910dbbf894eb2b9ac9a09724a835c"
+    },
+    {
+      "relativePath": "basic.svg",
+      "bytes": 6909,
+      "sha256": "6280dce4ed9775cde1ac924053e6570960d35f217ec9486ce9c9779240bfb504"
+    },
+    {
+      "relativePath": "batch-app.drawer",
+      "bytes": 1878,
+      "sha256": "fee55c643bce3f7cb63a85b90bc93e2484d5ade0eb1174a2344647728fb8c75e"
+    },
+    {
+      "relativePath": "batch-app.drawer.drawer-last-good",
+      "bytes": 1674,
+      "sha256": "aef69378fd8f68c033c4a818bdfabd90c1be4b74423110b9e56f59828ce9a223"
+    },
+    {
+      "relativePath": "batch-filter.drawer",
+      "bytes": 1728,
+      "sha256": "abfe43a318d3f9edfb90cd38b0fd223f7c4930ad49e251d24eb5613365282033"
+    },
+    {
+      "relativePath": "batch-filter.drawer.drawer-last-good",
+      "bytes": 1525,
+      "sha256": "53b0cecde625a73d4c74ed2034c977d7ab20b40a54c9c3ec0037aab95277a042"
+    },
+    {
+      "relativePath": "batch-old.drawer",
+      "bytes": 1664,
+      "sha256": "86cc2aef62c2291af56bd49afe592676d910c8f0c317edc33317a45a9fb00428"
+    },
+    {
+      "relativePath": "batch-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "batch-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "batch-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "batch-user/settings/recent.json",
+      "bytes": 187,
+      "sha256": "5418808b16bc3a759b6639cc9eea5cd9150c3b938694a46930626a7eba6d00b0"
+    },
+    {
+      "relativePath": "batch-user/settings/views.json",
+      "bytes": 516,
+      "sha256": "2011303d041551f02d3ffb467540ca84a5392c7c2aada9d320ce69c4a8e83f0d"
+    },
+    {
+      "relativePath": "batch-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "f215cfbfc5ee96a89a6b74c6b26743001cd74b1688b01c3fe8859701971136ae"
+    },
+    {
+      "relativePath": "batch-user/settings/workspaces.json",
+      "bytes": 287138,
+      "sha256": "dd4e10ccd65ae6b9e6cab256b8818179ebe678d187eaeddaab9ad392e6335f3e"
+    },
+    {
+      "relativePath": "batch-user/work-time/7865a71d254e5a944403c49f9a2772d3a67c7cbcb3791134d02ed060b5bafefc.json",
+      "bytes": 444,
+      "sha256": "71e269d7bd14bd03546701fae19cebeb6f997f1d6f51699d1b8c906d0d423125"
+    },
+    {
+      "relativePath": "batch-user/work-time/7865a71d254e5a944403c49f9a2772d3a67c7cbcb3791134d02ed060b5bafefc.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "behavior-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "behavior-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "behavior-user/settings/workspaces.json",
+      "bytes": 286701,
+      "sha256": "c2e8014562a7b850b00b3ad5b39a7aeb1ed64d3e915a976bab695d9cf27b159c"
+    },
+    {
+      "relativePath": "blend-exchange.psd",
+      "bytes": 1410,
+      "sha256": "42420801bd9713a0995885995b8f8b2fd381db5e2100b8ecd95332016beda52f"
+    },
+    {
+      "relativePath": "blend-Multiply.drawer",
+      "bytes": 1093,
+      "sha256": "990aab743963a0fd548ed5565ad032d8acd0c05cdb53f40e639ba5f784be0d8b"
+    },
+    {
+      "relativePath": "blend-Normal.drawer",
+      "bytes": 893,
+      "sha256": "21fcc29dc7aad5a1e4605587e25470d8767533cf97b03f2a003920bc636972d4"
+    },
+    {
+      "relativePath": "blend-Overlay.drawer",
+      "bytes": 1092,
+      "sha256": "771ef32e8f4fa72839d7890c905d41fd667d9dce545a12163465d830f7b1f2f0"
+    },
+    {
+      "relativePath": "blend-Screen.drawer",
+      "bytes": 1091,
+      "sha256": "af10801367be049db63306bd1eeb5bb03b0aca6e211cd6033fe2c2411eb60856"
+    },
+    {
+      "relativePath": "blur-app-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "blur-app-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "blur-app-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "blur-app-user/settings/views.json",
+      "bytes": 859,
+      "sha256": "770d545d51480d71bcc87e19a343b793742b5d63a016edb3517a5197150af3b1"
+    },
+    {
+      "relativePath": "blur-app-user/settings/views.previous.json",
+      "bytes": 538,
+      "sha256": "eb01db10b8f125b076df2645a0cd0254dacdfe8fbeebb063f7d4d7b526683e05"
+    },
+    {
+      "relativePath": "blur-app-user/settings/workspaces.json",
+      "bytes": 287611,
+      "sha256": "91e533d84a453d0c79ca29f4eb4bc8794248c0ea378c2e55be1f6eea1142adab"
+    },
+    {
+      "relativePath": "blur-app-user/work-time/5d3620ffea57396cd053426e72b2c3505d7f1e1a472c2cbf5c6082270ef63930.json",
+      "bytes": 466,
+      "sha256": "5c00ea20568bdb3a5675bc48675be2690b7f508b15d04a39361a0027fa7d59f7"
+    },
+    {
+      "relativePath": "blur-app-user/work-time/5d3620ffea57396cd053426e72b2c3505d7f1e1a472c2cbf5c6082270ef63930.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "blur-app-user/work-time/db187c6bbda59954b8039bc2b2b573535f6ec8c7d0dea5d70e3bd9517be7e47e.json",
+      "bytes": 279,
+      "sha256": "6f72de8f5a64049c80d1543027502f2bee0df822a074eb5139a2d7bfc7bbb7c0"
+    },
+    {
+      "relativePath": "blur-app-user/work-time/db187c6bbda59954b8039bc2b2b573535f6ec8c7d0dea5d70e3bd9517be7e47e.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "blur-presets/settings/workspaces.json",
+      "bytes": 284558,
+      "sha256": "990036c8364c691d7b584d462458eac3b0a40b718835c3ae6aa6b86a8a287b59"
+    },
+    {
+      "relativePath": "brightness-opacity.drawer",
+      "bytes": 675,
+      "sha256": "c6b772d67914e11f725b6618b74fae52acba804b5d2476377eca21a1202ed83f"
+    },
+    {
+      "relativePath": "brush-color-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "brush-color-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "brush-color-user/settings/workspaces.json",
+      "bytes": 286713,
+      "sha256": "06f858b71db5a4dbefabe8a2b1181e83b17d8c4de4ca4a4cd0393f41e989d106"
+    },
+    {
+      "relativePath": "brush-color-user/work-time/3731aa1eba581d01ff3c7a780ba0a8342742000100083cc9f718f03372e713b4.json",
+      "bytes": 279,
+      "sha256": "44ac4c87a64e1049dbe4addbad46daebf63cbf2ed9ddef431c0579ff447dbd7c"
+    },
+    {
+      "relativePath": "brush-color-user/work-time/3731aa1eba581d01ff3c7a780ba0a8342742000100083cc9f718f03372e713b4.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "bucket-base-false.drawer",
+      "bytes": 2066,
+      "sha256": "bde3a31ce8905f7a2a68ab754030430c4a45bc65ba90896694ae32924a71fe41"
+    },
+    {
+      "relativePath": "bucket-base-true.drawer",
+      "bytes": 2066,
+      "sha256": "17c37dcbd7b86e0d0fdc39d8ff3fa1f50afec5d7d088181b29c547f70968b87b"
+    },
+    {
+      "relativePath": "bucket-selected.drawer",
+      "bytes": 480,
+      "sha256": "c794d88cd34a9d845d0521425f39e247098bf48175febcae864a4356f0c81b66"
+    },
+    {
+      "relativePath": "bucket-settings-false.json",
+      "bytes": 286757,
+      "sha256": "7b9506d5efde5f0e40902ea2bf21dfe98c8dfb0a54946e36af8dafc509efb011"
+    },
+    {
+      "relativePath": "bucket-settings-true.json",
+      "bytes": 286757,
+      "sha256": "7b9506d5efde5f0e40902ea2bf21dfe98c8dfb0a54946e36af8dafc509efb011"
+    },
+    {
+      "relativePath": "cached-cell-file.drawer",
+      "bytes": 1487,
+      "sha256": "633219a4a1d8872a6046db26b8c04efa10fab531c6374e152e08c2d8916fc531"
+    },
+    {
+      "relativePath": "cached-track-file.drawer",
+      "bytes": 1470,
+      "sha256": "e134b343224b2385411c2b412c9b9276f648eabced4ad62628654a45138a904e"
+    },
+    {
+      "relativePath": "cell-file.drawer",
+      "bytes": 362,
+      "sha256": "c0f516f046324d81d991073648cdd57423dba6e52f77c47419ab88363edd6181"
+    },
+    {
+      "relativePath": "circle-ui.drawer",
+      "bytes": 155175,
+      "sha256": "021ee23fc9d60333abcc5ce7c239e55879b11a225142d8aac17afdfb96c20187"
+    },
+    {
+      "relativePath": "circular-text.drawer",
+      "bytes": 155109,
+      "sha256": "45f0eff0b6c38d960005e38413bd4dfcb2dd25ddca71b10011e41075858779eb"
+    },
+    {
+      "relativePath": "cleanup-fake83.drawer",
+      "bytes": 3972,
+      "sha256": "ddbb5b4ea01ec7a8c42528c37c45696e37c27dada2954a4c35d541a34955303d"
+    },
+    {
+      "relativePath": "cleanup-preset/settings/workspaces.json",
+      "bytes": 283901,
+      "sha256": "ef3f2f2d0c9f7581217787c237d5dbe2e1771d1d68f555def4f7e71b3ef51ff3"
+    },
+    {
+      "relativePath": "cleanup-ui.drawer",
+      "bytes": 1825,
+      "sha256": "ebb5b1b293922001a5e793d214bb1589834c4ed9a4f0a7d1e1e6b1a96ac68ca4"
+    },
+    {
+      "relativePath": "cleanup.drawer",
+      "bytes": 4036,
+      "sha256": "2ec055be6d2458979515e5e018ca906b28bd3aee98f80700397992564e4e43e8"
+    },
+    {
+      "relativePath": "clipboard-file.drawer",
+      "bytes": 362,
+      "sha256": "0901597925360d08100e9b2b4436bd8e9137956e3a92564908c63dee8e030370"
+    },
+    {
+      "relativePath": "clipping-orphan.drawer",
+      "bytes": 1062,
+      "sha256": "52230a90308bd41508ab2f0091c7dd6d4db1c36a04db8789808b8cd8985487c8"
+    },
+    {
+      "relativePath": "clipping-rotated.drawer",
+      "bytes": 1824,
+      "sha256": "7c8cb18492877caff08ca7c1b65b1897c533cfe2e310ae9ccbd7b37ea2e1c37b"
+    },
+    {
+      "relativePath": "clipping.png",
+      "bytes": 240,
+      "sha256": "e80263c175551de856ab7d84969b4c39bfdb4bc79d0de91b18e2569fb60937ea"
+    },
+    {
+      "relativePath": "color-corrections-app.drawer",
+      "bytes": 920,
+      "sha256": "fce41bca546a26f22cb088f5f6921b90e8d18b87f4263bc9656286cb8cc0974f"
+    },
+    {
+      "relativePath": "color-deepen-app.drawer",
+      "bytes": 1055,
+      "sha256": "3e40575194d30c8500d9a6fb9cfa9f282948760f89735e431f4b77ecc6332816"
+    },
+    {
+      "relativePath": "color-deepen-app.drawer.drawer-last-good",
+      "bytes": 650,
+      "sha256": "1c8929b2c0327e660bca68564cbcb495ec09bf85d7f12d05da16d9ec12593721"
+    },
+    {
+      "relativePath": "color-deepen-old.drawer",
+      "bytes": 840,
+      "sha256": "e57e64adcd8974946e8526479996c31eaed3d7de8ebd1c20181e4cf432dc56c3"
+    },
+    {
+      "relativePath": "color-deepen.drawer",
+      "bytes": 904,
+      "sha256": "104356d5171944813798b682bb298d6f47958086d87d7a7740c132b5aa90b0d9"
+    },
+    {
+      "relativePath": "color-deepen.drawer.drawer-last-good",
+      "bytes": 500,
+      "sha256": "ee0189832b8f6caa49a03448da6f1517e027b1dae0eb85a77904dd75ebf2f0fd"
+    },
+    {
+      "relativePath": "color-modes-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "color-modes-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "color-modes-user/settings/panels.json",
+      "bytes": 915,
+      "sha256": "633a9720cd8c05182e05797b1ad435cc0861cbc82d7d5ed48d05208f9e5b2ec3"
+    },
+    {
+      "relativePath": "color-modes-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "color-modes-user/settings/references.json",
+      "bytes": 261,
+      "sha256": "51f95cc508791da585d42a03d9b3119660633598482dc783a6ce53d967b1bb17"
+    },
+    {
+      "relativePath": "color-modes-user/settings/references.previous.json",
+      "bytes": 263,
+      "sha256": "947720f2f96bd98b6a0ef95aebe8cb2f93c9ea86bdeeb134572c4c192370ed58"
+    },
+    {
+      "relativePath": "color-modes-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "e2d61c4c60d8e261a87b53dbb6daa8d48d3edad4a70f69ae03fff8e5b49d66e2"
+    },
+    {
+      "relativePath": "color-modes-user/settings/workspaces.json",
+      "bytes": 286913,
+      "sha256": "a16fcb97918f1c9044f7f71d676f1769f78adc1b065cac068b8047f22f1ffb4e"
+    },
+    {
+      "relativePath": "color-modes-user/work-time/ea4f2e1b232c92ac5b79173b20c2e94c7177ecb1e40e05dc9ed62657acd30759.json",
+      "bytes": 279,
+      "sha256": "e83ddff6d1ec3506ffddceaf614121a5c5db938b7775e0dc881b8f99e1471cd5"
+    },
+    {
+      "relativePath": "color-modes-user/work-time/ea4f2e1b232c92ac5b79173b20c2e94c7177ecb1e40e05dc9ed62657acd30759.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "color-panel-document.drawer",
+      "bytes": 565,
+      "sha256": "a2512f5e736d2c27d16f42d9e198fe75bea7054e7fe2248bacfdbf8cc4861361"
+    },
+    {
+      "relativePath": "color-range-settings.json",
+      "bytes": 286714,
+      "sha256": "cf3965c4f0466f677f3c6b1f40512b28abec0db3d75211134aceefe4679c5685"
+    },
+    {
+      "relativePath": "color-range.drawer",
+      "bytes": 684,
+      "sha256": "fa6cc694c3a8404ed640fe421ef81f942319272817f7222eebe8bfbb2755c701"
+    },
+    {
+      "relativePath": "color-selector-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "color-selector-user/settings/workspaces.json",
+      "bytes": 286875,
+      "sha256": "92d25223c4e8dee03a6b9838d75d1ecf28faa2b15de17feaa0b7d46d74b50a71"
+    },
+    {
+      "relativePath": "color-selector-user/work-time/3eb7115b8415a7e21e56734a56682f09c204a66945e90f0360b0f26ad234d3be.json",
+      "bytes": 279,
+      "sha256": "674bf2836bd3aae7e1b8a26c7002619df1e17a71ce22b65c6a4b23ceceeb6ee3"
+    },
+    {
+      "relativePath": "color-selector-user/work-time/3eb7115b8415a7e21e56734a56682f09c204a66945e90f0360b0f26ad234d3be.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "comparison-Body/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "comparison-Body/manifest.json",
+      "bytes": 492,
+      "sha256": "dc85c044668f39c8608e9b72e0e70acc3ca79265cb6ef470c0aded53750125d2"
+    },
+    {
+      "relativePath": "comparison-Body/weights.onnx",
+      "bytes": 2858,
+      "sha256": "1288ece33db67f332681a674e4a4ec96d24eddfad4806b101a407489b3d44069"
+    },
+    {
+      "relativePath": "comparison-Denoise/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "comparison-Denoise/manifest.json",
+      "bytes": 495,
+      "sha256": "cd763d861826c6a041438ae7264b1cc6c4f173a60a05c6e60d120df71d896586"
+    },
+    {
+      "relativePath": "comparison-Denoise/weights.onnx",
+      "bytes": 460,
+      "sha256": "3416e682c108fe515ef500e44e4cd9d170d03230318866db33296fcdd3243ba8"
+    },
+    {
+      "relativePath": "comparison-Hand/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "comparison-Hand/manifest.json",
+      "bytes": 492,
+      "sha256": "148e6e1d51a294fb8043306819c270c503acbf140b6c36d95110b1afdbb51859"
+    },
+    {
+      "relativePath": "comparison-Hand/weights.onnx",
+      "bytes": 3482,
+      "sha256": "c352fd4db6e7cf8fe09cb9b3bba5b1fda3b60ee1f5c7eaa6048b073e45b2d9b0"
+    },
+    {
+      "relativePath": "comparison-HintColor/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "comparison-HintColor/manifest.json",
+      "bytes": 497,
+      "sha256": "ef558ce630a87f0bcaf424e6bc773cd6ab108e4f4b1142ac9ca8b73c6baa6943"
+    },
+    {
+      "relativePath": "comparison-HintColor/weights.onnx",
+      "bytes": 201,
+      "sha256": "49399686f173814408e3fa0d6fe978f8ade214259f117e4eadf80ee01b90a116"
+    },
+    {
+      "relativePath": "comparison-Upscale/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "comparison-Upscale/manifest.json",
+      "bytes": 495,
+      "sha256": "98f5d9a97edde36f983be86d2958775e6278033176ab14997b7b1b5c5ca8fa19"
+    },
+    {
+      "relativePath": "comparison-Upscale/weights.onnx",
+      "bytes": 255,
+      "sha256": "ccc23de765789f76738704164bb3cad2eef61d6f0696f9589b684617df694cab"
+    },
+    {
+      "relativePath": "composition-Background.drawer",
+      "bytes": 3853,
+      "sha256": "18c780422516529bd05375ca2909fb68b6019c142532546f45369af70a6926a6"
+    },
+    {
+      "relativePath": "composition-BlackBurn.drawer",
+      "bytes": 3852,
+      "sha256": "c3257c8333f9a3cfddb4e447322a0e3017f7daa5239ffba9909e50f8aa11dd0f"
+    },
+    {
+      "relativePath": "composition-CompareDensity.drawer",
+      "bytes": 3857,
+      "sha256": "fb4ed7977249626ae9b4e51cc511825046f29e6410ab7fee0e385bf3a8b757fa"
+    },
+    {
+      "relativePath": "composition-Dissolve.drawer",
+      "bytes": 3851,
+      "sha256": "ab68641a3c1357144d12ffbbd7b9f0beb8536311c36edf8e304134a82f3c15d3"
+    },
+    {
+      "relativePath": "composition-Erase.drawer",
+      "bytes": 3848,
+      "sha256": "fcbe4d8ecff93b6f2c4c14a4e2d0fd830022bb60e722771a9321c7935d54e7d4"
+    },
+    {
+      "relativePath": "composition-EraseCompare.drawer",
+      "bytes": 3855,
+      "sha256": "ad488c3c129a3be29aabb7bf471cd739ffe4de43bcc0fa490c177ce2819700dd"
+    },
+    {
+      "relativePath": "composition-Normal.drawer",
+      "bytes": 3849,
+      "sha256": "819c70fc3a2c9859e2a1335a2221e9ee7c61d8b407d82e0370b7266aabeeb372"
+    },
+    {
+      "relativePath": "composition-ReplaceAlpha.drawer",
+      "bytes": 3855,
+      "sha256": "fc875b4ad7edae945cc02da75e2faa529da71b27d40b7ba4ac2df7bfcd2bb080"
+    },
+    {
+      "relativePath": "composition-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "composition-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "composition-user/settings/workspaces.json",
+      "bytes": 286701,
+      "sha256": "31b27599db5029981bd3989de97f73d5ee5b2b0a3ca5d5011cee86f565b5641d"
+    },
+    {
+      "relativePath": "composition-WhiteBurn.drawer",
+      "bytes": 3852,
+      "sha256": "e74655359d6c720041fed112bbff97b84424ba01fdc9241400dafe0030290b88"
+    },
+    {
+      "relativePath": "confirmed-path.drawer",
+      "bytes": 13540,
+      "sha256": "ae4a698065e8740dff5cccdcb8340bb51d5c3f69289765397f660ea3e7bbfac0"
+    },
+    {
+      "relativePath": "confirmed-path.drawer.drawer-last-good",
+      "bytes": 13481,
+      "sha256": "f5c4b39603f165e3331000aea5fb698a2d41aaf5314c7ff2301512fab43249b5"
+    },
+    {
+      "relativePath": "continuous-brush.drawer",
+      "bytes": 3393,
+      "sha256": "73f10330be9ccd6c261098dde609d785d0562c8df61e8359a7672f26e348d784"
+    },
+    {
+      "relativePath": "contour-selection.drawer",
+      "bytes": 4072,
+      "sha256": "4012879ea8d815f0dfbaeb6b4e42f3472311fd007d5b46966aaddf676362c8fa"
+    },
+    {
+      "relativePath": "converted-folder.drawer",
+      "bytes": 610,
+      "sha256": "24d05c6ca79e7303aa7d5e9817d9d5c12057e913c70f2bdf8a4ea165b942660e"
+    },
+    {
+      "relativePath": "converted-object.drawer",
+      "bytes": 410,
+      "sha256": "93d099b71904c3ef0a9408ecb55f2f0f71f7b118af2e30f94926639d1ee7bffe"
+    },
+    {
+      "relativePath": "converted-raster.drawer",
+      "bytes": 362,
+      "sha256": "5131c9843f5781b1cd7941ca3507d6283887574c4c8f9b569ff6019217e346bd"
+    },
+    {
+      "relativePath": "converted-raster.drawer.drawer-last-good",
+      "bytes": 390,
+      "sha256": "a47b61623af8dcae40e9fb011e36cca0e651a14ea23fa0cba6deb710f5388ae7"
+    },
+    {
+      "relativePath": "converted-vector.drawer",
+      "bytes": 5394,
+      "sha256": "e7a21aff37645908d1aad9d63b7422641f6bcd0f9163a0d8ce547609d5f34ed8"
+    },
+    {
+      "relativePath": "correction-mask.drawer",
+      "bytes": 1469,
+      "sha256": "b404d678a7e6210c7f5780b43eb0a51f37a878010527febfe868864a6688ad1e"
+    },
+    {
+      "relativePath": "correction-ui.drawer",
+      "bytes": 1100,
+      "sha256": "f4ee4a29667700982e531536630734a5faafb39862aff26fab8d4b3247a60335"
+    },
+    {
+      "relativePath": "corrupt-material.drawer",
+      "bytes": 1276,
+      "sha256": "11f213500ac52970cc0d47a6adc93763654266379a451f823e3b31f9e27b63f9"
+    },
+    {
+      "relativePath": "cycle-a.drawer",
+      "bytes": 1388,
+      "sha256": "84fdd0c03bae4d42aef2d34e4356a35971060f183d74cdf37a8804158e58d401"
+    },
+    {
+      "relativePath": "cycle-a.drawer.drawer-last-good",
+      "bytes": 362,
+      "sha256": "30b4b22aba926c30fb21892728f9fc31415cff79a8c3ac818aec284244a3fb3a"
+    },
+    {
+      "relativePath": "cycle-b.drawer",
+      "bytes": 1381,
+      "sha256": "acf1b8b52f1230b3738b36938b55dc33b77662294483e81fcfb84f1a40543b3f"
+    },
+    {
+      "relativePath": "cycle-b.drawer.drawer-last-good",
+      "bytes": 362,
+      "sha256": "ad8d86094bb9d4e01427963fd8511da0cfe9fb83807fb40d4903d279fcdbcefb"
+    },
+    {
+      "relativePath": "cycle.drawer",
+      "bytes": 1638,
+      "sha256": "3368fa34cc0e84f5c745a8cf97a5fbe80705d68f9fb57512fc669cae5b3987d9"
+    },
+    {
+      "relativePath": "deepen-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "deepen-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "deepen-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "deepen-user/settings/recent.json",
+      "bytes": 194,
+      "sha256": "58a7754e49aa07535737fc3199d2e10bcdeffc9b77882a29ea8b54e5cfdcfbb2"
+    },
+    {
+      "relativePath": "deepen-user/settings/views.json",
+      "bytes": 530,
+      "sha256": "705a5c078d577d607b1fa6dd75386700fdadbcc3c5e1ba2da37e2c0f6882e490"
+    },
+    {
+      "relativePath": "deepen-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "c488f704886bb176281da0d4ae1c4b9fe9b5a25bbdf267a79337e374e45eb5fd"
+    },
+    {
+      "relativePath": "deepen-user/settings/workspaces.json",
+      "bytes": 286758,
+      "sha256": "f8209c0b19415ee19ab0e692b60f64c1d40089226a09c5961e38b5ed80e803f1"
+    },
+    {
+      "relativePath": "deepen-user/work-time/fa47fd488b9fd42979bb2f1827b1ed015a0f98b1c6dbcad28998c1387e3b1f0e.json",
+      "bytes": 457,
+      "sha256": "e02d248340788eba702fa29cabc894026cabbc8b66fe4f6a835e64aeadf94f42"
+    },
+    {
+      "relativePath": "deepen-user/work-time/fa47fd488b9fd42979bb2f1827b1ed015a0f98b1c6dbcad28998c1387e3b1f0e.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "default-created.drawer",
+      "bytes": 1398,
+      "sha256": "6624abb6cb262c93f6c881996667480cef7f36ddfe02b330b5b8588af150e69b"
+    },
+    {
+      "relativePath": "deformation-app.drawer",
+      "bytes": 1828,
+      "sha256": "cccfa9fa623adeaa55f352d238a860db67bc2ae479db6fb143c1627d353bd812"
+    },
+    {
+      "relativePath": "detail-filter.drawer",
+      "bytes": 550,
+      "sha256": "6fb0ec34db4ee83256ae4f3836ab275bf0fa9e0484339dd37567d41e958437d0"
+    },
+    {
+      "relativePath": "detail-filter.drawer.drawer-last-good",
+      "bytes": 632,
+      "sha256": "4bfb3cb9ad3a57e82a13e6f7bbcdb10f9607a391da0617873f9bf8c9d45eeb8b"
+    },
+    {
+      "relativePath": "device-frozen.drawer",
+      "bytes": 5717,
+      "sha256": "2f9e97b6bddb04d9c9214da93eb64e76065ce54f2c671443458a7f93f0578c5b"
+    },
+    {
+      "relativePath": "display-effects.png",
+      "bytes": 155,
+      "sha256": "2ac46a0c74e072f8e8bdc9fc668a47fd2091c12092e7ea11153b0b5e900169ff"
+    },
+    {
+      "relativePath": "display-effects.psd",
+      "bytes": 1520,
+      "sha256": "99545412a7a0d220f5dbf3e4e0061c438ea2382e96dbe5db97d173bd254e3e37"
+    },
+    {
+      "relativePath": "distortion-app.drawer",
+      "bytes": 825,
+      "sha256": "adb8a8b0b2c78a46bf43bae79e47fa1c456beae83e17687bea703c47f96d4c88"
+    },
+    {
+      "relativePath": "distortion-app.drawer.drawer-last-good",
+      "bytes": 838,
+      "sha256": "20623fc8033108cdd6d712d516590aae13ee2d534ab02092bdf75f0eb41e8ce1"
+    },
+    {
+      "relativePath": "distortion-old.drawer",
+      "bytes": 612,
+      "sha256": "6244c7af6355b1e0a5e34d98c157668373e0a68a31a9816f0e1361b050839e3e"
+    },
+    {
+      "relativePath": "distortion.drawer",
+      "bytes": 676,
+      "sha256": "1626ab9bb8bd2eee411de422be7ccad30b0ef52ae149a736cf74c81312556718"
+    },
+    {
+      "relativePath": "distortion.drawer.drawer-last-good",
+      "bytes": 689,
+      "sha256": "bc39eb56cecc92d0bb062133c777446af81572f5669225b50933b9a4af8d108a"
+    },
+    {
+      "relativePath": "downgraded-inversion.drawer",
+      "bytes": 1003,
+      "sha256": "327869de46671376e0d25fc0afa868186db75ea41b1197c97ae65634f5e1b79c"
+    },
+    {
+      "relativePath": "draft-excluded.png",
+      "bytes": 139,
+      "sha256": "61b8acd53d0cab4840ac206d821a1b150c826f9feaa3dc6c075ad4308d1f4d56"
+    },
+    {
+      "relativePath": "draft-excluded.psd",
+      "bytes": 1410,
+      "sha256": "51142e408c006639ad19382f3336179a181280d76c08224d3a6aaed3bf0da3cd"
+    },
+    {
+      "relativePath": "draft-preserved.drawer",
+      "bytes": 867,
+      "sha256": "f33504173890155359e7eed9dff30c56a1b1fdee1e1f9dd60beb5df4f18e56c4"
+    },
+    {
+      "relativePath": "dual-color.drawer",
+      "bytes": 10147,
+      "sha256": "a0c3c592505ea8a538a7f8b535919068bb2cf3038a3bf9acaf4ff57026b8b49d"
+    },
+    {
+      "relativePath": "editable-colors-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "editable-colors-user/settings/workspaces.json",
+      "bytes": 286908,
+      "sha256": "5889206418c8160175ce25e5e7033d5248f4f699d717062acca0da5678b08397"
+    },
+    {
+      "relativePath": "editable-colors-user/work-time/595976ce4f913e3304879c01077551b3540ac26be4ea02650fc71065b26fda2a.json",
+      "bytes": 278,
+      "sha256": "1824488e3f533e707f4a6e1c1a5a38b414228524ddbdaeef399d34791c4852d2"
+    },
+    {
+      "relativePath": "editable-colors-user/work-time/595976ce4f913e3304879c01077551b3540ac26be4ea02650fc71065b26fda2a.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "editable-gradient.drawer",
+      "bytes": 1207,
+      "sha256": "906c084b547cf610b3928e5666bf38d7951a7fbe3f4068f22980852e498fce41"
+    },
+    {
+      "relativePath": "editable-mesh.drawer",
+      "bytes": 2893,
+      "sha256": "7b79811f59596491e0dcfda5cd8bc5ebc1f29f95d5452c96670d84b52a6964f2"
+    },
+    {
+      "relativePath": "effect-coordinate-frame.drawer",
+      "bytes": 13420,
+      "sha256": "41dff36bef32382095cce020e75db212d807fdec86e565eb4e3029c6afb75f22"
+    },
+    {
+      "relativePath": "effects-app-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "effects-app-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "effects-app-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "effects-app-user/settings/recent.json",
+      "bytes": 189,
+      "sha256": "6614e9fe3dd949338dc57789bc36b46dacadfa62686df21ec1383a8557b62bbf"
+    },
+    {
+      "relativePath": "effects-app-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "0689fb8ea8aa829017668c8f31057475cee13f3a617b8d2fb270a37628d77255"
+    },
+    {
+      "relativePath": "effects-app-user/settings/workspaces.json",
+      "bytes": 287140,
+      "sha256": "c30f6ddb08f773bba08180f71de16b976ae900cdafa0c534c7f26b2d0461314b"
+    },
+    {
+      "relativePath": "effects-app-user/work-time/d59bdb46297acef6a94b63c4ecfaee54fb8b987487bbda50d56c82f804f31065.json",
+      "bytes": 282,
+      "sha256": "eaa2ee864049c36ec2b6c1293a890edc368909536680a387765ca261085a0f6f"
+    },
+    {
+      "relativePath": "effects-app-user/work-time/d59bdb46297acef6a94b63c4ecfaee54fb8b987487bbda50d56c82f804f31065.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "effects-app.drawer",
+      "bytes": 15376,
+      "sha256": "ecf9dffad868629d6f4d8c733525c7df5cb915a2f578ed3838339108b75ff973"
+    },
+    {
+      "relativePath": "empty-text.drawer",
+      "bytes": 154625,
+      "sha256": "0573be5bf988c1f70bf982469fb94b03fecd60a222c7d19100377ef0fd1d1f3b"
+    },
+    {
+      "relativePath": "enclosed-fill.drawer",
+      "bytes": 773,
+      "sha256": "4f5b5085c3612df276d5245fbe731fc07bede422ac31874e032ab3159180ec93"
+    },
+    {
+      "relativePath": "enclosure-base-false-false.drawer",
+      "bytes": 2774,
+      "sha256": "5c9931223b84befbb307885f4e28278195d3738d9b8e5f57a741b5c4ec23bd58"
+    },
+    {
+      "relativePath": "enclosure-base-false-true.drawer",
+      "bytes": 2774,
+      "sha256": "f21c9276e5c651a3148a36a109e016f4564fdb615c0d995cd4cc2c954cf0da45"
+    },
+    {
+      "relativePath": "enclosure-base-true-false.drawer",
+      "bytes": 2774,
+      "sha256": "292fa16516cbfff9a88dcc0d62a7fe250dbf0efd7c34d723ae068513141ffff5"
+    },
+    {
+      "relativePath": "enclosure-base-true-true.drawer",
+      "bytes": 2774,
+      "sha256": "500bba1cffef75fafcb047c58eccf5302bb8d57a75851fa4a8af40a56e01485a"
+    },
+    {
+      "relativePath": "enclosure-settings.json",
+      "bytes": 286765,
+      "sha256": "3a21fbe0aec0ee3e3adfa741ba5bb6efbb2caa9ae4ea7ce452560a34000e2973"
+    },
+    {
+      "relativePath": "expression-actual.drawer",
+      "bytes": 370,
+      "sha256": "d3c20c830deafe4618171b6a367fd68b1ab2c9d60bd3304514d6a4d0dc581622"
+    },
+    {
+      "relativePath": "expression-alpha.png",
+      "bytes": 85,
+      "sha256": "660efde996c9b4b73d76d5883d1df7e8d217a4a5756987ca2fef89a47d267e9c"
+    },
+    {
+      "relativePath": "expression-old-version.drawer",
+      "bytes": 979,
+      "sha256": "d405959e8f4b9a1c234d4ff56e3172ca725a6e8f24e442f8650d34fa06b75de3"
+    },
+    {
+      "relativePath": "expression-thresholds.drawer",
+      "bytes": 1043,
+      "sha256": "674586cb443faa279b854be1bb36f6b3ea5f9175e99a412587349a028c721af7"
+    },
+    {
+      "relativePath": "extended-blend-Add.drawer",
+      "bytes": 1087,
+      "sha256": "82b1a842f97fff3c15394853a4f9d20b194bda3d63dd6198a2db8bcf3ab1c4c0"
+    },
+    {
+      "relativePath": "extended-blend-AddGlow.drawer",
+      "bytes": 1091,
+      "sha256": "e51307e84d4826f4367a82add9d78cac7e5335b6aff44f3d9c343eaf3f5ddc9c"
+    },
+    {
+      "relativePath": "extended-blend-Brightness.drawer",
+      "bytes": 1094,
+      "sha256": "7e15c0058671019be2c773b8adc5d0d0e20050dcc0819d9d058af9b35f380870"
+    },
+    {
+      "relativePath": "extended-blend-Color.drawer",
+      "bytes": 1089,
+      "sha256": "df406ef436166f6d097a70b90572c76e1dac83b65a1643f93aad29ba49075c26"
+    },
+    {
+      "relativePath": "extended-blend-ColorBurn.drawer",
+      "bytes": 1093,
+      "sha256": "f9f38fedf37ef22576cf4251b95c9a569e42c601e1e54ad73c1cf3d67ed59eda"
+    },
+    {
+      "relativePath": "extended-blend-ColorDodge.drawer",
+      "bytes": 1094,
+      "sha256": "69f3fe7b8b367d4d862210be44dbb72f1347fd56428120fd759200e8f8cb90fe"
+    },
+    {
+      "relativePath": "extended-blend-Darken.drawer",
+      "bytes": 1090,
+      "sha256": "80cd7413342652f7e073656d706e5bdfbf9883eded9e00737fddaf6918307828"
+    },
+    {
+      "relativePath": "extended-blend-DarkerColor.drawer",
+      "bytes": 1095,
+      "sha256": "3e23bc87ec98ef9268c5f1e8ac5b1bdc6cf49fbca84f60c44f61625581a37843"
+    },
+    {
+      "relativePath": "extended-blend-Difference.drawer",
+      "bytes": 1094,
+      "sha256": "0b7765cdc2f2b1eb1a6247ff5e420043befb9909423648514779601988a846c2"
+    },
+    {
+      "relativePath": "extended-blend-Divide.drawer",
+      "bytes": 1090,
+      "sha256": "f806d1a24c7a062301e66f0c707628a74ecc8bb90571a729245e3080f3935fca"
+    },
+    {
+      "relativePath": "extended-blend-Exclusion.drawer",
+      "bytes": 1093,
+      "sha256": "ec6266af0bc40fcda71a0ece11f2d34129e7bd0e2727cb02132273d6918dc97a"
+    },
+    {
+      "relativePath": "extended-blend-GlowDodge.drawer",
+      "bytes": 1093,
+      "sha256": "1a7c5f8f741b36c5adf9706abf7c8ac7556c4ce280f31e650c55cb499c871f5d"
+    },
+    {
+      "relativePath": "extended-blend-HardLight.drawer",
+      "bytes": 1093,
+      "sha256": "012170394145fa39caaaf1e709c331beed090ba99d5ee57408a0770d71f9cdb1"
+    },
+    {
+      "relativePath": "extended-blend-HardMix.drawer",
+      "bytes": 1091,
+      "sha256": "50e77bbd4c1a1c33d9c2729bf3e8b9f5edd30064a95488db583d663c5e3b9098"
+    },
+    {
+      "relativePath": "extended-blend-Hue.drawer",
+      "bytes": 1087,
+      "sha256": "4d2ce7541285c061d71b2ba45144e340ab1dead2e00ad5cc007f91d94ec638e7"
+    },
+    {
+      "relativePath": "extended-blend-Lighten.drawer",
+      "bytes": 1091,
+      "sha256": "08048fea2e0ee19ffcc429c159e7da5c49fee1c1ecd9e567b5009d10dea7695c"
+    },
+    {
+      "relativePath": "extended-blend-LighterColor.drawer",
+      "bytes": 1096,
+      "sha256": "3983678c2b62c201b16bde34a19668138a43a2a4bd7a7bf091d4c3b675a86150"
+    },
+    {
+      "relativePath": "extended-blend-LinearBurn.drawer",
+      "bytes": 1094,
+      "sha256": "ff2200d6b32e62576d58048629f73077304ad1b05504c46c048d6e7594bdabe8"
+    },
+    {
+      "relativePath": "extended-blend-LinearLight.drawer",
+      "bytes": 1095,
+      "sha256": "5c9e7b097e92069ef98226b265e44aeb64c21e0da8fe2b455f2d7ea275d1a707"
+    },
+    {
+      "relativePath": "extended-blend-Multiply.drawer",
+      "bytes": 1092,
+      "sha256": "fda3fb52f1595c973a4f285e4546c1051cc076e33a598407e5f7b3bf2d7171a3"
+    },
+    {
+      "relativePath": "extended-blend-Normal.drawer",
+      "bytes": 1073,
+      "sha256": "b759f9460c972064fba2b6f63abc7c9dc756aac5b9bbbf55cd5dc5faf66ca613"
+    },
+    {
+      "relativePath": "extended-blend-Overlay.drawer",
+      "bytes": 1091,
+      "sha256": "9c7ed2cf133cc1fbf0e1044df0416051b9e91122f7562ccbf60816685ae05a62"
+    },
+    {
+      "relativePath": "extended-blend-PinLight.drawer",
+      "bytes": 1092,
+      "sha256": "a05722f92e5cd65b3f08b70fefbce66f73bedb838d83ff71b7747311f22bce4a"
+    },
+    {
+      "relativePath": "extended-blend-Saturation.drawer",
+      "bytes": 1094,
+      "sha256": "35f929453eff8d155928f680979acdaf62e96d64d3d1993dd69c22d75c7ff0d5"
+    },
+    {
+      "relativePath": "extended-blend-Screen.drawer",
+      "bytes": 1090,
+      "sha256": "d3740ddc9607800683fd8ade6a9b84d0d98309ef5a1b67792722d70d5ec69234"
+    },
+    {
+      "relativePath": "extended-blend-SoftLight.drawer",
+      "bytes": 1093,
+      "sha256": "6ead88407da0af41aaa09f776e78a8c9ad16a8977dfabe0be953b7e6012f66eb"
+    },
+    {
+      "relativePath": "extended-blend-Subtract.drawer",
+      "bytes": 1092,
+      "sha256": "f0e0288aead51849ef56712b5e14128b1418ab3a34c01df43f0a0e37ab0d5510"
+    },
+    {
+      "relativePath": "extended-blend-VividLight.drawer",
+      "bytes": 1094,
+      "sha256": "740e9ded62a145872dd0b1ce2ca4a7420514802e8997b5c29464a41d3480f0fd"
+    },
+    {
+      "relativePath": "extended-fill.json",
+      "bytes": 286693,
+      "sha256": "46e250e4b01fad07dda0dcaa213d03712ab859f0f21d6a671e868dd27db52ef1"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/references.json",
+      "bytes": 263,
+      "sha256": "d854cf86be8a7cab6849640ad90675006da67d1bb3330fec7cf6e0929faf5223"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/references.previous.json",
+      "bytes": 258,
+      "sha256": "76f2210520eb29c8ab21d9c4601819e757f014741912388f889c02f05200e20f"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "18dd590172719735abb731fa1ed6222c13f276fe86bee7306476cc9cc2076460"
+    },
+    {
+      "relativePath": "eyedropper-user/settings/workspaces.json",
+      "bytes": 287138,
+      "sha256": "806be89a1eba695953c84dd387bb5ab84bfbdde22a68beb0b1e95574ac9fdc6b"
+    },
+    {
+      "relativePath": "eyedropper-user/work-time/9a55bf17766b510190e497baee35e9132868f4ce96278702d2a0aeb04164370a.json",
+      "bytes": 282,
+      "sha256": "165506bcc66264b967b09b48002ab98763857dba936633d28db116314661c554"
+    },
+    {
+      "relativePath": "eyedropper-user/work-time/9a55bf17766b510190e497baee35e9132868f4ce96278702d2a0aeb04164370a.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "fake-v80-mesh.drawer",
+      "bytes": 2829,
+      "sha256": "eac72beb23eeb335f4f1641c5916f774872bb101bf3f4185f377d01286ffb018"
+    },
+    {
+      "relativePath": "file-cache.drawer",
+      "bytes": 1651,
+      "sha256": "2817f279c8667bab329eed67273c192cc1279cb76d15cc961fddba1afd11d6ed"
+    },
+    {
+      "relativePath": "file-source.drawer.drawer-last-good",
+      "bytes": 362,
+      "sha256": "bece0d5c2583a3720b3eb1ee1f1edf978d5b7af3a5240e00a15dff79803d1130"
+    },
+    {
+      "relativePath": "fill-reference-workspace.json",
+      "bytes": 286766,
+      "sha256": "6089d2c54cab74abc1fb8443dd3d493bd978f7212a58b0f6ac8de878aca80352"
+    },
+    {
+      "relativePath": "fill-reference.drawer",
+      "bytes": 2627,
+      "sha256": "aab6025db280aad65befec25a7d11433c1d05c3f6c40c51525c3357282734108"
+    },
+    {
+      "relativePath": "fill-refs-false-0.drawer",
+      "bytes": 2774,
+      "sha256": "2dc1a11acc07f09d255bbd3ff9164764eeaad3e5eb45e3aa6b46d8542349fca7"
+    },
+    {
+      "relativePath": "fill-refs-false-1.drawer",
+      "bytes": 2774,
+      "sha256": "71e3ed0cc88a2f215dd98ed1578d68e00c7f6c831a7abedcf3c7262515c13e64"
+    },
+    {
+      "relativePath": "fill-refs-false-2.drawer",
+      "bytes": 2774,
+      "sha256": "e4b445c6386cd3a7200d41b5d5e373853500c18081cccbbecb84bbe19df024ac"
+    },
+    {
+      "relativePath": "fill-refs-false-3.drawer",
+      "bytes": 2774,
+      "sha256": "5bf25738eea3621a39db58d0271c006ebd1f0554e31176d14b7f010962fccf79"
+    },
+    {
+      "relativePath": "fill-refs-false-4.drawer",
+      "bytes": 2774,
+      "sha256": "fd572e7cea6e4b6ffd7dd67e7fc9d0ab8e3d269d6a3acbabe086a4fa2c29f7d9"
+    },
+    {
+      "relativePath": "fill-refs-false-5.drawer",
+      "bytes": 2774,
+      "sha256": "775dde814fd8b81490f7298179d838789dcabf7ec5872135e0514f52a5161ba5"
+    },
+    {
+      "relativePath": "fill-refs-false-6.drawer",
+      "bytes": 2774,
+      "sha256": "4d181837ed68b25b5649534852520ac463113a3b14a642e56b191026e1b01b8f"
+    },
+    {
+      "relativePath": "fill-refs-false-7.drawer",
+      "bytes": 2774,
+      "sha256": "e27ae73e4d6b7b1b68e35214c9df4a05578998ee3fd7a53daa930a8005d9bbc2"
+    },
+    {
+      "relativePath": "fill-refs-false-8.drawer",
+      "bytes": 2774,
+      "sha256": "3d59299d09de86e6ef4abe2f3da1a7df848dd76b3fc9374ad227bdfa8eef86f4"
+    },
+    {
+      "relativePath": "fill-refs-false-9.drawer",
+      "bytes": 2774,
+      "sha256": "07e7387685438fd3ba748adfb15611b862bc7e0ed9801b0b99da7d63416c3190"
+    },
+    {
+      "relativePath": "fill-refs-true-0.drawer",
+      "bytes": 2774,
+      "sha256": "2a8c8587b1925ace5fcbf8d53f1bb11adbd92858d93f87c430b904fc407ac767"
+    },
+    {
+      "relativePath": "fill-refs-true-1.drawer",
+      "bytes": 2774,
+      "sha256": "51377528adeaade6229e541528b7f23b674f954098c1ef7b58534dbc742f228b"
+    },
+    {
+      "relativePath": "fill-refs-true-2.drawer",
+      "bytes": 2774,
+      "sha256": "431ed78a99b7c270510ffcb4fa807c262fb5506fe38bb3b69d6a71815b296e0f"
+    },
+    {
+      "relativePath": "fill-refs-true-3.drawer",
+      "bytes": 2774,
+      "sha256": "4ab1f9cd16b84ff4c015f67419b01f960ec487f64d3f63ab75865e5e25a7e821"
+    },
+    {
+      "relativePath": "fill-refs-true-4.drawer",
+      "bytes": 2774,
+      "sha256": "9a1e59fbd248313dcde1d58796bd4aae27ce2eb90282f454c620af16d68e17c3"
+    },
+    {
+      "relativePath": "fill-refs-true-5.drawer",
+      "bytes": 2774,
+      "sha256": "1af9cbf813523abea2b719c96c875b852d4ea28760e2bf7a1081db3847779f54"
+    },
+    {
+      "relativePath": "fill-refs-true-6.drawer",
+      "bytes": 2774,
+      "sha256": "9da4dd656249c1eefc5fab39d32c9811d19c4ea48c2355a88ecc102e86551e9c"
+    },
+    {
+      "relativePath": "fill-refs-true-7.drawer",
+      "bytes": 2774,
+      "sha256": "706563e43d1f29c227377f8e27323921241a9f9f70144a1b9c9d28207792f2c6"
+    },
+    {
+      "relativePath": "fill-refs-true-8.drawer",
+      "bytes": 2774,
+      "sha256": "89eb95d13e7314b43c34b330ed1301691d84afcfd36fece84ed8d508c8d88fea"
+    },
+    {
+      "relativePath": "fill-refs-true-9.drawer",
+      "bytes": 2774,
+      "sha256": "7ebe63e5a809691f0bb81687eb25880daf1456c684afbd4998bb14b4c956bdbc"
+    },
+    {
+      "relativePath": "filter-options-fake82.drawer",
+      "bytes": 1824,
+      "sha256": "546de62fa7955ce114d0d0bb8d78cc20ce58cfee2d6d8325dfd29d64a4a550b9"
+    },
+    {
+      "relativePath": "filter-options-preset/settings/workspaces.json",
+      "bytes": 284086,
+      "sha256": "c0af6d3d6fd533afdeb7003769299ad918ec56ce69eadd0ac4b900678b9b5d58"
+    },
+    {
+      "relativePath": "filter-options.drawer",
+      "bytes": 1888,
+      "sha256": "c3ed8e696c9224e5aa54df9a112cd1033dfd7e204a34515551e7bf218cd8ef77"
+    },
+    {
+      "relativePath": "finishing-0.drawer",
+      "bytes": 1525,
+      "sha256": "8a9c99e19eb9a8a1666e7b464e6d4a0ea4d6cf677759b648add2de52d6c837ca"
+    },
+    {
+      "relativePath": "finishing-1.drawer",
+      "bytes": 1525,
+      "sha256": "b0a625f6c52e217c7634f47a849a31d96111b6eca5ec61c14bf77e64e46d628f"
+    },
+    {
+      "relativePath": "finishing-10.drawer",
+      "bytes": 1556,
+      "sha256": "2db83a140603df26e380fecfe1fab7896f4676fe274ea8fb7d8c9a3e8b989b09"
+    },
+    {
+      "relativePath": "finishing-11.drawer",
+      "bytes": 1556,
+      "sha256": "19a6d00de6e32de13df501236397e6b319061db992ef627730a195176cc90f3b"
+    },
+    {
+      "relativePath": "finishing-2.drawer",
+      "bytes": 1520,
+      "sha256": "f1f99fbab2689f3960c922ed957e3bff686e175e108603ec9f709f4fc6d35e35"
+    },
+    {
+      "relativePath": "finishing-3.drawer",
+      "bytes": 1541,
+      "sha256": "fc620fea7b0cae14734ee68545b2b14039341ba1c72b8849ade6f7ddec13ab3a"
+    },
+    {
+      "relativePath": "finishing-4.drawer",
+      "bytes": 1536,
+      "sha256": "8df1fd3bef7ba1412a713837c7c879b0f1a796a3eeefcf8c3e34a82594a75af6"
+    },
+    {
+      "relativePath": "finishing-5.drawer",
+      "bytes": 1492,
+      "sha256": "6a219e4a307b7f02a5afceb04d8f8083dcdbbeeb7d3979fd26ad22b3be4bdc27"
+    },
+    {
+      "relativePath": "finishing-6.drawer",
+      "bytes": 1498,
+      "sha256": "208645ff9a2b1fc5aebae13296a03f0c3837dd957e945ff1bfe251fb2be7776d"
+    },
+    {
+      "relativePath": "finishing-7.drawer",
+      "bytes": 1499,
+      "sha256": "42bc14c20bdf41d18f1b0d5a962d57b78ee898051ae5ae60dedf0acc1a4fb3ca"
+    },
+    {
+      "relativePath": "finishing-8.drawer",
+      "bytes": 1540,
+      "sha256": "6481cfd566754b624e96c6e3956fd0543e58abba07c3b5ba7e5e8f538763f163"
+    },
+    {
+      "relativePath": "finishing-9.drawer",
+      "bytes": 1558,
+      "sha256": "43056b1ececb16b06d97018f12fa72f8558da54430b95536b9cfe4a7def3bc06"
+    },
+    {
+      "relativePath": "finishing-fake81.drawer",
+      "bytes": 1463,
+      "sha256": "b6a5389581888d962ea658ebd2c3c4772a0f62a82f834b1725c896b380153060"
+    },
+    {
+      "relativePath": "finishing-new.drawer",
+      "bytes": 1527,
+      "sha256": "40f7b3b539a21c9dee5cf98595988694bb3abf7778092d4d443e1ff45e984a1d"
+    },
+    {
+      "relativePath": "finishing-preset-settings/settings/workspaces.json",
+      "bytes": 283862,
+      "sha256": "28875d263e5c27502fc37523b902e6946c34be91006705ac354473b214e99ca4"
+    },
+    {
+      "relativePath": "finishing-ui.drawer",
+      "bytes": 1676,
+      "sha256": "4b1603344e75babf3cfc94204d42297c67934799b00e749c46fbe9e517c6e002"
+    },
+    {
+      "relativePath": "finishing-ui.drawer.drawer-last-good",
+      "bytes": 1676,
+      "sha256": "4e8974231933c27b2559f542824d6de973de34ca52505c586bd9bcab3b7a8fd4"
+    },
+    {
+      "relativePath": "folder-mask-ui.drawer",
+      "bytes": 1846,
+      "sha256": "ead12030e6775de5294289faa482a60e8010f4740949470300fc9f8538e1d6c9"
+    },
+    {
+      "relativePath": "font-char-ui.drawer",
+      "bytes": 174235,
+      "sha256": "51ea75602d09a02ea9f160ca292196e52faf6f66af1a88e2cd45ad7831bf9012"
+    },
+    {
+      "relativePath": "font-library-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "font-library-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "font-library-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "font-library-user/settings/recent.json",
+      "bytes": 190,
+      "sha256": "8b19a943093c4774f031237dd5e844e54c503a8f36bc11bd5b4782ff150e38b1"
+    },
+    {
+      "relativePath": "font-library-user/settings/views.json",
+      "bytes": 522,
+      "sha256": "a1ae694b185b61c53e0a5344561bfd5d638fd6ea7a7b9660ffc686497f3aed75"
+    },
+    {
+      "relativePath": "font-library-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "32fb9c92e07d69f269b013970a90fbea81302aabf8802c0d9c010959fdeb788d"
+    },
+    {
+      "relativePath": "font-library-user/settings/workspaces.json",
+      "bytes": 287665,
+      "sha256": "a43b5fd00d48e8ca21670bcc0606c913bb25fcf54a8847c3335ccf7d7a5155d0"
+    },
+    {
+      "relativePath": "font-library-user/work-time/08990f92b5ada46fb5f86568b0978133a68e2b1fd76117c07647cf42b92b2a5d.json",
+      "bytes": 448,
+      "sha256": "2d103b4e3ceb661325500f56cd027482a0c1860df99a5095d477ef47a0d052cd"
+    },
+    {
+      "relativePath": "font-library-user/work-time/08990f92b5ada46fb5f86568b0978133a68e2b1fd76117c07647cf42b92b2a5d.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "font-lifecycle/local-font-fake88.drawer",
+      "bytes": 154720,
+      "sha256": "7de74d2e750d782e08a8c567b1b82cc9b5cb6f23083777b773cdfd127b17a25c"
+    },
+    {
+      "relativePath": "font-lifecycle/local-font.drawer",
+      "bytes": 154784,
+      "sha256": "34304c4a9a009906a3a695f07108fa6182238a4a51eae8488b4d7fdc974dde26"
+    },
+    {
+      "relativePath": "font-lifecycle/local-fonts/damaged.ttf",
+      "bytes": 12,
+      "sha256": "a283a9af23f9c67491de6ae5564346209c7e5fcb59ebe0e28ad42c38e8e1e6f5"
+    },
+    {
+      "relativePath": "font-lifecycle/local-fonts/hack.ttf",
+      "bytes": 309549,
+      "sha256": "62ecf14880c9ba79a8f9a34288bc45707dcfac3482571fc7beb45bf949143f05"
+    },
+    {
+      "relativePath": "font-lifecycle/local-fonts/ubuntu.ttf",
+      "bytes": 361817,
+      "sha256": "ba845bddb59bf468aae4743a770886e62614293f547cdd04c170f1816bc9f19e"
+    },
+    {
+      "relativePath": "font-lists/font-list-store/settings/workspaces.json",
+      "bytes": 284714,
+      "sha256": "0b3b916415c0e946cc44be449e474cceb2bb572811d0f4e1899c939afcda14eb"
+    },
+    {
+      "relativePath": "font-lists/local-fonts/damaged.ttf",
+      "bytes": 12,
+      "sha256": "a283a9af23f9c67491de6ae5564346209c7e5fcb59ebe0e28ad42c38e8e1e6f5"
+    },
+    {
+      "relativePath": "font-lists/local-fonts/hack.ttf",
+      "bytes": 309545,
+      "sha256": "6010eafbab660de843119524357bee25697404ea954b26fcc356b4dd6ca92171"
+    },
+    {
+      "relativePath": "font-lists/local-fonts/ubuntu.ttf",
+      "bytes": 361813,
+      "sha256": "c114296c8789c07107847a5e9ed8d48cc57500ef0c26ace9ccbe31e2a397294e"
+    },
+    {
+      "relativePath": "font-mix-settings/settings/workspaces.json",
+      "bytes": 283705,
+      "sha256": "2b24deb9dd820427745d3de3ec671cc7a1f43b2e33061bd2968e1863df8f0f4a"
+    },
+    {
+      "relativePath": "font-path-ui-user/fonts/drawer-fonts.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/views.json",
+      "bytes": 516,
+      "sha256": "4c2265fa33192ad5d0909bd96eca33cde00d3dd29a57672db557d97aab4c48d4"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "634ef8516e7ef6911a817c7d8c715b9de6927a66b61dce690cf66c1b3256a8b9"
+    },
+    {
+      "relativePath": "font-path-ui-user/settings/workspaces.json",
+      "bytes": 286852,
+      "sha256": "c20c8229a69985849479f85769d3fd7e450dd1798e1a7ed4ed14c12c0f6cc943"
+    },
+    {
+      "relativePath": "font-path-ui-user/work-time/1d356c53ae37c8292b3447b88a38e961b9689f1c4072826027f5a140d6020cc7.json",
+      "bytes": 441,
+      "sha256": "7cdb7b7e02a3674d4114a20213156437d518fa679363619c7de78e81b142cff0"
+    },
+    {
+      "relativePath": "font-path-ui-user/work-time/1d356c53ae37c8292b3447b88a38e961b9689f1c4072826027f5a140d6020cc7.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "font-source/other/same.ttf",
+      "bytes": 361828,
+      "sha256": "b2d349f8bc766faa55d4dd00b80cf1be315c4fda5a0d1aa09ac78673364476ea"
+    },
+    {
+      "relativePath": "font-source/same.ttf",
+      "bytes": 361802,
+      "sha256": "785518841c9a179597ab75cfcb64b928ecba7e69f275bb57e24e84a765b60552"
+    },
+    {
+      "relativePath": "font-ui-fixture/local-fonts/damaged.ttf",
+      "bytes": 12,
+      "sha256": "a283a9af23f9c67491de6ae5564346209c7e5fcb59ebe0e28ad42c38e8e1e6f5"
+    },
+    {
+      "relativePath": "font-ui-fixture/local-fonts/hack.ttf",
+      "bytes": 309550,
+      "sha256": "025b9d39679d39281f45daf250404d6495ea8f02a8069d41615a3fae6d3450db"
+    },
+    {
+      "relativePath": "font-ui-fixture/local-fonts/ubuntu.ttf",
+      "bytes": 361818,
+      "sha256": "655dcfd320b07dfb35afbac7f8cf7234720e6532226c0820f12581f3c63a4f85"
+    },
+    {
+      "relativePath": "format-fake87.drawer",
+      "bytes": 154793,
+      "sha256": "92461217e19c755ce62f6435f9d3ebccf681d2e7ffefe24811618ff1164bf753"
+    },
+    {
+      "relativePath": "formatted-text.drawer",
+      "bytes": 154857,
+      "sha256": "f1e5cc0a941994b1b187a53e43119ac8424ab654e5ed46cb6e34eb35b5716f1f"
+    },
+    {
+      "relativePath": "gaussian-app.drawer",
+      "bytes": 814,
+      "sha256": "df024b3483fda47b99036e5247fd2a7a65faad661f28632a4989360d8a65475e"
+    },
+    {
+      "relativePath": "gaussian-blur.drawer",
+      "bytes": 666,
+      "sha256": "bd6efed9469c68d5fe4736b0f5ffa6bc43e987229a7389fafab7ab5b078ef0ff"
+    },
+    {
+      "relativePath": "geometric-selection.drawer",
+      "bytes": 991,
+      "sha256": "a568bbdd740e46c78d0f95b5738f134f23bb439920c1f2a8a6d190633728994f"
+    },
+    {
+      "relativePath": "geometric-selection.drawer.drawer-last-good",
+      "bytes": 1065,
+      "sha256": "234d185cfb632ba90ef44cd5c1790cb0ad7ce49e99a5698ccc7c9bc2178bf924"
+    },
+    {
+      "relativePath": "gradient-clip-hole.svg",
+      "bytes": 7230,
+      "sha256": "f74949b750b79e7fedfbe30cbf59c72bb790ee1dc674f7c8cb257d39adbb3e24"
+    },
+    {
+      "relativePath": "gradient-file.drawer",
+      "bytes": 610,
+      "sha256": "db0d97508aaf92ce92ec916493fabad908795735fa53ac2352e4ca52aaf18943"
+    },
+    {
+      "relativePath": "gradient-presets-bad.json",
+      "bytes": 14,
+      "sha256": "9a2f382f9e837c60ef6c2dcc8efeb1b0e2e37ce828e692deb08fb9b0d798d2d7"
+    },
+    {
+      "relativePath": "gradient-presets.json",
+      "bytes": 537,
+      "sha256": "0dc16608db5252e537df8887dc600852a4b81d505ee770af7a7f4bcdf76b9635"
+    },
+    {
+      "relativePath": "gradient-ramp.drawer",
+      "bytes": 2374,
+      "sha256": "62f863387c21468eee65c0a86c228431aa7c94e7bc94a5060ba76549cf564239"
+    },
+    {
+      "relativePath": "gradient-workspace.json",
+      "bytes": 287161,
+      "sha256": "05774a12b019a8419d5065a26061ce3ed81222962b7f0c97b04e2e4678102321"
+    },
+    {
+      "relativePath": "hidden-outline-settings.json",
+      "bytes": 286769,
+      "sha256": "90f4c1d1d0cd3a747f6a58f6fc2df85d59fad78c938ba10d833aa255ac79c5fd"
+    },
+    {
+      "relativePath": "hsl-colors-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "hsl-colors-user/settings/workspaces.json",
+      "bytes": 286871,
+      "sha256": "ec52dc865f3c726a3748a6b2032e5c2f4cf49a5f32ea0d05177b0d6eebed2b85"
+    },
+    {
+      "relativePath": "hsl-colors-user/work-time/7f0b8d08e8a596a1b3fdcc664f5e6c6066598cf22b0913b60b9b74ad9a43e8ee.json",
+      "bytes": 278,
+      "sha256": "4795f83458fe8c33bf4b399b73c0acd2ed3803c7032bc35b67fb4c3395720203"
+    },
+    {
+      "relativePath": "hsl-colors-user/work-time/7f0b8d08e8a596a1b3fdcc664f5e6c6066598cf22b0913b60b9b74ad9a43e8ee.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "hsl-keeps-document.drawer",
+      "bytes": 517,
+      "sha256": "d4848af3642cb528cbaec7c86737d5a7591fcdcd7ee83a86676b211e6394b3f9"
+    },
+    {
+      "relativePath": "image-layer-12-10.drawer",
+      "bytes": 1332,
+      "sha256": "76512faa94b3a7aa873468c0103dbc3e9e38b6e9a76e742abd6db570af191a38"
+    },
+    {
+      "relativePath": "image-layer-2-1.drawer",
+      "bytes": 858,
+      "sha256": "1434b75d86d0d37c3e5d57901a84a733fd682cbe584bf49aa3df74b50b79db5d"
+    },
+    {
+      "relativePath": "individual-mask-roundtrip.drawer",
+      "bytes": 723,
+      "sha256": "57470228e0398f2dc76709151db13070421ab6d410b2cbe6888edf3fbcc630a5"
+    },
+    {
+      "relativePath": "individual-mask-roundtrip.drawer.drawer-last-good",
+      "bytes": 723,
+      "sha256": "57470228e0398f2dc76709151db13070421ab6d410b2cbe6888edf3fbcc630a5"
+    },
+    {
+      "relativePath": "inference-Body.drawer",
+      "bytes": 3066,
+      "sha256": "7f7329ad461298a9f6cf1e59e3bad43d7470614a26a9698cead202c341e8b35e"
+    },
+    {
+      "relativePath": "inference-Body/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-Body/manifest.json",
+      "bytes": 492,
+      "sha256": "dc85c044668f39c8608e9b72e0e70acc3ca79265cb6ef470c0aded53750125d2"
+    },
+    {
+      "relativePath": "inference-Body/weights.onnx",
+      "bytes": 2858,
+      "sha256": "1288ece33db67f332681a674e4a4ec96d24eddfad4806b101a407489b3d44069"
+    },
+    {
+      "relativePath": "inference-Denoise.drawer",
+      "bytes": 622,
+      "sha256": "5ebc183b6b26f61dffad06e44c6ab849a606b0ec200a81445bbd9ece37a0d862"
+    },
+    {
+      "relativePath": "inference-Denoise/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-Denoise/manifest.json",
+      "bytes": 495,
+      "sha256": "cd763d861826c6a041438ae7264b1cc6c4f173a60a05c6e60d120df71d896586"
+    },
+    {
+      "relativePath": "inference-Denoise/weights.onnx",
+      "bytes": 460,
+      "sha256": "3416e682c108fe515ef500e44e4cd9d170d03230318866db33296fcdd3243ba8"
+    },
+    {
+      "relativePath": "inference-final/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-final/manifest.json",
+      "bytes": 492,
+      "sha256": "dc85c044668f39c8608e9b72e0e70acc3ca79265cb6ef470c0aded53750125d2"
+    },
+    {
+      "relativePath": "inference-final/weights.onnx",
+      "bytes": 2858,
+      "sha256": "1288ece33db67f332681a674e4a4ec96d24eddfad4806b101a407489b3d44069"
+    },
+    {
+      "relativePath": "inference-Hand.drawer",
+      "bytes": 3523,
+      "sha256": "7d0f91750aae30c6ad8f699f24fb30a7e2af6ccc390cb1594a27781bc91cbe3c"
+    },
+    {
+      "relativePath": "inference-Hand/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-Hand/manifest.json",
+      "bytes": 492,
+      "sha256": "148e6e1d51a294fb8043306819c270c503acbf140b6c36d95110b1afdbb51859"
+    },
+    {
+      "relativePath": "inference-Hand/weights.onnx",
+      "bytes": 3482,
+      "sha256": "c352fd4db6e7cf8fe09cb9b3bba5b1fda3b60ee1f5c7eaa6048b073e45b2d9b0"
+    },
+    {
+      "relativePath": "inference-HintColor.drawer",
+      "bytes": 603,
+      "sha256": "2c373a29a25c934a2208ab242be0b34ddabed70a8a6d188ad1eb57baf8443f7e"
+    },
+    {
+      "relativePath": "inference-HintColor/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-HintColor/manifest.json",
+      "bytes": 497,
+      "sha256": "ef558ce630a87f0bcaf424e6bc773cd6ab108e4f4b1142ac9ca8b73c6baa6943"
+    },
+    {
+      "relativePath": "inference-HintColor/weights.onnx",
+      "bytes": 201,
+      "sha256": "49399686f173814408e3fa0d6fe978f8ade214259f117e4eadf80ee01b90a116"
+    },
+    {
+      "relativePath": "inference-hints.png",
+      "bytes": 86,
+      "sha256": "6bffa6d3e3af5863cae1ce51acca204ed73af1290077414042ee3c9db0a3bec8"
+    },
+    {
+      "relativePath": "inference-input.png",
+      "bytes": 86,
+      "sha256": "aa72fa2d63eedbfcbce3c04f5ed34634e1081919bcb04efe1b7eee3cbc0365a7"
+    },
+    {
+      "relativePath": "inference-Upscale.drawer",
+      "bytes": 641,
+      "sha256": "2d28aca4ec4bf0082a5341f2a623e83016003787d21f6314c77f1ac2a50b21ad"
+    },
+    {
+      "relativePath": "inference-Upscale/LICENSE.txt",
+      "bytes": 1053,
+      "sha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017"
+    },
+    {
+      "relativePath": "inference-Upscale/manifest.json",
+      "bytes": 495,
+      "sha256": "98f5d9a97edde36f983be86d2958775e6278033176ab14997b7b1b5c5ca8fa19"
+    },
+    {
+      "relativePath": "inference-Upscale/weights.onnx",
+      "bytes": 255,
+      "sha256": "ccc23de765789f76738704164bb3cad2eef61d6f0696f9589b684617df694cab"
+    },
+    {
+      "relativePath": "inference-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "inference-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "inference-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "inference-user/settings/recent.json",
+      "bytes": 879,
+      "sha256": "a6869b58921e3d225a90e11663b50eae411a309affc58944a69c647d7dbcc58b"
+    },
+    {
+      "relativePath": "inference-user/settings/recent.previous.json",
+      "bytes": 707,
+      "sha256": "98fc760fd243fa097b801fe4656275ea899834a9de4ce226a6335b6ebe400953"
+    },
+    {
+      "relativePath": "inference-user/settings/views.json",
+      "bytes": 532,
+      "sha256": "fd8050aad089166449863674a5f46218449d6b233fc9f335e765b9629eee79a9"
+    },
+    {
+      "relativePath": "inference-user/settings/views.previous.json",
+      "bytes": 532,
+      "sha256": "8a4d06371460946f97fd610f00b3b83b1a6f616de0d1c0eafa2501d87f338f23"
+    },
+    {
+      "relativePath": "inference-user/settings/workspaces.json",
+      "bytes": 286758,
+      "sha256": "f8209c0b19415ee19ab0e692b60f64c1d40089226a09c5961e38b5ed80e803f1"
+    },
+    {
+      "relativePath": "inference-user/work-time/9e66cfa3271aca23e07fb28aebde7b1fa1ab17fb62ed819fe3bf08ab3091f5b1.json",
+      "bytes": 461,
+      "sha256": "b4420d90832f39cb29b3191a9d55da46bf94134161607200814376a2583798d1"
+    },
+    {
+      "relativePath": "inference-user/work-time/9e66cfa3271aca23e07fb28aebde7b1fa1ab17fb62ed819fe3bf08ab3091f5b1.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "invalid-advanced.drawer",
+      "bytes": 154875,
+      "sha256": "2090907366dc4b547d6338e928028c759d2a163e1e2d1af06602540b7b660f55"
+    },
+    {
+      "relativePath": "invalid-circular.drawer",
+      "bytes": 155045,
+      "sha256": "5735621ac7bfbd73001583e9fab830f7c224ca8a58486a61652272fdbcb28799"
+    },
+    {
+      "relativePath": "invalid-text-version.drawer",
+      "bytes": 155139,
+      "sha256": "1730894e5d7a41407acd10e73e6d3d777c4544880060612e32ab99e8bcfab541"
+    },
+    {
+      "relativePath": "invalid-v69-blur.drawer",
+      "bytes": 1446,
+      "sha256": "d12a3b11eec742be09b43a74cec98142187743a5d2f55798a876eb8890e89cc9"
+    },
+    {
+      "relativePath": "invalid-v70-detail.drawer",
+      "bytes": 486,
+      "sha256": "f5c27af63b1e59e06fa20c7de0be22c372a066af2943ca9b4b150f9df349119d"
+    },
+    {
+      "relativePath": "invalid-v71-pixels.drawer",
+      "bytes": 568,
+      "sha256": "4a6f7769c53b434eb587bbe2a2edb7d5ca255d75e40c578435ae398bd8aa1897"
+    },
+    {
+      "relativePath": "invalid-v72-style.drawer",
+      "bytes": 455,
+      "sha256": "8382fc1231a700dc6a6e9db68d4f5687bf5cb3fb5106396d701291b789ef39e5"
+    },
+    {
+      "relativePath": "inversion-v69.drawer",
+      "bytes": 1067,
+      "sha256": "3ad3d12c0d88723bbffb087b0d058c7c390a5dd75482f50e94fc58b84fddb34d"
+    },
+    {
+      "relativePath": "last-deselected.drawer",
+      "bytes": 1806,
+      "sha256": "40560eefa23c3c7abe97c1b8c38bfe3666720573d4bf4dfefea2412853be2aba"
+    },
+    {
+      "relativePath": "layer-alpha-Add-0.drawer",
+      "bytes": 431,
+      "sha256": "4e88cc5dec07d5c65c9d30f230dc8b57226a0abad866c9d74e270ac0bf9197c5"
+    },
+    {
+      "relativePath": "layer-alpha-Add-128.drawer",
+      "bytes": 603,
+      "sha256": "4399d3f1ffa964e7711b00b4815e2de459d9f872ea392a17400301f7d139a55d"
+    },
+    {
+      "relativePath": "layer-alpha-Add-255.drawer",
+      "bytes": 603,
+      "sha256": "fda885fd36a9fe326a8ad73db0b435d963aea501c80c65c2417088ebbc6b35f5"
+    },
+    {
+      "relativePath": "layer-alpha-Intersect-0.drawer",
+      "bytes": 531,
+      "sha256": "23a3c4f2f896d62bbdd1f4cbf817d55fed3d33677131021e96b3824f612c7fa7"
+    },
+    {
+      "relativePath": "layer-alpha-Intersect-128.drawer",
+      "bytes": 601,
+      "sha256": "f6a145423661329de169cc117dedc630067e869b6788e17f39dedaaf006bae67"
+    },
+    {
+      "relativePath": "layer-alpha-Intersect-255.drawer",
+      "bytes": 431,
+      "sha256": "3cd1122b9266f7725edb8d4a165f7e8bc869481e41e931769b204c84febcdf16"
+    },
+    {
+      "relativePath": "layer-alpha-Replace-0.drawer",
+      "bytes": 531,
+      "sha256": "85499fe16ee87eb0d2a1066c51ba66c934ee8cb0b91362584d8691b0725a0825"
+    },
+    {
+      "relativePath": "layer-alpha-Replace-128.drawer",
+      "bytes": 431,
+      "sha256": "1cccfb249f11fd2351df4d5274a1e23d66486cc7dce40a093fd07d1f31d933be"
+    },
+    {
+      "relativePath": "layer-alpha-Replace-255.drawer",
+      "bytes": 603,
+      "sha256": "4b36da8bd2fd3b2b7590f48959ce6a8e1f928aef35b1b6738dd10a2a33bbaf9c"
+    },
+    {
+      "relativePath": "layer-alpha-Subtract-0.drawer",
+      "bytes": 431,
+      "sha256": "4e88cc5dec07d5c65c9d30f230dc8b57226a0abad866c9d74e270ac0bf9197c5"
+    },
+    {
+      "relativePath": "layer-alpha-Subtract-128.drawer",
+      "bytes": 601,
+      "sha256": "e5704a1e1d0412ff3665eacd18ef7b33b6e6945ba0c303abe08c682f90388d31"
+    },
+    {
+      "relativePath": "layer-alpha-Subtract-255.drawer",
+      "bytes": 531,
+      "sha256": "ef786adc35c92b89ff205004d2b427f12117fbe80ba4c30b99189a4b13d446b6"
+    },
+    {
+      "relativePath": "layer-appearance.drawer",
+      "bytes": 854,
+      "sha256": "989fe722179738ce350b94a84a3b1d3bb474ed07d73c830209cae47656333d14"
+    },
+    {
+      "relativePath": "layer-colors-workspace.json",
+      "bytes": 283658,
+      "sha256": "cdc80598f1a122849651c824ca210dd00a8432084eb109d24daa67d17def5dd6"
+    },
+    {
+      "relativePath": "layer-comps-invalid-version.drawer",
+      "bytes": 17485,
+      "sha256": "d97fa02bb7d5cc2fb7cb155fbaa41cfdd0b55ac1867a4f107d0f13ba8bc68c24"
+    },
+    {
+      "relativePath": "layer-comps.drawer",
+      "bytes": 17549,
+      "sha256": "08ba0b2dcfdb769f89c6a53f38d204db05ce84ef135dfe004ed438c1c0713e92"
+    },
+    {
+      "relativePath": "layer-default-settings/settings/workspaces.json",
+      "bytes": 284022,
+      "sha256": "a8b05a11afcd182b46901586efb30353ac070dd3dbacb7dfb22e25833cb7b89a"
+    },
+    {
+      "relativePath": "layer-label-after.png",
+      "bytes": 143,
+      "sha256": "edad6b0e1906a0c35ac38880e105e830f85b11c4fb81f8463f3179b51d6ee23c"
+    },
+    {
+      "relativePath": "layer-label-before.png",
+      "bytes": 143,
+      "sha256": "edad6b0e1906a0c35ac38880e105e830f85b11c4fb81f8463f3179b51d6ee23c"
+    },
+    {
+      "relativePath": "layer-maintenance.drawer",
+      "bytes": 5889,
+      "sha256": "7b55e185b4704e3b8d519cbe410f74e9b6ba70193c7381c019594df998635fd0"
+    },
+    {
+      "relativePath": "layer-maintenance.drawer.drawer-last-good",
+      "bytes": 6055,
+      "sha256": "f523a4cb62d977b78266fee1c8679eb91c21943d06c09edf7f3058f46c494002"
+    },
+    {
+      "relativePath": "layer-mask-0-255.drawer",
+      "bytes": 1813,
+      "sha256": "c3ea43b9286af4dc7dba6f9b3e6e18d40ca07246326c55551c8c7d1198de0523"
+    },
+    {
+      "relativePath": "layer-mask-128-128.drawer",
+      "bytes": 2108,
+      "sha256": "293aa0be2d9b3f2bac7102af26f3cd85671dd1704be3ec768d95d5ce011d423a"
+    },
+    {
+      "relativePath": "layer-mask-128-255.drawer",
+      "bytes": 2108,
+      "sha256": "476e05a46ed2a80e4091c528997f8f14782770b22a4b0f16db6cae939fc31863"
+    },
+    {
+      "relativePath": "layer-mask-255-255.drawer",
+      "bytes": 2108,
+      "sha256": "a34af4a7b6a7405df71881ce005fbfbb29e2ece1c37545f9e882cdc8b0e452a6"
+    },
+    {
+      "relativePath": "layer-mask-controls.drawer",
+      "bytes": 1108,
+      "sha256": "e25bd897c0ab904467962dced9bc071d8940f402a78e7fbc0fcba6275f535164"
+    },
+    {
+      "relativePath": "layer-move-workspace.json",
+      "bytes": 283648,
+      "sha256": "639d08c4d110c5c66852c319cc7c3603296878c38320ae848568eaf59a000757"
+    },
+    {
+      "relativePath": "layer-pick-workspace.json",
+      "bytes": 286709,
+      "sha256": "c0e3b30542370092fa1870f28e62242c84e94224b9485ae47757344f0a1c5b40"
+    },
+    {
+      "relativePath": "layer-pick.drawer",
+      "bytes": 1995,
+      "sha256": "61e72a1ec564171d1fb6af9ad2be2c77c1dcf4f38179833f9e127dc10382a611"
+    },
+    {
+      "relativePath": "layer-properties-animation.drawer",
+      "bytes": 1164,
+      "sha256": "c838e463394d1637514063f841d451032711ea0fc37c0a98ca8bf7b6ca683e13"
+    },
+    {
+      "relativePath": "layer-properties-animation.drawer.drawer-last-good",
+      "bytes": 1164,
+      "sha256": "c838e463394d1637514063f841d451032711ea0fc37c0a98ca8bf7b6ca683e13"
+    },
+    {
+      "relativePath": "layer-properties.drawer",
+      "bytes": 1640,
+      "sha256": "af4887908f7e50b8a72e5ef15298aa3f8878f42f7db761e4bb1d28ed1b0fbe88"
+    },
+    {
+      "relativePath": "layer-properties.drawer.drawer-last-good",
+      "bytes": 1640,
+      "sha256": "af4887908f7e50b8a72e5ef15298aa3f8878f42f7db761e4bb1d28ed1b0fbe88"
+    },
+    {
+      "relativePath": "layer-property-ui-base.drawer",
+      "bytes": 8720,
+      "sha256": "cdd6855921e68ce4b64e6040272219df349d80829c2cc4f4b1864f97883a5da4"
+    },
+    {
+      "relativePath": "layer-property-ui.drawer",
+      "bytes": 9024,
+      "sha256": "46e1fdce4d135827f676625646eb843e6ebe82f5cef711adc7cc30fcbeff9f14"
+    },
+    {
+      "relativePath": "layer-search-settings/settings/workspaces.json",
+      "bytes": 286764,
+      "sha256": "cabf0d51685fed73d926e76f80443b78ee689e29490e120f5ec93e3f8464bda3"
+    },
+    {
+      "relativePath": "layer-search.drawer",
+      "bytes": 2472,
+      "sha256": "0a88663ae00cb1fbbd4e75db94fe1c9c250c0b2114bade978c8641ffccae8fb2"
+    },
+    {
+      "relativePath": "layers-raster.drawer",
+      "bytes": 2315,
+      "sha256": "fe07436046515cc25c8f9c3e60948255e01b57c975fd5b54399c077ba6a73279"
+    },
+    {
+      "relativePath": "layers-ui.drawer",
+      "bytes": 4766,
+      "sha256": "b77f610ffd0b59740907d5a77402d3df0dc11997b79d33e7f18f264942822db5"
+    },
+    {
+      "relativePath": "layers-vector.drawer",
+      "bytes": 1883,
+      "sha256": "2556cfe8dab7a3664297c4925d28cff017e1c1dcdcf6fea67ad3e377a8426f44"
+    },
+    {
+      "relativePath": "line-references.drawer",
+      "bytes": 26024,
+      "sha256": "775c622ec6831975b0ec3b86229c2034db9b93be90dd0997061cf6ac2207e79f"
+    },
+    {
+      "relativePath": "linked-groups-old-version.drawer",
+      "bytes": 2543,
+      "sha256": "d973589deb27a68eb47dd6b80d231d00d4cb448ac445de127e61f054770fec7c"
+    },
+    {
+      "relativePath": "linked-groups.drawer",
+      "bytes": 2607,
+      "sha256": "19ae3cdc2b3c832828b8a6bd79699a946c6fbbca7418b1dfb4ded89f03effba2"
+    },
+    {
+      "relativePath": "local image.png",
+      "bytes": 77,
+      "sha256": "476839feb8efd169b4c73271d3089c0bc6fa81a9f77f9525cb787cdc4afb2fdf"
+    },
+    {
+      "relativePath": "local-color-app.drawer",
+      "bytes": 967,
+      "sha256": "05bc0da84b5d630a09fcac0d67237cc03e2b1fe27e8c44ab4cfd74f8c9d916d9"
+    },
+    {
+      "relativePath": "local-color-app.drawer.drawer-last-good",
+      "bytes": 1063,
+      "sha256": "4f8aadbcd1b4ddcffd2bd59e72ad64a6ad2cb53e3902dcd4a9a97560c6502b7e"
+    },
+    {
+      "relativePath": "local-color-old.drawer",
+      "bytes": 755,
+      "sha256": "4339b141a7da540cb2b46899a0c88327da560b773e798c8316d4a768d0dcb065"
+    },
+    {
+      "relativePath": "local-color-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "local-color-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "local-color-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "local-color-user/settings/recent.json",
+      "bytes": 193,
+      "sha256": "97874dd8f0447f4186559408016b7f05286792564e585044a9c35029917556b3"
+    },
+    {
+      "relativePath": "local-color-user/settings/views.json",
+      "bytes": 528,
+      "sha256": "8065c7ea92901a6193a2732e6bc19d5f9d9d986aa558c2c420694513547e098d"
+    },
+    {
+      "relativePath": "local-color-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "cd5f04e722a1c651088b6a4b6529d16c60c3153025a96ebdc7d612ae5a9fa0f8"
+    },
+    {
+      "relativePath": "local-color-user/settings/workspaces.json",
+      "bytes": 286758,
+      "sha256": "f8209c0b19415ee19ab0e692b60f64c1d40089226a09c5961e38b5ed80e803f1"
+    },
+    {
+      "relativePath": "local-color-user/work-time/7b0edb0961ef71936a06b2ccb2fb26b8785de77297e45739fa5b06ec3a1e324e.json",
+      "bytes": 455,
+      "sha256": "8c81537d6bc5d623f3a9a9cb09b41f05249ea7eca55747b051ef19cdf68038a2"
+    },
+    {
+      "relativePath": "local-color-user/work-time/7b0edb0961ef71936a06b2ccb2fb26b8785de77297e45739fa5b06ec3a1e324e.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "local-color.drawer",
+      "bytes": 819,
+      "sha256": "aab2f35c0c457543da6a6420f64c878c5d4e69e4d36cada4f89114c8adbbecf7"
+    },
+    {
+      "relativePath": "local-color.drawer.drawer-last-good",
+      "bytes": 915,
+      "sha256": "0c8806a76cfe5abd28144c6133f066c0f1cd5607b94f80008f4d1dead7040f0d"
+    },
+    {
+      "relativePath": "local-reference.png",
+      "bytes": 136,
+      "sha256": "4eaafed894236a5d8be7a0bec8fbacfe4c65ed91041823f0ce78bdb619ba373b"
+    },
+    {
+      "relativePath": "local-work.drawer-work",
+      "bytes": 454,
+      "sha256": "0a75ede1576c77fd1422a18bbd34bf59cee573e55d4d547772bf8884c623ec1d"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/panels.previous.json",
+      "bytes": 916,
+      "sha256": "1633be5d6754089132ff42b222d1373d5c19c1d081447c6ed68744bc743b7736"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "4d2befed05a2e8ee58364694738844bfbfed23db0bb2509289b5532012d1bfd4"
+    },
+    {
+      "relativePath": "locked-builtin-user/settings/workspaces.json",
+      "bytes": 286760,
+      "sha256": "a671c0a3f5320af73c6045883467d1911c02a0a32433fc30770e0243c418876a"
+    },
+    {
+      "relativePath": "locked-builtin-user/work-time/9361c85cfbbc29ad9a5b5cd5f78b01d5f7d61b80a90227348b1e8c42cb693bd6.json",
+      "bytes": 280,
+      "sha256": "e3c427ad702c4f9a5665e19892b2c8cbb26770ad1529cf966899491512010667"
+    },
+    {
+      "relativePath": "locked-builtin-user/work-time/9361c85cfbbc29ad9a5b5cd5f78b01d5f7d61b80a90227348b1e8c42cb693bd6.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "locked-user-tool/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "locked-user-tool/settings/workspaces.json",
+      "bytes": 293775,
+      "sha256": "25a4d29789535d3b17e4581c891e7e97b54272b4a3201a471e5fa6df87192bea"
+    },
+    {
+      "relativePath": "locked-workspace.json",
+      "bytes": 287892,
+      "sha256": "1ac9614c7a90ec597ba4ec3444ef43a9c800c14e92b380a297a5a1f74f7cef73"
+    },
+    {
+      "relativePath": "magnetic-settings.json",
+      "bytes": 283662,
+      "sha256": "59df0e9d4fd9b7b2b98227675ac048b509f0e9887d159be46d402287e935ec86"
+    },
+    {
+      "relativePath": "mask-area-workspace.json",
+      "bytes": 286708,
+      "sha256": "44598fa0563f6e7213ef38995c57282f01d4c03d1b9d8aa0979c6232ab1fbceb"
+    },
+    {
+      "relativePath": "mask-overlay-after.png",
+      "bytes": 81,
+      "sha256": "dbd8c257c2b2fcad8abe9930ff6abd94e07eccbab2203fdc8e52f87dee7319b1"
+    },
+    {
+      "relativePath": "mask-overlay-before.png",
+      "bytes": 81,
+      "sha256": "dbd8c257c2b2fcad8abe9930ff6abd94e07eccbab2203fdc8e52f87dee7319b1"
+    },
+    {
+      "relativePath": "masked-material-transform.drawer",
+      "bytes": 2824,
+      "sha256": "d534169b7a5ce33b6998c59bf80f3e38158d34e63e64c99fcf32cd92501d631e"
+    },
+    {
+      "relativePath": "masked-material-transform.drawer.drawer-last-good",
+      "bytes": 2823,
+      "sha256": "fe14452a991c4161da9d1b608d6974b5c7f34d4d059df75bcd86192d56b71277"
+    },
+    {
+      "relativePath": "masked-transform-source.drawer",
+      "bytes": 362,
+      "sha256": "604f963dde2a32127960a75dfa348bb8aaa56b0e2fd84c742a7fb4eab57375b9"
+    },
+    {
+      "relativePath": "masked-transform-source.drawer.drawer-last-good",
+      "bytes": 362,
+      "sha256": "604f963dde2a32127960a75dfa348bb8aaa56b0e2fd84c742a7fb4eab57375b9"
+    },
+    {
+      "relativePath": "material-library.json",
+      "bytes": 312,
+      "sha256": "8e36f31ecfe26afe41fb4519915888e4bb2f01a70ef3f9ae58564d381272f92e"
+    },
+    {
+      "relativePath": "material-mapping.drawer",
+      "bytes": 2167,
+      "sha256": "09fb7b9d234f2be9aa638f2baf95990e9bbac5018d8fa9f0acee9928061aac29"
+    },
+    {
+      "relativePath": "material-mapping.drawer.drawer-last-good",
+      "bytes": 2061,
+      "sha256": "4f60673e2c3a64bcfe4637785f89a1d42a5282694661496dd39c632380a0886e"
+    },
+    {
+      "relativePath": "material-mapping.drawer.drawer-unverified-82920fce1a68ce60511fce5a8e1dea9a4b8f7d34231743742aceb856befa0612",
+      "bytes": 2095,
+      "sha256": "82920fce1a68ce60511fce5a8e1dea9a4b8f7d34231743742aceb856befa0612"
+    },
+    {
+      "relativePath": "material-mapping.drawer.drawer-unverified-967e8bebbfe1f51065275b2196ec6fa970b0fcb84393a9718d922c6933e4f6f5",
+      "bytes": 2091,
+      "sha256": "967e8bebbfe1f51065275b2196ec6fa970b0fcb84393a9718d922c6933e4f6f5"
+    },
+    {
+      "relativePath": "material-pixels.drawer",
+      "bytes": 3655,
+      "sha256": "1846b3091c1cd15e8b86452c1296a37e8b92386efe0b5e150b304a5199621e9a"
+    },
+    {
+      "relativePath": "material-source-alpha.png",
+      "bytes": 86,
+      "sha256": "67ef567bb9f287d99f56caff649d05b38e840fcef23b30e775cdc956649fc98e"
+    },
+    {
+      "relativePath": "material-source-texture.png",
+      "bytes": 86,
+      "sha256": "b49d68ac63a92746f546cbdf165cbcf8a9e803af5ba54f12fc71e37ce69d4c4d"
+    },
+    {
+      "relativePath": "material-transform.drawer",
+      "bytes": 2229,
+      "sha256": "aea81088573747ff5b60a102dc1ee5dbc04be218c41c312d66919924090f11ad"
+    },
+    {
+      "relativePath": "material-transform.drawer.drawer-last-good",
+      "bytes": 2157,
+      "sha256": "98a4ecba8c8a1c8b2eb83018fc2b8e9dddbe13d3bc9d2b9c8c9ea0ef4de6192e"
+    },
+    {
+      "relativePath": "material-ui.drawer",
+      "bytes": 1421,
+      "sha256": "815228dd8a196ea0f1e591ac3385c1ff6d8382b66a7f4d71fc97d94e71911392"
+    },
+    {
+      "relativePath": "material-user/materials/library.json",
+      "bytes": 312,
+      "sha256": "8e36f31ecfe26afe41fb4519915888e4bb2f01a70ef3f9ae58564d381272f92e"
+    },
+    {
+      "relativePath": "material-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "material-user/work-time/80baf41dbcab8ec053c8aa5bb0f77c0ebe7b3998f43bda0186db0b858cfc9bf5.json",
+      "bytes": 279,
+      "sha256": "e250c41d41aa88fb12f4741de2427704c97c3c72d4122af273e59d5925c41c3d"
+    },
+    {
+      "relativePath": "material-user/work-time/80baf41dbcab8ec053c8aa5bb0f77c0ebe7b3998f43bda0186db0b858cfc9bf5.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "material-user/work-time/9df4e0f39626d9028b7c5a2ebdcd25cc3c3daf206eeac71be928d0cd298978bb.json",
+      "bytes": 453,
+      "sha256": "3b4294575e061dadfe51f54453f0471c5d4344a2afbef84d35f80fdb10334fcc"
+    },
+    {
+      "relativePath": "material-user/work-time/9df4e0f39626d9028b7c5a2ebdcd25cc3c3daf206eeac71be928d0cd298978bb.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "material.drawer",
+      "bytes": 1276,
+      "sha256": "8d4d1e3276b89b7fd4e44e5b3ae2c628b9ffc146a3d74947e4dae3654a964545"
+    },
+    {
+      "relativePath": "materials/references/reference-1.png",
+      "bytes": 77,
+      "sha256": "ec31b50368307a43eec2441976111c9134f50608ce5cf1e83688a807a6d3c724"
+    },
+    {
+      "relativePath": "merge-source-effects-0.drawer",
+      "bytes": 1521,
+      "sha256": "bda880285644b1d64279d5ae9037650fe4704f5a33f0f660dbe14bf9d53d031d"
+    },
+    {
+      "relativePath": "merge-source-effects-128.drawer",
+      "bytes": 1816,
+      "sha256": "9fe88b31385d34f403b4de987bff140b88405efb3fb6b54b3076ec9d77e209b0"
+    },
+    {
+      "relativePath": "merge-source-effects-255.drawer",
+      "bytes": 1816,
+      "sha256": "3e6bfbba9ea6ab0249e622c703436c43311df4d2ad4095d4ea7500fd90ed1ea1"
+    },
+    {
+      "relativePath": "merge-ui-0.drawer",
+      "bytes": 882,
+      "sha256": "1b126e97e88edf25f0f9c85fadeff6c44f2df16d847ce8ae08740004f5a2bee6"
+    },
+    {
+      "relativePath": "merge-ui-1.drawer",
+      "bytes": 882,
+      "sha256": "305b9ef30b856d620e14cf1448ae07f9372edcad05fe737619e5b5af035cde39"
+    },
+    {
+      "relativePath": "merge-ui-2.drawer",
+      "bytes": 801,
+      "sha256": "196d2a642508e320995fc58da13c67273adc75b660e9c4f0cf2f43d65a444b65"
+    },
+    {
+      "relativePath": "merge-ui-3.drawer",
+      "bytes": 1369,
+      "sha256": "2cc0347dd6c0082bfddbd185173fd2cf2f9ceb81de37ff3d0f674a99084cca2b"
+    },
+    {
+      "relativePath": "merged-layers.drawer",
+      "bytes": 1033,
+      "sha256": "e8819849822bbe23e3eaeb02838c85882c267479a3f3833e8e3f85c91272a24d"
+    },
+    {
+      "relativePath": "mesh-app.drawer",
+      "bytes": 3069,
+      "sha256": "b8c34f21e3e060c4f96070659caecdd1a5432bdc8b5179cb7b2bf7f8fa6a472c"
+    },
+    {
+      "relativePath": "mesh-puppet.drawer",
+      "bytes": 1530,
+      "sha256": "197d36fa1fc03af31346b7aaeee3471c756c961a9d2c0ba4d79c176b5e63d54f"
+    },
+    {
+      "relativePath": "mesh-set-ui.drawer",
+      "bytes": 3103,
+      "sha256": "e0c63f63e0953d14f5c647a0a9114a951f19f87d5c91903627b6d1ede08b752d"
+    },
+    {
+      "relativePath": "mesh-truncated.drawer",
+      "bytes": 4345,
+      "sha256": "b42b3d6f41c28d20cc7a1e599f4e6604bcf4c9444ed536b74c292ba1ae56d8a1"
+    },
+    {
+      "relativePath": "metallic-app.drawer",
+      "bytes": 1514,
+      "sha256": "52f1d5ab556b1d285a929a1df28c6b55a9ef4676c23f46047fd693b59f06999d"
+    },
+    {
+      "relativePath": "metallic-material.drawer",
+      "bytes": 1179,
+      "sha256": "9262ef08e5255ddb983f87721f26b46bee7dc823116b3d48c9084c9aaf0c6a4e"
+    },
+    {
+      "relativePath": "metallic-old.drawer",
+      "bytes": 1115,
+      "sha256": "fd7f507a7fa38e7a384e0c0569287c5817aa7bb52f4f0c55c2a6c0e9ef7ff71c"
+    },
+    {
+      "relativePath": "metallic-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "metallic-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "metallic-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "metallic-user/settings/recent.json",
+      "bytes": 190,
+      "sha256": "38d49b1972741de76a1c42cd813e932cfe4ea2f72bf6da6e3fc5cac0bf8d5799"
+    },
+    {
+      "relativePath": "metallic-user/settings/views.json",
+      "bytes": 522,
+      "sha256": "7d3aecd2f8b08a476e95366acc2b3c5c0c40349492f921388167fec7b274295a"
+    },
+    {
+      "relativePath": "metallic-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "c8e73393a229af9f7bcb69f64a2c3c2e2770e937cc4280df3e8eb95f56a1ccf0"
+    },
+    {
+      "relativePath": "metallic-user/settings/workspaces.json",
+      "bytes": 286758,
+      "sha256": "f8209c0b19415ee19ab0e692b60f64c1d40089226a09c5961e38b5ed80e803f1"
+    },
+    {
+      "relativePath": "metallic-user/work-time/8381d0e2a9edf64bef5690956f65aca0ae830cbe3d87dcb9ff5fecbfa2ff41a4.json",
+      "bytes": 448,
+      "sha256": "b7afb0b08959e4da9cd5844a919c6f64887d9c715247a431bee47c8655add3f5"
+    },
+    {
+      "relativePath": "metallic-user/work-time/8381d0e2a9edf64bef5690956f65aca0ae830cbe3d87dcb9ff5fecbfa2ff41a4.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "mixed-join.drawer",
+      "bytes": 13427,
+      "sha256": "cda590776bce500ce0892336b278d6fb220fc1ca6ee5c910258bce984b54d4c0"
+    },
+    {
+      "relativePath": "mixed-text-ui.drawer",
+      "bytes": 174974,
+      "sha256": "f93b111161f563ad50791e7b98e056f027f49ff63c1b375398f345dee90729f9"
+    },
+    {
+      "relativePath": "mixed-text-version.drawer",
+      "bytes": 155203,
+      "sha256": "436e2a529038befddb0f2ade9ef82686ef6546ff16fe31093e0b43328277462d"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/recent.json",
+      "bytes": 191,
+      "sha256": "5819578bcca9d99cb9c7a8023310f1c811449bd6ace5b927cfd314c38ec3211e"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "2bcf124a5b939eda8f49ead2ee71f8a9a6e65f4949b1b84b146a58b1c0a89d60"
+    },
+    {
+      "relativePath": "mixed-ui-user/settings/workspaces.json",
+      "bytes": 286854,
+      "sha256": "a0e24b7371f63a5501a5ccd42c74bd8bcc816973d96537cd65528c6440ae073b"
+    },
+    {
+      "relativePath": "mixed-ui-user/work-time/c7dadb3744edaf815df83f65197e3c8be91042f7bcf78f0712ccf7e54621217d.json",
+      "bytes": 279,
+      "sha256": "4bb4c643a9db1ae9b831edc84b0ec0f9225e3b90cc0ea6c21a63c1be4371e945"
+    },
+    {
+      "relativePath": "mixed-ui-user/work-time/c7dadb3744edaf815df83f65197e3c8be91042f7bcf78f0712ccf7e54621217d.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "mixing-keeps-document.drawer",
+      "bytes": 1525,
+      "sha256": "e2ad66fe56e8ce7fe789c08fd876efc108074a020e20333eb4f0b1190b754fd7"
+    },
+    {
+      "relativePath": "mixing-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "mixing-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "mixing-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "mixing-user/settings/preferences.txt",
+      "bytes": 23,
+      "sha256": "e5b0c04b66f1ee84200cc6f0f8ab32f2afdcf180893b2384f6ee074ec0de1a5d"
+    },
+    {
+      "relativePath": "mixing-user/settings/references.json",
+      "bytes": 263,
+      "sha256": "261e353916f0da390469707dbbd27ee34541cec813cc82a0bfc63738212506ce"
+    },
+    {
+      "relativePath": "mixing-user/settings/views.json",
+      "bytes": 540,
+      "sha256": "c31eeec6e6b1c195845a57c5bd0c8820d995061da2c80d3952655e356ab2fd0e"
+    },
+    {
+      "relativePath": "mixing-user/settings/workspaces.json",
+      "bytes": 289162,
+      "sha256": "076ca46d65e3afa201c7dff0125abbc734248598fa78ce608e0cdee5828a56c4"
+    },
+    {
+      "relativePath": "mixing-user/work-time/84a8daa743e4b9205c20a488aa6c5d792b256f7e7f61acac84f14695ae38f0e9.json",
+      "bytes": 465,
+      "sha256": "408009e92296f2b8b83e7b4aed74f3cad57a481e0eb7705c0f13acc4e5a3185d"
+    },
+    {
+      "relativePath": "mixing-user/work-time/84a8daa743e4b9205c20a488aa6c5d792b256f7e7f61acac84f14695ae38f0e9.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "move-copies.drawer",
+      "bytes": 3391,
+      "sha256": "5ac8b0d893e09f0a0a0d9631f7524fddd9f7230731378505ad3df76f3be97e99"
+    },
+    {
+      "relativePath": "nested.drawer",
+      "bytes": 1642,
+      "sha256": "b37d759a607d11ae1e22b554daff185bdff0c75d60bd61ce0c47f4936059483a"
+    },
+    {
+      "relativePath": "object-snap-workspace.json",
+      "bytes": 283655,
+      "sha256": "de57095f4c4af725bc9413160a7ef79ed45afe40818ec5dafcc89d248e663475"
+    },
+    {
+      "relativePath": "options-ui.drawer",
+      "bytes": 2012,
+      "sha256": "606ffd66f9e28b1f5432a99faf8fd0ec18c630e7db80beadcc67ef9ac3c5aa1d"
+    },
+    {
+      "relativePath": "own-gray-proof.icc",
+      "bytes": 312,
+      "sha256": "978c0f771ac36e578237561f900215050b3408f5364969c0169d59aaceb7028f"
+    },
+    {
+      "relativePath": "owned-alpha.png",
+      "bytes": 81,
+      "sha256": "2d88031416a3c48fbd97daf89eed7684b902db4f38204a19b6554f51402d6961"
+    },
+    {
+      "relativePath": "owned-density.png",
+      "bytes": 81,
+      "sha256": "85ffa21adfbd5c3d28a4fde1c96eac8bbfdeff5159701ff5b5e4ea753879e034"
+    },
+    {
+      "relativePath": "owned-font-user/fonts/drawer-785518841c9a179597ab75cfcb64b928ecba7e69f275bb57e24e84a765b60552.ttf",
+      "bytes": 361802,
+      "sha256": "785518841c9a179597ab75cfcb64b928ecba7e69f275bb57e24e84a765b60552"
+    },
+    {
+      "relativePath": "owned-font-user/fonts/drawer-b2d349f8bc766faa55d4dd00b80cf1be315c4fda5a0d1aa09ac78673364476ea.ttf",
+      "bytes": 361828,
+      "sha256": "b2d349f8bc766faa55d4dd00b80cf1be315c4fda5a0d1aa09ac78673364476ea"
+    },
+    {
+      "relativePath": "owned-font-user/fonts/drawer-fonts.json",
+      "bytes": 764,
+      "sha256": "c39d78994b785c9b4072f5f6cd8afa0878150338bafa13f7696072e9f0db942b"
+    },
+    {
+      "relativePath": "owned-tool-bundle/manifest.json",
+      "bytes": 574,
+      "sha256": "4268bb8e80ee8967f17c55713d81501f98dc2cb423a45f42279fe0d071a83c63"
+    },
+    {
+      "relativePath": "owned-tool-bundle/materials/1024.json",
+      "bytes": 121,
+      "sha256": "43c7321859856222dd76255f07afb2344ac5219d56abc91874e3e864820aad52"
+    },
+    {
+      "relativePath": "owned-tool-bundle/materials/1025.json",
+      "bytes": 119,
+      "sha256": "d3128540a756d8e2ad10b6550948785c732ac42649b74fbea23e9ac333f0b5e1"
+    },
+    {
+      "relativePath": "owned-tool-bundle/materials/1026.json",
+      "bytes": 297,
+      "sha256": "a5be7a67a03c6e0acf2a7226ae625e61fdcef0f5bacebaa5d85009ee9bf3d7c0"
+    },
+    {
+      "relativePath": "owned-tool-bundle/materials/1027.json",
+      "bytes": 146,
+      "sha256": "b98afdf98307cde87614d059739033a007eadb61beac257db3f4863d1a346be0"
+    },
+    {
+      "relativePath": "owned-tool-bundle/tools.json",
+      "bytes": 14224,
+      "sha256": "954e142d6c627eb3be2af4637a3082b60b331393dd1ee28d98d5749ad6abf3e5"
+    },
+    {
+      "relativePath": "paper-background.drawer",
+      "bytes": 649,
+      "sha256": "c1266125bb95057c1026a789524dfa330fdf1b1272dacb0db13c7c59ab37be54"
+    },
+    {
+      "relativePath": "paper-display-preferences.json",
+      "bytes": 283652,
+      "sha256": "707ab52b842087b283978b904a949a3456a9402bcb8fa1eaf756fc09ee286f37"
+    },
+    {
+      "relativePath": "paper-hidden.png",
+      "bytes": 134,
+      "sha256": "485e47c4c7e896d2421ad1f422fa7be9acd7f4050c8de4243dec60e940e9025f"
+    },
+    {
+      "relativePath": "paper-old-version.drawer",
+      "bytes": 585,
+      "sha256": "a90c4a2575b0e1378e866410de271b0fcc9144ed9da3dee1ec9223e0f987d1ca"
+    },
+    {
+      "relativePath": "paper-smoke.psd",
+      "bytes": 1236,
+      "sha256": "ce57a7101c8266c0acd01021bc93db684a6561a7cedbb2806bd58ef14905e7af"
+    },
+    {
+      "relativePath": "path-baseline.drawer",
+      "bytes": 12789,
+      "sha256": "a9ec68e2df9848bfa7d3ac65982fd371535757c19d51d634fed0d757c514b56d"
+    },
+    {
+      "relativePath": "path-baseline.drawer.drawer-last-good",
+      "bytes": 12789,
+      "sha256": "c9325cebe2d8f68b746bec806bc5eecf14d873002d04fa1db6b12316adc43104"
+    },
+    {
+      "relativePath": "pixel-effect.drawer",
+      "bytes": 632,
+      "sha256": "4bfb3cb9ad3a57e82a13e6f7bbcdb10f9607a391da0617873f9bf8c9d45eeb8b"
+    },
+    {
+      "relativePath": "pixel-effect.drawer.drawer-last-good",
+      "bytes": 519,
+      "sha256": "cd2f8d532971228f8ee8f77a47ec9c735511cae81189a4c0d0c78edacd19ba37"
+    },
+    {
+      "relativePath": "pixel-overwrite.drawer",
+      "bytes": 1325,
+      "sha256": "d80bf28c247e0452d7dda19e179a0f6206233f33536f6c5be459c3c418f33647"
+    },
+    {
+      "relativePath": "pixel-precision.drawer",
+      "bytes": 3566,
+      "sha256": "437c4517c8bbea065ca57c9a92ce08517cc3f400b12159a3fc6684fcddb11c07"
+    },
+    {
+      "relativePath": "plain-v68.drawer",
+      "bytes": 354,
+      "sha256": "b1cb037dbd7d28c32fd1f37b2c43aff87fe905004a53134a802f4e74bb7df312"
+    },
+    {
+      "relativePath": "pointer-move-copies.drawer",
+      "bytes": 3127,
+      "sha256": "480265ac31789e89ba204bf3424a3bfa0ac282b4dba2d428b5b27e07d10efa6e"
+    },
+    {
+      "relativePath": "portable-materials.json",
+      "bytes": 949,
+      "sha256": "10d99a5d57878448fb8bfff038325dc4c7e5ec248c952460901e950658957646"
+    },
+    {
+      "relativePath": "portable-slots.json",
+      "bytes": 35402,
+      "sha256": "6cd316a1353c019dd08b71392cb2d3cc1699fd08811a3d09e05836c8b0ebaa34"
+    },
+    {
+      "relativePath": "precise-surface.drawer",
+      "bytes": 6907,
+      "sha256": "3e7f2c3b3188abf64bbeaf33b4a08d6276195fecf3e4ab87a5bef629a8f2bd47"
+    },
+    {
+      "relativePath": "precision.drawer",
+      "bytes": 542,
+      "sha256": "8e8c9d381e949523e979089154507ec8dcdca431c1fc4f8f48a5b3125dd05df3"
+    },
+    {
+      "relativePath": "precision.png",
+      "bytes": 432,
+      "sha256": "bb65f6e8e9ebd01dfbba231191aef4d53487cd1957e9fa1cd184bded982cf1a4"
+    },
+    {
+      "relativePath": "preserved-v89.drawer",
+      "bytes": 154589,
+      "sha256": "61ecdd7936fc87ffcadf044f0a5cfa0eabd292a756eed380becfc60d490c2b47"
+    },
+    {
+      "relativePath": "pressure-reset.drawer",
+      "bytes": 8062,
+      "sha256": "a6328032db47f51d1dfec11150769446002ec595e8728217db7047c8d783ed05"
+    },
+    {
+      "relativePath": "pressure-reset.drawer.drawer-last-good",
+      "bytes": 8148,
+      "sha256": "a729a4801cde649e23b1ca13255af3178af1f8e3f0e2c16f40a6fe07cc727dfe"
+    },
+    {
+      "relativePath": "proof-applied.drawer",
+      "bytes": 757,
+      "sha256": "bd4e1e5537b1f5140324115fc13404cc5720ec9b2c0b827d5f3d8218dc991fc8"
+    },
+    {
+      "relativePath": "proof-original.drawer",
+      "bytes": 757,
+      "sha256": "0ee0e7827e6d263026c18ba01a8cefe0e254c2ffbf1ad71e6243af11d0e34b71"
+    },
+    {
+      "relativePath": "protected-brush.json",
+      "bytes": 1981,
+      "sha256": "85b65cd072ec13a78de4ea17c920ea4fe9298c5ac8b73027ec5fc211bc820933"
+    },
+    {
+      "relativePath": "puppet-precision-selection.drawer",
+      "bytes": 8690,
+      "sha256": "7ace5e5bd0745f2a6a5e7c1a0751b8bd97ce55b928cd7ecd869720ab4aedfdb3"
+    },
+    {
+      "relativePath": "quad-handles.drawer",
+      "bytes": 991,
+      "sha256": "a82fa2a3bd19549266616bbaa08af5f015ec9a01acd99d424c4c9f62f56fa275"
+    },
+    {
+      "relativePath": "quick-fake84.drawer",
+      "bytes": 11233,
+      "sha256": "c4ec849b6bf2e011aebe5276188b5fe03c6db54057abaa48329f596226dd2c90"
+    },
+    {
+      "relativePath": "quick-mask-false.drawer",
+      "bytes": 3616,
+      "sha256": "6f99d09dd21445f2f55c946fe395f63ba6a87f5776cb8596c78dbe077f35bb23"
+    },
+    {
+      "relativePath": "quick-mask-true.drawer",
+      "bytes": 3616,
+      "sha256": "5e1579e13bc8eac457ed23dcbecb805d582c8707ed208015439e5deae635be84"
+    },
+    {
+      "relativePath": "quick-presets/settings/workspaces.json",
+      "bytes": 283910,
+      "sha256": "bf44420e59346ea91dca3ff3a07ab0e7dd6ab7d41a331e489b02be5fa27d3922"
+    },
+    {
+      "relativePath": "quick-route.drawer",
+      "bytes": 11297,
+      "sha256": "365325be4529cdab287578595f5ba60a8f85538e4916fb47b02a36c7ea377762"
+    },
+    {
+      "relativePath": "quick-ui.drawer",
+      "bytes": 13004,
+      "sha256": "41cf36b96a6e3cd7ea2633b13cc3cfb922083a6da85a34e19e8bc4c729f4d30a"
+    },
+    {
+      "relativePath": "quick-ui.drawer.drawer-last-good",
+      "bytes": 5447,
+      "sha256": "b74e4406a9af0e47afd82ecd54eb9d6393006be47729cce8758bb73c9b9718d0"
+    },
+    {
+      "relativePath": "quick-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "quick-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "quick-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "quick-user/settings/recent.json",
+      "bytes": 186,
+      "sha256": "ea49d62eb8e1c4d5a028a0481f1f42feed0482a341236decd9dcec3e777e5812"
+    },
+    {
+      "relativePath": "quick-user/settings/views.json",
+      "bytes": 514,
+      "sha256": "e07fb4f9f04ae53e1ea20c5f875c4d5cdf6c100fde583242ad4680f9dcbca197"
+    },
+    {
+      "relativePath": "quick-user/settings/views.previous.json",
+      "bytes": 354,
+      "sha256": "e6c15716a4d22aea6c039a72a05425037476f6a916eab155a3408cfd779490af"
+    },
+    {
+      "relativePath": "quick-user/settings/workspaces.json",
+      "bytes": 287087,
+      "sha256": "e7343a6c3997fc46c0f02d68983fff3b72c16166e453eea99533afbabf91b8ad"
+    },
+    {
+      "relativePath": "quick-user/work-time/17e11d73cc3dfabb997deac8f83934a349920d58223daff2a0a8ca7e2605d339.json",
+      "bytes": 442,
+      "sha256": "d2a91f4f5ff9da963a1df02c8f13fd2f6fda0d0b9df6c170653bfa4d9f9f94fe"
+    },
+    {
+      "relativePath": "quick-user/work-time/17e11d73cc3dfabb997deac8f83934a349920d58223daff2a0a8ca7e2605d339.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "raster-deformation.drawer",
+      "bytes": 6597,
+      "sha256": "adf19add1cf33fb6c5ab43324af63a93faf6309a8406858c3955ff9084ce3f83"
+    },
+    {
+      "relativePath": "raster-order.drawer",
+      "bytes": 21819,
+      "sha256": "e3f5b24e334e5962e1d80a14b05cd413623173f626946f5eb609aab508482e46"
+    },
+    {
+      "relativePath": "raster-trace.drawer",
+      "bytes": 4433,
+      "sha256": "47ec30b80f29115f7ce6214c56a783bd004fb775e7a9dcc16baa9cb8665c0d4d"
+    },
+    {
+      "relativePath": "raster-ui.drawer",
+      "bytes": 16011,
+      "sha256": "b2f8737012cccc53deae33c39672e45ad67a7e5adcf60af0b049a2f9d09b1a13"
+    },
+    {
+      "relativePath": "reading-basic86.drawer",
+      "bytes": 154589,
+      "sha256": "c390838605ae751012d12dcb50f5f2ca3fc7c4ee367751997a2b9073c22d61ca"
+    },
+    {
+      "relativePath": "reading-fake86.drawer",
+      "bytes": 154712,
+      "sha256": "8b40a926cca62448576d752c78b82c74e9e9022ac7d9dbb14e46578810d63449"
+    },
+    {
+      "relativePath": "reading-ui.drawer",
+      "bytes": 174102,
+      "sha256": "db14d640047e9d0cb4f86f561e909cdf1d86bf421a1d09e2ddb7b1deac1509c8"
+    },
+    {
+      "relativePath": "related-colors-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "related-colors-user/settings/workspaces.json",
+      "bytes": 286733,
+      "sha256": "11f0bdae510bedcfafb9ec38426de52d6dd907640d7d40c241a40291b61f5606"
+    },
+    {
+      "relativePath": "related-colors-user/work-time/1eff6548296a4ab14e515d347c66b62e1e444adfda7583173c009f3e4d5ef9fa.json",
+      "bytes": 279,
+      "sha256": "873e9b29ac00be5aca11d764d8aefe8882cf37fe16c1061b879b9ec988ea8d45"
+    },
+    {
+      "relativePath": "related-colors-user/work-time/1eff6548296a4ab14e515d347c66b62e1e444adfda7583173c009f3e4d5ef9fa.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "related-keeps-document.drawer",
+      "bytes": 517,
+      "sha256": "c603ccd9c769d2ece94a6591f83d2536572c94bb88d90f8e21b650a9d3f91138"
+    },
+    {
+      "relativePath": "relinked.drawer",
+      "bytes": 362,
+      "sha256": "a34bfa290c6d63a33c5ed4c1a4c5b4b8f17de7e010c8cd8d8549dfaff1e04abc"
+    },
+    {
+      "relativePath": "removed-font.drawer",
+      "bytes": 154791,
+      "sha256": "1aefc6f29dfc569647ccc425acde158d743bf13f4d2ed191ed62db515ef8078a"
+    },
+    {
+      "relativePath": "resolved-snap-shape.drawer",
+      "bytes": 13340,
+      "sha256": "6280737f80362712a76a4292af6f44556a0e0e33312a1945bddbe723bfbf1deb"
+    },
+    {
+      "relativePath": "roles-ui.drawer",
+      "bytes": 1046,
+      "sha256": "465c34a4421fc2aa7160d3f65af5944cbaf890b1e17f405616adfdffb075bad6"
+    },
+    {
+      "relativePath": "ruler-symmetry.drawer",
+      "bytes": 4662,
+      "sha256": "cabae9589c51464c82ef046eac7aac57ecc465b656ade08fa7c38846c28d8089"
+    },
+    {
+      "relativePath": "ruler-symmetry.drawer.drawer-last-good",
+      "bytes": 4663,
+      "sha256": "fdba3c03e880dbb68a0832778004b74e4eaba34885f391ae90adbaa86866deba"
+    },
+    {
+      "relativePath": "ruler-ui-false.drawer",
+      "bytes": 5885,
+      "sha256": "e0ba8c9fbe4e83f70f4ce9454585c38a8ff3585c24fa20f008226fde4e191a06"
+    },
+    {
+      "relativePath": "ruler-ui-false.drawer.drawer-last-good",
+      "bytes": 4808,
+      "sha256": "9b6485f53dc3e0d62e0715ddd096f62ce0ea3a3d3edac167e607c4bdd87f6752"
+    },
+    {
+      "relativePath": "ruler-ui-true.drawer",
+      "bytes": 5885,
+      "sha256": "3f5fc9763d1fc6a92ed29708a457b2aa370c53237afc9a4d4f9a27b200e53300"
+    },
+    {
+      "relativePath": "ruler-ui-true.drawer.drawer-last-good",
+      "bytes": 4808,
+      "sha256": "0a6389b1a9e2377f9a409a4cb34f3d247523d30dc0e4102c49105e91262614b7"
+    },
+    {
+      "relativePath": "sampler-keeps-document.drawer",
+      "bytes": 605,
+      "sha256": "9e0988d2cc32752172e1728bce2fd5b65e7237d98ad92616c7fd1c5e8c7bdbc2"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/references.json",
+      "bytes": 261,
+      "sha256": "f652142e5bdeaf540957f285c7acdf6541f7752915928d65d6e6465a2d1478f9"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/views.json",
+      "bytes": 542,
+      "sha256": "e528d75f8c8588e321f1d0c6736dfc2df5529397fb6bba76f174825672359c4a"
+    },
+    {
+      "relativePath": "screen-sampling-user/settings/workspaces.json",
+      "bytes": 287257,
+      "sha256": "ae6d7e353ecab7aeff50bf00ba4efd7dcd2ad596df4e85ed0c62977b03352cd2"
+    },
+    {
+      "relativePath": "screen-sampling-user/work-time/0a9f49eadf245a1d53c1742407e2fa6d516bebf2fb9005b577b56ab4f427e4de.json",
+      "bytes": 467,
+      "sha256": "ae7dbbac3ff75654f9c05168686bf09d10f2726b995798b0564d12af2798c6ff"
+    },
+    {
+      "relativePath": "screen-sampling-user/work-time/0a9f49eadf245a1d53c1742407e2fa6d516bebf2fb9005b577b56ab4f427e4de.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "select-input-base.drawer",
+      "bytes": 3573,
+      "sha256": "d2a66fcafab0a4cdb2b97daa8b08ccaa95c420ca7920730bee195c2b9986ad61"
+    },
+    {
+      "relativePath": "selected-mouse-0-0.drawer",
+      "bytes": 2834,
+      "sha256": "651f7d72d98c08c6d4cca626525db595189056084f3bbbc5de6cfda99001dac3"
+    },
+    {
+      "relativePath": "selected-mouse-0-128.drawer",
+      "bytes": 3759,
+      "sha256": "54d82e4fe259d5db4c468f509c783046612aceec99fc05629e546f2258f3e077"
+    },
+    {
+      "relativePath": "selected-mouse-0-255.drawer",
+      "bytes": 3759,
+      "sha256": "806fb1b026ba9b83c78193dfce4092dbb2f8fa9cce5b7f91a565684d1e333dee"
+    },
+    {
+      "relativePath": "selected-mouse-128-0.drawer",
+      "bytes": 2834,
+      "sha256": "1ff7f8396554b2f59f2137f34b434b1ee793f6c8883775d503d011fe25302498"
+    },
+    {
+      "relativePath": "selected-mouse-128-128.drawer",
+      "bytes": 3759,
+      "sha256": "32a7d688e537b2a8c7a9d01eb3d0044727df97b5de5f91aee675b8bd5ae20f15"
+    },
+    {
+      "relativePath": "selected-mouse-128-255.drawer",
+      "bytes": 3759,
+      "sha256": "316e783af0e11a5c2132197d53bdaa6d96e9f6607ed00c8f734feb4513180323"
+    },
+    {
+      "relativePath": "selected-mouse-255-0.drawer",
+      "bytes": 2834,
+      "sha256": "9cd918fbc6ccca26d5ec1149d53560b0c45f4a803685b432a95f3f75faf62029"
+    },
+    {
+      "relativePath": "selected-mouse-255-128.drawer",
+      "bytes": 3759,
+      "sha256": "d5d34b113911733d068d13a926bfcc573f3e2aa15e2d397a0565fbb173982f03"
+    },
+    {
+      "relativePath": "selected-mouse-255-255.drawer",
+      "bytes": 3759,
+      "sha256": "f7ee77a37ff2bde44ae77cb575e738f0c611a7b0bc729749dfdbebb49670b7d0"
+    },
+    {
+      "relativePath": "selected-mouse-final.drawer",
+      "bytes": 4668,
+      "sha256": "88841e4b424d22497b387059b05784b6df27dba7cb23351fe785caa803a8f5e0"
+    },
+    {
+      "relativePath": "selected-mouse-final.drawer.drawer-last-good",
+      "bytes": 4668,
+      "sha256": "05a47f9ef7dd840ee4ee569ffa8a02980ae6ffc244714a22df1fa76f5c41eea8"
+    },
+    {
+      "relativePath": "selected-paint.drawer",
+      "bytes": 2020,
+      "sha256": "5aabaf9b026a392d090131f31039f076384aad3c72a7488ca31299ad383596e3"
+    },
+    {
+      "relativePath": "selected-paste.drawer",
+      "bytes": 964,
+      "sha256": "1261cd4ae5cc8fcb458d7cb55fe99d5d7d0d9c523021e1f8078817039f259ffd"
+    },
+    {
+      "relativePath": "selection-border.drawer",
+      "bytes": 783,
+      "sha256": "16f3838a395e242ce4695d60447a1e401eab340e32ddff31decd1ee3143e00b6"
+    },
+    {
+      "relativePath": "selection-border.drawer.drawer-last-good",
+      "bytes": 783,
+      "sha256": "96a2ed29e3966bc767e35171f3c8fc9f8daa21fc99a2e681363762dd002ffcc3"
+    },
+    {
+      "relativePath": "selection-brush.drawer",
+      "bytes": 3617,
+      "sha256": "c13b596bb91b7168240de86757c3f8343d7beb5165cfe0ae9875d1877ce47060"
+    },
+    {
+      "relativePath": "selection-filter.drawer",
+      "bytes": 935,
+      "sha256": "e93b23bb26184e58f44d421519a21669324b1a6ee8a114936f06972a25a39b62"
+    },
+    {
+      "relativePath": "selection-outline-workspace.json",
+      "bytes": 286658,
+      "sha256": "d43ba5c9c88a12687617cbc2d483694bedf62850200449b463990c3e6889e5b8"
+    },
+    {
+      "relativePath": "selection-shortcuts.json",
+      "bytes": 283633,
+      "sha256": "eace5f5e76a920c24896198c30432ba323746056095f9c01ead7179a6d1079ee"
+    },
+    {
+      "relativePath": "selection-tool-settings-false.json",
+      "bytes": 286710,
+      "sha256": "8fd9f22302315062edb58971c628d7148c83c38b1f908e5af1d39daaab638acf"
+    },
+    {
+      "relativePath": "selection-tool-settings-true.json",
+      "bytes": 286710,
+      "sha256": "8fd9f22302315062edb58971c628d7148c83c38b1f908e5af1d39daaab638acf"
+    },
+    {
+      "relativePath": "selection-tools-false.drawer",
+      "bytes": 3777,
+      "sha256": "7f973846e32970d7a7497afba15034959ffccaa39b0ee008049a90fd0830dc23"
+    },
+    {
+      "relativePath": "selection-tools-true.drawer",
+      "bytes": 3753,
+      "sha256": "fd1bd4c5afd2dda68196049ef34dfe54bb1cc47b0a0e29c0f7b760ae281e2b92"
+    },
+    {
+      "relativePath": "settings/aids.json",
+      "bytes": 88,
+      "sha256": "e6e92d36c5cf61de088d259282b5f05804fe5b6a5a66e9e1313bd829fbb8605a"
+    },
+    {
+      "relativePath": "settings/canvas-presets.json",
+      "bytes": 339,
+      "sha256": "fb920981cb96988ae57b0c507df158d96c8f6e743241040057f597756f32b877"
+    },
+    {
+      "relativePath": "settings/display.json",
+      "bytes": 308,
+      "sha256": "d9181a7953ff46b383d9a3b6da047e9deefa9fea340bc052eb01941afa859ff9"
+    },
+    {
+      "relativePath": "settings/display.previous.json",
+      "bytes": 307,
+      "sha256": "7ce32a91cda7d408870ed048bdc2e9d9e368a57b710b9a588ee7aaaba6cd1b6c"
+    },
+    {
+      "relativePath": "settings/interface.json",
+      "bytes": 97,
+      "sha256": "918720855613e74bda149e1db9f38ef54ecc6ab25e916e35c317f55ac6453529"
+    },
+    {
+      "relativePath": "settings/interface.previous.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "settings/interpolation.json",
+      "bytes": 97,
+      "sha256": "6f9f28fe88ca53e80a97d1298d82f44b7af9bd3caab0b9d6d06ccde96476a5c0"
+    },
+    {
+      "relativePath": "settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "settings/preferences.txt",
+      "bytes": 23,
+      "sha256": "e5b0c04b66f1ee84200cc6f0f8ab32f2afdcf180893b2384f6ee074ec0de1a5d"
+    },
+    {
+      "relativePath": "settings/recent.json",
+      "bytes": 522,
+      "sha256": "fb98d4587641b92d746256566c9add2b1d8f14e655638b48d0ba0811000be52b"
+    },
+    {
+      "relativePath": "settings/recent.previous.json",
+      "bytes": 522,
+      "sha256": "ba225f8dd8875889264d7341bff5513fc6ab78068b76705ad005370a7fd3f990"
+    },
+    {
+      "relativePath": "settings/references.json",
+      "bytes": 525,
+      "sha256": "c4a09971706e8d02536fcbf3878c004414f0fd1ff52bda4b3936c5e4ac2d7915"
+    },
+    {
+      "relativePath": "settings/references.previous.json",
+      "bytes": 523,
+      "sha256": "a70107ef11856cdd818ee41339bebb48ae5bb937da18a8fb95726d41f9db719b"
+    },
+    {
+      "relativePath": "settings/view.txt",
+      "bytes": 15,
+      "sha256": "2dae474e3bcc732097ed33e853faff288520558bd9d076a0d16ec20ae6700e58"
+    },
+    {
+      "relativePath": "settings/views.json",
+      "bytes": 1634,
+      "sha256": "467da3581d5bfb32a4485564ae5e426ea905bdb8fa229a488d1502e4a9e6f87f"
+    },
+    {
+      "relativePath": "settings/views.previous.json",
+      "bytes": 663,
+      "sha256": "15ad4932b8e77cf1577d0e86500ef96fc3b664142364ec4593678200a82fe79d"
+    },
+    {
+      "relativePath": "settings/workspace-before-apply.json",
+      "bytes": 290942,
+      "sha256": "f8367f5d7a5748f2a75d423d96e89188f02902ac9a714c4fb87169b99f420d33"
+    },
+    {
+      "relativePath": "settings/workspaces.json",
+      "bytes": 290989,
+      "sha256": "4571e8fb33e5d1fe7852fbab7c971b22b799d47b6fe155863c8a70ffd0455a27"
+    },
+    {
+      "relativePath": "shape-false-false-false.drawer",
+      "bytes": 6192,
+      "sha256": "221438c12f7e89bfc40127ec7d98ef24e4e708fe17eb9d25ae9558d229cfa706"
+    },
+    {
+      "relativePath": "shape-false-false-true.drawer",
+      "bytes": 6191,
+      "sha256": "dae49a8974157d513b9b2daa2579a2d9b3b7e1b4a01b570a5f2ec8abce9a27be"
+    },
+    {
+      "relativePath": "shape-false-true-false.drawer",
+      "bytes": 6736,
+      "sha256": "e418cdae661d47e25ef719f36906715e75d38e0548a8d80a335daf0edad036a3"
+    },
+    {
+      "relativePath": "shape-false-true-true.drawer",
+      "bytes": 6735,
+      "sha256": "354df2612ee81560b09f81bd34302c939073b8dfe908c2b7b35fc77273f1909b"
+    },
+    {
+      "relativePath": "shape-false.drawer",
+      "bytes": 1909,
+      "sha256": "f4b09ec606fc6750840f26422760b53785820384d3aea425bea8d37ee0ec2d28"
+    },
+    {
+      "relativePath": "shape-false.drawer.drawer-last-good",
+      "bytes": 1987,
+      "sha256": "791e49b62d974e7d77df92d20db8094e7120501e059ed45227eb0860056d8b22"
+    },
+    {
+      "relativePath": "shape-settings-false.json",
+      "bytes": 286706,
+      "sha256": "90781db129bc48f03814a111a347bba6e3aff6e8a6f6ffc6ef6116cb3d08ca19"
+    },
+    {
+      "relativePath": "shape-settings-true.json",
+      "bytes": 286706,
+      "sha256": "90781db129bc48f03814a111a347bba6e3aff6e8a6f6ffc6ef6116cb3d08ca19"
+    },
+    {
+      "relativePath": "shape-settings.json",
+      "bytes": 286652,
+      "sha256": "12db0c34c5ca648a7ebf599688c8e8ce5556907c702170ee94d3da92dd467684"
+    },
+    {
+      "relativePath": "shape-true-false-false.drawer",
+      "bytes": 6247,
+      "sha256": "0c0b556f72440ac5c7ab337f911389ea944691b5cbed719b8527a2d10e59187f"
+    },
+    {
+      "relativePath": "shape-true-false-true.drawer",
+      "bytes": 6186,
+      "sha256": "21a544be21d78e80c61c97283c7ae303880036a522d5d797e31e8400358a620c"
+    },
+    {
+      "relativePath": "shape-true-true-false.drawer",
+      "bytes": 7143,
+      "sha256": "05659e29bb00d5d68defb9d2a4ffcb583463679ff238c81ba88bc11c50be4e44"
+    },
+    {
+      "relativePath": "shape-true-true-true.drawer",
+      "bytes": 6698,
+      "sha256": "00178feaf72e42c1567b10a0e7ea50597a7ecf96c91285f4566e95a73e533c05"
+    },
+    {
+      "relativePath": "shape-true.drawer",
+      "bytes": 1909,
+      "sha256": "e7b82c20bf12b25428b2bb594d5908a045a59937b14f5845e1d51c31c7ea2e67"
+    },
+    {
+      "relativePath": "shape-true.drawer.drawer-last-good",
+      "bytes": 1987,
+      "sha256": "19700d97267974ebba2a1d340b2411d941d050cd0aa3c7b0e87d25dec31d56c8"
+    },
+    {
+      "relativePath": "short-vector.drawer",
+      "bytes": 12958,
+      "sha256": "a60ef4a7d6f893c93096fdd716916f706400dccc4b1c6fcf5572458962959204"
+    },
+    {
+      "relativePath": "shortcut-settings-false-false.json",
+      "bytes": 286687,
+      "sha256": "812f79cbc2c004aa44022b66e38c172413cea547b652e1aae75630ae5ea07351"
+    },
+    {
+      "relativePath": "shortcut-settings-false-true.json",
+      "bytes": 286687,
+      "sha256": "812f79cbc2c004aa44022b66e38c172413cea547b652e1aae75630ae5ea07351"
+    },
+    {
+      "relativePath": "shortcut-settings-true-false.json",
+      "bytes": 286687,
+      "sha256": "812f79cbc2c004aa44022b66e38c172413cea547b652e1aae75630ae5ea07351"
+    },
+    {
+      "relativePath": "shortcut-settings-true-true.json",
+      "bytes": 286687,
+      "sha256": "812f79cbc2c004aa44022b66e38c172413cea547b652e1aae75630ae5ea07351"
+    },
+    {
+      "relativePath": "slot-user/materials/library.json",
+      "bytes": 949,
+      "sha256": "10d99a5d57878448fb8bfff038325dc4c7e5ec248c952460901e950658957646"
+    },
+    {
+      "relativePath": "slot-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "slot-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "slot-user/settings/workspaces.json",
+      "bytes": 302446,
+      "sha256": "e48c037d80465b30a189776c9b859f735800ef32044f41493919c5f1cb469563"
+    },
+    {
+      "relativePath": "slot-user/work-time/a5a0b1ec3db9c2ea266a42521342fa62a9e35f5580385a6015dd77583066fab6.json",
+      "bytes": 279,
+      "sha256": "82bba3f53fb8d3d9a90d6c869d4728d2258ea7f77ae0c203b0ee6891006e4229"
+    },
+    {
+      "relativePath": "slot-user/work-time/a5a0b1ec3db9c2ea266a42521342fa62a9e35f5580385a6015dd77583066fab6.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "smoke-animation.drawer",
+      "bytes": 584,
+      "sha256": "5cd22568e86b6313deabbd58e2c0c702fe01da24ed051e37f2b1ad777a2c9235"
+    },
+    {
+      "relativePath": "smoke-export.png",
+      "bytes": 77,
+      "sha256": "71e407df4418ffb40e9e13e99e6d12e52fe55849cda1d617ea252a94dfac3749"
+    },
+    {
+      "relativePath": "smoke-first.drawer",
+      "bytes": 509,
+      "sha256": "b9ba1e263bda7379c4a7b57b068d52c38312d887f15d6ee9e88411fb8c691fe4"
+    },
+    {
+      "relativePath": "smoke-movie.avi",
+      "bytes": 128,
+      "sha256": "38723a2e5e8a17aa7950dc008209944e898f69a7bd10a23c839d341e935fd5ca"
+    },
+    {
+      "relativePath": "smoke-paste.drawer",
+      "bytes": 705,
+      "sha256": "7cbb401ef6a764cd7b3a4b03cb6f9848c9ef552d2cb2273ecd3f25f92ad978c4"
+    },
+    {
+      "relativePath": "smoke-second.drawer",
+      "bytes": 509,
+      "sha256": "b9ba1e263bda7379c4a7b57b068d52c38312d887f15d6ee9e88411fb8c691fe4"
+    },
+    {
+      "relativePath": "snap-guide-grid.drawer",
+      "bytes": 12664,
+      "sha256": "1f44e99f57337dd0c7c6f9971a7ef04eed7a4fb4e8ab095defc6aaee767e7feb"
+    },
+    {
+      "relativePath": "snapping-workspace.json",
+      "bytes": 286653,
+      "sha256": "4d17f3b6fd6ee8a106b509d335ac764680d46112c6948ce3d35b784cbaddc70e"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/display.json",
+      "bytes": 306,
+      "sha256": "29963992ca95dc38db3931bc5eae23bbc8fc436433b94f0279d8d48d4fdf6885"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/recent.json",
+      "bytes": 191,
+      "sha256": "a8963dec250857881133597e140855919475e89bc793b93a88bcf1ffa04c23d6"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/views.json",
+      "bytes": 1169,
+      "sha256": "05f5bfa8ef15f23537ca18fbd3d9f174fb2a71af20c22b8a22cebe3f1745ca2e"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/views.previous.json",
+      "bytes": 1173,
+      "sha256": "3607e45b439aed9c8570100fd826c628c43e171031d62246f4067f50b1374ab0"
+    },
+    {
+      "relativePath": "soft-proof-user/settings/workspaces.json",
+      "bytes": 286757,
+      "sha256": "de1f8e49aaedfb2d38a9f1520053443066f325534fdab4982eba8fb0bded79fe"
+    },
+    {
+      "relativePath": "soft-proof-user/work-time/865d46ead272ce4e272c8ec7e307b4741b37b9ae433204dbe31b14f673960b38.json",
+      "bytes": 451,
+      "sha256": "cfd7504e6a4e7b2ee508c3d972fcd6452fcdba952262e4c60bbfe79cd47d3011"
+    },
+    {
+      "relativePath": "soft-proof-user/work-time/865d46ead272ce4e272c8ec7e307b4741b37b9ae433204dbe31b14f673960b38.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "source-pages.tiff",
+      "bytes": 421,
+      "sha256": "5ecee77bcf64a504320d01258694508b8904577efb37139ccc46873d008b1fa1"
+    },
+    {
+      "relativePath": "source-selection-owner.drawer",
+      "bytes": 3195,
+      "sha256": "fec2744e6b0735c42d8178fcc438a6306407b420d48cc1a8b9431bbb9b31668f"
+    },
+    {
+      "relativePath": "source-selection.drawer",
+      "bytes": 1211,
+      "sha256": "5122d5d239a9974ecedbf7ea91fd3c140360ee0934abe6e4d6cff3d5033eb501"
+    },
+    {
+      "relativePath": "source-selection.drawer.drawer-last-good",
+      "bytes": 1211,
+      "sha256": "b02631632a4e48f9b99d0c7b457ba4ad007b575cf15e820480cb8a7c67640a9a"
+    },
+    {
+      "relativePath": "source.svg",
+      "bytes": 246,
+      "sha256": "d612593311ce9d01b67d2078a273aedb5a80267d1e0d11a108db3af30790ea5b"
+    },
+    {
+      "relativePath": "spatial-blur.drawer",
+      "bytes": 1510,
+      "sha256": "ffd281051e0d89f87735aec48447a9ffdc3bd772a90f77f52302a2c1883a2cdb"
+    },
+    {
+      "relativePath": "spatial-blur.drawer.drawer-last-good",
+      "bytes": 2201,
+      "sha256": "4905eff77a5d04eb500cca310f6826a4dc04d79ee470e5519ef82d3450125192"
+    },
+    {
+      "relativePath": "special-base-false.drawer",
+      "bytes": 16885,
+      "sha256": "0652bf7849e56a025fd93d7e9635cd1a0168ec0de6e8f8beed97196ea11a3c4b"
+    },
+    {
+      "relativePath": "special-base-true.drawer",
+      "bytes": 17113,
+      "sha256": "974bdc8d4e949849f5c78aa868a7fa5ae9d0c09dccfebbc08464274a4ed21295"
+    },
+    {
+      "relativePath": "special-ruler-false.drawer",
+      "bytes": 16974,
+      "sha256": "f59984a38276d792be9fd8db42f002f034db57cf08191cfe135513d9d63eee05"
+    },
+    {
+      "relativePath": "special-ruler-true.drawer",
+      "bytes": 24743,
+      "sha256": "f24da0abcdcb986c821624962b5731b547e7ffc3753e2f159f25c0e54656b235"
+    },
+    {
+      "relativePath": "special-ui-false.drawer",
+      "bytes": 17160,
+      "sha256": "19cd2014bc96e828b29e0ae72f751d69623a3e73d954f5e1734c872aff5802e1"
+    },
+    {
+      "relativePath": "special-ui-true.drawer",
+      "bytes": 24878,
+      "sha256": "3db425941c7e012d0143f1c95cbf2be6ae0f3f7315f7163c11a50b7d20173efc"
+    },
+    {
+      "relativePath": "story-ui-first.drawer",
+      "bytes": 154798,
+      "sha256": "48343c17aedfff15ab83f44207f39152e20ebe84e9efd382fc4eff6786504783"
+    },
+    {
+      "relativePath": "story-ui-second.drawer",
+      "bytes": 154795,
+      "sha256": "becd655dad9a291023756ab165878799412aeec562d0078609a05d2ff6704652"
+    },
+    {
+      "relativePath": "story-ui-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "story-ui-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "story-ui-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "story-ui-user/settings/views.json",
+      "bytes": 1021,
+      "sha256": "fd931dcf3496e16962c4385d8fe13e2991972b7881461c8b29c80ae70b9703aa"
+    },
+    {
+      "relativePath": "story-ui-user/settings/views.previous.json",
+      "bytes": 526,
+      "sha256": "66aea09b1af7d6f68863b9da4bfb103e413e092c2e41809f235b042ab4b720b7"
+    },
+    {
+      "relativePath": "story-ui-user/settings/workspaces.json",
+      "bytes": 286758,
+      "sha256": "f8209c0b19415ee19ab0e692b60f64c1d40089226a09c5961e38b5ed80e803f1"
+    },
+    {
+      "relativePath": "story-ui-user/work-time/c3403c42a77161a882e7566d4c461727ed1a5901868481e755a38f8ac41fe58b.json",
+      "bytes": 453,
+      "sha256": "e4c4183290ca7e793539a0d05fbf74f29e6de8b1e269d6514dbb060ee7f160d7"
+    },
+    {
+      "relativePath": "story-ui-user/work-time/c3403c42a77161a882e7566d4c461727ed1a5901868481e755a38f8ac41fe58b.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "story-ui-user/work-time/c534a45abbb3f9a31ae75504afec0bc54749c6034ef8f6fcf24d22f20f6f9f96.json",
+      "bytes": 451,
+      "sha256": "c5be2bd50159e694454b017bd91a5cd2489098c737157b5e5cd78b40fd1ea4ee"
+    },
+    {
+      "relativePath": "story-ui-user/work-time/c534a45abbb3f9a31ae75504afec0bc54749c6034ef8f6fcf24d22f20f6f9f96.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "stylized-effect.drawer",
+      "bytes": 519,
+      "sha256": "559f3c99d3fbd2291fa04336e2bcb0550216c114b7765dbbc61d86c7826415e9"
+    },
+    {
+      "relativePath": "stylized-effect.drawer.drawer-last-good",
+      "bytes": 639,
+      "sha256": "6ab6dfa0bdf483f951ffe1d1440f55f1368671d982dd4326b6c09ef118a70bec"
+    },
+    {
+      "relativePath": "surface-effects-old.drawer",
+      "bytes": 2737,
+      "sha256": "e5aac99fd33d0fd562c0582d92c29c3bf9586dc3bc58d22bc16c55a8dae7ef4c"
+    },
+    {
+      "relativePath": "surface-effects.drawer",
+      "bytes": 2801,
+      "sha256": "039918d5753285ba533f5ac757b20d1e45727324d592f6adfbcab93ebeb52505"
+    },
+    {
+      "relativePath": "svg-app.drawer",
+      "bytes": 17700,
+      "sha256": "bb17f60e99488dbdfb85abaafeb6120a85e6f423a768f50ef30043c66f6bf2cd"
+    },
+    {
+      "relativePath": "svg-basic.drawer",
+      "bytes": 23977,
+      "sha256": "4fe27adb8ada6d9ef441fb4b76b314128e3bf7cafebf54d8c8af3da6c7ec399e"
+    },
+    {
+      "relativePath": "svg-gradient-clip-hole.drawer",
+      "bytes": 24092,
+      "sha256": "1d362546a23e00b8301ef9e8e03030340581d3745db86f2b6f341eb93575a020"
+    },
+    {
+      "relativePath": "svg-raster-native.drawer",
+      "bytes": 22541,
+      "sha256": "aed75b3105e5019433603026dc64022c311f064ca52d17b5fe7d9433de53a0fc"
+    },
+    {
+      "relativePath": "svg-raster-native.drawer.drawer-last-good",
+      "bytes": 21909,
+      "sha256": "ca35bc2f472daff11193fb01adeebaafbf908a494e792d85e0fef78e5f8951a7"
+    },
+    {
+      "relativePath": "swatches-keeps-document.drawer",
+      "bytes": 517,
+      "sha256": "8ba5efa61beea96b37de40c7b0869afbb30f269072ec37e8ec2821154f800b26"
+    },
+    {
+      "relativePath": "test-area-keeps-document.drawer",
+      "bytes": 565,
+      "sha256": "26d21766a6d571d654f812b96ec0f723a84b163f18248d9df2be1b3a3d9ce1d0"
+    },
+    {
+      "relativePath": "test-area-keeps-document.drawer.drawer-last-good",
+      "bytes": 565,
+      "sha256": "5006d17283cc9c8a5f59fc2cb38bc1e9bc1886641181d76f3243d23e3ed30a0b"
+    },
+    {
+      "relativePath": "text-fake85.drawer",
+      "bytes": 154589,
+      "sha256": "0ea2f079f41b9eff7be3ace159b12d8e46626a03ba0da9a0e3cbb8f0d6d036c4"
+    },
+    {
+      "relativePath": "text-layout.drawer",
+      "bytes": 154653,
+      "sha256": "57c7d8e0f6ccca9e43b7c3babfd95c39ec25444e1321288633724529ded55062"
+    },
+    {
+      "relativePath": "text-reading.drawer",
+      "bytes": 154776,
+      "sha256": "99cf5eeb39ebe34fc6dd51a09bbe4cb12ebe3eb4a25d6a5687846407dfa41de8"
+    },
+    {
+      "relativePath": "text-ui.drawer",
+      "bytes": 154811,
+      "sha256": "d6e285107cb1f137b81f0ea5a0e892bc0911cfadd8fa6b8cd8af4802efe301ce"
+    },
+    {
+      "relativePath": "third-offline-pc/manifest.json",
+      "bytes": 574,
+      "sha256": "3b595d96817f0df52c9030bdeb1c1ea4ebe4e6134f06f4ec98ed3f8fb61ba318"
+    },
+    {
+      "relativePath": "third-offline-pc/materials/1025.json",
+      "bytes": 125,
+      "sha256": "6b76fb6ca8308f858629d3511ea7266ea835616078ea28acf046372a681f94c9"
+    },
+    {
+      "relativePath": "third-offline-pc/materials/1026.json",
+      "bytes": 119,
+      "sha256": "2e73caf2f4f56825f828dce16619dafd6f3357b7523722ee1a118a88bcaf485f"
+    },
+    {
+      "relativePath": "third-offline-pc/materials/1027.json",
+      "bytes": 297,
+      "sha256": "1e0f534b08a86505838d8d770d47ef603ba8e8214138af9c9c4952c98a09bc88"
+    },
+    {
+      "relativePath": "third-offline-pc/materials/1028.json",
+      "bytes": 146,
+      "sha256": "2cd9d85f1c9b7ab5d18dc53de8b41d0731c29c46f374e76e104a7f78ddad5fee"
+    },
+    {
+      "relativePath": "third-offline-pc/tools.json",
+      "bytes": 14255,
+      "sha256": "f1aedb460f8ff0bbb7f32cd3adb2a775c4a0a10aa86662375633abfd80fb785c"
+    },
+    {
+      "relativePath": "through-folders.drawer",
+      "bytes": 5143,
+      "sha256": "45d51ee952b59259d30e505cbb848dcb6c38e861e6fa61f901e0028a47a7873e"
+    },
+    {
+      "relativePath": "tip-texture-edges.drawer",
+      "bytes": 3704,
+      "sha256": "d16ca3869ac8a947b866edf00bd7bc859c5aec9f7d0d5cbd7f3b4274ed5a348e"
+    },
+    {
+      "relativePath": "tip-texture-library.json",
+      "bytes": 334,
+      "sha256": "83aa85e55d521204d952c489dca712e9528d11faed4f602ab51a9091616a8e81"
+    },
+    {
+      "relativePath": "tip-texture-user/materials/library.json",
+      "bytes": 334,
+      "sha256": "83aa85e55d521204d952c489dca712e9528d11faed4f602ab51a9091616a8e81"
+    },
+    {
+      "relativePath": "tip-texture-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "tip-texture-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "tip-texture-user/settings/workspaces.json",
+      "bytes": 287053,
+      "sha256": "36b2d47ab38998fa1a5051a3ebd09e974c94ad5b01f317c499800b4812693501"
+    },
+    {
+      "relativePath": "tip-texture-view.drawer",
+      "bytes": 14354,
+      "sha256": "a7f154f484cece5b57f31f8b67c012c1adea7409089078a2ca54751ee1f5aec2"
+    },
+    {
+      "relativePath": "tone-Burn-Highlights.drawer",
+      "bytes": 3426,
+      "sha256": "32d76921aae583d44b495dabde1abbc50ca4ef2ef738b39ed6f53473cca6e460"
+    },
+    {
+      "relativePath": "tone-Burn-Midtones.drawer",
+      "bytes": 3426,
+      "sha256": "8adc34d80bcf50dfcc18139ed6879714013f3264d7d136b983399338dca7930c"
+    },
+    {
+      "relativePath": "tone-Burn-Shadows.drawer",
+      "bytes": 3426,
+      "sha256": "0cbefacf1f4b5e83681c7b034ebd2e16b0421676a721dd467489835de4e08414"
+    },
+    {
+      "relativePath": "tone-curves.drawer",
+      "bytes": 1378,
+      "sha256": "7497d35e5bfda80aba5465e100210f05b29fda683fe3dd8f1a40bb1627fd5643"
+    },
+    {
+      "relativePath": "tone-Dodge-Highlights.drawer",
+      "bytes": 3426,
+      "sha256": "710c004c088a7857d60f5bed3fd812975ca16488daa5ad643f0b02a4932a4e4e"
+    },
+    {
+      "relativePath": "tone-Dodge-Midtones.drawer",
+      "bytes": 3426,
+      "sha256": "cd809f440514a8c9668376e3541af669b817ffe1055fbcf3d2ffc950f016acf5"
+    },
+    {
+      "relativePath": "tone-Dodge-Shadows.drawer",
+      "bytes": 3426,
+      "sha256": "ef4db1bb4de57bd0a9239da89e67f564754ed4dc5ba6d0f1d96e8ac6dd699037"
+    },
+    {
+      "relativePath": "tone-mapping-app.drawer",
+      "bytes": 1526,
+      "sha256": "77ed842bcce7fcee7619705569ece23ee0d8396138a40ee80805359f5d4ae71c"
+    },
+    {
+      "relativePath": "tool-modes-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "tool-modes-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "tool-modes-user/settings/workspaces.json",
+      "bytes": 286704,
+      "sha256": "7784cea79a5d4e72b5f40d2c84cfa221bf19b09c3abacd0ecdcb4b7b1ecdc3b9"
+    },
+    {
+      "relativePath": "tool-modes-user/work-time/0ebde4f7bfc628f2bdf7a5588567b7ba72255a8b8bd23fe71ebf770c01b78083.json",
+      "bytes": 279,
+      "sha256": "8ccc5c9c8cc92fb22215d577f6bd9fcf6b07612623d64f8114dc49dc9e52cfbc"
+    },
+    {
+      "relativePath": "tool-modes-user/work-time/0ebde4f7bfc628f2bdf7a5588567b7ba72255a8b8bd23fe71ebf770c01b78083.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "track-file.drawer",
+      "bytes": 362,
+      "sha256": "f46a60e1d0e82bb7276a5766fd47a242a8f48189498eff47968d826fd3749592"
+    },
+    {
+      "relativePath": "transfer-down.drawer",
+      "bytes": 532,
+      "sha256": "99ffd5391520816bdfe088fc382afc4a072851c4869ded9272fc4c598de94206"
+    },
+    {
+      "relativePath": "transfer-move-selected-pixels-false.drawer",
+      "bytes": 1298,
+      "sha256": "2032b1d17f5bb2465c4a6d78df64b0be2853dce7ed2166f4c2833c77357a0420"
+    },
+    {
+      "relativePath": "transfer-move-selected-pixels-true.drawer",
+      "bytes": 1298,
+      "sha256": "2faf82ba54b7ef036d3d91d2e72511edf79ebe7c5f62be695196eb0299b9593f"
+    },
+    {
+      "relativePath": "transfer-move-selection-boundary-false.drawer",
+      "bytes": 1298,
+      "sha256": "de69d65a5c516d7f5a1a1516de8f39cad5b6abe0f0b594006091835a348c0d2c"
+    },
+    {
+      "relativePath": "transfer-move-selection-boundary-true.drawer",
+      "bytes": 1298,
+      "sha256": "dd3bbd7c51ce34d412cc6c43a5227e0a54f7780b0f24eb6a369fa9d242d5a2f9"
+    },
+    {
+      "relativePath": "transform-apply.drawer",
+      "bytes": 59461,
+      "sha256": "6c218b1d8090999c7b09bdab0106d07d83df6638482422ed15f98257ecfae16e"
+    },
+    {
+      "relativePath": "transform-discard.drawer",
+      "bytes": 53819,
+      "sha256": "bbbca4aa3d1e41c99ade3b4bd63f0adf5ae11a894df71d37a6e3da42811826c4"
+    },
+    {
+      "relativePath": "transform-handles-old.drawer",
+      "bytes": 1351,
+      "sha256": "d2ee72d0846ff92a963fce685dfcbe44e2c65a7194e27cfa1749136da57c45df"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/recent.json",
+      "bytes": 190,
+      "sha256": "ebc9680662633a7aa262a14fe25bfd7b66098aaff42f8b5f386eb15956d01ce2"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "074721a0ae9fe690a3f01b8cf777585eb78d4c4184f89f81150f1adbae809764"
+    },
+    {
+      "relativePath": "transform-handles-user/settings/workspaces.json",
+      "bytes": 286757,
+      "sha256": "8748b401d362b6ef99d10206bcd79354bda7bd90b8ad4cc1273eceb7f91a49c3"
+    },
+    {
+      "relativePath": "transform-handles-user/work-time/6a91527530a2b056a5d3fe224b3c0f5da85b250cdcf171e18bab76248eb8c778.json",
+      "bytes": 281,
+      "sha256": "71209081db10a1982e475f33a77a6bf05d05b284e4511fd748ac3b7a2f4c83e8"
+    },
+    {
+      "relativePath": "transform-handles-user/work-time/6a91527530a2b056a5d3fe224b3c0f5da85b250cdcf171e18bab76248eb8c778.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "transform-handles.drawer",
+      "bytes": 1415,
+      "sha256": "d6727aa8d8f1207e7d043dffc04cf40288fdcf16a94cf0d179f762423534371e"
+    },
+    {
+      "relativePath": "transform-policy.drawer",
+      "bytes": 14261,
+      "sha256": "86ce88d31f3d14dca4aa632efd6c7c3e26650f62b9eca7b88b22da5fdab1a7aa"
+    },
+    {
+      "relativePath": "transformed-text.psd",
+      "bytes": 308098,
+      "sha256": "eb5d9a23ba68bcd016b92f6fcac72b229b6cbe256c476f6c24b39ff1426f3d06"
+    },
+    {
+      "relativePath": "transparency-controls.json",
+      "bytes": 286667,
+      "sha256": "f7cfef6756afc7d5c3df72bd3734a5d621ffc5587d8acc427529a9342f1a8b83"
+    },
+    {
+      "relativePath": "transparent-shape.drawer",
+      "bytes": 3715,
+      "sha256": "6436af3c5029dd853232453c423b046fe2e267308d3956d28486967827f34117"
+    },
+    {
+      "relativePath": "truncated-material.drawer",
+      "bytes": 1268,
+      "sha256": "772a6e8180354aa2ac5449c11fbf8a41af169534028d65efa78e65ec88c38eb9"
+    },
+    {
+      "relativePath": "two-page-selection.drawer",
+      "bytes": 5290,
+      "sha256": "bb24962e9a36f8f54089242b67a1cc7ab85c2a5bf747f4c4b88f67b684d37c5d"
+    },
+    {
+      "relativePath": "typeset-ui-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "typeset-ui-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "typeset-ui-user/settings/panels.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "typeset-ui-user/settings/workspaces.json",
+      "bytes": 287266,
+      "sha256": "c7ff20405759e713d67149795983eac317ca17aff135056d05fdbea50da29553"
+    },
+    {
+      "relativePath": "typeset-ui-user/work-time/3ae1f219656958f9cf71c46cea52f085ef9e26514e67698519a26b546e5a5bc4.json",
+      "bytes": 279,
+      "sha256": "c9c729704c65c7ca42c22d24b80132055af1ddea2caf9d6f195561859916f3c4"
+    },
+    {
+      "relativePath": "typeset-ui-user/work-time/3ae1f219656958f9cf71c46cea52f085ef9e26514e67698519a26b546e5a5bc4.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "typeset-user/settings/workspaces.json",
+      "bytes": 284133,
+      "sha256": "990881671a24a729e5c5c9ec4726fc747f3c6bb9c139ab4e30da0fd04bc6ca51"
+    },
+    {
+      "relativePath": "ui-file-cache.drawer",
+      "bytes": 1802,
+      "sha256": "798f1f4d4481dbb190efdd02ad23a498401ffea0f4b4a7aa3de303f1fcad966f"
+    },
+    {
+      "relativePath": "ui-file-converted.drawer",
+      "bytes": 358,
+      "sha256": "ce750e92c13ff9059b66bcbb2f45a3018e22bfef1e3383086d54294cd25d9065"
+    },
+    {
+      "relativePath": "ui-file-source.drawer.drawer-last-good",
+      "bytes": 362,
+      "sha256": "16f823d22dddbb965411e7c44867b4f6367b166d9b10b54ad13187cfa23d524b"
+    },
+    {
+      "relativePath": "unconfirmed-gaussian.drawer",
+      "bytes": 582,
+      "sha256": "ac3ebf4866e5c01d13fc953c924e586efc70f88727347fba8e94a5229d8ed020"
+    },
+    {
+      "relativePath": "unconfirmed-rgb.drawer",
+      "bytes": 567,
+      "sha256": "ebb4bd22e31d84e3fe5c9b217ed4769ddb90f61fbe511f6b821d2c910b0c5e01"
+    },
+    {
+      "relativePath": "unconfirmed-rgb.drawer.drawer-last-good",
+      "bytes": 567,
+      "sha256": "2874887275c5148492557e3d7bbba5156a9324970c499e1cc56fddfdffec5ab0"
+    },
+    {
+      "relativePath": "unconfirmed-transform.drawer",
+      "bytes": 787,
+      "sha256": "5d39e601644ea35d93cda08b4c35de121fe832ab13f325f80702fdd3c97e38be"
+    },
+    {
+      "relativePath": "unfinished-save.drawer",
+      "bytes": 24,
+      "sha256": "18013dd9b6923afa8a6ae8529be4364751e2a1325b02b887b242be5972aadf80"
+    },
+    {
+      "relativePath": "unfinished-save.drawer.drawer-unverified-18013dd9b6923afa8a6ae8529be4364751e2a1325b02b887b242be5972aadf80",
+      "bytes": 24,
+      "sha256": "18013dd9b6923afa8a6ae8529be4364751e2a1325b02b887b242be5972aadf80"
+    },
+    {
+      "relativePath": "unicode-fallback.drawer",
+      "bytes": 154646,
+      "sha256": "7efbec9719f98dbe5e0a379c7f679a16a610f5e2f5b58955a656b95affa30aa2"
+    },
+    {
+      "relativePath": "user-tool-group.json",
+      "bytes": 17835,
+      "sha256": "18390997d09c7bae74802751a540cd6782f5a1cd21c92805dfac293da6b7e249"
+    },
+    {
+      "relativePath": "user-tool-pixels.drawer",
+      "bytes": 3829,
+      "sha256": "8c8faeceb1c12c65291e1f373f551091c15a2bf3dd9eb7e19bb9b58b66315ece"
+    },
+    {
+      "relativePath": "user-tools-user/materials/library.json",
+      "bytes": 176,
+      "sha256": "47e2b1589e1169d83dc84cf5be7f4ff9f67110eaf09dce3e0676354077034388"
+    },
+    {
+      "relativePath": "user-tools-user/settings/interface.json",
+      "bytes": 96,
+      "sha256": "b1cb76cea92d565ed23ecf29c584000d983daeeac43546fe5784b22b2961e860"
+    },
+    {
+      "relativePath": "user-tools-user/settings/navigator.json",
+      "bytes": 172,
+      "sha256": "a436b53b10e1a5b6235a5b37a0d9972b243ecb1e174c0db45a206277e4dd128d"
+    },
+    {
+      "relativePath": "user-tools-user/settings/panels.json",
+      "bytes": 915,
+      "sha256": "ec77a370d9bb55e6f84809227d0a6446ab50ffda46ca2223d303068ec6d8d109"
+    },
+    {
+      "relativePath": "user-tools-user/settings/panels.previous.json",
+      "bytes": 916,
+      "sha256": "6d453a605ee515fa75bacf1878255aaba9e36185d8d3567140745bca031ed151"
+    },
+    {
+      "relativePath": "user-tools-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "user-tools-user/settings/views.json",
+      "bytes": 354,
+      "sha256": "32ef54bcf7dc41a38cf14559c2028bf2383b4a39dd53205cff27191a78aaf6dd"
+    },
+    {
+      "relativePath": "user-tools-user/settings/workspace-before-apply.json",
+      "bytes": 301161,
+      "sha256": "25dec434c21b2cf0724dadfc7b08d45da6bc2fbd4901293d27b4d1609c1ce01a"
+    },
+    {
+      "relativePath": "user-tools-user/settings/workspaces.json",
+      "bytes": 299345,
+      "sha256": "e606d327bfd2176191827a1896f0f9898985a36e8b1d60926aa01de50d834f87"
+    },
+    {
+      "relativePath": "user-tools-user/work-time/f32d8db8e5d657b72a6adf9757857233e41042125b1a9407c77abe2783ab2b71.json",
+      "bytes": 279,
+      "sha256": "3aa98576a2572bc4b02e3f199e24e759a2b0a4636fd0b5feb94814588d437f59"
+    },
+    {
+      "relativePath": "user-tools-user/work-time/f32d8db8e5d657b72a6adf9757857233e41042125b1a9407c77abe2783ab2b71.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "vector-cleanup-app.drawer",
+      "bytes": 4200,
+      "sha256": "b4c403690d919b67e008411f1ced0b660846f1e0a3f0b67d2750889ec5cd6eb8"
+    },
+    {
+      "relativePath": "vector-command.drawer",
+      "bytes": 11692,
+      "sha256": "8141c7155bbabe38436139caeddda4ef7ef6a509072b5bdb5c037c76f04df105"
+    },
+    {
+      "relativePath": "vector-command.drawer.drawer-last-good",
+      "bytes": 8849,
+      "sha256": "d9f7ec3478ac365f3575c730dc53e59b642996b3de37efcd26a4a32ce7adc2d7"
+    },
+    {
+      "relativePath": "vector-creation.drawer",
+      "bytes": 4879,
+      "sha256": "0d1883dc974b2fe37fa15f1da7fce7e5c7d833990b9a95f569c0d48538845f6c"
+    },
+    {
+      "relativePath": "vector-creation.drawer.drawer-last-good",
+      "bytes": 5612,
+      "sha256": "e80ec7b83fb27126d099796227013cca301a157f68effd306a5c77a34d17e94d"
+    },
+    {
+      "relativePath": "vector-device-input.drawer",
+      "bytes": 17444,
+      "sha256": "a4e91f7de6a9ad985a2d3262cd58114f07a58d9c3fa903b92b0e230b5376c92e"
+    },
+    {
+      "relativePath": "vector-edit-selection.drawer",
+      "bytes": 4307,
+      "sha256": "24779cb690aebf0e7b9e10b852983258b8fc59ded2983eaa26b3a627cad3861f"
+    },
+    {
+      "relativePath": "vector-edit.drawer",
+      "bytes": 5511,
+      "sha256": "ed5b364658b8a893e9ce439870dd494f340040c6a493c332395121cb2271b8b3"
+    },
+    {
+      "relativePath": "vector-edit.drawer.drawer-unverified-198d00f693a414c64ddfadb5a3f79533f8e0ccbbcc83d67d3ef425d837a238d2",
+      "bytes": 5511,
+      "sha256": "198d00f693a414c64ddfadb5a3f79533f8e0ccbbcc83d67d3ef425d837a238d2"
+    },
+    {
+      "relativePath": "vector-edit.drawer.drawer-unverified-ed8299498721a8f639eefc44266e1c00a4f8e1b9b42d0640740d583de027fe92",
+      "bytes": 5482,
+      "sha256": "ed8299498721a8f639eefc44266e1c00a4f8e1b9b42d0640740d583de027fe92"
+    },
+    {
+      "relativePath": "vector-edited-1.drawer",
+      "bytes": 17407,
+      "sha256": "bde21d102b0c2366c7d5923e89ac2c191acaf7e38879f21843ebf1895364a56d"
+    },
+    {
+      "relativePath": "vector-edited-3.drawer",
+      "bytes": 17407,
+      "sha256": "84b58480d91fbeefa814d93626024b856da935065d83c10de80b524bd4144299"
+    },
+    {
+      "relativePath": "vector-erase-pressure.drawer",
+      "bytes": 5420,
+      "sha256": "7ccb14cc11c1f929d871214473c9a058574ec391f6e47421c32f18c499c52caa"
+    },
+    {
+      "relativePath": "vector-eraser-input.drawer",
+      "bytes": 5632,
+      "sha256": "7fec9fba7827199fc119e92a59f36fe195209848d0c4879afb894fde3b06bedb"
+    },
+    {
+      "relativePath": "vector-eraser-workspace.json",
+      "bytes": 286701,
+      "sha256": "85a0630432ba127f41b240fe8f5a03f95f08fcbd623228ee89213ba768529036"
+    },
+    {
+      "relativePath": "vector-material-transform.drawer",
+      "bytes": 1756,
+      "sha256": "42507895767cd004845c3d4928a73df174ca67107312e74f37e00e7b38810376"
+    },
+    {
+      "relativePath": "vector-material-transform.drawer.drawer-last-good",
+      "bytes": 1756,
+      "sha256": "42507895767cd004845c3d4928a73df174ca67107312e74f37e00e7b38810376"
+    },
+    {
+      "relativePath": "vector-node-input-AddNode.drawer",
+      "bytes": 5917,
+      "sha256": "6bffafb0249117cf427e0da146a76e72e15872cdf3ad671abc50e2536b37b7c6"
+    },
+    {
+      "relativePath": "vector-node-input-CornerNode.drawer",
+      "bytes": 7842,
+      "sha256": "3af9df3e36c12e2b45396687f121fc269e06ce5f79a48ffe4ccf0adfcd1c7e85"
+    },
+    {
+      "relativePath": "vector-node-input-DeleteNode.drawer",
+      "bytes": 7418,
+      "sha256": "9c35c3d75616bfa5d22c6681d47df42a643c5356ea557cdaa5e982637dd95993"
+    },
+    {
+      "relativePath": "vector-node-input-SmoothNode.drawer",
+      "bytes": 10000,
+      "sha256": "ed6e8a56214381839be0a3dada7f2906e0203294ccab3faa28a0d482b5f4c729"
+    },
+    {
+      "relativePath": "vector-nodes.drawer",
+      "bytes": 5705,
+      "sha256": "5a9f736e5cfd0cde834613b7015590aac8b59ff7a769e646480ff4124b68b785"
+    },
+    {
+      "relativePath": "vector-overlay-workspace.json",
+      "bytes": 286702,
+      "sha256": "a6a40c78beac8ab684ac33a6b483b9652cee6ad346bb83f99dd53d3d62528580"
+    },
+    {
+      "relativePath": "vector-push-tool.drawer",
+      "bytes": 7320,
+      "sha256": "d6039a4b827458e78b6f55460f7fe3a1c1ab2552042223921387c2926a8ad89a"
+    },
+    {
+      "relativePath": "vector-redraw-tool.drawer",
+      "bytes": 5347,
+      "sha256": "4473513ec296812713e54b00d2c227929d3c9dcc8a43a7ce52bc30c7318e2fd0"
+    },
+    {
+      "relativePath": "vector-refine.drawer",
+      "bytes": 5040,
+      "sha256": "c11972848a1167391b3e57b9bee088896fc80bccbdaa22c3f4f82912c8bb05a9"
+    },
+    {
+      "relativePath": "vector-scope.drawer",
+      "bytes": 21600,
+      "sha256": "7c9e4b178db18f5dea2f2ac2c80d32af2939615f5f33b8df04cf3a06f2c2cfad"
+    },
+    {
+      "relativePath": "vector-tip-Diamond.drawer",
+      "bytes": 5678,
+      "sha256": "594346b9884a6c6002a1b932946f99b5c6ba154f91a1312773e8b5d58a8a6a82"
+    },
+    {
+      "relativePath": "vector-tip-Flat.drawer",
+      "bytes": 5677,
+      "sha256": "8522935b42b2f7e74a2d4f0202c29b158131f9af5c22dce763ea92197bcacd85"
+    },
+    {
+      "relativePath": "vector-tip-Round.drawer",
+      "bytes": 5724,
+      "sha256": "f9e627abcae22849ca471180aa1b0619dc920c85d04fb7da8dd61fbc7144b277"
+    },
+    {
+      "relativePath": "vector-tip-Square.drawer",
+      "bytes": 5676,
+      "sha256": "e4f246001270fd6711c564ec2c6cb331497313443da2e84b1685757ec7ecc32d"
+    },
+    {
+      "relativePath": "velocity-opacity.drawer",
+      "bytes": 6474,
+      "sha256": "5bc8fadcf2cd1f94910e190abd6b087892f23d65902a7aafc0abeef1835de6fc"
+    },
+    {
+      "relativePath": "velocity-user/settings/preferences.txt",
+      "bytes": 20,
+      "sha256": "d6e3574f3f5c50f46b852b08c5eb49800f5043d3cf39e1448a2c7a923f3ec081"
+    },
+    {
+      "relativePath": "velocity-user/settings/workspace-before-apply.json",
+      "bytes": 286657,
+      "sha256": "69f8f4fe4b8991c3b205fb56c8f58c2f82a2b6527a5a35b8d4aac85768a887f9"
+    },
+    {
+      "relativePath": "velocity-user/settings/workspaces.json",
+      "bytes": 286797,
+      "sha256": "6c46cdbf0172d84de95c89256378cbad86d9caeef10830f52e31a1700bebdd43"
+    },
+    {
+      "relativePath": "visible-copy.drawer",
+      "bytes": 1079,
+      "sha256": "1139c8e376fa7fdc876773bb5dc99a4b90b540c3bacfe50dbccae477f2696ebe"
+    },
+    {
+      "relativePath": "visible-copy.drawer.drawer-last-good",
+      "bytes": 983,
+      "sha256": "e5692c66c94540d2263ab40649abfa64f3940d581d1a26dcfff9d2916f4f24fb"
+    },
+    {
+      "relativePath": "wand-base-false.drawer",
+      "bytes": 1525,
+      "sha256": "1593262325ce77f618748b82282f9895691dd4fdf4c36bb15f3790556bf7815e"
+    },
+    {
+      "relativePath": "wand-base-true.drawer",
+      "bytes": 1525,
+      "sha256": "97a790f4951d10f05e30b4616890b3809ee158459ea73548ae3116f43d7d20a3"
+    },
+    {
+      "relativePath": "work-page-0.drawer",
+      "bytes": 154804,
+      "sha256": "abff366ceba0ea84cf58a798ca14e4fe217a6e8b6c86af1eb0b96d0db83dbe73"
+    },
+    {
+      "relativePath": "work-page-1.drawer",
+      "bytes": 154803,
+      "sha256": "8132aac933d9dddfb5273ddaa21a77c8a5967daa96933c403901bfd5da4053ba"
+    },
+    {
+      "relativePath": "work-time/92555e9cf29a8103b86da0fcde54ad5d31d7990a37b39811b21f6aa04303f690.json",
+      "bytes": 276,
+      "sha256": "0a67340f46d01690cfd6ca89572665131859bbfc1bf65b1124084abd3797a375"
+    },
+    {
+      "relativePath": "work-time/92555e9cf29a8103b86da0fcde54ad5d31d7990a37b39811b21f6aa04303f690.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "work-time/a446f4275451c0101afdb35e92bed4219750d1081e1a3f6a41c2ba42f019944c.json",
+      "bytes": 276,
+      "sha256": "728439617c62bb6cc4cb7a0967da70021e78a040b26390ddd93eda174cf206c2"
+    },
+    {
+      "relativePath": "work-time/a446f4275451c0101afdb35e92bed4219750d1081e1a3f6a41c2ba42f019944c.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "work-time/d30fe488f6d27e7010b8c0ed9ed215539dbfb83ff11c564b654ea4fc0ea70ea7.json",
+      "bytes": 447,
+      "sha256": "5b7cbfed5c1167ee07c18c35b9f12db5f32888b849b8fe9353166224cce8b875"
+    },
+    {
+      "relativePath": "work-time/d30fe488f6d27e7010b8c0ed9ed215539dbfb83ff11c564b654ea4fc0ea70ea7.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relativePath": "world-file.drawer",
+      "bytes": 610,
+      "sha256": "455637d9fbfa739ba780a687efb734ada972688427b2700ca6deab9716c6ed2c"
+    }
+  ],
+  "diagnostics": "Explicit smoke harness only; API trace omits arguments/pixels/user paths",
+  "limitations": [
+    "Named Windows user-mode API entries only; direct syscalls and unrelated OS/vendor services are outside observation",
+    "Only this finite scenario and descendants launched under its debug object are observed",
+    "No native target files or host clock changed; RET stub and breakpoints exist only in owned child memory"
+  ]
+}
