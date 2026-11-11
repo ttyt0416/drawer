@@ -53,6 +53,9 @@ impl Drawer {
         {
             return Err("Open documents exceed the proposed limits; close them or choose larger limits. Existing settings preserved".into());
         }
+        for d in &self.documents {
+            d.can_configure_history(next.history)?;
+        }
         let root = next.root(&storage).to_owned();
         let free = drawer_platform::file_browser::available_space(&root)?;
         core::probe(&root, free)?;
@@ -98,6 +101,10 @@ impl Drawer {
             ui.horizontal(|ui|{ui.label("Working memory MiB (64–256)");ui.add(egui::DragValue::new(&mut self.resources.draft.ram_mib).range(64..=256));});
             ui.horizontal(|ui|{ui.label("Maximum canvas dimension (1–32768)");ui.add(egui::DragValue::new(&mut self.resources.draft.max_dimension).range(1..=32768));});
             ui.horizontal(|ui|{ui.label("Recovery storage MiB (16–4096)");ui.add(egui::DragValue::new(&mut self.resources.draft.recovery_mib).range(16..=4096));});
+            ui.horizontal(|ui|{ui.label("Undo steps (1–1000)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.steps).range(1..=1000));});
+            ui.horizontal(|ui|{ui.label("History MiB (1–64)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.memory_mib).range(1..=64));});
+            ui.horizontal(|ui|{ui.label("Explicit command group interval ms (0–5000;0 disables)");ui.add(egui::DragValue::new(&mut self.resources.draft.history.group_ms).range(0..=5000));});
+            ui.small("Only consecutive updates of one explicit command may merge. Separate strokes, layer changes and document switches remain separate. Oldest Undo records are discarded; Redo alone above a new limit prevents applying it.");
             ui.label(format!("Scratch: {}",self.resources.draft.scratch.as_deref().map_or("Application data".into(),|p|p.display().to_string())));
             if ui.button("Choose local scratch folder…").clicked()&&let Some(p)=rfd::FileDialog::new().pick_folder(){self.resources.draft.scratch=Some(p);}
             if ui.button("Use application data folder").clicked(){self.resources.draft.scratch=None;}

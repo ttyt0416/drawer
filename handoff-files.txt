@@ -1223,3 +1223,7 @@ crates/drawer-core/src/resource_settings.rs
 crates/drawer-core/src/resource_settings_verify.rs
 crates/drawer-app/src/resource_settings.rs
 docs/process/resource-settings.md
+
+crates/drawer-core/src/history_limits.rs
+crates/drawer-core/src/history_limits_verify.rs
+docs/process/history-limits.md

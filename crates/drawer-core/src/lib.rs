@@ -668,3 +668,5 @@ pub mod resource_plan_verify;
 pub use history::navigation as history_navigation;
 
 pub mod resource_settings;
+
+pub use history::limits as history_limits;

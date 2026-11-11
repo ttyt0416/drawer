@@ -131,6 +131,11 @@ impl Drawer {
         {
             self.finish_stroke();
         }
+        if self.active_tab != Some(index) {
+            for d in &mut self.documents {
+                d.history_barrier();
+            }
+        }
         self.settle_work_time();
         self.sync_tool_properties();
         self.sync_active_view();

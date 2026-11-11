@@ -76,6 +76,7 @@ impl Document {
     }
     /// Confirmation belongs to the UI. This releases records without changing the drawing identity.
     pub fn clear_session_history(&mut self) {
+        self.history_barrier();
         self.history.undo.clear();
         self.history.undo.shrink_to_fit();
         self.history.redo.clear();

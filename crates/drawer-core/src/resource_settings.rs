@@ -8,6 +8,7 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Settings {
+    pub history: crate::history_limits::Settings,
     pub version: u32,
     pub scratch: Option<PathBuf>,
     pub retained: Vec<PathBuf>,
@@ -18,6 +19,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            history: Default::default(),
             version: 1,
             scratch: None,
             retained: vec![],
@@ -29,7 +31,8 @@ impl Default for Settings {
 }
 impl Settings {
     pub fn valid(&self) -> Result<(), String> {
-        if self.version != 1
+        if !self.history.valid()
+            || self.version != 1
             || !(64..=256).contains(&self.ram_mib)
             || !(1..=32768).contains(&self.max_dimension)
             || !(16..=4096).contains(&self.recovery_mib)

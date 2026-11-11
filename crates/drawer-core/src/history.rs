@@ -34,6 +34,7 @@ enum EditKind {
 }
 #[derive(Clone)]
 struct Edit {
+    cached: Option<usize>,
     label: Option<String>,
     group: Option<u64>,
     kind: EditKind,
@@ -43,32 +44,33 @@ struct Edit {
 impl Edit {
     fn bytes(&self) -> usize {
         self.label.as_ref().map_or(0, String::len)
-            + match &self.kind {
-                EditKind::Multi { layers, scene } => {
-                    layers
-                        .iter()
-                        .map(|(_, p)| p.capacity() * std::mem::size_of::<PixelChange>())
-                        .sum::<usize>()
-                        + std::mem::size_of::<Self>()
-                        + scene
-                            .as_ref()
-                            .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
-                }
-                EditKind::Pixels { changes, scene, .. } => {
-                    changes.capacity() * std::mem::size_of::<PixelChange>()
-                        + std::mem::size_of::<Self>()
-                        + scene
-                            .as_ref()
-                            .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
-                }
-                EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
-                EditKind::State { before, after } => {
-                    crate::tiled_raster::history_bytes(before, after)
-                }
-                EditKind::Scene { before, after } => {
-                    before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
-                }
+            + self.cached.unwrap_or_else(|| self.kind_bytes())
+    }
+    fn kind_bytes(&self) -> usize {
+        match &self.kind {
+            EditKind::Multi { layers, scene } => {
+                layers
+                    .iter()
+                    .map(|(_, p)| p.capacity() * std::mem::size_of::<PixelChange>())
+                    .sum::<usize>()
+                    + std::mem::size_of::<Self>()
+                    + scene
+                        .as_ref()
+                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
             }
+            EditKind::Pixels { changes, scene, .. } => {
+                changes.capacity() * std::mem::size_of::<PixelChange>()
+                    + std::mem::size_of::<Self>()
+                    + scene
+                        .as_ref()
+                        .map_or(0, |(a, b)| a.size_bytes() + b.size_bytes())
+            }
+            EditKind::Pixel { .. } => std::mem::size_of::<Self>(),
+            EditKind::State { before, after } => crate::tiled_raster::history_bytes(before, after),
+            EditKind::Scene { before, after } => {
+                before.size_bytes() + after.size_bytes() + std::mem::size_of::<Self>()
+            }
+        }
     }
 }
 #[derive(Default, Clone)]
@@ -83,6 +85,9 @@ pub(crate) struct History {
     save_serial: u64,
     saved_serial: u64,
     inflight: std::collections::BTreeMap<u64, u64>,
+    limits: limits::Settings,
+    last_group: Option<std::time::Instant>,
+    pruned: u64,
 }
 impl History {
     pub(crate) fn mark_saved(&mut self) {
@@ -93,21 +98,24 @@ impl History {
     }
     fn push(&mut self, kind: EditKind) {
         self.next += 1;
-        let edit = Edit {
+        let mut edit = Edit {
+            cached: None,
             label: None,
             group: None,
             kind,
             from: self.current,
             to: self.next,
         };
+        edit.cached = Some(edit.kind_bytes());
+        self.last_group = None;
         self.current = edit.to;
         self.redo.clear();
         self.undo.push(edit);
-        while self.undo.len() > 100
-            || self.undo.iter().map(Edit::bytes).sum::<usize>()
-                > crate::document::DEFAULT_DOCUMENT_BUDGET / 4
+        while self.undo.len() > self.limits.steps as usize
+            || self.undo.iter().map(Edit::bytes).sum::<usize>() > self.limits.bytes()
         {
             self.undo.remove(0);
+            self.pruned = self.pruned.saturating_add(1);
         }
     }
 }
@@ -211,6 +219,7 @@ impl Document {
         }
         let kind = EditKind::Multi { layers, scene };
         let bytes = Edit {
+            cached: None,
             label: None,
             group: None,
             kind,
@@ -407,23 +416,23 @@ impl Document {
         let budget = self
             .working_budget
             .saturating_sub(self.allocation_bytes())
-            .min(crate::document::DEFAULT_DOCUMENT_BUDGET / 4);
-        while self
-            .history
-            .undo
-            .iter()
-            .chain(&self.history.redo)
-            .map(Edit::bytes)
-            .sum::<usize>()
-            > budget
+            .min(self.history.limits.bytes());
+        while self.history.undo.len() + self.history.redo.len() > self.history.limits.steps as usize
+            || self
+                .history
+                .undo
+                .iter()
+                .chain(&self.history.redo)
+                .map(Edit::bytes)
+                .sum::<usize>()
+                > budget
         {
-            if !self.history.undo.is_empty() {
-                self.history.undo.remove(0);
-            } else if !self.history.redo.is_empty() {
-                self.history.redo.remove(0);
-            } else {
+            if self.history.undo.is_empty() {
+                self.resource_error=Some("Retained Redo exceeds the available history memory; resolve or explicitly clear it before further work".into());
                 break;
             }
+            self.history.undo.remove(0);
+            self.history.pruned = self.history.pruned.saturating_add(1);
         }
     }
     fn history_changed(&mut self) {
@@ -585,6 +594,10 @@ impl Document {
         }
         after.restore(self);
         if group.is_some()
+            && self.history.limits.group_ms > 0
+            && self.history.last_group.is_some_and(|t| {
+                t.elapsed().as_millis() <= u128::from(self.history.limits.group_ms)
+            })
             && self.history.redo.is_empty()
             && self.history.saved != Some(self.history.current)
             && !self
@@ -605,7 +618,10 @@ impl Document {
                 self.history.current = edit.from;
             } else {
                 **previous = after;
+                last.cached = None;
+                last.cached = Some(last.kind_bytes());
             }
+            self.history.last_group = Some(std::time::Instant::now());
             self.history_changed();
             return Ok(true);
         }
@@ -615,6 +631,7 @@ impl Document {
         });
         if let Some(last) = self.history.undo.last_mut() {
             last.group = group;
+            self.history.last_group = group.map(|_| std::time::Instant::now());
         }
         self.history_changed();
         Ok(true)
@@ -667,6 +684,7 @@ impl Document {
         Ok(())
     }
     pub fn undo(&mut self) -> bool {
+        self.history_barrier();
         let Some(edit) = self.history.undo.pop() else {
             return false;
         };
@@ -732,6 +750,7 @@ impl Document {
         true
     }
     pub fn redo(&mut self) -> bool {
+        self.history_barrier();
         let Some(edit) = self.history.redo.pop() else {
             return false;
         };
@@ -805,6 +824,7 @@ impl Document {
         let count = crate::file_browser::remap_scene(&mut self.scene, old, new);
         let mut historical = 0;
         for edit in self.history.undo.iter_mut().chain(&mut self.history.redo) {
+            edit.cached = None;
             match &mut edit.kind {
                 EditKind::State { before, after } => {
                     historical += crate::file_browser::remap_scene(&mut before.scene, old, new);
@@ -822,6 +842,9 @@ impl Document {
                 }
                 EditKind::Pixel { .. } => {}
             }
+        }
+        for edit in self.history.undo.iter_mut().chain(&mut self.history.redo) {
+            edit.cached = Some(edit.kind_bytes());
         }
         if count + historical > 0 {
             self.history.saved = None;
@@ -871,3 +894,6 @@ mod tests {
 
 #[path = "history_navigation.rs"]
 pub mod navigation;
+
+#[path = "history_limits.rs"]
+pub mod limits;

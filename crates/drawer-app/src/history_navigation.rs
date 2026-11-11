@@ -34,6 +34,7 @@ impl Drawer {
             egui::Window::new("Document history").open(&mut open).default_width(350.).show(ctx,|ui|{
             ui.label("Session history · saving writes only the current state. A new edit drops the redo branch.");
             if let Some(n)=self.active{let d=&self.documents[n];let busy=self.drawing.pending();
+                ui.small(format!("History {} bytes / {}MiB; {} oldest Undo entries removed by limits",d.history_bytes(),d.history_limits().memory_mib,d.history_pruned()));
                 egui::ScrollArea::vertical().max_height(320.).show(ui,|ui|{for e in d.history_entries(){let text=format!("{} {}{}",if e.current{"●"}else{"○"},e.label,if e.redo{" (redo branch)"}else{""});if ui.add_enabled(!busy,egui::Button::new(text).selected(e.current)).clicked(){jump=Some((d.id,e.token));}}});
                 let r=ui.add_enabled(!busy,egui::Button::new("Clear Undo/Redo history…"));self.history_navigation.clear=Some(r.rect);if r.clicked(){clear=Some(d.id);}
             }else{ui.label("Open a document to view its history.");}
@@ -149,6 +150,63 @@ mod tests {
         std::fs::create_dir(&dir).unwrap();
         let r = super::run(&dir);
         std::fs::remove_dir_all(dir).unwrap();
+        r.unwrap();
+    }
+}
+
+pub(super) fn limits_smoke(root: &std::path::Path) -> Result<(), String> {
+    drawer_core::history_limits::verify::run()?;
+    std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
+    let dir = root.join("history-limits-ui");
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        let storage = UserStorage::at(dir.join("data")).map_err(|e| e.to_string())?;
+        let settings = drawer_core::resource_settings::Settings {
+            history: drawer_core::history_limits::Settings {
+                steps: 2,
+                memory_mib: 1,
+                group_ms: 0,
+            },
+            ..Default::default()
+        };
+        settings.save(&storage).map_err(|e| e.to_string())?;
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None).with_storage(storage);
+        app.create_canvas(CanvasSpec {
+            width: 2,
+            height: 2,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .map_err(|e| e.to_string())?;
+        input_replay::frame(&ctx, &mut app, 0.1, vec![]);
+        for n in 1..=4 {
+            app.documents[0].edit_pixel(0, 0, 0, [n, 0, 0, 255]);
+        }
+        let before = app.documents[0].snapshot();
+        if app.documents[0].history_counts() != (2, 0) || app.documents[0].history_pruned() != 2 {
+            return Err("Persisted limits were not applied".into());
+        }
+        app.documents[0].undo();
+        app.documents[0].redo();
+        if app.documents[0].snapshot() != before {
+            return Err("Pruned history changed current picture".into());
+        }
+        drop(app);
+        Ok(())
+    })();
+    std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    result
+}
+#[cfg(test)]
+mod limits_tests {
+    #[test]
+    fn persisted_limits_apply_to_session() {
+        let root =
+            std::env::temp_dir().join(format!("drawer-history-limits-ui-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let r = super::limits_smoke(&root);
+        std::fs::remove_dir_all(root).unwrap();
         r.unwrap();
     }
 }
