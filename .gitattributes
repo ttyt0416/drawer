@@ -4,3 +4,5 @@ docs/licenses/** whitespace=-trailing-space
 
 # Keep the exact bytes recorded in the pinned public dependency inventory.
 vendor/ufbx/** -text -eol whitespace=cr-at-eol
+
+vendor/moxcms/** -text -eol whitespace=cr-at-eol

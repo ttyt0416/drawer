@@ -127,7 +127,7 @@ pub fn forget(
     trash(&index.root)?;
     let ticket = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|error| error.duration())
         .as_nanos();
     let base = format!("{}-{ticket}", entry.sha256);
     let movement = Movement {

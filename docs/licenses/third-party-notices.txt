@@ -25171,6 +25171,9 @@ moxcms 0.8.1
 https://crates.io/crates/moxcms/0.8.1
 Declared license: BSD-3-Clause OR Apache-2.0
 
+Local modification: Signed UTC profile creation dates avoid recursive Default/now stack overflow before1970; bounded civil metadata dates and deterministic calendar cases.
+Upstream source and exact patched file hashes: COMPONENTS.json / local_patch.
+
 --- LICENSE-APACHE.md ---
                                  Apache License
                            Version 2.0, January 2004

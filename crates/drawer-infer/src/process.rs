@@ -12,7 +12,7 @@ impl Scratch {
         let base = base.canonicalize().map_err(|e| e.to_string())?;
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
+            .unwrap_or_else(|error| error.duration())
             .as_nanos();
         let path = base.join(format!("drawer-infer-{}-{stamp}", std::process::id()));
         std::fs::create_dir(&path).map_err(|e| e.to_string())?;

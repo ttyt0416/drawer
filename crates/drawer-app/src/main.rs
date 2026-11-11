@@ -628,8 +628,9 @@ impl Drawer {
             commands_button: None,
             view_session: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos() as u64,
+                .unwrap_or_else(|error| error.duration())
+                .as_nanos() as u64
+                ^ u64::from(std::process::id()).rotate_left(32),
             #[cfg(test)]
             new_button: None,
             #[cfg(test)]

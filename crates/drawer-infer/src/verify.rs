@@ -10,7 +10,7 @@ impl Temp {
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_else(|error| error.duration())
                     .as_nanos()
             ));
             match std::fs::create_dir(&path) {

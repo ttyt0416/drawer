@@ -52,7 +52,7 @@ impl Scratch {
         let base = base.canonicalize().map_err(|e| e.to_string())?;
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
+            .unwrap_or_else(|error| error.duration())
             .as_nanos();
         for n in 0..16 {
             let path = base.join(format!("drawer-acquire-{}-{stamp}-{n}", std::process::id()));

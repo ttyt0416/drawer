@@ -353,7 +353,7 @@ impl Plan {
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(err)?
+                .unwrap_or_else(|error| error.duration())
                 .as_nanos()
         );
         let staging = parent.join(format!(".drawer-move-{nonce}"));
