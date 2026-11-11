@@ -1388,3 +1388,7 @@ scripts/package-manifest.py
 scripts/test-local-update.ps1
 docs/process/local-update.md
 docs/process/local-update-evidence.json
+crates/drawer-platform/src/local_errors.rs
+scripts/test-network-attempts.py
+docs/process/network-attempts.md
+docs/process/network-attempts-evidence.json

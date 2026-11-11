@@ -312,4 +312,7 @@ pub mod book_print;
 #[allow(unsafe_code)]
 pub mod audio;
 
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod local_errors;
 pub mod work_clock;
