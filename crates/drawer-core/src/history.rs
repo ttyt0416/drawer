@@ -868,3 +868,6 @@ mod tests {
         assert_ne!(a.id, b.id);
     }
 }
+
+#[path = "history_navigation.rs"]
+pub mod navigation;

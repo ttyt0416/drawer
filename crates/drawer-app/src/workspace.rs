@@ -627,6 +627,9 @@ impl Drawer {
                 {
                     self.execute_command(ui.ctx(), "redo");
                 }
+                if ui.button("History…").clicked() {
+                    self.history_navigation.open = true;
+                }
                 if crate::help::button(ui, "Duplicate view", "files").clicked() {
                     self.duplicate_view();
                 }

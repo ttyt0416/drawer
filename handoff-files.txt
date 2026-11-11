@@ -1213,3 +1213,8 @@ crates/drawer-core/src/resource_plan.rs
 crates/drawer-core/src/resource_plan_verify.rs
 crates/drawer-app/src/resource_limits.rs
 docs/process/resource-limits.md
+
+crates/drawer-core/src/history_navigation.rs
+crates/drawer-core/src/history_navigation_verify.rs
+crates/drawer-app/src/history_navigation.rs
+docs/process/history-navigation.md

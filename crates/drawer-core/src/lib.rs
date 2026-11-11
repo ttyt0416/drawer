@@ -664,3 +664,5 @@ pub mod resource_plan;
 
 #[path = "resource_plan_verify.rs"]
 pub mod resource_plan_verify;
+
+pub use history::navigation as history_navigation;

@@ -343,3 +343,5 @@ if($smokeResult -notmatch 'sparse_raster=true'){throw 'Sparse raster verificatio
 
 
 if($smokeResult -notmatch 'resource_limits=true'){throw 'Resource admission verification failed'}
+
+if($smokeResult -notmatch 'history_navigation=true'){throw 'History navigation verification failed'}
