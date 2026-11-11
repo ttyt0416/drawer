@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "executableSha256": "548d2295b30985b2dd9ebb517179233ea28aefa3672fcbc2936ce4be8aa6c2fb",
+  "registrySha256": "181179cba71a62a0122279a43073b3192bdd68585773510c35e45c9cc64047dc",
+  "relativeRegistrations": true,
+  "models": [
+    {
+      "task": "Body",
+      "manifestSha256": "dc85c044668f39c8608e9b72e0e70acc3ca79265cb6ef470c0aded53750125d2",
+      "weightsBytes": 2858,
+      "weightsSha256": "1288ece33db67f332681a674e4a4ec96d24eddfad4806b101a407489b3d44069",
+      "licenseSha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017",
+      "licenseIdentifier": "MIT"
+    },
+    {
+      "task": "Denoise",
+      "manifestSha256": "cd763d861826c6a041438ae7264b1cc6c4f173a60a05c6e60d120df71d896586",
+      "weightsBytes": 460,
+      "weightsSha256": "3416e682c108fe515ef500e44e4cd9d170d03230318866db33296fcdd3243ba8",
+      "licenseSha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017",
+      "licenseIdentifier": "MIT"
+    },
+    {
+      "task": "Hand",
+      "manifestSha256": "148e6e1d51a294fb8043306819c270c503acbf140b6c36d95110b1afdbb51859",
+      "weightsBytes": 3482,
+      "weightsSha256": "c352fd4db6e7cf8fe09cb9b3bba5b1fda3b60ee1f5c7eaa6048b073e45b2d9b0",
+      "licenseSha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017",
+      "licenseIdentifier": "MIT"
+    },
+    {
+      "task": "HintColor",
+      "manifestSha256": "ef558ce630a87f0bcaf424e6bc773cd6ab108e4f4b1142ac9ca8b73c6baa6943",
+      "weightsBytes": 201,
+      "weightsSha256": "49399686f173814408e3fa0d6fe978f8ade214259f117e4eadf80ee01b90a116",
+      "licenseSha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017",
+      "licenseIdentifier": "MIT"
+    },
+    {
+      "task": "Upscale",
+      "manifestSha256": "98f5d9a97edde36f983be86d2958775e6278033176ab14997b7b1b5c5ca8fa19",
+      "weightsBytes": 255,
+      "weightsSha256": "ccc23de765789f76738704164bb3cad2eef61d6f0696f9589b684617df694cab",
+      "licenseSha256": "ceecaef8fb3d99b46d1b69b83f91df357af6d552784ad8f2e9a3aa1528d73017",
+      "licenseIdentifier": "MIT"
+    }
+  ],
+  "consentBeforeCopyAndRun": true,
+  "actualCpuHelperAndUiReplay": true,
+  "originalDrawingAndUndoPreserved": true,
+  "scratchResidue": 0,
+  "limits": "Self-authored deterministic ONNX fixtures exercise adapter behavior; no third-party weights are shipped. Fresh offline-PC272 remains separate."
+}

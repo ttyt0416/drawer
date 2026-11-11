@@ -11,6 +11,7 @@ use std::{io::Read, path::Path};
 use tract_onnx::{pb, prelude::*};
 mod process;
 pub use process::execute;
+pub mod bundle;
 pub mod comparison;
 pub mod fixtures;
 #[cfg(test)]
@@ -39,6 +40,7 @@ pub struct Manifest {
 pub struct Request {
     pub manifest: String,
     pub task: Task,
+    pub manifest_sha256: String,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -48,13 +50,16 @@ pub struct Reply {
     pub error: Option<String>,
 }
 pub fn read_bytes(path: &Path, max: usize) -> Result<Vec<u8>, String> {
-    let f = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if !f.metadata().map_err(|e| e.to_string())?.is_file()
-        || f.metadata().map_err(|e| e.to_string())?.len() > max as u64
-    {
+    let path = drawer_core::file_browser::checked(path)?;
+    let f = std::fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let metadata = f.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() > max as u64 {
         return Err("Local model file exceeds memory limit".into());
     }
     let mut bytes = vec![];
+    bytes
+        .try_reserve_exact(metadata.len() as usize)
+        .map_err(|_| "Model file allocation refused")?;
     f.take(max as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
@@ -66,15 +71,40 @@ pub fn read_bytes(path: &Path, max: usize) -> Result<Vec<u8>, String> {
 pub fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
+struct Inspected {
+    manifest: Manifest,
+    raw_manifest: Vec<u8>,
+    manifest_sha256: String,
+    license: String,
+    weights: Vec<u8>,
+}
 pub fn inspect(path: &Path, task: Task) -> Result<(Manifest, Vec<u8>), String> {
+    let b = inspect_data(path, task)?;
+    Ok((b.manifest, b.weights))
+}
+fn inspect_data(path: &Path, task: Task) -> Result<Inspected, String> {
     let path = drawer_core::file_browser::checked(path).map_err(|e| format!("{GUIDE} ({e})"))?;
     if !path.is_file() {
         return Err(GUIDE.into());
     }
     let parent = path.parent().ok_or("Missing model folder")?;
-    let m: Manifest = serde_json::from_slice(&read_bytes(&path, 16384)?)
+    let raw_manifest = read_bytes(&path, 16384)?;
+    let manifest_sha256 = hash(&raw_manifest);
+    let m: Manifest = serde_json::from_slice(&raw_manifest)
         .map_err(|e| format!("Invalid model manifest: {e}"))?;
     let text = |s: &str| !s.trim().is_empty() && s.len() <= 512 && !s.chars().any(char::is_control);
+    if [
+        "unknown",
+        "unspecified",
+        "none",
+        "unlicensed",
+        "n/a",
+        "not provided",
+    ]
+    .contains(&m.license.trim().to_lowercase().as_str())
+    {
+        return Err("A confirmed model license identifier and notice are required".into());
+    }
     if m.format != 1
         || m.task != task
         || ![&m.name, &m.version, &m.license, &m.source]
@@ -115,11 +145,19 @@ pub fn inspect(path: &Path, task: Task) -> Result<(Manifest, Vec<u8>), String> {
         Ok(bytes)
     };
     let license = file("LICENSE.txt", 65536, &m.license_sha256)?;
-    if std::str::from_utf8(&license).is_err() || license.iter().all(u8::is_ascii_whitespace) {
+    if std::str::from_utf8(&license).is_err()
+        || std::str::from_utf8(&license).is_ok_and(|s| s.trim_matches('\u{feff}').trim().is_empty())
+    {
         return Err("A nonempty UTF-8 model license is required".into());
     }
-    let bytes = file("weights.onnx", 64 * 1024 * 1024, &m.weights_sha256)?;
-    Ok((m, bytes))
+    let weights = file("weights.onnx", 64 * 1024 * 1024, &m.weights_sha256)?;
+    Ok(Inspected {
+        manifest: m,
+        raw_manifest,
+        manifest_sha256,
+        license: String::from_utf8(license).map_err(|_| "Invalid model license UTF-8")?,
+        weights,
+    })
 }
 fn tensor(t: &pb::TensorProto) -> Result<(), String> {
     if !t.external_data.is_empty()
@@ -244,10 +282,27 @@ pub fn run(
     input: &LocalImage,
     hints: Option<&LocalImage>,
 ) -> Result<Output, String> {
+    run_bound(path, task, input, hints, None)
+}
+fn run_bound(
+    path: &Path,
+    task: Task,
+    input: &LocalImage,
+    hints: Option<&LocalImage>,
+    approved: Option<&str>,
+) -> Result<Output, String> {
     if !core::valid_image(input, core::MAX_INPUT) || input.pixels.iter().all(|p| p[3] == 0) {
         return Err("Choose a nontransparent image within the input memory limit".into());
     }
-    let (m, bytes) = inspect(path, task)?;
+    let bundle = inspect_data(path, task)?;
+    if let Some(expected) = approved
+        && (!bundle::valid_pin(expected) || expected != bundle.manifest_sha256)
+    {
+        return Err(
+            "Model manifest changed after license approval; review and install again".into(),
+        );
+    }
+    let (m, bytes) = (bundle.manifest, bundle.weights);
     if task == Task::HintColor
         && hints.is_none_or(|h| {
             !core::valid_image(h, core::MAX_INPUT)
@@ -419,11 +474,15 @@ pub fn helper(directory: &Path) -> Result<(), String> {
         } else {
             None
         };
-        run(
+        if !bundle::valid_pin(&request.manifest_sha256) {
+            return Err("Review and approve the local model license before execution".into());
+        }
+        run_bound(
             Path::new(&request.manifest),
             request.task,
             &input,
             hints.as_ref(),
+            Some(&request.manifest_sha256),
         )
     })
     .unwrap_or_else(|_| {

@@ -67,6 +67,7 @@ try {
     }
     if (Test-Path -LiteralPath (Join-Path $installRoot 'Drawer.exe')) { throw '프로그램 제거 실패' }
     $smokeResult = Get-Content -LiteralPath $receipt -Raw
+    if($smokeResult -notmatch 'local_model_bundles=true'){throw '로컬 모델 라이선스/캐시/실행 확인 실패'}
     if($smokeResult -notmatch 'local_references=true'){throw '로컬 참조 입장 검사/캐시 유지 실패'}
     if($smokeResult -notmatch 'error_reporting_disabled=true'){throw '로컬 오류 보고 억제 실패'}
     if($smokeResult -notmatch 'action_repeat=true'){throw '반복 액션/대기/계속/좌표/회차 취소 검증 실패'}

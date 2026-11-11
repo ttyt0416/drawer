@@ -8,8 +8,9 @@ use std::{
 struct Scratch(std::path::PathBuf);
 impl Scratch {
     fn new(base: &Path) -> Result<Self, String> {
-        std::fs::create_dir_all(base).map_err(|e| e.to_string())?;
-        let base = base.canonicalize().map_err(|e| e.to_string())?;
+        let base = drawer_core::file_browser::new_path(base)?;
+        std::fs::create_dir_all(&base).map_err(|e| e.to_string())?;
+        let base = drawer_core::file_browser::folder(&base)?;
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|error| error.duration())
@@ -50,6 +51,12 @@ pub fn execute(
     timeout: Duration,
 ) -> Result<Output, String> {
     core::checked(cancel)?;
+    if !bundle::valid_pin(&request.manifest_sha256) {
+        return Err("Review and approve the model before execution".into());
+    }
+    let executable = drawer_core::file_browser::checked(executable)?;
+    drawer_core::file_browser::checked(Path::new(&request.manifest))
+        .map_err(|e| format!("{GUIDE} ({e})"))?;
     let scratch = Scratch::new(base)?;
     std::fs::write(
         scratch.0.join("request.json"),

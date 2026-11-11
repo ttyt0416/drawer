@@ -90,9 +90,78 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
             });
         }
         settle(&ctx, &mut app, &mut time);
+        if task == Task::Body {
+            check(
+                app.start_inference(&ctx, true).is_err() && app.local_inference.job.is_none(),
+                "Unapproved model spawned a helper",
+            )?;
+            let rect = app
+                .local_inference
+                .model_review
+                .ok_or("Model review button")?;
+            click(&ctx, &mut app, &mut time, rect);
+            settle(&ctx, &mut app, &mut time);
+            check(
+                app.local_inference
+                    .draft
+                    .as_ref()
+                    .unwrap()
+                    .model_review
+                    .is_some(),
+                &format!("Model review button did not complete: {:?}", app.status),
+            )?;
+            check(
+                app.install_model_bundle().is_err(),
+                "Model copied without license permission",
+            )?;
+            let rect = app
+                .local_inference
+                .model_permission
+                .ok_or("Model permission checkbox")?;
+            click(&ctx, &mut app, &mut time, rect);
+            settle(&ctx, &mut app, &mut time);
+            check(
+                app.local_inference.draft.as_ref().unwrap().allow_model_copy,
+                "Model permission checkbox was not activated",
+            )?;
+            let rect = app
+                .local_inference
+                .model_install
+                .ok_or("Model install button")?;
+            click(&ctx, &mut app, &mut time, rect);
+            settle(&ctx, &mut app, &mut time);
+        } else {
+            app.review_model_bundle()?;
+            app.local_inference.draft.as_mut().unwrap().allow_model_copy = true;
+            app.install_model_bundle()?;
+            settle(&ctx, &mut app, &mut time);
+        }
+        check(
+            app.local_inference
+                .draft
+                .as_ref()
+                .unwrap()
+                .config
+                .approved_manifest
+                .is_some(),
+            &format!(
+                "Reviewed model registration missing: status={:?}, permission={}, review={}, rect={:?}",
+                app.status,
+                app.local_inference.draft.as_ref().unwrap().allow_model_copy,
+                app.local_inference
+                    .draft
+                    .as_ref()
+                    .unwrap()
+                    .model_review
+                    .is_some(),
+                app.local_inference.model_install
+            ),
+        )?;
         let before = app.documents[0].snapshot();
         let counts = app.documents[0].history_counts();
         let r = app.local_inference.input.ok_or("Input button missing")?;
+        let input_layer = ctx.layer_id_at(r.center());
+        let input_fresh = source(&app).ok() == app.local_inference.draft.as_ref().map(|e| e.source);
         click(&ctx, &mut app, &mut time, r);
         wait(&ctx, &mut app, &mut time)?;
         check(
@@ -100,7 +169,20 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
                 .draft
                 .as_ref()
                 .is_some_and(|e| e.input.is_some()),
-            &format!("Input preview failed: {:?}", app.status),
+            &format!(
+                "Input preview failed: task={task:?}, status={:?}, rect={:?}, revision={}/{}, approved={}, fresh={input_fresh}, layer={input_layer:?}",
+                app.status,
+                app.local_inference.input,
+                app.documents[0].revision,
+                app.local_inference.draft.as_ref().unwrap().source.revision,
+                app.local_inference
+                    .draft
+                    .as_ref()
+                    .unwrap()
+                    .config
+                    .approved_manifest
+                    .is_some()
+            ),
         )?;
         if task == Task::Hand {
             let cfg = app.local_inference.draft.as_ref().unwrap().config.clone();
@@ -216,6 +298,9 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
         e.config.task = task;
         e.config.source = InputSource::Comparison;
         e.config.manifest = manifest.to_string_lossy().into_owned();
+        app.review_model_bundle()?;
+        app.local_inference.draft.as_mut().unwrap().allow_model_copy = true;
+        app.install_model_bundle()?;
         app.start_inference(&ctx, false)?;
         wait(&ctx, &mut app, &mut time)?;
         app.start_inference(&ctx, true)?;
@@ -236,12 +321,23 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     }
     // Missing model is a guide, never a simulated inference result.
     app.begin_local_inference()?;
+    app.local_inference
+        .draft
+        .as_mut()
+        .unwrap()
+        .config
+        .approved_manifest = None;
+    app.local_inference.draft.as_mut().unwrap().config.manifest =
+        root.join("missing-manifest.json").display().to_string();
     app.start_inference(&ctx, false)?;
     wait(&ctx, &mut app, &mut time)?;
-    app.start_inference(&ctx, true)?;
-    wait(&ctx, &mut app, &mut time)?;
+    let missing = app
+        .start_inference(&ctx, true)
+        .err()
+        .ok_or("Unapproved missing model started")?;
     check(
-        app.status.as_ref().is_some_and(|s| s.contains("Install"))
+        missing.contains("Install")
+            && app.local_inference.job.is_none()
             && app
                 .local_inference
                 .draft
@@ -254,6 +350,9 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     let manifest = drawer_infer::fixtures::bundle(&root.join("inference-final"), Task::Body)?;
     app.local_inference.draft.as_mut().unwrap().config.manifest =
         manifest.to_string_lossy().into_owned();
+    app.review_model_bundle()?;
+    app.local_inference.draft.as_mut().unwrap().allow_model_copy = true;
+    app.install_model_bundle()?;
     app.start_inference(&ctx, false)?;
     wait(&ctx, &mut app, &mut time)?;
     // A revision/frame change during inference cannot apply the frozen source to a different page state.
@@ -306,6 +405,7 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     let request = drawer_infer::Request {
         manifest: manifest.to_string_lossy().into_owned(),
         task: Task::Body,
+        manifest_sha256: drawer_infer::hash(&std::fs::read(&manifest).map_err(|e| e.to_string())?),
     };
     let c = AtomicBool::new(false);
     check(

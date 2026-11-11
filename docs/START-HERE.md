@@ -94,3 +94,6 @@ Tool input behavior의 Independent position and device pressure filters에서 �
 
 
 수동 설치/업데이트: 검토한 로컬 Install.ps1에 배포 기록에서 확인한 PACKAGE.json SHA256을 ExpectedManifestSha256으로 전달합니다. 현재 서명 없는 자체 빌드는 AllowUnsigned를 명시해야 합니다. 설치는 전체 파일 해시와 오프라인 서명 상태를 검사하고 이전 앱/추가 파일을 보존하며 사용자 문서·설정은 변경하지 않습니다. 낮은 버전은 AllowDowngrade 확인이 필요합니다. 새 문서 형식은 이전 앱에서 열리지 않을 수 있어 원본을 보관하세요.
+
+
+로컬 모델: Local models에서 작업과 manifest.json을 고르고 Inspect model and LICENSE.txt로 검증/고지를 읽습니다. 로컬 복사·사용 권한을 확인한 다음 Install reviewed bundle locally를 누릅니다. 모델은 사용자 데이터의 models/<명세 SHA256>에만 보관하고, 등록은 설정에 저장합니다. 입력 미리보기 후 확인한 명세와 일치하는 모델만 실행합니다. 등록 해제는 모델 파일을 남깁니다. 다운로드·계정·서버 폴백은 없습니다.

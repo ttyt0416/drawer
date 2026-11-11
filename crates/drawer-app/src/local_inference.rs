@@ -19,6 +19,9 @@ pub(super) struct Panel {
     input: Option<egui::Rect>,
     run: Option<egui::Rect>,
     apply: Option<egui::Rect>,
+    model_review: Option<egui::Rect>,
+    model_permission: Option<egui::Rect>,
+    model_install: Option<egui::Rect>,
 }
 #[derive(Clone, Copy, PartialEq)]
 struct Source {
@@ -41,6 +44,8 @@ struct Config {
     path: String,
     page: usize,
     manifest: String,
+    approved_manifest: Option<String>,
+    model_label: String,
     hints: String,
 }
 #[derive(Clone)]
@@ -58,6 +63,9 @@ struct Draft {
     result: Option<Output>,
     threshold: f32,
     accept_low: bool,
+    model_review: Option<drawer_infer::bundle::Review>,
+    allow_model_copy: bool,
+    scroll_to_input: bool,
 }
 enum Preview {
     Input(Frozen),
@@ -177,7 +185,7 @@ impl Drawer {
             source: source(self)?,
             config: Config {
                 page: 1,
-                ..Default::default()
+                ..self.registered_model_config(Task::Body)?
             },
             input: None,
             images: None,
@@ -185,6 +193,9 @@ impl Drawer {
             result: None,
             threshold: 0.5,
             accept_low: false,
+            model_review: None,
+            allow_model_copy: false,
+            scroll_to_input: false,
         }));
         Ok(())
     }
@@ -206,6 +217,11 @@ impl Drawer {
             e.images = None;
             return Err("Source changed; reopen and select a fresh input".into());
         }
+        if run && e.config.approved_manifest.is_none() {
+            return Err(
+                "Install a reviewed local model and approve its license before execution".into(),
+            );
+        }
         let frozen = if run {
             Some(
                 e.input
@@ -224,12 +240,17 @@ impl Drawer {
         if used
             .saturating_add(d.memory_bytes().saturating_mul(7))
             .saturating_add(96 * 1024 * 1024)
-            > DEFAULT_DOCUMENT_BUDGET
+            > self.resource_budget()
         {
             return Err("Insufficient workspace memory for local inference preview".into());
         }
         let snapshot = d.snapshot();
         let exe = executable()?;
+        let scratch = self
+            .storage
+            .as_ref()
+            .map(|s| self.resources.current.root(s).to_owned())
+            .unwrap_or_else(std::env::temp_dir);
         let cancel = Arc::new(AtomicBool::new(false));
         let c = cancel.clone();
         let config = cfg.clone();
@@ -279,11 +300,15 @@ impl Drawer {
                 } else {
                     let input = frozen.unwrap();
                     let mut out = drawer_infer::execute(
-                        &std::env::temp_dir(),
+                        &scratch,
                         &exe,
                         &drawer_infer::Request {
                             manifest: config.manifest.clone(),
                             task: config.task,
+                            manifest_sha256: config
+                                .approved_manifest
+                                .clone()
+                                .ok_or("Install and approve a local model")?,
                         },
                         &input.image,
                         input.hints.as_ref(),
@@ -451,19 +476,41 @@ impl Drawer {
         let busy = self.local_inference.job.is_some();
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut input, mut run, mut apply, mut cancel) = (false, false, false, false);
-        egui::Window::new("Local models — pose / color / restoration").default_width(550.).vscroll(true).max_height(660.).default_pos(egui::pos2(25.,10.)).collapsible(false).open(&mut open).show(ctx,|ui|{
+        let (mut review_model, mut install_model, mut forget_model) = (false, false, false);
+        egui::Window::new("Local models — pose / color / restoration").order(egui::Order::Foreground).default_width(550.).default_height(660.).vscroll(true).max_height(660.).default_pos(egui::pos2(25.,10.)).collapsible(false).open(&mut open).show(ctx,|ui|{
             ui.small(drawer_infer::GUIDE);
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed. Cancel and reopen to freeze a new input.");}
             ui.add_enabled_ui(!busy,|ui|{
                 egui::ComboBox::from_label("Task").selected_text(e.config.task.label()).show_ui(ui,|ui|{for task in Task::ALL{ui.selectable_value(&mut e.config.task,task,task.label());}});
+                if old.task!=e.config.task {
+                    match self.registered_model_config(e.config.task) {
+                        Ok(model)=>{e.config.manifest=model.manifest;e.config.approved_manifest=model.approved_manifest;e.config.model_label=model.model_label;},
+                        Err(error)=>{e.config.manifest.clear();e.config.approved_manifest=None;e.config.model_label.clear();self.status=Some(error);}
+                    }
+                    e.model_review=None;e.allow_model_copy=false;
+                }
                 ui.horizontal(|ui|{ui.radio_value(&mut e.config.source,InputSource::Composite,"Page composite");ui.radio_value(&mut e.config.source,InputSource::Selection,"Selected pixels");ui.radio_value(&mut e.config.source,InputSource::File,"Local file");ui.radio_value(&mut e.config.source,InputSource::Comparison,"Fixed comparison");});
                 if e.config.source==InputSource::File{ui.text_edit_singleline(&mut e.config.path);if ui.button("Choose local input…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Local images",&["png","jpg","jpeg","tif","tiff","bmp"]).pick_file(){e.config.path=p.to_string_lossy().into_owned();}ui.add(egui::DragValue::new(&mut e.config.page).range(1..=256).prefix("TIFF page "));}
                 if e.config.task==Task::HintColor && e.config.source!=InputSource::Comparison{ui.label("RGBA hints: same size; alpha marks hint strength");ui.text_edit_singleline(&mut e.config.hints);if ui.button("Choose local hints…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Hint image",&["png","tif","tiff"]).pick_file(){e.config.hints=p.to_string_lossy().into_owned();}}
-                ui.label("Local model bundle manifest (no automatic installation)");ui.text_edit_singleline(&mut e.config.manifest);if ui.button("Choose model manifest…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Model manifest",&["json"]).pick_file(){e.config.manifest=p.to_string_lossy().into_owned();}
+                ui.label("Local model bundle · inspect its license before copying locally");
+                let model_path=e.config.manifest.clone();
+                ui.text_edit_singleline(&mut e.config.manifest);if ui.button("Choose model manifest…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Model manifest",&["json"]).pick_file(){e.config.manifest=p.to_string_lossy().into_owned();}
+                if model_path!=e.config.manifest {e.config.approved_manifest=None;e.config.model_label.clear();e.model_review=None;e.allow_model_copy=false;}
+                ui.small("Inspection checks hashes and notice; the bounded CPU helper checks ONNX before execution.");
+                let r=ui.button("Inspect model and LICENSE.txt");self.local_inference.model_review=Some(r.rect);review_model=r.clicked();
+                if let Some(review)=&e.model_review {
+                    ui.label(format!("{} {} · {} · {} bytes",review.manifest.name,review.manifest.version,review.manifest.license,review.weights_bytes));
+                    egui::ScrollArea::vertical().id_salt("local-model-license").max_height(100.).show(ui,|ui|{ui.label(&review.license_text);});
+                    let r=ui.checkbox(&mut e.allow_model_copy,"I reviewed LICENSE.txt and confirm permission for local copy/use");self.local_inference.model_permission=Some(r.rect);
+                    let r=ui.add_enabled(e.allow_model_copy,egui::Button::new("Install reviewed bundle locally"));self.local_inference.model_install=Some(r.rect);install_model=r.clicked();
+                }
+                if e.config.approved_manifest.is_some(){ui.small(format!("Approved local registration: {}",e.config.model_label));forget_model=ui.button("Forget registration; keep model files").clicked();}
+
             });
             if old!=e.config{e.input=None;e.images=None;e.prepared=None;e.result=None;e.accept_low=false;}
             let r=ui.add_enabled(fresh&&!busy,egui::Button::new("1. Freeze and preview input"));self.local_inference.input=Some(r.rect);input=r.clicked();
-            let r=ui.add_enabled(fresh&&!busy&&e.input.is_some(),egui::Button::new("2. Run verified local model"));self.local_inference.run=Some(r.rect);run=r.clicked();
+            if e.scroll_to_input{ui.scroll_to_rect(r.rect,Some(egui::Align::Center));e.scroll_to_input=false;}
+            let r=ui.add_enabled(fresh&&!busy&&e.input.is_some()&&e.config.approved_manifest.is_some(),egui::Button::new("2. Run verified local model"));self.local_inference.run=Some(r.rect);run=r.clicked();
             let can=e.result.as_ref().is_some_and(|r|!r.low_confidence(e.threshold)||e.accept_low);
             let r=ui.add_enabled(fresh&&!busy&&can&&e.prepared.is_some(),egui::Button::new("3. Adopt as one Undo"));self.local_inference.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel local inference").clicked();
             if busy{ui.horizontal(|ui|{ui.spinner();ui.label("Local task running · CPU · 512 MiB helper limit · 120 seconds maximum");});}
@@ -483,6 +530,15 @@ impl Drawer {
         } else {
             self.cancel_inference();
         }
+        if review_model && let Err(err) = self.review_model_bundle() {
+            self.status = Some(err);
+        }
+        if install_model && let Err(err) = self.install_model_bundle() {
+            self.status = Some(err);
+        }
+        if forget_model && let Err(err) = self.forget_model_bundle() {
+            self.status = Some(err);
+        }
         if input && let Err(err) = self.start_inference(ctx, false) {
             self.status = Some(err);
         }
@@ -494,6 +550,9 @@ impl Drawer {
         }
     }
 }
+
+#[path = "local_model_bundle.rs"]
+mod model_bundle;
 
 #[path = "local_inference_verify.rs"]
 mod verify;

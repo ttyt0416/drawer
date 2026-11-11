@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "executableSha256": "548d2295b30985b2dd9ebb517179233ea28aefa3672fcbc2936ce4be8aa6c2fb",
+  "installerSha256": "0b45b9b2eeb7932e367282b58a7b5c7838859eb6764e4f7f0066f975fbd4c752",
+  "negativeControls": [
+    {
+      "case": "socket",
+      "api": "socket",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "loopback-connect",
+      "api": "connect",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "loopback-bind",
+      "api": "bind",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "loopback-listen",
+      "api": "listen",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "address-lookup",
+      "api": "getaddrinfo",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "dns",
+      "api": "DnsQuery_W",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "http",
+      "api": "WinHttpOpen",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "wininet",
+      "api": "InternetOpenW",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "url-download",
+      "api": "URLDownloadToFileW",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    },
+    {
+      "case": "error-report",
+      "api": "WerReportSubmit",
+      "observedAttempts": 1,
+      "originalApiExecuted": false,
+      "ownedProcessesRemaining": 0
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "application-full-smoke",
+      "networkAttempts": 0,
+      "networkApiCount": 53,
+      "ownedProcessesRemaining": 0,
+      "coverage": [
+        {
+          "pid": 904,
+          "module": "urlmon.dll",
+          "hooks": [
+            "URLDownloadToCacheFileA",
+            "URLDownloadToCacheFileW",
+            "URLDownloadToFileA",
+            "URLDownloadToFileW",
+            "URLOpenBlockingStreamA",
+            "URLOpenBlockingStreamW"
+          ],
+          "forwarded": []
+        },
+        {
+          "pid": 904,
+          "module": "cryptnet.dll",
+          "hooks": [
+            "CryptRetrieveObjectByUrlA",
+            "CryptRetrieveObjectByUrlW"
+          ],
+          "forwarded": []
+        }
+      ],
+      "processCount": 17
+    },
+    {
+      "name": "manual-local-installer",
+      "networkAttempts": 0,
+      "networkApiCount": 53,
+      "ownedProcessesRemaining": 0,
+      "coverage": [
+        {
+          "pid": 4696,
+          "module": "ws2_32.dll",
+          "hooks": [
+            "GetAddrInfoExA",
+            "GetAddrInfoExW",
+            "GetAddrInfoW",
+            "WSAAccept",
+            "WSAConnect",
+            "WSAConnectByList",
+            "WSAConnectByNameA",
+            "WSAConnectByNameW",
+            "WSALookupServiceBeginA",
+            "WSALookupServiceBeginW",
+            "WSASend",
+            "WSASendTo",
+            "WSASocketA",
+            "WSASocketW",
+            "accept",
+            "bind",
+            "connect",
+            "getaddrinfo",
+            "gethostbyname",
+            "listen",
+            "send",
+            "sendto",
+            "socket"
+          ],
+          "forwarded": []
+        }
+      ],
+      "processCount": 4
+    }
+  ],
+  "windowsFaultReportingDisabledInApplication": true,
+  "blocking": "Named user-mode network entries stop all owned processes before the original API executes; would-fail calls also fail the scenario",
+  "limitations": [
+    "Named Windows user-mode API entries only; direct syscalls and unrelated OS/vendor services are outside observation",
+    "Only this finite scenario and descendants launched under its debug object are observed",
+    "No native target files or host clock changed; RET stub and breakpoints exist only in owned child memory",
+    "Host network adapters were not changed; this is API-level fail-closed observation, not the fresh offline PC272",
+    "SEM_NOGPFAULTERRORBOX is verified in the app; unrelated OS service activity and pre-main faults are outside observation",
+    "Negative socket/bind/listen/lookup controls use invalid handles/arguments and must still be detected; no server is opened"
+  ]
+}

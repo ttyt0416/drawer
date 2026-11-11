@@ -31,8 +31,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--evidence', type=Path, default=repo/'docs/process/network-attempts-evidence.json')
     parser.add_argument('--controls-only', action='store_true')
+    parser.add_argument('--item', type=int, default=278)
     args = parser.parse_args()
-    base = repo/('.verify-278-network-'+uuid.uuid4().hex)
+    if not 1 <= args.item <= 309:
+        raise ValueError('Checklist item must be1..309')
+    base = repo/(f'.verify-{args.item:03d}-network-'+uuid.uuid4().hex)
     base.mkdir()
     controls = [
         ('socket', 'ws2_32', 'socket', '[c.c_int]*3', '(2,1,6)'),

@@ -1398,3 +1398,10 @@ scripts/test-local-references.ps1
 docs/process/local-references.md
 docs/process/local-references-evidence.json
 docs/process/local-references-network.json
+crates/drawer-app/src/local_model_bundle.rs
+crates/drawer-infer/src/bundle.rs
+crates/drawer-infer/src/bundle_verify.rs
+scripts/test-local-model-bundles.ps1
+docs/process/local-model-bundles.md
+docs/process/local-model-bundles-evidence.json
+docs/process/local-models-network.json
