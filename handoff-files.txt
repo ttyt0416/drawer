@@ -1208,3 +1208,8 @@ crates/drawer-core/src/tiled_raster.rs
 crates/drawer-core/src/tiled_raster_verify.rs
 crates/drawer-app/src/tiled_raster.rs
 docs/process/tiled-memory.md
+
+crates/drawer-core/src/resource_plan.rs
+crates/drawer-core/src/resource_plan_verify.rs
+crates/drawer-app/src/resource_limits.rs
+docs/process/resource-limits.md

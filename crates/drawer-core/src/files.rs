@@ -781,6 +781,29 @@ fn read_native_body(
 pub fn save(document: &mut Document, path: &Path) -> io::Result<()> {
     save_report(document, path).map(|_| ())
 }
+/// Exact serialized size, including integrity and embedded blocks; no filesystem writes.
+pub fn estimate_native_bytes(document: &Document) -> io::Result<u64> {
+    struct Count(u64);
+    impl Write for Count {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_add(b.len() as u64)
+                .ok_or_else(|| invalid("Native size overflow"))?;
+            if self.0 > 2 * 1024 * 1024 * 1024 {
+                return Err(invalid("Native block limit2GiB"));
+            }
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let scene = native_scene(document)?;
+    let mut count = Count(0);
+    write_payload(document, &scene, &mut count)?;
+    Ok(count.0)
+}
 pub fn save_report(
     document: &mut Document,
     path: &Path,

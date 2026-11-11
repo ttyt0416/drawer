@@ -33,18 +33,10 @@ fn checked(cancel: &AtomicBool) -> io::Result<()> {
     }
 }
 fn dimensions(width: u32, height: u32, budget: usize) -> io::Result<usize> {
-    let bytes = (width as usize)
-        .checked_mul(height as usize)
-        .and_then(|n| n.checked_mul(4));
-    if !(1..=MAX_DIMENSION).contains(&width)
-        || !(1..=MAX_DIMENSION).contains(&height)
-        || bytes.is_none_or(|n| n > budget)
-    {
-        return Err(invalid(
-            "Image dimensions exceed the document or memory limit",
-        ));
-    }
-    Ok(bytes.unwrap())
+    let cost = crate::resource_plan::dense(i64::from(width), i64::from(height), 4, 1, 1)
+        .map_err(invalid)?;
+    cost.admit_memory(budget as u64).map_err(invalid)?;
+    usize::try_from(cost.image).map_err(|_| invalid("Image size overflow"))
 }
 fn image_limits(budget: usize) -> image::Limits {
     let mut limits = image::Limits::default();

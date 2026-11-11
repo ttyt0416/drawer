@@ -230,6 +230,14 @@ impl Drawer {
         Ok(())
     }
     pub(super) fn save_to(&mut self, index: usize, path: &Path) -> Result<(), String> {
+        self.save_to_space(index, path, None)
+    }
+    pub(super) fn save_to_space(
+        &mut self,
+        index: usize,
+        path: &Path,
+        free: Option<u64>,
+    ) -> Result<(), String> {
         if self.file_browser.mutating() {
             return Err("Wait for the pending physical file operation before saving".into());
         }
@@ -255,6 +263,24 @@ impl Drawer {
 
         self.finish_stroke();
         let _awake = self.synchronous_power();
+        let absolute = if path.is_absolute() {
+            path.to_owned()
+        } else {
+            std::env::current_dir()
+                .map_err(|e| e.to_string())?
+                .join(path)
+        };
+        let parent = absolute.parent().ok_or("Save target has no parent")?;
+        let measured = drawer_platform::file_browser::available_space(parent)?;
+        let size = drawer_core::files::estimate_native_bytes(&self.documents[index])
+            .map_err(|e| e.to_string())?;
+        let previous = match std::fs::metadata(&absolute) {
+            Ok(m) => m.len(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
+            Err(e) => return Err(e.to_string()),
+        };
+        drawer_core::resource_plan::native_space(size, previous)?
+            .admit_disk(free.unwrap_or(measured))?;
         let target = if path.exists() {
             path.canonicalize()
         } else {

@@ -659,3 +659,8 @@ pub mod atomic_file;
 pub mod recovery;
 
 pub mod tiled_raster;
+
+pub mod resource_plan;
+
+#[path = "resource_plan_verify.rs"]
+pub mod resource_plan_verify;

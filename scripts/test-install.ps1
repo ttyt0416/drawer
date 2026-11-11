@@ -340,3 +340,6 @@ if($smokeResult -notmatch 'local_recovery=true'){throw 'Local recovery verificat
 if($smokeResult -notmatch 'saved_state=true'){throw 'Saved state/close verification failed'}
 
 if($smokeResult -notmatch 'sparse_raster=true'){throw 'Sparse raster verification failed'}
+
+
+if($smokeResult -notmatch 'resource_limits=true'){throw 'Resource admission verification failed'}

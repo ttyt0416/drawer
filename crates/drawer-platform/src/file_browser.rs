@@ -34,6 +34,34 @@ pub fn local_disk(p: &Path) -> Result<(), String> {
         _ => Err("Local drive unavailable or disconnected".into()),
     }
 }
+/// Available bytes for the current user, after local-drive/reparse admission.
+pub fn available_space(path: &Path) -> Result<u64, String> {
+    local_disk(path)?;
+    let path = drawer_core::file_browser::folder(path)?;
+    use std::os::windows::ffi::OsStrExt;
+    let wide = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetDiskFreeSpaceExW(
+            path: *const u16,
+            available: *mut u64,
+            total: *mut u64,
+            free: *mut u64,
+        ) -> i32;
+    }
+    let mut available = 0u64;
+    let mut total = 0u64;
+    let mut free = 0u64;
+    // SAFETY: wide is terminated and live; all three outputs are aligned writable u64 storage.
+    if unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut free) } == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(available)
+}
 fn allow_recycle(flags: u32, cancel: bool) -> bool {
     !cancel && flags & TSF_DELETE_RECYCLE_IF_POSSIBLE.0 as u32 != 0
 }

@@ -285,10 +285,11 @@ impl Document {
         if !spec.dpi.is_finite() || spec.dpi <= 0.0 {
             return Err(CreateError::InvalidDpi);
         }
-        let count = (spec.width as usize)
-            .checked_mul(spec.height as usize)
-            .ok_or(CreateError::ResourceLimit)?;
-        let bytes = count.checked_mul(4).ok_or(CreateError::ResourceLimit)?;
+        let estimate =
+            crate::resource_plan::dense(i64::from(spec.width), i64::from(spec.height), 4, 1, 1)
+                .map_err(|_| CreateError::ResourceLimit)?;
+        let bytes = usize::try_from(estimate.image).map_err(|_| CreateError::ResourceLimit)?;
+        let count = bytes / 4;
         let sparse = bytes > DEFAULT_DOCUMENT_BUDGET && memory_budget >= 65536;
         if bytes > memory_budget && !sparse {
             return Err(CreateError::ResourceLimit);
