@@ -383,7 +383,11 @@ pub fn scan(storage: &Path) -> Result<Vec<Candidate>, String> {
     }
     let base = crate::file_browser::folder(&base)?;
     let mut out = vec![];
-    for e in fs::read_dir(base).map_err(|e| e.to_string())?.take(128) {
+    for (n, e) in fs::read_dir(&base).map_err(|e| e.to_string())?.enumerate() {
+        if n >= 128 {
+            out.push(Candidate{session:base.clone(),title:"Recovery inventory limit reached".into(),original:None,file:None,error:Some("Only the first128 directory entries were inspected. No files removed; review/archive resolved sessions before rescanning".into()),expected:None});
+            break;
+        }
         let e = e.map_err(|e| e.to_string())?;
         let path = e.path();
         if owned(&path).is_err() {

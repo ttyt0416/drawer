@@ -20,6 +20,7 @@ pub struct CanvasSpec {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CreateError {
+    ConfiguredDimensions(u32),
     InvalidDimensions,
     InvalidDpi,
     ResourceLimit,
@@ -31,6 +32,7 @@ pub enum CreateError {
 impl fmt::Display for CreateError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
+            Self::ConfiguredDimensions(max)=>return write!(formatter,"Canvas exceeds configured maximum dimension {max}; change Local resources or choose a smaller canvas."),
             Self::InvalidDimensions => "Width and height must be whole numbers from 1 to 32768.",
             Self::InvalidDpi => "DPI must be a positive finite number.",
             Self::ResourceLimit => "The canvas exceeds the available document memory budget.",

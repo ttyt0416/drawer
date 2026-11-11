@@ -69,6 +69,24 @@ impl Drawer {
         });
     }
     pub(super) fn add_document(&mut self, mut document: Document) {
+        if document.width > self.resources.current.max_dimension
+            || document.height > self.resources.current.max_dimension
+            || self
+                .documents
+                .iter()
+                .map(Document::resident_bytes)
+                .sum::<usize>()
+                .saturating_add(document.resident_bytes())
+                > self.resource_budget()
+        {
+            self.status = Some(format!(
+                "Document exceeds configured dimension {} or memory {} bytes; current documents preserved",
+                self.resources.current.max_dimension,
+                self.resource_budget()
+            ));
+            return;
+        }
+
         document.tool = self
             .tool_input
             .controller
@@ -192,7 +210,8 @@ impl Drawer {
             return Ok(());
         }
 
-        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        drawer_platform::file_browser::local_disk(path)?;
+        let path = drawer_core::file_browser::checked(path)?;
         if let Some(id) = self
             .documents
             .iter()
@@ -210,7 +229,7 @@ impl Drawer {
             return Err("The workspace supports up to 256 views.".into());
         }
         let (mut document, mut warnings) =
-            drawer_core::files::open_report(&path, DEFAULT_DOCUMENT_BUDGET.saturating_sub(used))
+            drawer_core::files::open_report(&path, self.resource_budget().saturating_sub(used))
                 .map_err(|e| e.to_string())?;
         if path
             .extension()
@@ -221,6 +240,14 @@ impl Drawer {
         warnings.extend(self.material_dependencies(&document));
         if !warnings.is_empty() {
             self.status = Some(warnings.join("; "));
+        }
+        if document.width > self.resources.current.max_dimension
+            || document.height > self.resources.current.max_dimension
+        {
+            return Err(format!(
+                "Canvas exceeds configured maximum dimension {}. Existing documents unchanged",
+                self.resources.current.max_dimension
+            ));
         }
         document.view = self.default_view;
         self.documents.try_reserve(1).map_err(|e| e.to_string())?;
@@ -557,6 +584,9 @@ impl Drawer {
             ));
         }
         ui.horizontal_wrapped(|ui| {
+            if ui.button("Local resources…").clicked() {
+                self.resources.open = true;
+            }
             if crate::help::button(ui, "Open…", "files").clicked()
                 && let Err(e) = self.begin_file_browser(file_browser::Mode::Open)
             {

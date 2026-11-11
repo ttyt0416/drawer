@@ -42,17 +42,44 @@ impl Drawer {
         {
             return;
         }
-        self.init_recovery(storage.root());
+        let root = self.resources.current.root(storage).to_owned();
+        self.init_recovery(&root);
+    }
+    pub(super) fn install_resource_recovery(&mut self, root: &Path, session: Session) {
+        if let Some(old) = self.recovery.session.take()
+            && let Err(e) = old.finish()
+        {
+            self.status = Some(format!(
+                "Old scratch session retained after cleanup error: {e}"
+            ));
+        }
+        self.recovery.root = Some(root.to_owned());
+        self.recovery.session = Some(session);
+        self.recovery.last = Instant::now();
+        self.recovery.stamps.clear();
+    }
+    fn resource_recovery_candidates(&mut self, root: &Path) -> Vec<Candidate> {
+        let mut roots = self.resources.current.retained.clone();
+        roots.push(root.to_owned());
+        roots.sort();
+        roots.dedup();
+        let mut out = vec![];
+        for p in roots {
+            match drawer_platform::file_browser::local_disk(&p).and_then(|_| core::scan(&p)) {
+                Ok(mut c) => out.append(&mut c),
+                Err(e) => {
+                    self.recovery.error = Some(format!(
+                        "Scratch unavailable; recovery copies preserved: {e}"
+                    ))
+                }
+            }
+        }
+        out
     }
     pub(super) fn init_recovery(&mut self, root: &Path) {
         self.recovery.root = Some(root.to_path_buf());
-        match core::scan(root) {
-            Ok(c) => {
-                self.recovery.open = !c.is_empty();
-                self.recovery.candidates = c;
-            }
-            Err(e) => self.recovery.error = Some(e),
-        }
+        self.recovery.candidates = self.resource_recovery_candidates(root);
+        self.recovery.open = !self.recovery.candidates.is_empty();
         match Session::create(root) {
             Ok(s) => self.recovery.session = Some(s),
             Err(e) => self.recovery.error = Some(e),
@@ -76,7 +103,8 @@ impl Drawer {
             return;
         }
         if let Some(storage) = self.storage.clone() {
-            self.init_recovery(storage.root());
+            let root = self.resources.current.root(&storage).to_owned();
+            self.init_recovery(&root);
             if let Err(e) = self.checkpoint_recovery() {
                 self.recovery.error = Some(e);
                 self.recovery.open = true;
@@ -105,6 +133,25 @@ impl Drawer {
             .session
             .as_mut()
             .ok_or("Local recovery storage is unavailable")?;
+        let root = self
+            .recovery
+            .root
+            .as_ref()
+            .ok_or("Scratch root unavailable")?;
+        drawer_platform::file_browser::available_space(root)
+            .and_then(|free| drawer_core::resource_settings::probe(root, free))?;
+        let used = drawer_core::resource_settings::recovery_usage(root)?;
+        let next = documents.iter().try_fold(65536u64, |n, d| {
+            drawer_core::files::estimate_native_bytes(d)
+                .map_err(|e| e.to_string())
+                .and_then(|b| n.checked_add(b).ok_or("Recovery size overflow".into()))
+        })?;
+        if used
+            .checked_add(next)
+            .is_none_or(|n| n > u64::from(self.resources.current.recovery_mib) * 1024 * 1024)
+        {
+            return Err("Recovery quota exceeded; previous snapshots preserved. Review closed-session recovery copies or raise the local quota".into());
+        }
         session.checkpoint(&documents)?;
         self.recovery.stamps = self
             .documents
@@ -178,11 +225,8 @@ if r.clicked(){discard=Some(c.session.clone());}
             let r=ui.button("Cancel / keep snapshots");self.recovery.cancel=Some(r.rect);cancel=r.clicked();
         });
         self.recovery.open = open && !cancel;
-        if rescan && let Some(root) = &self.recovery.root {
-            match core::scan(root) {
-                Ok(c) => self.recovery.candidates = c,
-                Err(e) => self.recovery.error = Some(e),
-            }
+        if rescan && let Some(root) = self.recovery.root.clone() {
+            self.recovery.candidates = self.resource_recovery_candidates(&root);
         }
         if checkpoint && let Err(e) = self.checkpoint_recovery() {
             self.recovery.error = Some(e);

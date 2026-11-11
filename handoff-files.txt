@@ -1218,3 +1218,8 @@ crates/drawer-core/src/history_navigation.rs
 crates/drawer-core/src/history_navigation_verify.rs
 crates/drawer-app/src/history_navigation.rs
 docs/process/history-navigation.md
+
+crates/drawer-core/src/resource_settings.rs
+crates/drawer-core/src/resource_settings_verify.rs
+crates/drawer-app/src/resource_settings.rs
+docs/process/resource-settings.md
