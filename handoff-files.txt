@@ -1238,3 +1238,7 @@ crates/drawer-core/src/recovery_generations_verify.rs
 crates/drawer-app/src/background_save.rs
 crates/drawer-app/src/background_save_verify.rs
 docs/process/background-save.md
+
+scripts/test-offline-sandbox.ps1
+scripts/test-offline-guest.ps1
+docs/process/offline-fresh-environment.md
