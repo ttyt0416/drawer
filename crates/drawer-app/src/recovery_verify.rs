@@ -22,7 +22,10 @@ pub(crate) fn run(root: &Path) -> Result<(), String> {
         let ctx = egui::Context::default();
         let mut app = Drawer::new(&ctx, None).with_storage(storage.clone());
         app.add_document(document);
-        app.init_recovery(storage.root());
+        // Production startup already loaded this root; tests/smoke skip that step.
+        if app.recovery.session.is_none() {
+            app.init_recovery(storage.root());
+        }
         let mut time = 0.;
         let step = |app: &mut Drawer, time: &mut f64, events| {
             *time += 0.05;

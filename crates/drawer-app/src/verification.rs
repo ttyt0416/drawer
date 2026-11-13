@@ -15,6 +15,8 @@ mod history;
 mod masks;
 #[path = "verification_native.rs"]
 mod native;
+#[path = "verification_recovery.rs"]
+mod recovery;
 #[path = "verification_strokes.rs"]
 mod strokes;
 pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<(), String> {
@@ -25,7 +27,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=292) {
+    if !matches!(item, 287..=293) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -44,6 +46,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         290 => masks::run(&root)?,
         291 => history::run(&root)?,
         292 => native::run(&root)?,
+        293 => recovery::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(
@@ -105,4 +108,18 @@ pub(super) fn native_child(
         return Err("Unexpected native verification arguments".into());
     }
     native::child(&root, &expected)
+}
+
+pub(super) fn crash_child(
+    mut args: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<(), String> {
+    let root = std::path::PathBuf::from(args.next().ok_or("Missing crash verification root")?);
+    let expected = args
+        .next()
+        .and_then(|v| v.into_string().ok())
+        .ok_or("Missing crash manifest hash")?;
+    if args.next().is_some() {
+        return Err("Unexpected crash verification arguments".into());
+    }
+    recovery::worker(&root, &expected)
 }

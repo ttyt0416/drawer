@@ -29,7 +29,7 @@ struct Manifest {
     parent: u32,
     cases: Vec<Case>,
 }
-fn read(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
+pub(super) fn read(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
     let path = drawer_core::file_browser::checked(path)?;
     let mut bytes = vec![];
     std::fs::File::open(path)
@@ -43,7 +43,7 @@ fn read(path: &Path, limit: usize) -> Result<Vec<u8>, String> {
     )?;
     Ok(bytes)
 }
-fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut f = std::fs::OpenOptions::new()
         .create_new(true)
         .write(true)

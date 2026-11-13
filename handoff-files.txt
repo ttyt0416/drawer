@@ -1449,3 +1449,6 @@ docs/process/check-291-evidence.json
 crates/drawer-app/src/verification_native.rs
 docs/process/native-acceptance.md
 docs/process/check-292-evidence.json
+crates/drawer-app/src/verification_recovery.rs
+docs/process/save-crash-acceptance.md
+docs/process/check-293-evidence.json
