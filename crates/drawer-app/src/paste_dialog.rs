@@ -378,12 +378,13 @@ impl Drawer {
             return;
         }
         ui.horizontal_wrapped(|ui| {
-            if crate::help::button(ui, "Paste image layer…", "files").clicked()
+            if crate::help::button(ui, crate::i18n::text("Paste image layer…"), "files").clicked()
                 && let Err(error) = self.begin_paste(ui.ctx(), read_clipboard)
             {
                 self.status = Some(error);
             }
-            if crate::help::button(ui, "Copy top raster layer", "files").clicked()
+            if crate::help::button(ui, crate::i18n::text("Copy top raster layer"), "files")
+                .clicked()
                 && let Err(error) = self.copy_top_layer_from(write_clipboard)
             {
                 self.status = Some(error);
@@ -422,7 +423,7 @@ impl Drawer {
             ui.label("New layer · drag preview or edit position · pixels kept outside canvas");
             let mut offset = dialog.offset;
             ui.horizontal(|ui| {
-                ui.label("Left");
+                ui.label(crate::i18n::text("Left"));
                 super::edit::number(
                     ui,
                     &mut offset[0],
@@ -431,7 +432,7 @@ impl Drawer {
                     "",
                     "files",
                 );
-                ui.label("Top");
+                ui.label(crate::i18n::text("Top"));
                 super::edit::number(
                     ui,
                     &mut offset[1],
@@ -443,7 +444,7 @@ impl Drawer {
             });
 
             ui.horizontal(|ui| {
-                if crate::help::button(ui, "Center", "files").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Center"), "files").clicked() {
                     let layer = dialog.preview.layers.last().unwrap().placement.unwrap();
                     offset = [
                         (dialog.preview.width as i64 - layer.width as i64).div_euclid(2),
@@ -494,7 +495,7 @@ impl Drawer {
             ui.horizontal(|ui| {
                 let apply = crate::help::button(ui, "Place layer", "files");
                 accept = apply.clicked();
-                let dismiss = crate::help::button(ui, "Cancel", "files");
+                let dismiss = crate::help::button(ui, crate::i18n::text("Cancel"), "files");
                 cancel = dismiss.clicked();
                 {
                     dialog.apply_button = Some(apply.rect);

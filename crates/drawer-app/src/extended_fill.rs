@@ -98,7 +98,7 @@ impl Drawer {
             for i in 0..2{ui.horizontal(|ui|{ui.label(if i==0{"Left / Right"}else{"Top / Bottom"});ui.add(egui::DragValue::new(&mut e.bounds.min[i]).range(-1e9..=1e9));ui.add(egui::DragValue::new(&mut e.bounds.max[i]).range(-1e9..=1e9));});}
             if e.create{ui.label("This will create a local 24 fps animation with its output frame.");ui.add(egui::Slider::new(&mut e.frames,1..=drawer_core::animation::MAX_FRAMES).text("Timeline frames"));}
             ui.label("Apply saves one Undo entry. The blue frame follows page geometry and is used when fill boundary is set to Active animation output frame.");
-            ui.horizontal(|ui|{let r=ui.button("Apply output frame");self.extended_fill.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Apply output frame");self.extended_fill.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if !open || cancel {
             self.extended_fill.draft = None;

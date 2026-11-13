@@ -65,7 +65,7 @@ impl Drawer {
             ui.add(egui::Slider::new(&mut e.settings.tolerance,0..=255).text("RGB tolerance"));ui.checkbox(&mut e.settings.include_transparent,"Include fully transparent pixels (any hidden RGB)");
             egui::ComboBox::from_id_salt("color-range-reference").selected_text(format!("{:?}",e.settings.reference)).show_ui(ui,|ui|{for r in [Reference::Current,Reference::Composite]{ui.selectable_value(&mut e.settings.reference,r,format!("{r:?}"));}});
             egui::ComboBox::from_id_salt("color-range-combine").selected_text(format!("{:?}",e.settings.combine)).show_ui(ui,|ui|{for op in drawer_core::selection_edit::Combine::ALL{ui.selectable_value(&mut e.settings.combine,op,format!("{op:?}"));}});
-            ui.horizontal(|ui|{let r=ui.button("Apply color range");self.color_range.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Apply color range");self.color_range.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if !open || cancel {
             self.color_range.draft = None;

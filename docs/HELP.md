@@ -1893,3 +1893,5 @@ For a portable document, open **Local templates and resource bundles** and choos
 
 In **Local model inference…**, choose the requested processing device and save it locally if desired. This build provides the CPU ONNX engine and no GPU adapter/SDK. A GPU request is refused locally unless **Explicitly allow CPU fallback** is selected; results report the CPU device actually used. No SDK/model is downloaded. Local model registrations remember their reviewed content hashes; missing models show installation guidance. Discard an unsuccessful preview to continue basic editing, saving and recovery.
 
+**Language, IME and confirmations / 언어·입력기·확인 설정** controls Korean/English interface labels and local tutorials/tool explanations. Apply to switch at runtime; the choice is saved in the workspace. Missing translations in detailed dialogs and dynamic diagnostics use English. User names, document text and shortcut bindings are preserved. Translation uses only bundled strings and local fonts; no service is contacted. Validated platform support remains Windows x64; restricted local plugins keep their existing limits.
+

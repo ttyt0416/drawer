@@ -74,7 +74,7 @@ pub(super) fn controls(ui: &mut egui::Ui, e: &mut Draft, p: &mut Panel, blocked:
                     }
                 }
                 if let Some(fx) = &mut e.settings.style.effects {
-                    ui.checkbox(&mut fx.underline, "Underline");
+                    ui.checkbox(&mut fx.underline, crate::i18n::text("Underline"));
                     ui.checkbox(&mut fx.strike, "Strikethrough");
                     ui.add(
                         egui::DragValue::new(&mut fx.slant)

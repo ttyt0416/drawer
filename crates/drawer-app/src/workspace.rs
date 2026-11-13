@@ -621,31 +621,34 @@ impl Drawer {
             ));
         }
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Local resources…").clicked() {
+            if ui.button(crate::i18n::text("Local resources…")).clicked() {
                 self.resources.open = true;
             }
-            if crate::help::button(ui, "Open…", "files").clicked()
+            if crate::help::button(ui, crate::i18n::text("Open…"), "files").clicked()
                 && let Err(e) = self.begin_file_browser(file_browser::Mode::Open)
             {
                 self.status = Some(e);
             }
-            if crate::help::button(ui, "Image as new document…", "files").clicked()
+            if crate::help::button(ui, crate::i18n::text("Image as new document…"), "files")
+                .clicked()
                 && let Err(e) = self.begin_file_browser(file_browser::Mode::Image)
             {
                 self.status = Some(e);
             }
-            if crate::help::button(ui, "New from clipboard", "files").clicked()
+            if crate::help::button(ui, crate::i18n::text("New from clipboard"), "files").clicked()
                 && let Err(error) = self.document_from_clipboard(|| {
                     reference_pane::clipboard_image_with_budget(DEFAULT_DOCUMENT_BUDGET)
                 })
             {
                 self.status = Some(error);
             }
-            if crate::help::button(ui, "Recovery…", "files").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Recovery…"), "files").clicked() {
                 self.recovery.open = true;
             }
             self.recent_menu(ui);
-            if crate::help::button(ui, "Scanner / camera…", "acquisition").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Scanner / camera…"), "acquisition")
+                .clicked()
+            {
                 self.finish_stroke();
                 self.acquisition.open = true;
             }
@@ -653,7 +656,11 @@ impl Drawer {
             self.local_file_menu(ui);
             if let Some(active) = self.active {
                 if ui
-                    .button(format!("Save  {}", self.workspaces.command_label("save")))
+                    .button(format!(
+                        "{}  {}",
+                        crate::i18n::text("Save"),
+                        self.workspaces.command_label("save")
+                    ))
                     .clicked()
                     && let Err(error) = self.save_document(active)
                 {
@@ -661,7 +668,8 @@ impl Drawer {
                 }
                 if ui
                     .button(format!(
-                        "Save as…  {}",
+                        "{}  {}",
+                        crate::i18n::text("Save as…"),
                         self.workspaces.command_label("save-as")
                     ))
                     .clicked()
@@ -672,7 +680,7 @@ impl Drawer {
                 if ui
                     .add_enabled(
                         !self.background.busy(),
-                        egui::Button::new("Save in background…"),
+                        egui::Button::new(crate::i18n::text("Save in background…")),
                     )
                     .clicked()
                 {
@@ -693,7 +701,8 @@ impl Drawer {
                     .add_enabled(
                         undo > 0 || self.drawing.has_path_draft(),
                         egui::Button::new(format!(
-                            "Undo  {}",
+                            "{}  {}",
+                            crate::i18n::text("Undo"),
                             self.workspaces.command_label("undo")
                         )),
                     )
@@ -705,7 +714,8 @@ impl Drawer {
                     .add_enabled(
                         redo > 0 || self.drawing.has_path_draft(),
                         egui::Button::new(format!(
-                            "Redo  {}",
+                            "{}  {}",
+                            crate::i18n::text("Redo"),
                             self.workspaces.command_label("redo")
                         )),
                     )
@@ -713,10 +723,10 @@ impl Drawer {
                 {
                     self.execute_command(ui.ctx(), "redo");
                 }
-                if ui.button("History…").clicked() {
+                if ui.button(crate::i18n::text("History…")).clicked() {
                     self.history_navigation.open = true;
                 }
-                if crate::help::button(ui, "Duplicate view", "files").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Duplicate view"), "files").clicked() {
                     self.duplicate_view();
                 }
             }
@@ -725,14 +735,14 @@ impl Drawer {
         if self.active.is_some() {
             ui.horizontal_wrapped(|ui| {
                 use drawer_core::sizing::Change;
-                ui.label("Image:");
+                ui.label(crate::i18n::text("Image:"));
                 for (label, change) in [
                     ("Flip left/right", Change::FlipHorizontal),
                     ("Flip up/down", Change::FlipVertical),
                     ("Rotate 90° right", Change::Rotate90 { clockwise: true }),
                     ("Rotate 90° left", Change::Rotate90 { clockwise: false }),
                 ] {
-                    let button = crate::help::button(ui, label, "files");
+                    let button = crate::help::button(ui, crate::i18n::text(label), "files");
                     #[cfg(test)]
                     {
                         self.transform_buttons.insert(label, button.rect);
@@ -741,19 +751,27 @@ impl Drawer {
                         self.begin_transform(ui.ctx(), change);
                     }
                 }
-                if crate::help::button(ui, "Layer / folder paper…", "textures").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Layer / folder paper…"), "textures")
+                    .clicked()
+                {
                     self.textures.open = true;
                 }
-                if crate::help::button(ui, "Export PSD / PSB…", "textures").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Export PSD / PSB…"), "textures")
+                    .clicked()
+                {
                     self.request_psd();
                 }
-                if crate::help::button(ui, "Export JPEG / BMP / TGA / TIFF / WebP…", "files")
-                    .clicked()
+                if crate::help::button(
+                    ui,
+                    crate::i18n::text("Export JPEG / BMP / TGA / TIFF / WebP…"),
+                    "files",
+                )
+                .clicked()
                     && let Err(e) = self.begin_raster_export()
                 {
                     self.status = Some(e);
                 }
-                if crate::help::button(ui, "Export PNG…", "files").clicked()
+                if crate::help::button(ui, crate::i18n::text("Export PNG…"), "files").clicked()
                     && let Err(e) = self.begin_png_export()
                 {
                     self.status = Some(e);
@@ -842,7 +860,7 @@ impl Drawer {
                 if discard.clicked() {
                     action = Some(1);
                 }
-                let cancel = crate::help::button(ui, "Cancel", "files");
+                let cancel = crate::help::button(ui, crate::i18n::text("Cancel"), "files");
                 if cancel.clicked() {
                     action = Some(2);
                 }

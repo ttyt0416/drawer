@@ -134,7 +134,7 @@ impl Drawer {
             let c=e.checker.map(|c|egui::Color32::from_rgb(c[0],c[1],c[2]));
             let(r,_)=ui.allocate_exact_size(egui::vec2(128.,32.),egui::Sense::hover());for y in 0..2{for x in 0..8{ui.painter().rect_filled(egui::Rect::from_min_size(r.min+egui::vec2(x as f32*16.,y as f32*16.),egui::vec2(16.,16.)),0.,c[(x+y)%2]);}}
             ui.small("Check colors never enter document pixels, PNG/PSD output, document dirty state or Undo history. These buttons apply separately.");
-            ui.horizontal(|ui|{let r=ui.button("Apply display colors");self.paper_background.display=Some(r.rect);display=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Apply display colors");self.paper_background.display=Some(r.rect);display=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.paper_background.draft = Some(e);

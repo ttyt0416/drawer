@@ -187,7 +187,7 @@ impl Drawer {
             let r=ui.button("Preview mask operation");self.layer_masks.preview=Some(r.rect);preview=r.clicked();
             ui.allocate_ui(egui::vec2(490.,60.),|ui|{egui::ScrollArea::vertical().id_salt("mask-notes").max_height(60.).show(ui,|ui|{if let Some(p)=&e.prepared{for note in &p.notes{ui.small(note);}}});});
             ui.allocate_ui(egui::vec2(300.,118.),|ui|{if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After mask operation",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}});
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply reviewed mask operation"));self.layer_masks.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply reviewed mask operation"));self.layer_masks.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.layer_masks.draft = Some(e);

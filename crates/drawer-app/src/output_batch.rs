@@ -241,10 +241,10 @@ impl Drawer {
         let mut close = false;
         p.controls.clear();
         egui::Window::new("Output size, resolution and filename plan").default_pos(egui::pos2(25.,25.)).default_width(640.).max_height(680.).vscroll(true).open(&mut open).show(ctx,|ui|{
-            ui.horizontal(|ui|{for(key,label,enabled)in[("prepare","Prepare preview",p.job.is_none()),("write","Write reviewed new files",p.job.is_none()&&p.plan.is_some()&&p.reviewed)]{let b=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key,b.rect);if b.clicked(){action=key;}}let b=ui.button("Close");p.controls.insert("close",b.rect);close=b.clicked();});
+            ui.horizontal(|ui|{for(key,label,enabled)in[("prepare","Prepare preview",p.job.is_none()),("write","Write reviewed new files",p.job.is_none()&&p.plan.is_some()&&p.reviewed)]{let b=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key,b.rect);if b.clicked(){action=key;}}let b=ui.button(crate::i18n::text("Close"));p.controls.insert("close",b.rect);close=b.clicked();});
             let b=ui.checkbox(&mut p.show_source,"Show source sRGB instead of output soft proof (view only)");p.controls.insert("source-preview",b.rect);
             ui.add_enabled_ui(p.job.is_none(),|ui|{
-                ui.horizontal(|ui|{ui.label("Local output folder");ui.text_edit_singleline(&mut p.folder);if ui.button("Browse…").clicked()&&let Some(f)=rfd::FileDialog::new().pick_folder(){p.folder=f.display().to_string();}});
+                ui.horizontal(|ui|{ui.label("Local output folder");ui.text_edit_singleline(&mut p.folder);if ui.button(crate::i18n::text("Browse…")).clicked()&&let Some(f)=rfd::FileDialog::new().pick_folder(){p.folder=f.display().to_string();}});
                 ui.checkbox(&mut p.all,"All open documents (max32); otherwise active document");
                 ui.horizontal(|ui|{for(key,label,mode)in[("composite","Full composite",drawer_core::layer_output::Mode::Composite),("layers","Each layer",drawer_core::layer_output::Mode::Layers),("comps","Each saved comp",drawer_core::layer_output::Mode::Comps)]{let r=ui.selectable_value(&mut p.mode,mode,label);p.controls.insert(key,r.rect);}});
                 if p.mode==drawer_core::layer_output::Mode::Layers{ui.checkbox(&mut p.include_hidden,"Include hidden layers");}
@@ -281,7 +281,7 @@ impl Drawer {
                 if ui.add_enabled(!p.watermark_blocked||p.watermark_replace,egui::Button::new("Save local watermark preset")).clicked(){p.message=match self.storage.as_ref().ok_or_else(||"Local storage unavailable".to_string()).and_then(|v|p.settings.watermark.save(v)){Ok(())=>{p.watermark_blocked=false;"Local preset saved; closing without Save preserves the previous preset".into()},Err(e)=>e};}});
                 ui.checkbox(&mut p.reviewed,"Reviewed output names, pixel/DPI settings, losses and output details");
             });
-            if p.job.is_some(){ui.spinner();if ui.button("Cancel job").clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancel requested. Completed new files remain; pending files are reported canceled.".into();}}
+            if p.job.is_some(){ui.spinner();if ui.button(crate::i18n::text("Cancel job")).clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancel requested. Completed new files remain; pending files are reported canceled.".into();}}
             ui.label(&p.message);
             if let Some(plan)=&p.plan{for(f,t)in plan.files.iter().zip(&p.textures){ui.separator();ui.label(format!("{} · {}×{} · {:.5}DPI · {} bytes",f.path.display(),f.width,f.height,f.dpi,f.bytes.len()));ui.image((t.id(),t.size_vec2()));if !f.losses.is_empty(){ui.colored_label(egui::Color32::YELLOW,"Losses in this output; keep the editable source");for loss in &f.losses{ui.label(loss);}}for note in &f.notices{ui.small(note);}}}
             if let Some(r)=&p.report{for f in &r.files{ui.label(format!("{}: {}",f.path.display(),match &f.result{Ok(())=>"Written".into(),Err(e)=>format!("Failed / skipped: {e}")}));}}

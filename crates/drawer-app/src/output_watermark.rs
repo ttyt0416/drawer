@@ -4,7 +4,7 @@ pub(super) fn editor(ui: &mut egui::Ui, s: &mut Settings, message: &mut String) 
     ui.checkbox(&mut s.enabled, "Watermark enabled");
     ui.add_enabled_ui(s.enabled, |ui| {
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut s.source, Source::Text, "Text");
+            ui.selectable_value(&mut s.source, Source::Text, crate::i18n::text("Text"));
             ui.selectable_value(&mut s.source, Source::Image, "Local PNG");
         });
         ui.add_enabled_ui(s.source == Source::Text, |ui| {
@@ -59,7 +59,7 @@ pub(super) fn editor(ui: &mut egui::Ui, s: &mut Settings, message: &mut String) 
                 }
             });
         ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.).text("Watermark opacity"));
-        ui.checkbox(&mut s.lock, "Lock aspect ratio");
+        ui.checkbox(&mut s.lock, crate::i18n::text("Lock aspect ratio"));
         let old = s.scale;
         ui.horizontal(|ui| {
             ui.add(

@@ -69,7 +69,7 @@ pub(super) fn controls(
         ui.selectable_value(
             &mut e.settings.style.flow,
             core::Flow::Horizontal,
-            "Horizontal",
+            crate::i18n::text("Horizontal"),
         );
         let r = ui.selectable_value(
             &mut e.settings.style.flow,

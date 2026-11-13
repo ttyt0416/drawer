@@ -1,0 +1,11 @@
+# Local Korean/English UI
+
+The existing language preference now controls catalogued interface labels as well as local tutorials/tool descriptions. Choose Korean or English in **Language, IME and confirmations**, then apply. Settings/workspaces already persist this value. UI rendering changes on the next frame; document content, user names, command IDs, bindings and native files are language-independent.
+
+`locales/ko.json` is an embedded, locally shipped Korean catalog. English developer-owned strings are the English resource keys compiled with the UI. Common document/edit/view commands, layer menus, brush names, preferences, local inference/device controls, restricted plugins and resource bundles use it. Untranslated detailed dialogs/dynamic diagnostics deliberately retain English; the preference dialog states this fallback. This is not a claim that every technical sentence or third-party/model name has a Korean translation.
+
+Display-only translation is scoped to the current editor frame/thread and restored after nested rendering, so one editor or test does not change another thread's language. Static window titles keep their original stable IDs. User-entered document/layer names and text are not passed to the catalog. Missing keys fall back to their original English strings. No translation service, online fonts, locale downloads or external API is used. Existing Korean system-font fallback remains local.
+
+`scripts/localize-ui.py` checks duplicate/empty entries and catalogued static display-label coverage. `--apply` wraps only known developer UI literals, never arbitrary strings or document data. Newly added translations can be connected with that command. English shortcut notation and stable command IDs remain readable while existing Korean/English tool shortcut explanations are local.
+
+Verification checks English/Korean runtime scopes and fallback, actual painted UI text during language switches and fractional scale 1.75, preservation of a user document named `Save`, unchanged semantic document/history, and the existing preference apply/cancel/backup/restart tests with a Unicode data folder. Restricted plugins retain item 282 limits; platform support follows item 285 (only validated Windows x64 is advertised). Physical pen validation remains separate.

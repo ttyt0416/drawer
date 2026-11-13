@@ -667,9 +667,9 @@ impl Drawer {
                         egui::ComboBox::from_label("Page operation").selected_text(["Import local files","Combine selected pages","Split one page","Duplicate selected pages","Replace a page","Add blank pages"][p.mode as usize]).show_ui(ui,|ui|{for(i,label)in ["Import local files","Combine selected pages","Split one page","Duplicate selected pages","Replace a page","Add blank pages"].iter().enumerate(){ui.selectable_value(&mut p.mode,i as u8,*label);}});
                         if [0,4].contains(&p.mode){if ui.button("Choose local input files…").clicked(){action=1;}
                             if ui.button("Natural filename order").clicked(){page_batch::natural_sort(&mut p.files);}
-                            for(i,file)in p.files.iter().enumerate(){ui.horizontal(|ui|{ui.label(format!("{} · {}",i+1,file.display()));if ui.add_enabled(i>0,egui::Button::new("Up")).clicked(){move_file=Some((i,0));}
-                            if ui.add_enabled(i+1<p.files.len(),egui::Button::new("Down")).clicked(){move_file=Some((i,1));}
-                            if ui.button("Remove").clicked(){move_file=Some((i,2));}});}
+                            for(i,file)in p.files.iter().enumerate(){ui.horizontal(|ui|{ui.label(format!("{} · {}",i+1,file.display()));if ui.add_enabled(i>0,egui::Button::new(crate::i18n::text("Up"))).clicked(){move_file=Some((i,0));}
+                            if ui.add_enabled(i+1<p.files.len(),egui::Button::new(crate::i18n::text("Down"))).clicked(){move_file=Some((i,1));}
+                            if ui.button(crate::i18n::text("Remove")).clicked(){move_file=Some((i,2));}});}
                             ui.checkbox(&mut p.fit,"Fit imported pages to the specified size and DPI");
                         }else if p.mode!=5{ui.horizontal(|ui|{ui.label("Project page range (1,3-5)");ui.text_edit_singleline(&mut p.range);});}
                         if p.fit || p.mode==5{ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut p.width).range(1..=32768).prefix("Width "));ui.add(egui::DragValue::new(&mut p.height).range(1..=32768).prefix("Height "));ui.add(egui::DragValue::new(&mut p.dpi).range(1. ..=4800.).prefix("DPI "));});}
@@ -719,7 +719,7 @@ impl Drawer {
             });
             if working{ui.spinner();if ui.button("Cancel page operation").clicked(){p.job.as_ref().unwrap().cancel.store(true,Ordering::Relaxed);}}
             if !p.notice.is_empty(){ui.label(&p.notice);}
-            if ui.button("Close").clicked(){action=99;}
+            if ui.button(crate::i18n::text("Close")).clicked(){action=99;}
         });
         if let Some((n, kind)) = move_file {
             match kind {

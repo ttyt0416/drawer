@@ -184,7 +184,7 @@ impl Drawer {
         let mut apply = false;
         let mut cancel = false;
         let mut layer = None;
-        egui::Window::new("Tool input behavior").open(&mut open).collapsible(false).vscroll(true).show(ctx,|ui|{
+        egui::Window::new(crate::i18n::text("Tool input behavior")).id(egui::Id::new("Tool input behavior")).open(&mut open).collapsible(false).vscroll(true).show(ctx,|ui|{
             layer=Some(ui.layer_id());
             ui.horizontal(|ui|{let a=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior"));let c=crate::help::button(ui,"Cancel input behavior","modifier-tools");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.tool_input.apply_button=Some(a.rect);self.tool_input.cancel_button=Some(c.rect);}});
             super::edit::slider(ui,&mut draft.hold_millis,0..=5000,"Temporary tool threshold (ms)","modifier-tools");
@@ -225,7 +225,7 @@ impl Drawer {
             }
             ui.label("Input fields, menus and dialogs take priority. After suspension, release the modifier before using it again.");
             ui.label("Short tool keys keep the choice. Hold longer, then release to return. The drag threshold uses physical screen pixels.");
-            ui.horizontal_wrapped(|ui|{apply|=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior")).clicked();cancel|=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,"Reset draft","modifier-tools").clicked(){draft=Default::default();super::edit::discard_layer(ctx,ui.layer_id());}
+            ui.horizontal_wrapped(|ui|{apply|=ui.add_enabled(draft.valid()&&!super::edit::invalid_layer(ctx,ui.layer_id()),egui::Button::new("Apply input behavior")).clicked();cancel|=crate::help::button(ui,"Cancel input behavior","modifier-tools").clicked();if crate::help::button(ui,crate::i18n::text("Reset draft"),"modifier-tools").clicked(){draft=Default::default();super::edit::discard_layer(ctx,ui.layer_id());}
                 if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(s)=>{draft = *s.input;super::edit::discard_layer(ctx,ui.layer_id());},Err(e)=>self.status=Some(e.to_string())}}
             });
         });

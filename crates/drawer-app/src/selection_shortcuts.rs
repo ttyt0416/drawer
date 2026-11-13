@@ -151,7 +151,7 @@ impl Drawer {
                 Err(err)=>{ui.label(err);},
             }}
             ui.label("Blue shows the resulting selection. Pixels, path geometry and rulers remain unchanged. Apply creates one Undo entry; Cancel discards the preview.");
-            ui.horizontal(|ui|{let r=ui.add_enabled(allowed,egui::Button::new("Apply contour selection"));self.selection_shortcuts.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(allowed,egui::Button::new("Apply contour selection"));self.selection_shortcuts.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.selection_shortcuts.draft = Some(e);
@@ -184,16 +184,22 @@ impl Drawer {
                     ui.push_id(i, |ui| {
                         ui.horizontal(|ui| {
                             ui.label(c.label());
-                            if ui.add_enabled(i > 0, egui::Button::new("Up")).clicked() {
+                            if ui
+                                .add_enabled(i > 0, egui::Button::new(crate::i18n::text("Up")))
+                                .clicked()
+                            {
                                 action = Some((i, 0));
                             }
                             if ui
-                                .add_enabled(i + 1 < e.commands.len(), egui::Button::new("Down"))
+                                .add_enabled(
+                                    i + 1 < e.commands.len(),
+                                    egui::Button::new(crate::i18n::text("Down")),
+                                )
                                 .clicked()
                             {
                                 action = Some((i, 1));
                             }
-                            if ui.button("Remove").clicked() {
+                            if ui.button(crate::i18n::text("Remove")).clicked() {
                                 action = Some((i, 2));
                             }
                         });
@@ -226,7 +232,7 @@ impl Drawer {
                     let r = ui.add_enabled(e.valid(), egui::Button::new("Apply toolbar"));
                     self.selection_shortcuts.settings_apply = Some(r.rect);
                     apply = r.clicked();
-                    cancel = ui.button("Cancel").clicked();
+                    cancel = ui.button(crate::i18n::text("Cancel")).clicked();
                 });
             });
         if apply && e.valid() {

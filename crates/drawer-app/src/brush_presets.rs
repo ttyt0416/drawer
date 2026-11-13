@@ -179,8 +179,8 @@ impl Drawer {
     });
     ui.collapsing("Import ABR tips",|ui|self.abr_ui(ui,&mut e.abr,&mut e.draft));
     ui.separator();ui.heading("Quick size order");let mut movement=None;let mut remove=None;
-    for(n,size)in e.draft.sizes.iter().enumerate(){ui.push_id(("size",n),|ui|{ui.horizontal(|ui|{ui.label(format!("{size} px"));if ui.add_enabled(n>0,egui::Button::new("Up")).clicked(){movement=Some((n,-1));}
-    if ui.add_enabled(n+1<e.draft.sizes.len(),egui::Button::new("Down")).clicked(){movement=Some((n,1));}
+    for(n,size)in e.draft.sizes.iter().enumerate(){ui.push_id(("size",n),|ui|{ui.horizontal(|ui|{ui.label(format!("{size} px"));if ui.add_enabled(n>0,egui::Button::new(crate::i18n::text("Up"))).clicked(){movement=Some((n,-1));}
+    if ui.add_enabled(n+1<e.draft.sizes.len(),egui::Button::new(crate::i18n::text("Down"))).clicked(){movement=Some((n,1));}
     if ui.button("Remove from size list").clicked(){remove=Some(n);}});});}
     if let Some((n,d))=movement{e.draft.move_size(n,d);}
     if let Some(n)=remove{e.draft.remove_size(n);}

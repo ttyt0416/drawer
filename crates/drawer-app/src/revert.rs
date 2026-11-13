@@ -35,7 +35,7 @@ impl Drawer {
             ui.label("Unsaved edits will be discarded. The saved file stays unchanged.");
             ui.horizontal(|ui| {
                 confirm = crate::help::button(ui, "Discard edits and reload", "files").clicked();
-                cancel = crate::help::button(ui, "Cancel", "files").clicked();
+                cancel = crate::help::button(ui, crate::i18n::text("Cancel"), "files").clicked();
             });
         });
         if confirm {

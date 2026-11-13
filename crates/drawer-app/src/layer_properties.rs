@@ -200,7 +200,7 @@ impl Drawer {
         let mut view_changed = false;
         let mut solo = None;
         egui::Window::new("Layer properties and identification colors").open(&mut open).collapsible(false).resizable(false).default_width(530.0).min_width(530.0).default_pos(egui::pos2(60.0,25.0)).show(ctx,|ui|{
-            if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
+            if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
             ui.horizontal(|ui|{if ui.button("Select all layers / cells").clicked(){e.selected=targets.clone();}
 if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{} selected",e.selected.len()));});
             egui::ScrollArea::vertical().id_salt("property-layer-targets").max_height(150.0).show_rows(ui,22.0,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,label(d,t)).changed(){if selected{e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});
@@ -210,7 +210,7 @@ if ui.button("Clear targets").clicked(){e.selected.clear();}ui.label(format!("{}
                 let menu=egui::ComboBox::from_label("Layer blend").height(240.).width(180.).selected_text(e.values.blend.label()).show_ui(ui,|ui|{shown=true;for(i,mode)in drawer_core::layer_blend::Mode::ALL.iter().enumerate(){let r=ui.selectable_value(&mut e.values.blend,*mode,mode.label());self.layer_properties.modes[i]=Some(r.rect);if !was_open&&*mode==e.values.blend{r.scroll_to_me(Some(egui::Align::Center));}
 if r.clicked(){e.patch.blend=Some(*mode);}}});self.layer_properties.mode_trigger=Some(menu.response.rect);self.layer_properties.blend_open=shown;
             });
-            if ui.checkbox(&mut e.values.hidden,"Hidden").changed(){e.patch.hidden=Some(e.values.hidden);}
+            if ui.checkbox(&mut e.values.hidden,crate::i18n::text("Hidden")).changed(){e.patch.hidden=Some(e.values.hidden);}
             if ui.add(egui::Slider::new(&mut e.values.opacity,0..=100).text("Opacity %")).changed(){e.patch.opacity=Some(e.values.opacity);}
             if ui.checkbox(&mut e.values.locked,"Lock all layer content / position").changed(){e.patch.locked=Some(e.values.locked);}
             ui.add_enabled_ui(e.selected.iter().any(|t|!matches!(t,Target::Vector(_))),|ui|{if ui.checkbox(&mut e.values.pixels_locked,"Lock image pixels (raster / cells)").changed(){e.patch.pixels_locked=Some(e.values.pixels_locked);}});
@@ -225,7 +225,7 @@ if r.clicked(){e.patch.blend=Some(*mode);}}});self.layer_properties.mode_trigger
 if d.scene.clipping.solo.is_some() && ui.button("Restore visibility before solo").clicked(){solo=Some(None);}});
             ui.separator();ui.label("Show identification marks (view settings)");let p=&mut self.workspaces.store.current.layer_colors;
             ui.horizontal(|ui|{view_changed|=ui.checkbox(&mut p.list,"Lists").changed();view_changed|=ui.checkbox(&mut p.parents,"Mixed parent folders").changed();view_changed|=ui.checkbox(&mut p.canvas,"Selected canvas bounds").changed();view_changed|=ui.checkbox(&mut p.timeline,"Timeline cell / clip marks").changed();});
-            ui.horizontal(|ui|{let r=ui.add_enabled(!e.selected.is_empty()&&(!e.patch.empty()||e.alpha_patch.is_some()||e.clip_patch.is_some()),egui::Button::new("Apply changed properties"));self.layer_properties.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(!e.selected.is_empty()&&(!e.patch.empty()||e.alpha_patch.is_some()||e.clip_patch.is_some()),egui::Button::new("Apply changed properties"));self.layer_properties.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.label("Property edits use one Undo. View switches save separately. Identification colors never change image output. Hidden layers must be shown before painting.");
         });
         if open && !cancel {

@@ -150,33 +150,33 @@ impl Drawer {
         let mut close = false;
         let mut action = "";
         p.controls.clear();
-        egui::Window::new("Local templates and resource bundles").order(egui::Order::Foreground).open(&mut open).default_width(570.).default_pos(egui::pos2(20.,20.)).show(ctx,|ui|{
+        egui::Window::new(crate::i18n::text("Local templates and resource bundles")).id(egui::Id::new("Local templates and resource bundles")).order(egui::Order::Foreground).open(&mut open).default_width(570.).default_pos(egui::pos2(20.,20.)).show(ctx,|ui|{
             egui::ScrollArea::vertical().max_height(350.).show(ui,|ui|{
             ui.label("Editable full-page snapshots preserve layer stacks, comic cuts and timelines together.");
             ui.label("Native image/cel/model/audio/font caches are included. Linked sources refresh only on explicit request.");
             ui.small("Font files are not redistributed. Text keeps Unicode, formatting and cached glyph appearance. Review a local replacement before editing missing fonts; use outline/raster export when needed.");
             ui.add_enabled_ui(p.job.is_none(),|ui|{
-                ui.horizontal(|ui|{ui.label("Folder");if ui.text_edit_singleline(&mut p.path).changed(){p.prepared=None;p.reviewed=false;}
-                    if ui.button("Browse existing…").clicked() && let Some(f)=rfd::FileDialog::new().pick_folder(){p.path=f.display().to_string();p.prepared=None;p.reviewed=false;}});
-                ui.horizontal(|ui|{ui.label("Template name");ui.text_edit_singleline(&mut p.name);});
+                ui.horizontal(|ui|{ui.label(crate::i18n::text("Folder"));if ui.text_edit_singleline(&mut p.path).changed(){p.prepared=None;p.reviewed=false;}
+                    if ui.button(crate::i18n::text("Browse existing…")).clicked() && let Some(f)=rfd::FileDialog::new().pick_folder(){p.path=f.display().to_string();p.prepared=None;p.reviewed=false;}});
+                ui.horizontal(|ui|{ui.label(crate::i18n::text("Template name"));ui.text_edit_singleline(&mut p.name);});
                 ui.horizontal(|ui|{for kind in Kind::ALL{ui.selectable_value(&mut p.kind,kind,kind.label());}});
-                ui.label("Export: enter a NEW folder path. Import: choose a previously exported folder.");
-                let r=ui.checkbox(&mut p.embed_linked_caches,"Portable: copy linked image caches into the bundle (preserve original document links)");p.controls.insert("embed-links",r.rect);
+                ui.label(crate::i18n::text("Export: enter a NEW folder path. Import: choose a previously exported folder."));
+                let r=ui.checkbox(&mut p.embed_linked_caches,crate::i18n::text("Portable: copy linked image caches into the bundle (preserve original document links)"));p.controls.insert("embed-links",r.rect);
                 ui.horizontal(|ui|{for(key,label)in[("export","Export new bundle"),("prepare","Validate import")]{let b=ui.button(label);p.controls.insert(key,b.rect);if b.clicked(){action=key;}}});
                 if let Some(v)=&p.prepared{
                     ui.separator();ui.label(format!("{} · {} · {}×{} · {:.2}DPI · {} raster layers · {} frames",v.name,v.kind.label(),v.document.width,v.document.height,v.document.dpi,v.document.layers.len(),v.document.animation.as_ref().map_or(1,|a|a.frames)));
                     ui.label(format!("{} archived mask definitions. Existing frozen stroke IDs/settings stay unchanged.",v.masks.assets().len()));
                     for notice in &v.notices {ui.small(notice);}
-                    ui.checkbox(&mut p.copy_masks,"Also copy archived masks into my local library with new IDs");
+                    ui.checkbox(&mut p.copy_masks,crate::i18n::text("Also copy archived masks into my local library with new IDs"));
                 }
             });
             });
             if p.prepared.is_some() && p.job.is_none() {
-                ui.checkbox(&mut p.reviewed,"Reviewed: open a new unsaved document, preserving existing documents");
-                let b=ui.add_enabled(p.reviewed,egui::Button::new("Create from template"));p.controls.insert("apply",b.rect);if b.clicked(){action="apply";}
+                ui.checkbox(&mut p.reviewed,crate::i18n::text("Reviewed: open a new unsaved document, preserving existing documents"));
+                let b=ui.add_enabled(p.reviewed,egui::Button::new(crate::i18n::text("Create from template")));p.controls.insert("apply",b.rect);if b.clicked(){action="apply";}
             }
-            if p.job.is_some(){ui.spinner();let b=ui.button("Cancel job");p.controls.insert("cancel-job",b.rect);if b.clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancellation requested; waiting for owned temporary cleanup".into();}}
-            ui.label(&p.message);let b=ui.button("Close / discard preview");p.controls.insert("close",b.rect);if b.clicked(){close=true;}
+            if p.job.is_some(){ui.spinner();let b=ui.button(crate::i18n::text("Cancel job"));p.controls.insert("cancel-job",b.rect);if b.clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancellation requested; waiting for owned temporary cleanup".into();}}
+            ui.label(&p.message);let b=ui.button(crate::i18n::text("Close / discard preview"));p.controls.insert("close",b.rect);if b.clicked(){close=true;}
         });
         let result = match action {
             "export" => self.template_job(&mut p, true),

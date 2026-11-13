@@ -339,10 +339,10 @@ impl Drawer {
         p.controls.clear();
         egui::Window::new("Print layout and physical validation").default_pos(egui::pos2(25.,25.)).default_width(630.).max_height(650.).vscroll(false).open(&mut open).show(ctx,|ui|{
             let scroll=egui::ScrollArea::vertical().max_height(590.).show(ui,|ui|{
-            ui.horizontal(|ui|{for(key,label,enabled)in[("save","Save print settings",p.job.is_none()&&p.plan.is_some()),("print","Windows printer dialog…",p.job.is_none()&&p.plan.is_some()&&p.reviewed),("pdf","Virtual preview PDF…",p.job.is_none()&&p.plan.is_some()&&p.reviewed)]{let b=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key,b.rect);if b.clicked(){action=key;}}let b=ui.button("Close");p.controls.insert("close",b.rect);close=b.clicked();});
+            ui.horizontal(|ui|{for(key,label,enabled)in[("save","Save print settings",p.job.is_none()&&p.plan.is_some()),("print","Windows printer dialog…",p.job.is_none()&&p.plan.is_some()&&p.reviewed),("pdf","Virtual preview PDF…",p.job.is_none()&&p.plan.is_some()&&p.reviewed)]{let b=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key,b.rect);if b.clicked(){action=key;}}let b=ui.button(crate::i18n::text("Close"));p.controls.insert("close",b.rect);close=b.clicked();});
             ui.label("Preview is a captured page snapshot. Refresh from the drawing to include later edits. Virtual PDF is layout validation; actual printer/paper color must be checked separately.");
             ui.add_enabled_ui(p.job.is_none(),|ui|{
-                ui.horizontal(|ui|{for(paper,label)in[(Paper::A4,"A4"),(Paper::Letter,"Letter"),(Paper::Custom,"Custom")]{let b=ui.selectable_value(&mut p.draft.paper,paper,label);if paper==Paper::Letter{p.controls.insert("letter",b.rect);}}ui.checkbox(&mut p.draft.landscape,"Landscape");});
+                ui.horizontal(|ui|{for(paper,label)in[(Paper::A4,"A4"),(Paper::Letter,"Letter"),(Paper::Custom,"Custom")]{let b=ui.selectable_value(&mut p.draft.paper,paper,label);if paper==Paper::Letter{p.controls.insert("letter",b.rect);}}ui.checkbox(&mut p.draft.landscape,crate::i18n::text("Landscape"));});
                 ui.add_enabled_ui(p.draft.paper==Paper::Custom,|ui|{ui.horizontal(|ui|{ui.add(egui::DragValue::new(&mut p.draft.custom_mm[0]).range(1.0..=2000.0).prefix("Paper mm "));ui.add(egui::DragValue::new(&mut p.draft.custom_mm[1]).range(1.0..=2000.0));});});
                 ui.horizontal_wrapped(|ui|{for(n,name)in["Left mm ","Top mm ","Right mm ","Bottom mm "].into_iter().enumerate(){ui.add(egui::DragValue::new(&mut p.draft.margins[n]).range(0.0..=500.0).prefix(name));}});
                 ui.checkbox(&mut p.draft.fit,"Fit to reviewed margins (otherwise physical size × percent)");ui.add_enabled(!p.draft.fit,egui::DragValue::new(&mut p.draft.percent).range(1.0..=400.0).suffix("%"));
@@ -392,7 +392,7 @@ impl Drawer {
                 }}
                 ui.label(format!("Paper {:.2}×{:.2}mm; content {:.2}×{:.2}mm",plan.paper_mm[0],plan.paper_mm[1],item.image.width,item.image.height));if item.clipped{ui.colored_label(egui::Color32::YELLOW,"This scale clips content at the reviewed margins. Reduce percent or choose Fit.");}
             }
-            if p.job.is_some(){ui.spinner();if ui.button("Cancel job").clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancellation requested. Close any open Windows printer dialog with Cancel; the driver may finish an already-submitted page.".into();}}
+            if p.job.is_some(){ui.spinner();if ui.button(crate::i18n::text("Cancel job")).clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancellation requested. Close any open Windows printer dialog with Cancel; the driver may finish an already-submitted page.".into();}}
             ui.label(&p.message);
             });p.controls.insert("viewport",scroll.inner_rect);
         });

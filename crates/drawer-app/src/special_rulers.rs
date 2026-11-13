@@ -239,7 +239,7 @@ if e.selected==Some(id){e.selected=None;}}
             let valid=e.data.valid()&&fresh;
             if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");}else if !valid{ui.label("Correct invalid geometry, name, range or references before applying.");}
             ui.label("Ruler changes have their own Undo. Follow saved ruler and Move layer with rulers are separate commands. Folder scopes can keep each cut's raster layers separate.");
-            ui.horizontal(|ui|{let r=ui.add_enabled(valid,egui::Button::new("Apply special rulers"));self.special_rulers.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(valid,egui::Button::new("Apply special rulers"));self.special_rulers.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.special_rulers.draft = Some(e);
@@ -307,7 +307,7 @@ if e.selected==Some(id){e.selected=None;}}
             ui.label(format!("Output: {:?}",e.target));ui.add(egui::Slider::new(&mut e.width,0.05..=4096.0).logarithmic(true).text("Document line width"));super::edit::rgba(ui,&mut e.color);
             let fresh=d.revision==e.revision&&d.current_frame==e.frame;let result=if fresh{ruler_scope::follow_part(d,e.guide,e.target,e.width,e.color,e.part)}else{Err("Page/frame changed; reopen this command".into())};
             if let Err(err)=&result{ui.label(err);}ui.label("Draws one finite base path with one Undo. Scope, target lock, selection and drawing limits apply.");
-            ui.horizontal(|ui|{let r=ui.add_enabled(result.is_ok(),egui::Button::new("Draw ruler path"));self.special_rulers.follow_apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(result.is_ok(),egui::Button::new("Draw ruler path"));self.special_rulers.follow_apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.special_rulers.follow = Some(e);
@@ -351,7 +351,7 @@ if e.selected==Some(id){e.selected=None;}}
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Move layer with linked rulers").open(&mut open).collapsible(false).show(ctx,|ui|{ui.label(format!("Layer: {:?}. Raster movement rounds to pixels; vector movement keeps decimals.",e.target));ui.horizontal(|ui|{ui.label("X / Y");for v in &mut e.delta{ui.add(egui::DragValue::new(v).range(-1e6..=1e6));}});ui.horizontal(|ui|{let r=ui.button("Move layer and rulers");self.special_rulers.move_apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});});
+        egui::Window::new("Move layer with linked rulers").open(&mut open).collapsible(false).show(ctx,|ui|{ui.label(format!("Layer: {:?}. Raster movement rounds to pixels; vector movement keeps decimals.",e.target));ui.horizontal(|ui|{ui.label("X / Y");for v in &mut e.delta{ui.add(egui::DragValue::new(v).range(-1e6..=1e6));}});ui.horizontal(|ui|{let r=ui.button("Move layer and rulers");self.special_rulers.move_apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});});
         if !open || cancel {
             self.special_rulers.movement = None;
         } else if apply && let Err(err) = self.apply_ruler_layer_move() {

@@ -47,10 +47,10 @@ impl Drawer {
             if self.documents[n].color.depth==Depth::Sixteen && p.options.depth==Depth::Eight{ui.colored_label(egui::Color32::YELLOW,"16 to8 bit reduces channel precision in the exported copy.");}
             if self.documents[n].color.depth==Depth::Eight && p.options.depth==Depth::Sixteen{ui.label("8 to16 bit expands stored numbers; it adds no source detail.");}
             ui.small("Export keeps this drawing's pixels, precision, history and source unchanged. Transparent output retains alpha; opaque output composites the selected background. RGB profile is embedded for color-managed/16-bit output.");
-            ui.horizontal(|ui|{ui.label("Local PNG");if ui.text_edit_singleline(&mut p.path).changed(){p.replace=false;}let r=ui.button("Browse…");p.controls.insert("browse",r.rect);browse=r.clicked();});
+            ui.horizontal(|ui|{ui.label("Local PNG");if ui.text_edit_singleline(&mut p.path).changed(){p.replace=false;}let r=ui.button(crate::i18n::text("Browse…"));p.controls.insert("browse",r.rect);browse=r.clicked();});
             if std::path::Path::new(&p.path).exists(){let r=ui.checkbox(&mut p.replace,"Replace this existing exported file");p.controls.insert("replace",r.rect);}
             if !p.error.is_empty(){ui.colored_label(egui::Color32::YELLOW,&p.error);}
-            ui.horizontal(|ui|{let r=ui.add_enabled(!p.path.trim().is_empty(),egui::Button::new("Export PNG"));p.controls.insert("export",r.rect);export=r.clicked();let r=ui.button("Cancel");p.controls.insert("cancel",r.rect);cancel=r.clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(!p.path.trim().is_empty(),egui::Button::new("Export PNG"));p.controls.insert("export",r.rect);export=r.clicked();let r=ui.button(crate::i18n::text("Cancel"));p.controls.insert("cancel",r.rect);cancel=r.clicked();});
         });
         if browse
             && let Some(path) = rfd::FileDialog::new()

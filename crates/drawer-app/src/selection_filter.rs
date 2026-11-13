@@ -52,7 +52,7 @@ impl Drawer {
             egui::ComboBox::from_id_salt("selection-filter-operation").selected_text(format!("{:?}",e.op)).show_ui(ui,|ui|{for op in Operation::ALL{ui.selectable_value(&mut e.op,op,format!("{op:?}"));}});
             ui.add(egui::Slider::new(&mut e.radius,0..=64).text("Radius in document pixels"));
             ui.label("Expand/Shrink use a square neighborhood; Feather uses a box average. Radius 0 keeps the exact mask. Apply changes only the selection, as one Undo.");
-            ui.horizontal(|ui| {let r=ui.button("Apply selection boundary");self.selection_filter.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui| {let r=ui.button("Apply selection boundary");self.selection_filter.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if !open || cancel {
             self.selection_filter.draft = None;

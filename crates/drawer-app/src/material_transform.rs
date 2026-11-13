@@ -110,7 +110,7 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel) = (false, false, false);
         egui::Window::new("Image tiling and source transform").open(&mut open).fixed_size(egui::vec2(610.,595.)).default_pos(egui::pos2(40.,20.)).collapsible(false).resizable(false).show(ctx,|ui|{
-            if !fresh{ui.label("Page/frame changed; cancel and reopen the transform.");cancel=ui.button("Cancel").clicked();return;}
+            if !fresh{ui.label("Page/frame changed; cancel and reopen the transform.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
             let mut changed=false;let old_key=e.key;
             changed|=crate::transform_review::quality(ui,&mut e.quality);
             if working{ui.label("Calculating source transform — close or Escape to cancel");}
@@ -144,7 +144,7 @@ impl Drawer {
             ui.allocate_ui(egui::vec2(590.,65.),|ui|{egui::ScrollArea::vertical().id_salt("transform-notes").max_height(65.).show(ui,|ui|{if let Some(p)=&e.prepared{for note in &p.notes{ui.small(note);}}});});
             ui.allocate_ui(egui::vec2(590.,118.),|ui|{if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in["Current page","After transform"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}});
             let r=ui.add_enabled(e.prepared.is_some(),egui::Checkbox::new(&mut e.acknowledged,"I reviewed the source transform and mask notes"));self.material_transform.acknowledge=Some(r.rect);
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply source transform"));self.material_transform.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply source transform"));self.material_transform.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.material_transform.draft = Some(e);

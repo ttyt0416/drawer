@@ -408,7 +408,7 @@ impl CanvasView {
         let ppp = ui.ctx().pixels_per_point() as f64;
         if !self.compact_controls {
             ui.horizontal_wrapped(|ui| {
-                ui.label("Zoom");
+                ui.label(crate::i18n::text("Zoom"));
                 let mut percent = document.view.zoom * 100.0;
                 if super::edit::number(ui, &mut percent, 1.0_f64..=6400.0_f64, 1.0, "%", "view")
                     .changed()
@@ -416,7 +416,7 @@ impl CanvasView {
                 {
                     document.view.zoom = (percent / 100.0).clamp(0.01, 64.0);
                 }
-                ui.label("Angle");
+                ui.label(crate::i18n::text("Angle"));
                 let mut angle = document.view.angle;
                 if super::edit::number(ui, &mut angle, -1e9_f64..=1e9_f64, 0.5, "°", "view")
                     .changed()
@@ -430,10 +430,10 @@ impl CanvasView {
                 if crate::help::button(ui, "0°", "view").clicked() {
                     document.view.reset_angle(size, ppp);
                 }
-                if crate::help::button(ui, "Center", "view").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Center"), "view").clicked() {
                     document.view.pan = [0.0; 2];
                 }
-                if crate::help::button(ui, "Reset view", "view").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Reset view"), "view").clicked() {
                     document.view = Default::default();
                 }
                 if crate::help::checkbox(ui, &mut self.area_zoom, "Zoom region", "view").changed() {
@@ -616,7 +616,8 @@ impl CanvasView {
         {
             if self.navigator.floating {
                 let mut open = true;
-                let response = egui::Window::new("Navigator")
+                let response = egui::Window::new(crate::i18n::text("Navigator"))
+                    .id(egui::Id::new("Navigator"))
                     .id(egui::Id::new((
                         "floating-navigator",
                         self.navigator_generation,
@@ -1417,7 +1418,7 @@ impl CanvasView {
         ppp: f64,
     ) {
         if !self.navigator.floating {
-            ui.heading("Navigator");
+            ui.heading(crate::i18n::text("Navigator"));
         }
         ui.label(selection_status(document));
         let dimensions = if self.navigator.floating {

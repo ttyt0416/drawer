@@ -160,7 +160,7 @@ impl Drawer {
                 self.aids.refresh(&self.documents[index]);
             }
             let panel = &mut self.aids;
-            egui::Window::new("Canvas aids").open(&mut open).default_size(egui::vec2(430.0,450.0)).show(ctx,|ui| {
+            egui::Window::new(crate::i18n::text("Canvas aids")).id(egui::Id::new("Canvas aids")).open(&mut open).default_size(egui::vec2(430.0,450.0)).show(ctx,|ui| {
                 ui.add_enabled_ui(enabled,|ui| {
                     ui.horizontal(|ui| {crate::help::checkbox(ui,&mut panel.preferences.rulers,"Rulers","aids");crate::help::checkbox(ui,&mut panel.preferences.grid,"Grid","aids");crate::help::checkbox(ui,&mut panel.preferences.guides,"Guides","aids");});
                     let old_unit=panel.preferences.unit;

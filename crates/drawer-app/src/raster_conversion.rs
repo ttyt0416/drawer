@@ -367,7 +367,7 @@ impl Drawer {
         let (mut preview, mut apply, mut cancel) = (false, false, false);
         egui::Window::new("Rasterize and change content color").open(&mut open).default_width(550.).default_pos(egui::pos2(35.,20.)).collapsible(false).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen conversion.");return;}
-            let mut changed=false;if let Ok(rows)=catalog::rows(d){egui::ComboBox::from_label("Layer").selected_text(rows.iter().find(|r|r.key==e.target).map_or("Missing layer",|r|r.name.as_str())).show_ui(ui,|ui|{for row in rows.into_iter().filter(|r|!matches!(r.key,Key::Selection(_)|Key::Track(_)|Key::Cell{..})){changed|=ui.selectable_value(&mut e.target,row.key,&row.name).changed();}});}
+            let mut changed=false;if let Ok(rows)=catalog::rows(d){egui::ComboBox::from_label(crate::i18n::text("Layer")).selected_text(rows.iter().find(|r|r.key==e.target).map_or("Missing layer",|r|r.name.as_str())).show_ui(ui,|ui|{for row in rows.into_iter().filter(|r|!matches!(r.key,Key::Selection(_)|Key::Track(_)|Key::Cell{..})){changed|=ui.selectable_value(&mut e.target,row.key,&row.name).changed();}});}
             ui.horizontal(|ui|{for(value,label)in[(Operation::Rasterize,"Rasterize"),(Operation::Brightness,"Brightness to opacity"),(Operation::Color,"Current RGB")]{changed|=ui.radio_value(&mut e.operation,value,label).changed();}});
             match e.operation{
                 Operation::Rasterize=>{ui.horizontal(|ui|{ui.label("Raster expression");for v in[Expression::Color,Expression::Gray,Expression::Mono]{changed|=ui.radio_value(&mut e.expression,v,format!("{v:?}")).changed();}});ui.small("Original compositing position is retained. Complete vector clipping runs convert together. Masks and display effects become editable raster pixels. One Undo restores editable geometry.");},
@@ -380,7 +380,7 @@ if ui.button("Use current drawing color").clicked(){e.color=self.references.sess
             if let Some(p)=&e.prepared{ui.label(format!("Affected sources: {}",p.affected.len()));for note in &p.notes{ui.small(note);}
 if e.operation==Operation::Rasterize&&e.expression==Expression::Color{ui.label("Appearance comparison passed.");}}
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current page",&images[0]),("After conversion",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(128.,128.)));});}});}
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply raster conversion"));self.raster_conversion.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply raster conversion"));self.raster_conversion.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.raster_conversion.draft = Some(e);

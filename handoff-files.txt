@@ -1418,3 +1418,7 @@ docs/process/local-compute-network.json
 scripts/test-platform.py
 docs/process/platform-support.md
 docs/process/platform-windows-evidence.json
+crates/drawer-app/src/i18n.rs
+locales/ko.json
+scripts/localize-ui.py
+docs/process/localization.md

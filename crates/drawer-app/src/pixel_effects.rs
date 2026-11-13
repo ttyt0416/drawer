@@ -75,7 +75,7 @@ pub(super) fn controls(
             ui.add(egui::Slider::new(amount, 0. ..=1.).text("Noise amount"));
             state.seed(ui, seed);
             ui.horizontal(|ui| {
-                ui.radio_value(monochrome, false, "Color");
+                ui.radio_value(monochrome, false, crate::i18n::text("Color"));
                 ui.radio_value(monochrome, true, "Gray");
             });
         }

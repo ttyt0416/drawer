@@ -166,7 +166,7 @@ impl Drawer {
         let mut cancel = false;
         let mut changed = false;
         egui::Window::new("Merge layers and flatten page").open(&mut open).collapsible(false).resizable(false).default_width(570.).default_pos(egui::pos2(45.,20.)).show(ctx,|ui|{
-   if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
+   if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
    ui.allocate_ui(egui::vec2(550.,220.),|ui|{egui::ScrollArea::vertical().id_salt("merge-options").max_height(220.).show(ui,|ui|{
    ui.horizontal_wrapped(|ui|{changed|=ui.radio_value(&mut e.kind,0,"Merge selected").changed();changed|=ui.radio_value(&mut e.kind,1,"Merge down").changed();changed|=ui.radio_value(&mut e.kind,2,"Flatten page").changed();changed|=ui.radio_value(&mut e.kind,3,"Individual combine").changed();});
    if e.kind!=2{egui::ScrollArea::vertical().id_salt("merge-targets").max_height(100.).show_rows(ui,22.,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,super::layer_properties::label(d,t)).changed(){changed=true;if selected{if e.kind==1{e.selected.clear();}e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}}}});}
@@ -180,7 +180,7 @@ impl Drawer {
     if let Some(images)=&e.images{ui.horizontal(|ui|{ui.vertical(|ui|{ui.label("Current page");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(96.,96.)));});ui.vertical(|ui|{ui.label("After rasterization");ui.add(egui::Image::new(&images[1]).fit_to_exact_size(egui::vec2(96.,96.)));});});}
     let r=ui.checkbox(&mut e.acknowledged,"I reviewed the affected content and merge differences");self.layer_merge.ack=Some(r.rect);
    }
-   ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply merge"));self.layer_merge.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+   ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply merge"));self.layer_merge.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
    ui.small("One Undo restores layer structure, visibility, masks and effects. Preview and cancellation leave the document untouched.");
   });
         if open && !cancel {

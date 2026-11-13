@@ -1308,7 +1308,8 @@ impl Drawer {
         let mut cancel = false;
         let mut import = false;
         let mut export = false;
-        egui::Window::new("Input and commands")
+        egui::Window::new(crate::i18n::text("Input and commands"))
+            .id(egui::Id::new("Input and commands"))
             .open(&mut open)
             .vscroll(true)
             .scroll_bar_visibility(crate::ui_behavior::scroll(ctx))
@@ -1508,16 +1509,22 @@ fn edit_cycles(ui: &mut egui::Ui, e: &mut Editor) {
         for (n, t) in c.tools.iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(t);
-                if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
+                if ui
+                    .add_enabled(n > 0, egui::Button::new(crate::i18n::text("Up")))
+                    .clicked()
+                {
                     move_to = Some((n, n - 1));
                 }
                 if ui
-                    .add_enabled(n + 1 < c.tools.len(), egui::Button::new("Down"))
+                    .add_enabled(
+                        n + 1 < c.tools.len(),
+                        egui::Button::new(crate::i18n::text("Down")),
+                    )
                     .clicked()
                 {
                     move_to = Some((n, n + 1));
                 }
-                if crate::help::button(ui, "Remove", "shortcuts").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Remove"), "shortcuts").clicked() {
                     remove = Some(n);
                 }
             });
@@ -1630,10 +1637,13 @@ fn edit_access(ui: &mut egui::Ui, e: &mut Editor, color: [u8; 4]) {
                     }
                     _ => {}
                 }
-                if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
+                if ui
+                    .add_enabled(n > 0, egui::Button::new(crate::i18n::text("Up")))
+                    .clicked()
+                {
                     swap = Some((n, n - 1));
                 }
-                if crate::help::button(ui, "Remove", "shortcuts").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Remove"), "shortcuts").clicked() {
                     remove = Some(n);
                 }
             });
@@ -1732,7 +1742,7 @@ fn edit_radials(ui: &mut egui::Ui, e: &mut Editor) {
                         selected: slot.clone().unwrap_or_default(),
                     });
                 }
-                if crate::help::button(ui, "Clear", "shortcuts").clicked() {
+                if crate::help::button(ui, crate::i18n::text("Clear"), "shortcuts").clicked() {
                     *slot = None;
                 }
             });
@@ -1809,7 +1819,7 @@ fn edit_devices(ui: &mut egui::Ui, e: &mut Editor) {
                     selected: d.command.clone(),
                 });
             }
-            if crate::help::button(ui, "Remove", "shortcuts").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Remove"), "shortcuts").clicked() {
                 remove = Some(n);
             }
         });

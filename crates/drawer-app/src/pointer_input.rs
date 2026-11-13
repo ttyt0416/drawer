@@ -108,7 +108,7 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Mouse and pen input").open(&mut open).vscroll(true).show(ctx,|ui| {
+        egui::Window::new(crate::i18n::text("Mouse and pen input")).id(egui::Id::new("Mouse and pen input")).open(&mut open).vscroll(true).show(ctx,|ui| {
             let a=crate::help::button(ui,"Apply device input","pointer-input");
             let c=crate::help::button(ui,"Cancel device input","pointer-input");
             apply=a.clicked();cancel=c.clicked();
@@ -188,7 +188,7 @@ impl Drawer {
                 if let Some(value)=&mut s.stabilization { super::edit::slider(ui,value,0.0..=0.95,"Stabilization","pointer-input"); }
             }
             ui.label("Untyped contacts never draw. Finger drawing uses its explicit touch option. Mouse ID 0 is the GUI aggregate; pen IDs are valid for this session only.");
-            if crate::help::button(ui,"Reset draft","pointer-input").clicked(){draft=Default::default();}
+            if crate::help::button(ui,crate::i18n::text("Reset draft"),"pointer-input").clicked(){draft=Default::default();}
         });
         if !open || cancel {
             self.native_input.open = false;

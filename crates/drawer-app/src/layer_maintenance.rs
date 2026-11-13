@@ -108,7 +108,7 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut preview, mut apply, mut cancel, mut changed) = (false, false, false, false);
         egui::Window::new("Visible copy and layer cleanup").open(&mut open).resizable(false).collapsible(false).fixed_size(egui::vec2(580.,585.)).default_pos(egui::pos2(40.,20.)).show(ctx,|ui|{
-            if !fresh {ui.label("Page/frame changed; cancel and reopen this preview.");cancel=ui.button("Cancel").clicked();return;}
+            if !fresh {ui.label("Page/frame changed; cancel and reopen this preview.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
             ui.horizontal_wrapped(|ui|{for op in [Operation::VisibleCopy,Operation::Empty,Operation::Hidden] {changed|=ui.radio_value(&mut e.operation,op,op.label()).changed();}});
             ui.allocate_ui(egui::vec2(560.,62.),|ui|{ui.small(match e.operation {
                 Operation::VisibleCopy=>"Add the displayed page as a new raster. Originals remain visible and editable. Semi-transparent regions can become denser.",
@@ -131,7 +131,7 @@ impl Drawer {
             });});
             ui.allocate_ui(egui::vec2(560.,118.),|ui|{if let Some(images)=&e.images {ui.horizontal(|ui|{for (label,image) in ["Current page","After operation"].into_iter().zip(images) {ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}});
             let r=ui.add_enabled(e.prepared.is_some(),egui::Checkbox::new(&mut e.acknowledged,"I reviewed the result, candidates and reference impacts"));self.layer_maintenance.acknowledge=Some(r.rect);
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply layer operation"));self.layer_maintenance.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&e.acknowledged,egui::Button::new("Apply layer operation"));self.layer_maintenance.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.small("One Undo restores all structure and pixels. Preview and cancellation make no document changes.");
         });
         if open && !cancel {

@@ -73,6 +73,7 @@ mod help;
 mod history_audit;
 mod history_navigation;
 mod human_rig;
+mod i18n;
 mod image_import_dialog;
 mod information;
 mod input_replay;
@@ -707,23 +708,23 @@ impl Drawer {
         let mut open = true;
         let mut create = false;
         let mut cancel = false;
-        egui::Window::new("New canvas")
+        egui::Window::new(crate::i18n::text("New canvas")).id(egui::Id::new("New canvas"))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 size_fields::fields(ui, &mut self.new_canvas.size, true, None);
                 ui.horizontal(|ui| {
-                    ui.label("RGBA channel precision");
+                    ui.label(crate::i18n::text("RGBA channel precision"));
                     ui.selectable_value(
                         &mut self.new_canvas.depth,
                         drawer_core::color_precision::Depth::Sixteen,
-                        "16 bit",
+                        crate::i18n::text("16 bit"),
                     );
                     ui.selectable_value(
                         &mut self.new_canvas.depth,
                         drawer_core::color_precision::Depth::Eight,
-                        "8 bit",
+                        crate::i18n::text("8 bit"),
                     );
                 });
                 ui.small("Maximum 32768 × 32768 pixels; dense operations require full working buffers.");
@@ -733,18 +734,18 @@ impl Drawer {
                         ui.small(format!("Dense image {} bytes; two working buffers {} bytes; uncompressed atomic disk estimate {} bytes. Sparse 8-bit canvases allocate touched tiles; save checks actual encoded bytes.",cost.image,cost.working,cost.disk));
                     }
                 }
-                ui.small("sRGB color · dithering off");
+                ui.small(crate::i18n::text("sRGB color · dithering off"));
                 self.size_presets
                     .show(ui, &mut self.new_canvas.size, self.storage.as_ref());
                 crate::help::checkbox(
                     ui,
                     &mut self.new_canvas.transparent,
-                    "Transparent background",
+                    crate::i18n::text("Transparent background"),
                     "size",
                 );
                 ui.add_enabled_ui(!self.new_canvas.transparent, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Background");
+                        ui.label(crate::i18n::text("Background"));
                         ui.color_edit_button_srgb(&mut self.new_canvas.color);
                     });
                 });
@@ -752,8 +753,8 @@ impl Drawer {
                     ui.colored_label(egui::Color32::LIGHT_RED, error);
                 }
                 ui.horizontal(|ui| {
-                    let create_response = crate::help::button(ui, "Create", "size");
-                    let cancel_response = crate::help::button(ui, "Cancel", "size");
+                    let create_response = crate::help::button(ui, crate::i18n::text("Create"), "size");
+                    let cancel_response = crate::help::button(ui, crate::i18n::text("Cancel"), "size");
                     create = create_response.clicked();
                     cancel = cancel_response.clicked();
                     #[cfg(test)]
@@ -861,6 +862,8 @@ impl Drawer {
     }
 
     fn show(&mut self, ui: &mut egui::Ui) {
+        let _language =
+            crate::i18n::Scope::enter(self.workspaces.store.current.preferences.language);
         self.poll_background(false);
         if self.background.busy() {
             ui.ctx()
@@ -1031,7 +1034,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
                     && self.controls.radial.is_none(),
                 |ui| {
                     if self.simple_view || !self.workspaces.store.current.layout.menu {
-                        let _menu = ui.menu_button("All tools and commands", |ui| {
+                        let _menu = ui.menu_button(crate::i18n::text("All tools and commands"), |ui| {
                             ui.set_min_width(500.0_f32.min(ui.ctx().content_rect().width() - 40.0));
                             egui::ScrollArea::vertical()
                                 .id_salt("simple-all-commands")
@@ -1048,7 +1051,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
                         ui.horizontal_wrapped(|ui| {
                             for tip in BrushTip::ALL {
                                 if ui
-                                    .selectable_label(self.selected == tip, tip.label())
+                                    .selectable_label(self.selected == tip, crate::i18n::text(tip.label()))
                                     .clicked()
                                 {
                                     self.set_tool(tip);

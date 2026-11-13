@@ -688,7 +688,7 @@ impl Drawer {
                 ui.horizontal(|ui|{ui.label("Minimum bleed / safe mm");ui.add(egui::DragValue::new(&mut p.setup.bleed_mm).range(0. ..=100.));ui.add(egui::DragValue::new(&mut p.setup.safe_mm).range(0. ..=100.));});
                 ui.horizontal(|ui|{ui.label("Expected trim mm (0 = any)");for v in &mut p.setup.trim_mm{ui.add(egui::DragValue::new(v).range(0. ..=10000.));}});
                 if let Some(b)=&p.book {
-                    for (label,value) in [("Front cover",&mut p.setup.front),("Back cover",&mut p.setup.back)]{egui::ComboBox::from_label(label).selected_text(value.map_or("None".into(),|id|format!("Page ID{id}"))).show_ui(ui,|ui|{ui.selectable_value(value,None,"None");for (n,id) in b.work.page_ids.iter().enumerate(){ui.selectable_value(value,Some(*id),format!("Page{} / ID{id}",n+1));}});}
+                    for (label,value) in [("Front cover",&mut p.setup.front),("Back cover",&mut p.setup.back)]{egui::ComboBox::from_label(label).selected_text(value.map_or("None".into(),|id|format!("Page ID{id}"))).show_ui(ui,|ui|{ui.selectable_value(value,None,crate::i18n::text("None"));for (n,id) in b.work.page_ids.iter().enumerate(){ui.selectable_value(value,Some(*id),format!("Page{} / ID{id}",n+1));}});}
                     let mut number=p.index+1;ui.add(egui::Slider::new(&mut number,1..=b.pages.len()).text("Preview page"));p.index=number-1;ui.checkbox(&mut p.closed,"Cover / spine view");
                     ui.add(egui::Slider::new(&mut p.opening,0. ..=170.).text("Opening"));ui.add(egui::Slider::new(&mut p.yaw,-75. ..=75.).text("Rotate"));ui.add(egui::Slider::new(&mut p.pitch,-60. ..=60.).text("Tilt"));
                     if ui.button("Run output preflight").clicked(){action=2;}

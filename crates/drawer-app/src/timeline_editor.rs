@@ -878,7 +878,7 @@ if ui.button("Discard prepared edit").clicked(){action=11;}}
                 if let Some(image)=&view.image{ui.collapsing("Timeline preview",|ui|{ui.image((image.id(),image.size_vec2()));});}
                 ui.horizontal(|ui|{ui.selectable_value(&mut p.section,0,"Tracks / exposure table");ui.selectable_value(&mut p.section,1,"Cel definitions / content");ui.selectable_value(&mut p.section,2,"Labels / clipboard");});
                 if p.section==0{
-                    ui.horizontal(|ui|{ui.label("Name");ui.text_edit_singleline(&mut p.name);if ui.button("New track + blank cel").clicked(){edit=Some(Edit::NewTrack(p.name.clone()));}
+                    ui.horizontal(|ui|{ui.label(crate::i18n::text("Name"));ui.text_edit_singleline(&mut p.name);if ui.button("New track + blank cel").clicked(){edit=Some(Edit::NewTrack(p.name.clone()));}
 if ui.button("Enable editable cels").clicked(){edit=Some(Edit::Enable);}});
                     for(t,track)in a.tracks.iter().enumerate(){let tid=d.scene.catalog.tracks.id(t);ui.selectable_value(&mut view.track,Some(tid),format!("{} · {} cel slots · {} exposure starts",track.name,track.cells.len(),track.exposures.len()));}
                     if let Some(track)=view.track{ui.horizontal_wrapped(|ui|{if ui.button("Rename track").clicked(){edit=Some(Edit::RenameTrack{track,name:p.name.clone()});}

@@ -161,20 +161,21 @@ impl Drawer {
         let mut cancel = false;
         #[cfg(test)]
         self.preferences.restore_one.clear();
-        egui::Window::new("Language, IME and confirmations").open(&mut open).constrain(true).show(ctx,|ui|{
-            ui.horizontal(|ui|{let a=crate::help::button(ui,"Apply preferences","preferences");let c=crate::help::button(ui,"Cancel preferences","preferences");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.preferences.apply=Some(a.rect);self.preferences.cancel=Some(c.rect);}});
-            ui.label("Local tutorial / tool description language");ui.horizontal(|ui|{ui.selectable_value(&mut draft.language,Language::Korean,"한국어");ui.selectable_value(&mut draft.language,Language::English,"English");});
-            ui.label("IME when entering a text field");ui.horizontal(|ui|{for(mode,label)in[(ImeMode::Keep,"Keep current"),(ImeMode::Open,"Open IME"),(ImeMode::Closed,"Close IME")] {ui.selectable_value(&mut draft.text_ime,mode,label);}});
-            ui.label("IME when entering a number field");ui.horizontal(|ui|{ui.selectable_value(&mut draft.number_ime,ImeMode::Keep,"Keep current");ui.selectable_value(&mut draft.number_ime,ImeMode::Closed,"Close IME");});
+        egui::Window::new(crate::i18n::text("Language, IME and confirmations")).id(egui::Id::new("Language, IME and confirmations")).open(&mut open).constrain(true).show(ctx,|ui|{
+            ui.horizontal(|ui|{let a=crate::help::button(ui,crate::i18n::text("Apply preferences"),"preferences");let c=crate::help::button(ui,crate::i18n::text("Cancel preferences"),"preferences");apply=a.clicked();cancel=c.clicked();#[cfg(test)]{self.preferences.apply=Some(a.rect);self.preferences.cancel=Some(c.rect);}});
+            ui.label(crate::i18n::text("Interface / tutorial / tool language"));ui.horizontal(|ui|{ui.selectable_value(&mut draft.language,Language::Korean,crate::i18n::text("한국어"));ui.selectable_value(&mut draft.language,Language::English,crate::i18n::text("English"));});
+            ui.small(crate::i18n::text("Untranslated details are shown in English."));
+            ui.label(crate::i18n::text("IME when entering a text field"));ui.horizontal(|ui|{for(mode,label)in[(ImeMode::Keep,"Keep current"),(ImeMode::Open,"Open IME"),(ImeMode::Closed,"Close IME")] {ui.selectable_value(&mut draft.text_ime,mode,label);}});
+            ui.label(crate::i18n::text("IME when entering a number field"));ui.horizontal(|ui|{ui.selectable_value(&mut draft.number_ime,ImeMode::Keep,crate::i18n::text("Keep current"));ui.selectable_value(&mut draft.number_ime,ImeMode::Closed,crate::i18n::text("Close IME"));});
             ui.label("Each field restores the entry state on exit or window focus loss. Composition is never forced into a number. Failure keeps the previous state and shows a reason.");
             if let Some(error)=&self.preferences.error{ui.colored_label(egui::Color32::LIGHT_RED,error);}
-            ui.separator();ui.label("Confirmation dialogs (suppression affects settings drafts only)");
+            ui.separator();ui.label(crate::i18n::text("Confirmation dialogs (suppression affects settings drafts only)"));
             for warning in Confirmation::ALL {ui.horizontal(|ui|{
                 let mut hidden=draft.suppressed.contains(&warning);if crate::help::checkbox(ui,&mut hidden,format!("Hide: {}",warning.label()),"preferences").changed(){if hidden{draft.suppressed.insert(warning);}else{draft.suppressed.remove(&warning);}}
-                let restore=crate::help::button(ui,"Restore this confirmation","preferences");#[cfg(test)]self.preferences.restore_one.push((warning,restore.rect));if restore.clicked(){draft.restore(Some(warning));}
+                let restore=crate::help::button(ui,crate::i18n::text("Restore this confirmation"),"preferences");#[cfg(test)]self.preferences.restore_one.push((warning,restore.rect));if restore.clicked(){draft.restore(Some(warning));}
             });}
-            let restore=crate::help::button(ui,"Restore all confirmations","preferences");#[cfg(test)]{self.preferences.restore_all=Some(restore.rect);}if restore.clicked(){draft.restore(None);}
-            if crate::help::button(ui,"Open offline tutorial","preferences").clicked(){self.open_help(match draft.language{Language::Korean=>"tutorial-ko",Language::English=>"tutorial-en"});}
+            let restore=crate::help::button(ui,crate::i18n::text("Restore all confirmations"),"preferences");#[cfg(test)]{self.preferences.restore_all=Some(restore.rect);}if restore.clicked(){draft.restore(None);}
+            if crate::help::button(ui,crate::i18n::text("Open offline tutorial"),"preferences").clicked(){self.open_help(match draft.language{Language::Korean=>"tutorial-ko",Language::English=>"tutorial-en"});}
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.preferences.open = false;

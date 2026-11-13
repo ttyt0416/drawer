@@ -76,20 +76,29 @@ impl Drawer {
     pub(super) fn full_commands(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.heading(APP_NAME);
-            ui.label("Local drawing workspace");
-            if crate::help::button(ui, "Help", "screen-mode").clicked() {
+            ui.label(crate::i18n::text("Local drawing workspace"));
+            if crate::help::button(ui, crate::i18n::text("Help"), "screen-mode").clicked() {
                 self.open_help("welcome");
             }
-            if crate::help::button(ui, "Offline tutorial", "preferences").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Offline tutorial"), "preferences")
+                .clicked()
+            {
                 self.open_tutorial();
             }
-            if crate::help::button(ui, "Language, IME and confirmations", "preferences").clicked() {
+            if crate::help::button(
+                ui,
+                crate::i18n::text("Language, IME and confirmations"),
+                "preferences",
+            )
+            .clicked()
+            {
                 self.preferences.open = true;
             }
-            if crate::help::button(ui, "About", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("About"), "screen-mode").clicked() {
                 self.open_help("version");
             }
-            let new_response = crate::help::button(ui, "New canvas", "screen-mode");
+            let new_response =
+                crate::help::button(ui, crate::i18n::text("New canvas"), "screen-mode");
             #[cfg(test)]
             {
                 self.new_button = Some(new_response.rect);
@@ -98,58 +107,88 @@ impl Drawer {
                 self.new_canvas = NewCanvas::default();
                 self.show_new_canvas = true;
             }
-            if crate::help::button(ui, "References", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("References"), "screen-mode").clicked() {
                 self.references.session.workspace.visible = true;
             }
-            if crate::help::button(ui, "Canvas aids", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Canvas aids"), "screen-mode").clicked() {
                 self.aids.visible = true;
             }
-            if crate::help::button(ui, "Display view", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Display view"), "screen-mode").clicked() {
                 self.display.settings_open = true;
             }
-            if crate::help::button(ui, "Image quality", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Image quality"), "screen-mode").clicked()
+            {
                 self.show_interpolation = true;
             }
-            if crate::help::button(ui, "Interface size", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Interface size"), "screen-mode").clicked()
+            {
                 self.interface.open = true;
             }
-            if crate::help::button(ui, "Information", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Information"), "screen-mode").clicked() {
                 self.workspaces.store.current.information.visible = true;
             }
-            if crate::help::button(ui, "Cursor styles", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Cursor styles"), "screen-mode").clicked()
+            {
                 self.cursors.open = true;
             }
-            if crate::help::button(ui, "Panels, cursor and power", "screen-mode").clicked() {
+            if crate::help::button(
+                ui,
+                crate::i18n::text("Panels, cursor and power"),
+                "screen-mode",
+            )
+            .clicked()
+            {
                 self.ui_behavior.open = true;
             }
-            if crate::help::button(ui, "Tool input behavior", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Tool input behavior"), "screen-mode")
+                .clicked()
+            {
                 self.tool_input.open = true;
             }
-            if crate::help::button(ui, "Mouse and pen input", "pointer-input").clicked() {
+            if crate::help::button(
+                ui,
+                crate::i18n::text("Mouse and pen input"),
+                "pointer-input",
+            )
+            .clicked()
+            {
                 self.native_input.open = true;
             }
-            if crate::help::button(ui, "Brush pressure", "pressure").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Brush pressure"), "pressure").clicked() {
                 self.pressure.open = true;
             }
-            if crate::help::button(ui, "Virtual input replay", "input-replay").clicked() {
+            if crate::help::button(
+                ui,
+                crate::i18n::text("Virtual input replay"),
+                "input-replay",
+            )
+            .clicked()
+            {
                 self.replay.open = true;
             }
-            if crate::help::button(ui, "Input and commands", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Input and commands"), "screen-mode")
+                .clicked()
+            {
                 self.controls.open = true;
             }
-            if crate::help::button(ui, "Workspaces", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Workspaces"), "screen-mode").clicked() {
                 self.workspaces.open = true;
             }
-            if crate::help::button(ui, "Test painting", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Test painting"), "screen-mode").clicked()
+            {
                 self.workspaces.store.current.scratchpad.visible = true;
             }
-            if crate::help::button(ui, "Tool properties", "tool-properties").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Tool properties"), "tool-properties")
+                .clicked()
+            {
                 self.properties.open = true;
             }
-            if crate::help::button(ui, "Panels", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Panels"), "screen-mode").clicked() {
                 self.panels.open = true;
             }
-            if crate::help::button(ui, "Navigator settings", "screen-mode").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Navigator settings"), "screen-mode")
+                .clicked()
+            {
                 self.show_navigator_settings = true;
             }
         });
@@ -214,7 +253,7 @@ impl Drawer {
                 self.status = Some(e.to_string());
             }
         } else {
-            ui.heading("Create a canvas to begin");
+            ui.heading(crate::i18n::text("Create a canvas to begin"));
         }
     }
 }

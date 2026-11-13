@@ -405,7 +405,7 @@ impl Drawer {
                     }),
                 );
                 import = accept.clicked();
-                let dismiss = crate::help::button(ui, "Cancel", "files");
+                let dismiss = crate::help::button(ui, crate::i18n::text("Cancel"), "files");
                 cancel = dismiss.clicked();
                 #[cfg(test)]
                 {

@@ -137,7 +137,8 @@ impl Drawer {
         }
         let Some(n) = self.active else {
             let mut visible = true;
-            egui::Window::new("Information")
+            egui::Window::new(crate::i18n::text("Information"))
+                .id(egui::Id::new("Information"))
                 .open(&mut visible)
                 .show(ctx, |ui| {
                     ui.label("Open a document to read coordinates, lengths and colors.");
@@ -196,10 +197,10 @@ impl Drawer {
         let all_left = !docked.is_empty() && docked.iter().all(|p| p.dock == Dock::Left);
         let all_right = !docked.is_empty() && docked.iter().all(|p| p.dock == Dock::Right);
         self.information.shown = true;
-        egui::Window::new("Information").open(&mut visible).default_pos(egui::pos2(20.0,50.0)).default_width(390.0).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx,|ui|{
+        egui::Window::new(crate::i18n::text("Information")).id(egui::Id::new("Information")).open(&mut visible).default_pos(egui::pos2(20.0,50.0)).default_width(390.0).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx,|ui|{
             ui.horizontal_wrapped(|ui|{ui.selectable_value(&mut settings.theme,Theme::Dark,"Dark theme");ui.selectable_value(&mut settings.theme,Theme::Light,"Light theme");if crate::help::selectable(ui,all_left,"Docked tools left","information").clicked(){settings.side=Side::Left;force_side=true;}
 if crate::help::selectable(ui,all_right,"Docked tools right","information").clicked(){settings.side=Side::Right;force_side=true;}
-if crate::help::button(ui,"Interface size","information").clicked(){self.interface.open=true;}});
+if crate::help::button(ui,crate::i18n::text("Interface size"),"information").clicked(){self.interface.open=true;}});
             egui::ComboBox::from_id_salt("information-unit").selected_text(format!("{:?}",settings.unit)).show_ui(ui,|ui|{for unit in Unit::ALL{ui.selectable_value(&mut settings.unit,unit,format!("{unit:?}"));}});ui.label("Document uses the current ruler unit. Measurements stay in document coordinates.");
             let session=self.information.sessions.entry(id).or_default();
             ui.horizontal_wrapped(|ui|{let start=crate::help::button(ui,"Pick start on canvas","information");let end=crate::help::button(ui,"Pick end on canvas","information");if start.clicked(){session.waiting=1;}

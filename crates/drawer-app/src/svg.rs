@@ -326,7 +326,7 @@ impl Drawer {
             apply=ui.add_enabled(fresh && e.import.as_ref().is_some_and(|p|p.paths+p.images>0),egui::Button::new("Import as one Undo")).clicked();
             ui.small("SVG strokes become editable filled outlines, with caps, joins and dashes baked. Gradients and clipping remain local vector data. Vector recoloring replaces an imported gradient with a solid fill.");
             ui.separator();export=ui.add_enabled(fresh,egui::Button::new("Prepare current page SVG export")).clicked();
-            if let Some(out)=&e.export{ui.label(format!("{} SVG bytes · {} conversion notices",out.text.len(),out.warnings.len()));for warning in &out.warnings{ui.small(warning);}ui.horizontal(|ui|{save=ui.add_enabled(fresh,egui::Button::new("Save SVG…")).clicked();copy=ui.add_enabled(fresh,egui::Button::new("Copy SVG text")).clicked();});}
+            if let Some(out)=&e.export{ui.label(format!("{} SVG bytes · {} conversion notices",out.text.len(),out.warnings.len()));for warning in &out.warnings{ui.small(warning);}ui.horizontal(|ui|{save=ui.add_enabled(fresh,egui::Button::new("Save SVG…")).clicked();copy=ui.add_enabled(fresh,egui::Button::new(crate::i18n::text("Copy SVG text"))).clicked();});}
             ui.small("Variable widths and nonround tips become vector outlines. Unsupported image/texture or compositing sources use embedded PNG. The .drawer source, its selection and Undo remain unchanged by export/copy.");
         });
         if reload {

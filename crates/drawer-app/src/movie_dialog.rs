@@ -386,7 +386,7 @@ impl Drawer {
             }
             if dialog.job.is_some() {ui.spinner();ui.label("Reading local movie… Cancel stops decoding.");ctx.request_repaint();}
             if let Some(error)=&dialog.error {ui.colored_label(egui::Color32::LIGHT_RED,error);}
-            ui.horizontal(|ui| {let a=ui.add_enabled(dialog.clip.is_some()&&dialog.job.is_none(),egui::Button::new(if dialog.insert {"Insert track"}else {"Create animation"}));accept=a.clicked();let c=crate::help::button(ui,"Cancel","movie");cancel=c.clicked();#[cfg(test)] {dialog.accept_button=Some(a.rect);dialog.cancel_button=Some(c.rect);}});
+            ui.horizontal(|ui| {let a=ui.add_enabled(dialog.clip.is_some()&&dialog.job.is_none(),egui::Button::new(if dialog.insert {"Insert track"}else {"Create animation"}));accept=a.clicked();let c=crate::help::button(ui,crate::i18n::text("Cancel"),"movie");cancel=c.clicked();#[cfg(test)] {dialog.accept_button=Some(a.rect);dialog.cancel_button=Some(c.rect);}});
         });
         if switch_screen {
             self.simple_view = !self.simple_view;

@@ -64,7 +64,7 @@ pub(super) fn object(ui: &mut egui::Ui, d: &Document, e: &mut Draft) {
                         .map_or_else(|| "None".into(), |id| format!("Text#{id}")),
                 )
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut b.text, None, "None");
+                    ui.selectable_value(&mut b.text, None, crate::i18n::text("None"));
                     for (n, o) in d.scene.objects.iter().enumerate() {
                         if let PageObject::Text { text, .. } = o {
                             let id = d.scene.catalog.objects.id(n);

@@ -214,10 +214,10 @@ impl Drawer {
         let mut folder = false;
         p.controls.clear();
         egui::Window::new("Action playback and local file batch").id(egui::Id::new("action-runner")).default_pos(egui::pos2(40.,40.)).default_width(610.).max_height(650.).vscroll(true).open(&mut open).show(ctx,|ui|{
-            let r=ui.button("Close");p.controls.insert("close",r.rect);if r.clicked(){command=Some("close");}
+            let r=ui.button(crate::i18n::text("Close"));p.controls.insert("close",r.rect);if r.clicked(){command=Some("close");}
             ui.label(p.action.as_ref().map_or("No action",|a|a.name.as_str()));
             ui.small("This is a frozen action snapshot. Discard and reopen from the editor to use edited parameters. Originals are never saved by file batches; new .drawer outputs only.");
-            ui.horizontal(|ui|{ui.label("Step error:");ui.selectable_value(&mut p.steps,core::Errors::Stop,"Stop");ui.selectable_value(&mut p.steps,core::Errors::Skip,"Skip step");});
+            ui.horizontal(|ui|{ui.label("Step error:");ui.selectable_value(&mut p.steps,core::Errors::Stop,crate::i18n::text("Stop"));ui.selectable_value(&mut p.steps,core::Errors::Skip,"Skip step");});
             ui.horizontal(|ui|{ui.label("File error:");ui.selectable_value(&mut p.files,core::Errors::Stop,"Stop batch");ui.selectable_value(&mut p.files,core::Errors::Skip,"Skip file");});
             ui.add_enabled_ui(p.job.is_none()&&p.run.is_none(),|ui|{
                 ui.horizontal(|ui|{pick=ui.button("Select local input files…").clicked();folder=ui.button("Output folder…").clicked();});

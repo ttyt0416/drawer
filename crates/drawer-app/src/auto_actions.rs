@@ -366,7 +366,7 @@ impl Drawer {
             if p.job.is_some(){let r=ui.button("Cancel playback");p.controls.insert("cancel-play",r.rect);if r.clicked(){command=Some("cancel-play");}}
             if let Some(s)=&p.prepared {ui.label(format!("Prepared: {} × {}, {} layers",s.state.width,s.state.height,s.state.layers.len()));ui.horizontal(|ui|{for key in["apply","discard"]{let r=ui.button(key);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});}
             ui.separator();
-            ui.horizontal_wrapped(|ui|{ui.label("Name");ui.text_edit_singleline(&mut p.name);for(key,label)in[("new-set","New set"),("new-action","New action")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
+            ui.horizontal_wrapped(|ui|{ui.label(crate::i18n::text("Name"));ui.text_edit_singleline(&mut p.name);for(key,label)in[("new-set","New set"),("new-action","New action")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
             for set in &mut p.draft.sets {
                 ui.horizontal(|ui|{if ui.selectable_label(p.set==Some(set.id),format!("Set {}",set.id)).clicked(){p.set=Some(set.id);p.action=None;p.recording=None;}ui.text_edit_singleline(&mut set.name);});
                 if p.set==Some(set.id){
@@ -390,7 +390,7 @@ impl Drawer {
             }
             ui.collapsing("Local set import / export",|ui|{
                 if ui.text_edit_singleline(&mut p.path).changed(){p.import=None;p.replace=false;p.acknowledge=false;}
-                ui.horizontal_wrapped(|ui|{browse=ui.button("Browse…").clicked();save_as=ui.button("Save as…").clicked();for(key,label)in[("read","Read sets"),("import","Apply independent sets"),("cancel-import","Cancel import"),("export","Export selected set")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
+                ui.horizontal_wrapped(|ui|{browse=ui.button(crate::i18n::text("Browse…")).clicked();save_as=ui.button(crate::i18n::text("Save as…")).clicked();for(key,label)in[("read","Read sets"),("import","Apply independent sets"),("cancel-import","Cancel import"),("export","Export selected set")]{let r=ui.button(label);p.controls.insert(key,r.rect);if r.clicked(){command=Some(key);}}});
                 ui.checkbox(&mut p.replace,"Replace existing export file");
                 if let Some(s)=&p.import{ui.label("Validated and staged; all imported IDs will be new.");for issue in &s.issues{ui.colored_label(egui::Color32::YELLOW,issue);}if !s.issues.is_empty(){ui.checkbox(&mut p.acknowledge,"Keep these unavailable steps for editing; playback will refuse enabled unavailable steps");}}
             });
@@ -648,7 +648,7 @@ fn operation_fields(ui: &mut egui::Ui, op: &mut Operation) {
             }
         }
         Operation::Dpi(dpi) => {
-            ui.label("DPI");
+            ui.label(crate::i18n::text("DPI"));
             ui.add(egui::DragValue::new(dpi).range(1.0..=9600.0));
         }
         Operation::NewRaster { name } => {

@@ -77,13 +77,13 @@ impl Drawer {
         let mut cancel = false;
         egui::Window::new("Reference and draft layer roles").open(&mut open).default_width(480.).collapsible(false).default_pos(egui::pos2(45.,25.)).show(ctx,|ui|{
             if !fresh{ui.label("Page/frame changed; cancel and reopen roles.");return;}
-            if let Ok(rows)=catalog::rows(d){egui::ComboBox::from_label("Layer").selected_text(rows.iter().find(|r|r.key==e.key).map_or("Missing layer",|r|r.name.as_str())).show_ui(ui,|ui|{for row in rows{if ui.selectable_value(&mut e.key,row.key,&row.name).changed(){e.flags=core::own(d,catalog::target(d,e.key).unwrap());}}});}
+            if let Ok(rows)=catalog::rows(d){egui::ComboBox::from_label(crate::i18n::text("Layer")).selected_text(rows.iter().find(|r|r.key==e.key).map_or("Missing layer",|r|r.name.as_str())).show_ui(ui,|ui|{for row in rows{if ui.selectable_value(&mut e.key,row.key,&row.name).changed(){e.flags=core::own(d,catalog::target(d,e.key).unwrap());}}});}
             let r=ui.checkbox(&mut e.flags.reference,"Reference for fill / color selection");self.layer_roles.reference=Some(r.rect);
             let r=ui.checkbox(&mut e.flags.draft,"Draft layer");self.layer_roles.draft_flag=Some(r.rect);
             ui.small("Folder and animation-folder flags apply to descendants. Original content and the canvas stay unchanged. A child cannot override an inherited flag.");
             let r=ui.checkbox(&mut e.include_drafts,"Include draft layers in rendered output");self.layer_roles.output=Some(r.rect);
             ui.small("PNG and rendered-image PSD follow this page setting. Normal .drawer saves always keep draft content and flags. Fill and wand use their own reference, hidden-layer and draft-exclusion settings.");
-            ui.horizontal(|ui|{let r=ui.button("Apply layer roles");self.layer_roles.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Apply layer roles");self.layer_roles.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.layer_roles.draft = Some(e);

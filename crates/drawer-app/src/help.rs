@@ -166,9 +166,9 @@ impl Drawer {
         let mut p = self.workspaces.store.current.help.clone();
         let mut visible = true;
         let mut topic = p.topic.clone();
-        egui::Window::new("Local help — Drawer").open(&mut visible).default_size([800.0,600.0]).constrain(true).show(ctx,|ui|{
-            ui.horizontal_wrapped(|ui|{ui.label("Search / 검색");let changed=super::edit::text(ui,&mut p.query,"welcome").changed();if ui.button("Home / 시작").clicked(){p.query.clear();topic="welcome".into();}
-if ui.button("About / 버전").clicked(){topic="version".into();p.query.clear();}
+        egui::Window::new(crate::i18n::text("Local help — Drawer")).id(egui::Id::new("Local help — Drawer")).open(&mut visible).default_size([800.0,600.0]).constrain(true).show(ctx,|ui|{
+            ui.horizontal_wrapped(|ui|{ui.label(crate::i18n::text("Search / 검색"));let changed=super::edit::text(ui,&mut p.query,"welcome").changed();if ui.button(crate::i18n::text("Home / 시작")).clicked(){p.query.clear();topic="welcome".into();}
+if ui.button(crate::i18n::text("About / 버전")).clicked(){topic="version".into();p.query.clear();}
                 if changed{let found=help::search(&p.query,&self.capture_workspace());if !found.iter().any(|t|t.id==topic)&&let Some(first)=found.first(){topic=first.id.into();}}
             });
             if !self.help.korean_font{ui.label("Korean system font unavailable. Search still accepts Korean; no font is downloaded.");}

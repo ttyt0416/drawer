@@ -126,7 +126,7 @@ impl Drawer {
         egui::Window::new("Document precision and RGB profile").open(&mut open).default_pos(egui::pos2(30.,25.)).default_width(515.).collapsible(false).show(ctx,|ui|{
             let mut changed=false;
             ui.allocate_ui(egui::vec2(500.,330.),|ui|{egui::ScrollArea::vertical().max_height(330.).show(ui,|ui|{
-            ui.horizontal(|ui|{ui.label("RGBA channel precision");for(depth,label)in[(Depth::Sixteen,"16 bit"),(Depth::Eight,"8 bit")]{changed|=ui.selectable_value(&mut e.config.depth,depth,label).changed();}});
+            ui.horizontal(|ui|{ui.label(crate::i18n::text("RGBA channel precision"));for(depth,label)in[(Depth::Sixteen,"16 bit"),(Depth::Eight,"8 bit")]{changed|=ui.selectable_value(&mut e.config.depth,depth,label).changed();}});
             ui.small("16 to 8 bit loses channel detail. Preview first; Apply stores pixels and profile together in one Undo. PNG export leaves document precision unchanged.");
             changed|=ui.checkbox(&mut e.config.dither.enabled,"Dither final stored RGB").changed();
             ui.add_enabled_ui(e.config.dither.enabled,|ui|{ui.horizontal(|ui|{ui.label("Fixed seed");changed|=ui.add(egui::DragValue::new(&mut e.config.dither.seed)).changed();});});
@@ -144,7 +144,7 @@ impl Drawer {
             let r=ui.add_enabled(fresh,egui::Button::new("Preview color conversion"));self.document_color.preview=Some(r.rect);preview=r.clicked();
             ui.allocate_ui(egui::vec2(450.,40.),|ui|{if let Some(loss)=&e.loss{ui.small(loss);}});
             ui.allocate_ui(egui::vec2(300.,112.),|ui|{if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current page",&images[0]),("Converted page",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}});
-            ui.horizontal(|ui|{let r=ui.add_enabled(fresh&&e.state.is_some(),egui::Button::new("Apply color conversion (one Undo)"));self.document_color.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(fresh&&e.state.is_some(),egui::Button::new("Apply color conversion (one Undo)"));self.document_color.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             if !fresh{ui.label("Page/frame changed; close and reopen this editor.");}
         });
         if open && !cancel {

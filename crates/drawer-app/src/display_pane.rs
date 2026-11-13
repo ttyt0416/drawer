@@ -166,12 +166,12 @@ impl DisplayPane {
                 crate::help::checkbox(ui,&mut next.fullscreen, "Fullscreen on selected screen","view");
                 ui.add_enabled_ui(!next.synced, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Zoom");
+                        ui.label(crate::i18n::text("Zoom"));
                         let mut zoom = next.framing.zoom * 100.0;
                         if super::edit::number(ui,&mut zoom,1.0_f64..=6400.0_f64,1.0,"%","view").changed() {
                             next.framing.zoom = zoom / 100.0;
                         }
-                        ui.label("Angle");
+                        ui.label(crate::i18n::text("Angle"));
                         super::edit::number(ui,&mut next.framing.angle,-1e9_f64..=1e9_f64,0.5,"°","view");
                         next.framing.angle = next.framing.angle.rem_euclid(360.0);
                     });

@@ -224,7 +224,7 @@ impl Drawer {
                     );
                     p.controls.insert("export", r.rect);
                     export = r.clicked();
-                    let r = ui.button("Cancel");
+                    let r = ui.button(crate::i18n::text("Cancel"));
                     p.controls.insert("cancel", r.rect);
                     cancel = r.clicked();
                 });
@@ -318,7 +318,7 @@ impl Drawer {
                 if ui.text_edit_singleline(&mut p.path).changed() {
                     p.replace = false;
                 }
-                browse = ui.button("Save as…").clicked();
+                browse = ui.button(crate::i18n::text("Save as…")).clicked();
                 ui.checkbox(&mut p.replace, "Replace this existing export file");
                 ui.label(&p.message);
                 if let Some(texture) = &p.preview {

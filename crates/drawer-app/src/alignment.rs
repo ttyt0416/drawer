@@ -82,7 +82,7 @@ impl Drawer {
             let mut cancel = ctx.input(|i| i.key_pressed(egui::Key::Escape));
             egui::Window::new("Align and distribute objects").show(ctx, |ui| {
                 ui.label("Page/frame changed; cancel and reopen alignment.");
-                cancel |= ui.button("Cancel").clicked();
+                cancel |= ui.button(crate::i18n::text("Cancel")).clicked();
             });
             if cancel {
                 self.alignment.draft = None;
@@ -100,7 +100,7 @@ impl Drawer {
             egui::ComboBox::from_id_salt("alignment-key").selected_text(match e.reference{Reference::Key(i)=>format!("Key: {}",label(d,i)),_=>"Choose reference object".into()}).show_ui(ui,|ui|{for i in &items{ui.selectable_value(&mut e.reference,Reference::Key(*i),label(d,*i));}});
             egui::ComboBox::from_id_salt("alignment-guide").selected_text(match e.reference{Reference::Guide(n)=>format!("Page guide {}",n+1),_=>"Choose page guide".into()}).show_ui(ui,|ui|{for (n,_) in d.scene.guides.iter().enumerate(){ui.selectable_value(&mut e.reference,Reference::Guide(n),format!("Page guide {}",n+1));}});
             ui.checkbox(&mut e.options.text_pixels,"Align to text pixels (instead of text boxes)");ui.checkbox(&mut e.options.vector_paths,"Align to vector paths (instead of stroke outlines)");ui.checkbox(&mut e.options.raster_pixels,"Ignore transparent raster margins");
-            ui.horizontal(|ui|{if ui.button("Select all").clicked(){e.selected=items.clone();}
+            ui.horizontal(|ui|{if ui.button(crate::i18n::text("Select all")).clicked(){e.selected=items.clone();}
 if ui.button("Select none").clicked(){e.selected.clear();}});
             egui::ScrollArea::vertical().id_salt("alignment-items").max_height(120.0).show(ui,|ui|{for item in &items{let mut selected=e.selected.contains(item);if ui.checkbox(&mut selected,label(d,*item)).changed(){if selected{e.selected.push(*item)}else{e.selected.retain(|i|i!=item)}}}});
             });

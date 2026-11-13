@@ -116,12 +116,12 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Panels, cursor and power").open(&mut open).show(ctx,|ui|{
+        egui::Window::new(crate::i18n::text("Panels, cursor and power")).id(egui::Id::new("Panels, cursor and power")).open(&mut open).show(ctx,|ui|{
             crate::help::checkbox(ui,&mut s.auto_hide,"Auto-hide panel contents when idle","behavior");super::edit::slider(ui,&mut s.hide_delay_ms,0..=5000,"Hide delay (ms)","behavior");crate::help::checkbox(ui,&mut s.scrollbars,"Show scroll bars","behavior");crate::help::checkbox(ui,&mut s.brush_cursor,"Show brush outline and tool cursor","behavior");
             crate::help::checkbox(ui,&mut s.edge_pan,"Move view near canvas edges while drawing","behavior");super::edit::slider(ui,&mut s.edge_margin,1.0..=128.0,"Edge margin (screen pixels)","behavior");super::edit::slider(ui,&mut s.edge_speed,1.0..=2000.0,"Edge speed (screen pixels/sec)","behavior");
             crate::help::checkbox(ui,&mut s.prevent_sleep,"Prevent automatic idle sleep while working","behavior");ui.add_enabled_ui(s.prevent_sleep,|ui|{crate::help::checkbox(ui,&mut s.keep_display,"Also keep the display on while working","behavior");});ui.label("Inactive work, cancellation and completion release the request. Manual sleep remains under Windows control.");
             if let Some(e)=&self.ui_behavior.error{ui.colored_label(egui::Color32::LIGHT_RED,e);}
-            ui.horizontal(|ui|{apply=crate::help::button(ui,"Apply behavior","behavior").clicked();let c=crate::help::button(ui,"Cancel behavior","behavior");cancel=c.clicked();#[cfg(test)]{self.ui_behavior.cancel_button=Some(c.rect);}if crate::help::button(ui,"Reset draft","behavior").clicked(){s=Default::default();}});
+            ui.horizontal(|ui|{apply=crate::help::button(ui,"Apply behavior","behavior").clicked();let c=crate::help::button(ui,"Cancel behavior","behavior");cancel=c.clicked();#[cfg(test)]{self.ui_behavior.cancel_button=Some(c.rect);}if crate::help::button(ui,crate::i18n::text("Reset draft"),"behavior").clicked(){s=Default::default();}});
             if ui.add_enabled(self.storage.is_some(),egui::Button::new("Load before-apply backup")).clicked(){match drawer_core::workspaces::Snapshot::read(&self.storage.as_ref().unwrap().root().join("settings/workspace-before-apply.json")){Ok(p)=>s=p.behavior,Err(e)=>self.status=Some(e.to_string())}}
         });
         if cancel || !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {

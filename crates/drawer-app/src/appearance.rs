@@ -167,7 +167,7 @@ if ui.button("Use whole layer").clicked(){e.style.scope=None;changed=true;}ui.la
             ui.allocate_ui(egui::vec2(300.,155.), |ui| {
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in [("Current page",&images[0]),("After display effects",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(128.,128.)));});}});}
             });
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.state.is_some(),egui::Button::new(if e.convert {"Convert stored ink"}else{"Apply live effects"}));self.appearance.apply=Some(r.rect);if r.clicked(){apply=Some(false);}let r=ui.add_enabled(!e.convert&&e.state.is_some()&&matches!(e.target,Target::Raster(_)),egui::Button::new("Bake into raster pixels"));self.appearance.bake=Some(r.rect);if r.clicked(){apply=Some(true);}cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.state.is_some(),egui::Button::new(if e.convert {"Convert stored ink"}else{"Apply live effects"}));self.appearance.apply=Some(r.rect);if r.clicked(){apply=Some(false);}let r=ui.add_enabled(!e.convert&&e.state.is_some()&&matches!(e.target,Target::Raster(_)),egui::Button::new("Bake into raster pixels"));self.appearance.bake=Some(r.rect);if r.clicked(){apply=Some(true);}cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.small("Live effects preserve original RGBA and paths. Turning effects off restores the source appearance. Expression color is a separate nondestructive setting. Baking replaces the raster with rendered pixels; each action uses one Undo. Folder paper uses its own editor; Flatten page converts vector effects.");
         });
         if open && !cancel {

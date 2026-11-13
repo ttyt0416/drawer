@@ -102,7 +102,7 @@ for s in [Scope::Inside(c),Scope::Outside(c)]{ui.selectable_value(&mut settings.
             let visible=selection.visible(&results).len();
             ui.label(format!("{} results · {} selected here · {} selected outside results",results.len(),visible,selection.keys.len()-visible));
             ui.horizontal(|ui|{if ui.button("Select all results").clicked(){selection.keys.extend(results.iter().copied());}
-if ui.button("Clear selection").clicked(){selection.keys.clear();selection.anchor=None;}});
+if ui.button(crate::i18n::text("Clear selection")).clicked(){selection.keys.clear();selection.anchor=None;}});
             let map=rows.iter().map(|r|(r.key,r)).collect::<std::collections::BTreeMap<_,_>>();
             egui::ScrollArea::vertical().id_salt("layer-search-results").max_height(200.).show_rows(ui,24.,results.len(),|ui,range|{
 for i in range{let key=results[i];let row=map[&key];let flags=if row.states[1]{" · locked"}else if !row.states[0]{" · hidden"}else{""};let r=ui.selectable_label(selection.keys.contains(&key),format!("{} · {}{flags}",row.name,row.kind.label()));

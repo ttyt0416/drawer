@@ -116,7 +116,7 @@ impl Drawer {
             let r=ui.button("Preview content transfer");self.transfer_down.preview=Some(r.rect);preview=r.clicked();
             if let Some(p)=&e.prepared{ui.label(format!("Pixel positions: {} / appearance difference: {}",p.changed,p.maximum_delta));}
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After transfer",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Transfer and retain upper layer"));self.transfer_down.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Transfer and retain upper layer"));self.transfer_down.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if open && !cancel {
             self.transfer_down.draft = Some(e);

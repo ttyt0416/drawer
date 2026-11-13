@@ -185,12 +185,12 @@ impl Drawer {
 if ui.button("New ruler fields").clicked(){e.edit=None;}});
             let mut load=None;let mut remove=None;for g in &e.data.guides{ui.push_id(g.id,|ui|{ui.horizontal_wrapped(|ui|{if ui.selectable_label(e.data.active==Some(g.id),format!("{} · {}",g.name,g.kind.label())).clicked(){e.data.active=Some(g.id);}
 if ui.button("Edit fields").clicked(){if matches!(g.kind,Kind::Special(_)){e.data.active=Some(g.id);advanced=true;}else{load=Some(g.id);}}
-if ui.button("Remove").clicked(){remove=Some(g.id);}});});}
+if ui.button(crate::i18n::text("Remove")).clicked(){remove=Some(g.id);}});});}
             if let Some(id)=load{e.load(id,&self.documents[n]);}
 if let Some(id)=remove{e.data.guides.retain(|g|g.id!=id);if e.data.active==Some(id){e.data.active=None;}
 if e.edit==Some(id){e.edit=None;}}
             if ui.button("No active ruler").clicked(){e.data.active=None;}
-            ui.horizontal(|ui|{let button=ui.button("Apply rulers");self.ruler_tools.apply_button=Some(button.rect);apply=button.clicked();if ui.button("Cancel").clicked(){cancel=true;}});
+            ui.horizontal(|ui|{let button=ui.button("Apply rulers");self.ruler_tools.apply_button=Some(button.rect);apply=button.clicked();if ui.button(crate::i18n::text("Cancel")).clicked(){cancel=true;}});
         });
         if advanced {
             if let Err(err) = self.begin_special_rulers_with(e.id, e.revision, e.data.clone()) {

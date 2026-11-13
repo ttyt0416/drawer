@@ -262,7 +262,7 @@ impl Drawer {
         }
         let mut open = true;
         let mut start = false;
-        egui::Window::new("Virtual input replay").open(&mut open).vscroll(true).show(ctx,|ui| {
+        egui::Window::new(crate::i18n::text("Virtual input replay")).id(egui::Id::new("Virtual input replay")).open(&mut open).vscroll(true).show(ctx,|ui| {
             ui.label("Runs the normal drawing pipeline in an isolated test document. Your open drawings are unchanged. Physical pen validation remains pending.");
             if let Some(job)=&self.replay.job {ui.label(format!("Replayed {} events",job.progress.load(Ordering::Relaxed)));
                 if crate::help::button(ui,"Cancel replay","input-replay").clicked(){job.cancel.store(true,Ordering::Relaxed);}

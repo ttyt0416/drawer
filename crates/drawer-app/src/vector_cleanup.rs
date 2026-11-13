@@ -340,7 +340,7 @@ impl Drawer {
             let r=ui.add_enabled(fresh,egui::Button::new("Prepare conversion/cleanup preview"));self.vector_cleanup.preview=Some(r.rect);preview=r.clicked();
             if let Some(p)=&e.prepared {ui.label(format!("{} contours/spans will change",p.changed));}
             if let Some(images)=&e.images {ui.horizontal(|ui|{for(label,image)in["Before","After"].into_iter().zip(images){ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(120.,120.)));});}});}
-            let r=ui.add_enabled(fresh && e.prepared.is_some(),egui::Button::new("Apply as one Undo"));self.vector_cleanup.apply=Some(r.rect);apply=r.clicked();
+            let r=ui.add_enabled(fresh && e.prepared.is_some(),egui::Button::new(crate::i18n::text("Apply as one Undo")));self.vector_cleanup.apply=Some(r.rect);apply=r.clicked();
             ui.small("Escape or close discards the preview. Reopen after changing the page, frame, target or vector selection.");
         });
         if open {

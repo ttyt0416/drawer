@@ -52,7 +52,8 @@ impl Drawer {
         let mut open = true;
         let mut next = self.canvas_view.navigator;
         let mut history = None;
-        egui::Window::new("Navigator settings")
+        egui::Window::new(crate::i18n::text("Navigator settings"))
+            .id(egui::Id::new("Navigator settings"))
             .open(&mut open)
             .show(ctx, |ui| {
                 crate::help::checkbox(ui, &mut next.visible, "Show navigator", "view");

@@ -394,7 +394,7 @@ impl Drawer {
             ui.add_sized([770.,20.],egui::Label::new(&p.notice).truncate()).on_hover_text(&p.notice);
             ui.horizontal_wrapped(|ui|{for(key,label,a,enabled)in[("apply","Apply prepared change",1,p.staged.is_some()),("cancel","Cancel / discard",2,true),("undo","Undo document",3,!busy)]{let r=ui.add_enabled(enabled,egui::Button::new(label));p.controls.insert(key.into(),r.rect);if r.clicked(){action=a;}}});
             ui.add_enabled_ui(!busy,|ui|{let v=&mut p.draft;
-                ui.horizontal_wrapped(|ui|{ui.label("Model");for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let r=ui.selectable_label(v.actor==Some(id),format!("{id}{}",if d.scene.world3d.rigs.contains_key(&id){" (rig)"}else{""}));p.controls.insert(format!("actor-{id}"),r.rect);if r.clicked(){v.actor=Some(id);v.joint=0;v.key=0;}}});
+                ui.horizontal_wrapped(|ui|{ui.label(crate::i18n::text("Model"));for i in 0..d.scene.worlds.len(){let id=d.scene.catalog.worlds.id(i);let r=ui.selectable_label(v.actor==Some(id),format!("{id}{}",if d.scene.world3d.rigs.contains_key(&id){" (rig)"}else{""}));p.controls.insert(format!("actor-{id}"),r.rect);if r.clicked(){v.actor=Some(id);v.joint=0;v.key=0;}}});
                 if let Some(id)=v.actor{
                     if d.scene.world3d.rigs.contains_key(&id){
                         let r=ui.checkbox(&mut v.base,"Explicit base-scene pose/controls (sequence snapshots stay unchanged)");p.controls.insert("base".into(),r.rect);

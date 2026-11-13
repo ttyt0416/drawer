@@ -156,20 +156,20 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut load, mut install, mut preview, mut adopt, mut cancel) =
             (false, false, false, false, false);
-        egui::Window::new("Restricted local plugins").order(egui::Order::Foreground)
+        egui::Window::new(crate::i18n::text("Restricted local plugins")).id(egui::Id::new("Restricted local plugins")).order(egui::Order::Foreground)
             .default_width(540.).collapsible(false).open(&mut open).show(ctx,|ui|{
-                ui.label("Pixel bytecode v1 · no network, files, processes or native code");
+                ui.label(crate::i18n::text("Pixel bytecode v1 · no network, files, processes or native code"));
                 ui.small("256 KiB program · 4096 instructions · 1 megapixel · 2,097,152 execution units. Only a frozen page composite and its dimensions are exposed.");
                 if ui.add(egui::TextEdit::multiline(&mut self.local_plugins.text).char_limit(runtime::MAX_BYTES).desired_rows(6)).changed() {
                     self.local_plugins.prepared=None;self.local_plugins.image=None;
                 }
-                load=ui.button("Choose local plugin…").clicked();
-                install=ui.button("Keep a verified copy in local user data").clicked();
-                let r=ui.button("Preview on frozen page");self.local_plugins.preview=Some(r.rect);preview=r.clicked();
+                load=ui.button(crate::i18n::text("Choose local plugin…")).clicked();
+                install=ui.button(crate::i18n::text("Keep a verified copy in local user data")).clicked();
+                let r=ui.button(crate::i18n::text("Preview on frozen page"));self.local_plugins.preview=Some(r.rect);preview=r.clicked();
                 if let Some(image)=&self.local_plugins.image {ui.add(egui::Image::new(image));}
-                let r=ui.add_enabled(self.local_plugins.prepared.is_some(),egui::Button::new("Adopt as new layer · one Undo"));
+                let r=ui.add_enabled(self.local_plugins.prepared.is_some(),egui::Button::new(crate::i18n::text("Adopt as new layer · one Undo")));
                 self.local_plugins.adopt=Some(r.rect);adopt=r.clicked();
-                cancel=ui.button("Discard / close").clicked();
+                cancel=ui.button(crate::i18n::text("Discard / close")).clicked();
             });
         if !open || cancel {
             self.local_plugins.open = false;

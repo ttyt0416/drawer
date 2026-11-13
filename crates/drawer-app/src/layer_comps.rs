@@ -149,8 +149,8 @@ impl Drawer {
                 let r=ui.button("Save new comp");self.layer_comps.save=Some(r.rect);if r.clicked(){command=Some(Command::Capture{name:e.name.clone(),replace:None});}
                 if ui.add_enabled(e.selected.is_some(),egui::Button::new("Update saved states")).clicked(){command=Some(Command::Capture{name:e.name.clone(),replace:e.selected});}
                 if let Some(id)=e.selected{
-                    if ui.button("Rename").clicked(){command=Some(Command::Rename{id,name:e.name.clone()});}
-                    if ui.button("Delete").clicked(){command=Some(Command::Delete(id));}
+                    if ui.button(crate::i18n::text("Rename")).clicked(){command=Some(Command::Rename{id,name:e.name.clone()});}
+                    if ui.button(crate::i18n::text("Delete")).clicked(){command=Some(Command::Delete(id));}
                 }
             });
             let r=ui.add_enabled(e.selected.is_some(),egui::Button::new("Preview comp"));self.layer_comps.preview=Some(r.rect);preview=r.clicked();
@@ -159,7 +159,7 @@ impl Drawer {
                 egui::ScrollArea::vertical().max_height(65.).show(ui,|ui|{for key in &p.missing{ui.small(format!("Missing layer: {key:?}"));}});
             }
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Current",&images[0]),("After comp",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));});}});}
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply comp"));self.layer_comps.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply comp"));self.layer_comps.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.collapsing("New-layer policy / batch output",|ui|{
                 ui.horizontal(|ui|{ui.selectable_value(&mut e.policy,core::Policy::All,"Show new layers in all comps");ui.selectable_value(&mut e.policy,core::Policy::Current,"Show only in current comp");});
                 if e.policy_blocked{ui.checkbox(&mut e.policy_replace,"Replace unreadable saved comp policy");}

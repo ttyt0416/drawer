@@ -311,7 +311,7 @@ impl ReferencePane {
             {
                 view.rotate(angle);
             }
-            if crate::help::button(ui, "Reset view", "reference").clicked() {
+            if crate::help::button(ui, crate::i18n::text("Reset view"), "reference").clicked() {
                 *view = View::default();
             }
             crate::help::checkbox(ui, &mut self.pick_mode, "Pick color", "reference");

@@ -110,7 +110,7 @@ impl Drawer {
         let mut open = true;
         let mut zoom = self.interface.settings.zoom;
         let mut history = None;
-        egui::Window::new("Interface size").open(&mut open).show(ctx,|ui| {
+        egui::Window::new(crate::i18n::text("Interface size")).id(egui::Id::new("Interface size")).open(&mut open).show(ctx,|ui| {
             ui.label("Monitor scaling is automatic. This setting adds your preferred interface size.");
             super::edit::slider(ui,&mut zoom,0.5..=2.0,"Interface scale","view");
             ui.label(format!("Current screen scale: {:.0}%",ctx.pixels_per_point()*100.0));

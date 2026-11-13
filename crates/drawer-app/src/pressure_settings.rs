@@ -54,7 +54,7 @@ impl Drawer {
         let mut open = true;
         let mut apply = false;
         let mut cancel = false;
-        egui::Window::new("Brush pressure").open(&mut open).vscroll(true).show(ctx,|ui| {
+        egui::Window::new(crate::i18n::text("Brush pressure")).id(egui::Id::new("Brush pressure")).open(&mut open).vscroll(true).show(ctx,|ui| {
             let a=ui.add_enabled_ui(draft.valid(),|ui|crate::help::button(ui,"Apply pressure","pressure")).inner;
             let c=crate::help::button(ui,"Cancel pressure","pressure");
             apply=a.clicked();cancel=c.clicked();

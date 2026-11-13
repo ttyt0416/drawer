@@ -185,7 +185,7 @@ if ui.button("Preview band edit").clicked(){action=4;}});
 if !e.notice.is_empty(){ui.label(&e.notice);}
    });
    if old!=(e.object.clone(),e.page.clone(),e.webtoon.clone(),e.manual.clone(),e.cut.clone(),e.band_at,e.band_end,e.remove,e.confirmed,e.preview_dpi){e.prepared=None;e.image=None;}
-   ui.horizontal(|ui|{let r=ui.button("Preview comic object");self.comics.preview=Some(r.rect);if r.clicked(){action=1;}let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new("Apply as one Undo"));self.comics.apply=Some(r.rect);if r.clicked(){action=8;}
+   ui.horizontal(|ui|{let r=ui.button("Preview comic object");self.comics.preview=Some(r.rect);if r.clicked(){action=1;}let r=ui.add_enabled(fresh&&e.prepared.is_some(),egui::Button::new(crate::i18n::text("Apply as one Undo")));self.comics.apply=Some(r.rect);if r.clicked(){action=8;}
 if ui.button("Close editor").clicked(){action=9;}});
   });
         let result = (|| -> Result<(), String> {

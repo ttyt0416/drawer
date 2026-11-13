@@ -477,7 +477,7 @@ impl Drawer {
         if self.workspaces.open && self.workspaces.staged.is_none() {
             let mut open = true;
             let mut action = None;
-            egui::Window::new("Workspaces").open(&mut open).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx, |ui| {
+            egui::Window::new(crate::i18n::text("Workspaces")).id(egui::Id::new("Workspaces")).open(&mut open).vscroll(true).scroll_bar_visibility(crate::ui_behavior::scroll(ctx)).show(ctx, |ui| {
                 ui.label("Layout changes are saved locally. Named workspaces keep a separate saved layout.");
                 for kind in drawer_core::panels::Kind::ALL {
                     ui.push_id(kind.index(), |ui| {
@@ -487,31 +487,31 @@ impl Drawer {
                             for dock in Dock::ALL { ui.selectable_value(&mut p.dock, dock, format!("{dock:?}")); }
                             if p.dock == Dock::Floating {
                                 egui::ComboBox::from_id_salt("screen").selected_text(p.monitor.as_deref().unwrap_or("Primary screen")).show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut p.monitor, None, "Primary screen");
+                                    ui.selectable_value(&mut p.monitor, None, crate::i18n::text("Primary screen"));
                                     for m in &self.display.monitors { ui.selectable_value(&mut p.monitor, Some(m.key.clone()), &m.key); }
                                 });
                             }
                             let order = &mut self.workspaces.store.current.order;
                             let n = order.iter().position(|k| *k == kind).unwrap();
-                            if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() { order.swap(n, n - 1); }
-                            if ui.add_enabled(n < 3, egui::Button::new("Down")).clicked() { order.swap(n, n + 1); }
+                            if ui.add_enabled(n > 0, egui::Button::new(crate::i18n::text("Up"))).clicked() { order.swap(n, n - 1); }
+                            if ui.add_enabled(n < 3, egui::Button::new(crate::i18n::text("Down"))).clicked() { order.swap(n, n + 1); }
                         });
                     });
                 }
                 ui.separator();
-                ui.horizontal(|ui| { ui.label("New name"); super::edit::text(ui,&mut self.workspaces.name,"workspace"); if crate::help::button(ui,"Save new workspace","workspace").clicked() { action = Some(0); } });
+                ui.horizontal(|ui| { ui.label(crate::i18n::text("New name")); super::edit::text(ui,&mut self.workspaces.name,"workspace"); if crate::help::button(ui,crate::i18n::text("Save new workspace"),"workspace").clicked() { action = Some(0); } });
                 egui::ComboBox::from_id_salt("named-workspace").selected_text(&self.workspaces.selection).show_ui(ui, |ui| {
                     for n in &self.workspaces.store.named { ui.selectable_value(&mut self.workspaces.selection, n.name.clone(), &n.name); }
                 });
                 ui.horizontal_wrapped(|ui| {
                     for (id, label) in [(1, "Switch / preview"), (2, "Update selected saved workspace"), (3, "Delete selected")] { if crate::help::button(ui,label,"workspace").clicked() { action = Some(id); } }
-                    if ui.add_enabled(self.workspaces.store.active.is_some(), egui::Button::new("Reapply current saved workspace")).clicked() { action = Some(4); }
-                    if crate::help::button(ui,"Reset workspace","workspace").clicked() { action = Some(5); }
-                    if crate::help::button(ui,"Import local workspace","workspace").clicked() { action = Some(6); }
-                    if crate::help::button(ui,"Export current workspace","workspace").clicked() { action = Some(7); }
-                    if ui.add_enabled(self.storage.is_some(), egui::Button::new("Restore before-apply backup")).clicked() { action = Some(8); }
+                    if ui.add_enabled(self.workspaces.store.active.is_some(), egui::Button::new(crate::i18n::text("Reapply current saved workspace"))).clicked() { action = Some(4); }
+                    if crate::help::button(ui,crate::i18n::text("Reset workspace"),"workspace").clicked() { action = Some(5); }
+                    if crate::help::button(ui,crate::i18n::text("Import local workspace"),"workspace").clicked() { action = Some(6); }
+                    if crate::help::button(ui,crate::i18n::text("Export current workspace"),"workspace").clicked() { action = Some(7); }
+                    if ui.add_enabled(self.storage.is_some(), egui::Button::new(crate::i18n::text("Restore before-apply backup"))).clicked() { action = Some(8); }
                 });
-                if crate::help::button(ui,"Popup test painting","workspace").clicked() { self.workspaces.store.current.scratchpad.visible = true; }
+                if crate::help::button(ui,crate::i18n::text("Popup test painting"),"workspace").clicked() { self.workspaces.store.current.scratchpad.visible = true; }
                 for report in &self.workspaces.reports { ui.colored_label(egui::Color32::YELLOW, report); }
             });
             self.workspaces.open = open;
@@ -913,7 +913,8 @@ impl Drawer {
             && !self.lines.modal()
             && !self.ui_behavior.open;
         let mut visible = true;
-        egui::Window::new("Popup test painting")
+        egui::Window::new(crate::i18n::text("Popup test painting"))
+            .id(egui::Id::new("Popup test painting"))
             .open(&mut visible)
             .resizable(false)
             .show(ctx, |ui| {

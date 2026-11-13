@@ -231,7 +231,7 @@ impl Drawer {
                     ui.label(format!("{}",n+1));
                     let [x,y]=&mut f.position;
                     for (v,label,range) in [(x,"X",-1.0..=1.0),(y,"Y",-1.0..=1.0),(&mut f.thickness,"Width",0.0..=2.0),(&mut f.length,"Length",0.0..=4.0),(&mut f.angle,"Angle",-180.0..=180.0),(&mut f.density,"Density",0.0..=1.0)]{ui.add(egui::DragValue::new(v).prefix(format!("{label} ")).speed(0.01).range(range));}
-                    if ui.button("Remove").clicked(){remove=Some(n);}
+                    if ui.button(crate::i18n::text("Remove")).clicked(){remove=Some(n);}
                 });});}
             });
             if let Some(n)=remove{self.materials.fibres.fibres.remove(n);}

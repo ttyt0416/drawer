@@ -226,7 +226,7 @@ impl Drawer {
                 ("Canvas size…", Mode::Canvas),
                 ("Crop…", Mode::Crop),
             ] {
-                if crate::help::button(ui, label, "size").clicked() {
+                if crate::help::button(ui, crate::i18n::text(label), "size").clicked() {
                     self.begin_sizing(mode);
                 }
             }
@@ -315,7 +315,7 @@ impl Drawer {
                         }
                     }
                     if dialog.mode==Mode::Dpi {
-                        ui.label("DPI");
+                        ui.label(crate::i18n::text("DPI"));
                         changed |= super::edit::finite(ui,&mut dialog.dpi,f64::MIN_POSITIVE,1e9,false,"size").changed();
                         ui.end_row();
                     }
@@ -334,7 +334,7 @@ impl Drawer {
                     }
                     if dialog.keep_pixels {
                         ui.label("DPI only: no resampling; existing pixels stay unchanged.");
-                        ui.label("DPI");changed|=super::edit::finite(ui,&mut dialog.size.dpi,f64::MIN_POSITIVE,1e9,false,"size").changed();
+                        ui.label(crate::i18n::text("DPI"));changed|=super::edit::finite(ui,&mut dialog.size.dpi,f64::MIN_POSITIVE,1e9,false,"size").changed();
                     }else {changed|=size_fields::fields(ui,&mut dialog.size,true,Some(false));ui.label("DPI changes preserve physical size by resampling.");}
                 }
                 if dialog.mode==Mode::Canvas {
@@ -408,7 +408,7 @@ impl Drawer {
                         if let Some(error) = &dialog.error {
                             ui.colored_label(egui::Color32::LIGHT_RED, error);
                         }
-                        let apply = ui.add_enabled(plan.removed_pixels == 0 || dialog.confirmed, egui::Button::new("Apply"));
+                        let apply = ui.add_enabled(plan.removed_pixels == 0 || dialog.confirmed, egui::Button::new(crate::i18n::text("Apply")));
                         start = apply.clicked();
                         #[cfg(test)] { dialog.apply_button = Some(apply.rect); }
                     }
@@ -421,7 +421,7 @@ impl Drawer {
                 ui.spinner();
                 ui.label("Calculating image…");
             }
-            let cancel_response = crate::help::button(ui,"Cancel","size");
+            let cancel_response = crate::help::button(ui,crate::i18n::text("Cancel"),"size");
             cancel = cancel_response.clicked();
             #[cfg(test)] { dialog.cancel_button = Some(cancel_response.rect); }
         });

@@ -593,7 +593,7 @@ if ui.button("Discard prepared audio").clicked(){action=5;}});
             });}
             if p.tab==1 {ui.separator();ui.add_enabled_ui(p.values==p.base,|ui|{egui::ComboBox::from_id_salt("audio-clip").selected_text(p.selected.map_or_else(||"No audio clip".into(),|id|format!("Audio clip{id}"))).show_ui(ui,|ui|{for c in &data.audio {ui.selectable_value(&mut p.selected,Some(c.id),format!("{} [id{}]",a.audio[c.index].name,c.id));}});});
             if let Some(c)=p.selected.and_then(|id|data.audio.iter().find(|c|c.id==id)){ui.label(format!("{}Hz · {}ch ·{} samples · source{}{}",a.audio[c.index].rate,a.audio[c.index].channels,a.audio[c.index].sample_count,c.source,if c.locked{" · locked"}else{""}));ui.label(&p.source_notice);
-                ui.horizontal(|ui|{ui.label("Name");ui.text_edit_singleline(&mut p.values.name);ui.label("Start frame");ui.add(egui::DragValue::new(&mut p.values.start).range(1..=10000));});
+                ui.horizontal(|ui|{ui.label(crate::i18n::text("Name"));ui.text_edit_singleline(&mut p.values.name);ui.label("Start frame");ui.add(egui::DragValue::new(&mut p.values.start).range(1..=10000));});
                 ui.horizontal(|ui|{ui.add(egui::Slider::new(&mut p.values.gain,0..=400).text("Volume %"));ui.checkbox(&mut p.values.mute,"Mute");let r=ui.button("Apply clip settings");p.apply=Some(r.rect);if r.clicked(){action=6;}
 if ui.button("Reset values").clicked(){p.values=p.base.clone();}});
                 ui.horizontal(|ui|{if ui.button("Check linked source").clicked(){action=7;}ui.checkbox(&mut p.refresh_confirm,"Confirm shared refresh /16-bit conversion");if ui.button("Refresh linked original").clicked(){action=8;}

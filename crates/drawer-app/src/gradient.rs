@@ -118,13 +118,13 @@ impl Drawer {
                 ui.label("Each closed white/transparent region gets its own two-anchor field. Black ink is a boundary; colored islands and outside regions are preserved. Partial black edges retain their coverage. Vector replacement needs an unrestricted selection. Editing keeps the captured regions; topology changes require a new gradient.");
             }
             if let Some(id)=e.editing{ui.label(format!("Editing gradient {id}"));}else{ui.radio_value(&mut e.editable,false,"Draw on editing layer");ui.radio_value(&mut e.editable,true,"Create gradient layer");}
-            ui.horizontal(|ui|{let r=ui.button("Apply gradient");self.gradient.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Apply gradient");self.gradient.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.separator();ui.label("Editable gradient layers (above raster layers, below page objects and vectors)");
-            for (index,l) in layers.iter().enumerate(){ui.horizontal(|ui|{ui.label(&l.name);if ui.button("Edit").clicked(){edit_id=Some(l.id)}
+            for (index,l) in layers.iter().enumerate(){ui.horizontal(|ui|{ui.label(&l.name);if ui.button(crate::i18n::text("Edit")).clicked(){edit_id=Some(l.id)}
 if ui.button(if l.hidden{"Show"}else{"Hide"}).clicked(){toggle_id=Some(l.id)}
-if ui.button("Delete").clicked(){remove_id=Some(l.id)}
-if index>0&&ui.button("Down").clicked(){move_id=Some((index,index-1))}
-if index+1<layers.len()&&ui.button("Up").clicked(){move_id=Some((index,index+1))}});}
+if ui.button(crate::i18n::text("Delete")).clicked(){remove_id=Some(l.id)}
+if index>0&&ui.button(crate::i18n::text("Down")).clicked(){move_id=Some((index,index-1))}
+if index+1<layers.len()&&ui.button(crate::i18n::text("Up")).clicked(){move_id=Some((index,index+1))}});}
         });});
         if !open || cancel {
             self.gradient.draft = None;

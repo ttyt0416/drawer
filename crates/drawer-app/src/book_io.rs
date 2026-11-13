@@ -476,7 +476,7 @@ if ui.button("Print selected pages…").clicked(){action=5;}});
             });
             if working{ui.spinner();if ui.button("Cancel page operation").clicked(){p.job.as_ref().unwrap().cancel.store(true,Ordering::Relaxed);}}
             if !p.notice.is_empty(){ui.label(&p.notice);}
-if ui.button("Close").clicked(){action=9;}
+if ui.button(crate::i18n::text("Close")).clicked(){action=9;}
         });
         if action == 9 {
             open = false;

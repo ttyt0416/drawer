@@ -379,7 +379,7 @@ let r=ui.button("Metallic foil");self.material_layer.metal=Some(r.rect);if r.cli
             if changed{e.state=None;e.image=None;}
             let r=ui.button("Preview material");self.material_layer.preview=Some(r.rect);preview=r.clicked();
             if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(128.,128.)));}
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.state.is_some(),egui::Button::new("Apply material"));self.material_layer.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.state.is_some(),egui::Button::new("Apply material"));self.material_layer.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             ui.small("Images keep their original pixels and transparency. Repetition uses the image's native dimensions inside the local area. Move, scale and rotate change the material, and each Apply uses one Undo. Saved pages embed the image.");
         });
         if open && !cancel {

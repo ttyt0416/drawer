@@ -62,8 +62,8 @@ impl Drawer {
                 if self.defer_path(drawing::path_draft::Action::Configure(requested,vector)){self.workspaces.store.current.shapes=old;self.workspaces.store.current.shapes_vector=old_vector;return;}
                 self.finish_stroke();if self.drawing.mode.creation_shape(){self.drawing.mode=if self.workspaces.store.current.shapes.input==Input::ByClick{super::precision::Mode::ShapeClick}else{super::precision::Mode::ShapeDrag};}}
             if ui.button("Draw shape on canvas").clicked(){self.execute_command(ui.ctx(),"shape-tool");}
-            ui.horizontal(|ui|{if ui.button("Draw vector line").clicked(){self.execute_command(ui.ctx(),"vector-line-tool");}
-if ui.button("Draw vector curve").clicked(){self.execute_command(ui.ctx(),"vector-curve-tool");}});
+            ui.horizontal(|ui|{if ui.button(crate::i18n::text("Draw vector line")).clicked(){self.execute_command(ui.ctx(),"vector-line-tool");}
+if ui.button(crate::i18n::text("Draw vector curve")).clicked(){self.execute_command(ui.ctx(),"vector-curve-tool");}});
         });
     }
 }

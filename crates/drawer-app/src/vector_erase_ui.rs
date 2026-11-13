@@ -269,7 +269,7 @@ impl Drawer {
             ui.small("Do not erase preserves vectors; raster contact erasing remains active. Whole line also removes filled vector objects. Other modes require outline paths. Clear a raster selection before vector erasing.");
             ui.small("Drag to preview; release commits one Undo. Escape or focus/page/view/tool changes cancel the entire drag. At an exact intersection, the forward interval is selected. Settings are stored locally.");
             if ui.button("Select whole vector strokes").clicked() {self.execute_command(ui.ctx(),"vector-stroke-tool");}
-            if ui.button("Delete selected strokes").clicked() {self.execute_command(ui.ctx(),"vector-delete-strokes");}
+            if ui.button(crate::i18n::text("Delete selected strokes")).clicked() {self.execute_command(ui.ctx(),"vector-delete-strokes");}
         });
         self.vector_eraser_open = open;
     }

@@ -394,7 +394,7 @@ impl Drawer {
             if editor.draft.tools[&editor.source].is_empty(){ui.label("This tool has no shared brush properties; copies skip unsupported properties.");}
             for p in Property::ALL {if let Some(state)=editor.draft.tools.get_mut(&editor.source).unwrap().get_mut(&p) {ui.push_id(p.name(),|ui|{
                 property_value(ui,&mut state.value,p,Control::Number,editor.draft.size_unit,dpi);
-                ui.horizontal(|ui|{crate::help::checkbox(ui,&mut state.visible,"Visible","tool-properties");});
+                ui.horizontal(|ui|{crate::help::checkbox(ui,&mut state.visible,crate::i18n::text("Visible"),"tool-properties");});
                 ui.horizontal(|ui|{for control in [Control::Slider,Control::Number,Control::Indicator]{ui.selectable_value(&mut state.control,control,format!("{control:?}"));}});
             });}}
             size_unit(ui,&mut editor.draft.size_unit,dpi);

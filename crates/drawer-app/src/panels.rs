@@ -275,7 +275,7 @@ impl Drawer {
                         ui.label("Dock locked");
                         return;
                     }
-                    ui.menu_button("Dock", |ui| {
+                    ui.menu_button(crate::i18n::text("Dock"), |ui| {
                         for dock in drawer_core::workspaces::Dock::ALL {
                             if ui
                                 .selectable_label(
@@ -293,7 +293,8 @@ impl Drawer {
                 });
             }
             if !shown {
-                let reveal = crate::help::button(ui, "Show panel contents", "tools");
+                let reveal =
+                    crate::help::button(ui, crate::i18n::text("Show panel contents"), "tools");
                 if reveal.clicked() || reveal.has_focus() {
                     self.ui_behavior.hidden[kind.index()].reveal();
                 } else {
@@ -314,7 +315,7 @@ impl Drawer {
                             let label = if cfg.names {
                                 format!(
                                     "{}  {}",
-                                    tip.label(),
+                                    crate::i18n::text(tip.label()),
                                     self.workspaces.command_label(tip.name())
                                 )
                             } else {
@@ -436,7 +437,7 @@ impl Drawer {
             }
         }
         if rows.is_empty() {
-            ui.label("No animation tracks");
+            ui.label(crate::i18n::text("No animation tracks"));
         }
         let row_height = cfg.thumbnail.size().max(22) as f32;
         egui::ScrollArea::vertical()
@@ -481,20 +482,26 @@ impl Drawer {
                 }
             });
         if !rows.iter().any(|(target, _)| *target == selected) {
-            ui.label("Selection is outside this list.");
+            ui.label(crate::i18n::text("Selection is outside this list."));
         }
         if kind != Kind::Timeline
-            && ui.button("Reference / draft roles").clicked()
+            && ui
+                .button(crate::i18n::text("Reference / draft roles"))
+                .clicked()
             && let Err(e) = self.begin_layer_roles()
         {
             self.status = Some(e);
         }
-        if ui.button("Linked layer groups").clicked()
+        if ui
+            .button(crate::i18n::text("Linked layer groups"))
+            .clicked()
             && let Err(e) = self.begin_layer_groups()
         {
             self.status = Some(e);
         }
-        if ui.button("Transfer content down").clicked()
+        if ui
+            .button(crate::i18n::text("Transfer content down"))
+            .clicked()
             && let Err(e) = self.begin_transfer_down()
         {
             self.status = Some(e);
@@ -521,7 +528,7 @@ impl Drawer {
                 self.status = Some(e);
             }
             for (label, edit) in [("New material layer", false), ("Edit material layer", true)] {
-                if ui.button(label).clicked()
+                if ui.button(crate::i18n::text(label)).clicked()
                     && let Err(e) = self.begin_material_layer(edit)
                 {
                     self.status = Some(e);
@@ -532,7 +539,7 @@ impl Drawer {
             {
                 self.status = Some(e);
             }
-            if ui.button("New layer defaults").clicked()
+            if ui.button(crate::i18n::text("New layer defaults")).clicked()
                 && let Err(e) = self.begin_layer_defaults()
             {
                 self.status = Some(e);
@@ -638,13 +645,13 @@ impl Drawer {
                     let doc = &mut self.documents[n];
                     let mut top = false;
                     if kind == Kind::Layers {
-                        ui.menu_button("Layers…", |ui| {
+                        ui.menu_button(crate::i18n::text("Layers…"), |ui| {
                             let height = (ui.ctx().viewport_rect().height() * 0.65).max(100.);
                             egui::ScrollArea::vertical()
                                 .id_salt("layer-command-list")
                                 .max_height(height)
                                 .show(ui, |ui| {
-                                    top = ui.button("Top raster").clicked();
+                                    top = ui.button(crate::i18n::text("Top raster")).clicked();
                                     for (label, command) in [
                                         ("Manage layers…", "manage-layers"),
                                         ("Properties / identification colors…", "layer-properties"),
@@ -752,7 +759,7 @@ impl Drawer {
                                         ("Duplicate selected layer", "duplicate-layer"),
                                         ("Delete selected layer", "delete-layer"),
                                     ] {
-                                        if ui.button(label).clicked() {
+                                        if ui.button(crate::i18n::text(label)).clicked() {
                                             layer_action = Some(command);
                                             ui.close();
                                         }

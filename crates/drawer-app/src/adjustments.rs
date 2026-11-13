@@ -185,7 +185,7 @@ impl Drawer {
         let mut apply = false;
         let mut changed = false;
         egui::Window::new("Nondestructive color correction").open(&mut open).collapsible(false).resizable(false).default_width(540.).default_pos(egui::pos2(45.,20.)).show(ctx,|ui|{
-   if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button("Cancel").clicked();return;}
+   if !fresh{ui.label("Page/frame changed; cancel and reopen this draft.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
    ui.horizontal(|ui|{changed|=ui.radio_value(&mut e.edit,false,"New correction layer").changed();ui.add_enabled_ui(!existing.is_empty(),|ui|{if ui.radio_value(&mut e.edit,true,"Edit correction layer").changed(){changed=true;if let Some(id)=e.target{e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(id)).unwrap_or_default();}}});});
    if e.edit{egui::ComboBox::from_label("Correction layer").selected_text(e.target.map_or("Select layer".into(),|id|super::layer_properties::label(d,Target::Raster(id)))).show_ui(ui,|ui|{for id in &existing{if ui.selectable_value(&mut e.target,Some(*id),super::layer_properties::label(d,Target::Raster(*id))).changed(){changed=true;e.value=drawer_core::layer_effects::adjustment(d,Target::Raster(*id)).unwrap();}}});}else{ui.horizontal(|ui|{ui.label("Layer name");changed|=ui.text_edit_singleline(&mut e.name).changed();});egui::ComboBox::from_label("Parent folder").selected_text(e.parent.map_or("Root".into(),|n|format!("Folder {}",n+1))).show_ui(ui,|ui|{changed|=ui.selectable_value(&mut e.parent,None,"Root").changed();for(n,f)in d.scene.paper.folders.iter().enumerate().filter(|(n,_)|d.scene.paper.folder_active(*n)){changed|=ui.selectable_value(&mut e.parent,Some(n),&f.name).changed();}});}
    if let Some(local)=&mut e.value.local {changed|=crate::local_color::controls(ui,local);}
@@ -201,7 +201,7 @@ impl Drawer {
    if changed{e.prepared=None;e.images=None;}
    let r=ui.button("Preview correction");self.adjustments.preview=Some(r.rect);preview=r.clicked();
    if let Some(images)=&e.images{ui.horizontal(|ui|{ui.vertical(|ui|{ui.label("Current page");ui.add(egui::Image::new(&images[0]).fit_to_exact_size(egui::vec2(128.,128.)));});ui.vertical(|ui|{ui.label("After correction");ui.add(egui::Image::new(&images[1]).fit_to_exact_size(egui::vec2(128.,128.)));});});}
-   ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply correction"));self.adjustments.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+   ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some(),egui::Button::new("Apply correction"));self.adjustments.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
    ui.small("Original pixels and alpha stay unchanged. Layer masks and opacity limit the correction. One Undo restores parameters or the created layer.");
   });
         if open && !cancel {

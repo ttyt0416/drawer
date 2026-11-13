@@ -63,7 +63,7 @@ impl Drawer {
             egui::ComboBox::from_id_salt("selection-border-align").selected_text(format!("{:?}",e.settings.alignment)).show_ui(ui,|ui|{for a in Alignment::ALL{ui.selectable_value(&mut e.settings.alignment,a,format!("{a:?}"));}});
             ui.add(egui::Slider::new(&mut e.settings.width,0.0..=128.0).text("Width in document pixels"));super::edit::rgba(ui,&mut e.settings.color);
             ui.label("Draws the nonzero selection boundary, including holes. The original selection stays unchanged. Outside strokes can paint beyond the selection; the result is clipped to the canvas.");
-            ui.horizontal(|ui|{let r=ui.button("Draw border");self.selection_border.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.button("Draw border");self.selection_border.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
         });
         if !open || cancel {
             self.selection_border.draft = None;

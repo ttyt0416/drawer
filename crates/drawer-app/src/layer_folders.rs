@@ -134,7 +134,7 @@ impl Drawer {
         let mut action = None;
         let mut raster = false;
         egui::Window::new("Layer folders and grayscale masks").open(&mut open).collapsible(false).resizable(false).default_width(560.).default_pos(egui::pos2(45.,20.)).show(ctx,|ui|{
-   if !fresh{ui.label("Page/frame changed; cancel and reopen these controls.");cancel=ui.button("Cancel").clicked();return;}
+   if !fresh{ui.label("Page/frame changed; cancel and reopen these controls.");cancel=ui.button(crate::i18n::text("Cancel")).clicked();return;}
    egui::ScrollArea::vertical().id_salt("folder-mask-targets").max_height(130.).show_rows(ui,22.,targets.len(),|ui,rows|{for n in rows{let t=targets[n];let mut selected=e.selected.contains(&t);if ui.checkbox(&mut selected,super::layer_properties::label(d,t)).changed(){if selected{e.selected.push(t);}else{e.selected.retain(|v|*v!=t);}
 if let [Target::Folder(n)]=e.selected.as_slice(){e.through=d.scene.paper.folders[*n as usize].through;}}}});
    ui.horizontal(|ui|{ui.label("New folder name");ui.text_edit_singleline(&mut e.name);});
@@ -148,7 +148,7 @@ if let [Target::Folder(n)]=e.selected.as_slice(){e.through=d.scene.paper.folders
    ui.separator();ui.label("Replace one selected layer/folder mask with a gray rectangle");ui.add(egui::Slider::new(&mut e.gray,0..=255).text("Visible strength (0 hides / 255 shows)"));
    ui.horizontal(|ui|{for(k,name)in["Left","Top"].iter().enumerate(){ui.add(egui::DragValue::new(&mut e.bounds.min[k]).range(-1000000. ..=1000000.).prefix(format!("{name} ")));}for(k,name)in["Right","Bottom"].iter().enumerate(){ui.add(egui::DragValue::new(&mut e.bounds.max[k]).range(-1000000. ..=1000000.).prefix(format!("{name} ")));}});
    if let Some(t)=e.selected.first(){ui.label(if d.scene.layer_effects.get(*t).is_some_and(|v|v.mask.is_some()){"Selected target has a mask"}else{"Selected target has no mask"});}
-   ui.horizontal(|ui|{let r=ui.add_enabled(e.selected.len()==1,egui::Button::new("Replace rectangle mask"));self.layer_folders.mask=Some(r.rect);if r.clicked(){match core::rectangle_mask(d,e.bounds,e.gray){Ok(mask)=>action=Some(Command::Mask{target:e.selected[0],mask:Some(mask)}),Err(err)=>self.status=Some(err)}}let r=ui.add_enabled(e.selected.len()==1,egui::Button::new("Remove mask"));self.layer_folders.remove=Some(r.rect);if r.clicked(){action=Some(Command::Mask{target:e.selected[0],mask:None});}cancel=ui.button("Close").clicked();});
+   ui.horizontal(|ui|{let r=ui.add_enabled(e.selected.len()==1,egui::Button::new("Replace rectangle mask"));self.layer_folders.mask=Some(r.rect);if r.clicked(){match core::rectangle_mask(d,e.bounds,e.gray){Ok(mask)=>action=Some(Command::Mask{target:e.selected[0],mask:Some(mask)}),Err(err)=>self.status=Some(err)}}let r=ui.add_enabled(e.selected.len()==1,egui::Button::new("Remove mask"));self.layer_folders.remove=Some(r.rect);if r.clicked(){action=Some(Command::Mask{target:e.selected[0],mask:None});}cancel=ui.button(crate::i18n::text("Close")).clicked();});
    ui.small("Each button applies one Undo. Mask strength multiplies layer and parent alpha. Layer movement carries the linked mask; page rotation preserves its geometry.");
   });
         if open && !cancel {

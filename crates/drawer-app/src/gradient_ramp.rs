@@ -59,7 +59,7 @@ fn body(
                             .speed(0.005),
                     );
                     super::edit::rgba(ui, &mut stop.color);
-                    if ui.button("Remove").clicked() {
+                    if ui.button(crate::i18n::text("Remove")).clicked() {
                         remove = Some(index);
                     }
                 });

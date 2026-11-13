@@ -484,15 +484,15 @@ impl Drawer {
         let (mut input, mut run, mut apply, mut cancel) = (false, false, false, false);
         let (mut review_model, mut install_model, mut forget_model) = (false, false, false);
         let mut save_compute = false;
-        egui::Window::new("Local models — pose / color / restoration").order(egui::Order::Foreground).default_width(550.).default_height(660.).vscroll(true).max_height(660.).default_pos(egui::pos2(25.,10.)).collapsible(false).open(&mut open).show(ctx,|ui|{
+        egui::Window::new(crate::i18n::text("Local models — pose / color / restoration")).id(egui::Id::new("Local models — pose / color / restoration")).order(egui::Order::Foreground).default_width(550.).default_height(660.).vscroll(true).max_height(660.).default_pos(egui::pos2(25.,10.)).collapsible(false).open(&mut open).show(ctx,|ui|{
             ui.small(drawer_infer::GUIDE);
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed. Cancel and reopen to freeze a new input.");}
             ui.add_enabled_ui(!busy,|ui|{
-                egui::ComboBox::from_label("Task").selected_text(e.config.task.label()).show_ui(ui,|ui|{for task in Task::ALL{ui.selectable_value(&mut e.config.task,task,task.label());}});
-                ui.horizontal(|ui|{ui.label("Requested processing device");ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Cpu,"CPU");ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Gpu,"GPU (unavailable in this build)");});
-                ui.checkbox(&mut e.config.compute.allow_cpu_fallback,"Explicitly allow CPU fallback if GPU is unavailable");
+                egui::ComboBox::from_label(crate::i18n::text("Task")).selected_text(e.config.task.label()).show_ui(ui,|ui|{for task in Task::ALL{ui.selectable_value(&mut e.config.task,task,task.label());}});
+                ui.horizontal(|ui|{ui.label(crate::i18n::text("Requested processing device"));ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Cpu,crate::i18n::text("CPU"));ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Gpu,crate::i18n::text("GPU (unavailable in this build)"));});
+                ui.checkbox(&mut e.config.compute.allow_cpu_fallback,crate::i18n::text("Explicitly allow CPU fallback if GPU is unavailable"));
                 match e.config.compute.execution(){Ok(message)=>{ui.small(message);},Err(message)=>{ui.colored_label(egui::Color32::YELLOW,message);}}
-                save_compute=ui.button("Save processing device preference locally").clicked();
+                save_compute=ui.button(crate::i18n::text("Save processing device preference locally")).clicked();
                 if old.task!=e.config.task {
                     match self.registered_model_config(e.config.task) {
                         Ok(model)=>{e.config.manifest=model.manifest;e.config.approved_manifest=model.approved_manifest;e.config.model_label=model.model_label;},
@@ -500,12 +500,12 @@ impl Drawer {
                     }
                     e.model_review=None;e.allow_model_copy=false;
                 }
-                ui.horizontal(|ui|{ui.radio_value(&mut e.config.source,InputSource::Composite,"Page composite");ui.radio_value(&mut e.config.source,InputSource::Selection,"Selected pixels");ui.radio_value(&mut e.config.source,InputSource::File,"Local file");ui.radio_value(&mut e.config.source,InputSource::Comparison,"Fixed comparison");});
-                if e.config.source==InputSource::File{ui.text_edit_singleline(&mut e.config.path);if ui.button("Choose local input…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Local images",&["png","jpg","jpeg","tif","tiff","bmp"]).pick_file(){e.config.path=p.to_string_lossy().into_owned();}ui.add(egui::DragValue::new(&mut e.config.page).range(1..=256).prefix("TIFF page "));}
-                if e.config.task==Task::HintColor && e.config.source!=InputSource::Comparison{ui.label("RGBA hints: same size; alpha marks hint strength");ui.text_edit_singleline(&mut e.config.hints);if ui.button("Choose local hints…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Hint image",&["png","tif","tiff"]).pick_file(){e.config.hints=p.to_string_lossy().into_owned();}}
-                ui.label("Local model bundle · inspect its license before copying locally");
+                ui.horizontal(|ui|{ui.radio_value(&mut e.config.source,InputSource::Composite,crate::i18n::text("Page composite"));ui.radio_value(&mut e.config.source,InputSource::Selection,crate::i18n::text("Selected pixels"));ui.radio_value(&mut e.config.source,InputSource::File,crate::i18n::text("Local file"));ui.radio_value(&mut e.config.source,InputSource::Comparison,crate::i18n::text("Fixed comparison"));});
+                if e.config.source==InputSource::File{ui.text_edit_singleline(&mut e.config.path);if ui.button(crate::i18n::text("Choose local input…")).clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Local images",&["png","jpg","jpeg","tif","tiff","bmp"]).pick_file(){e.config.path=p.to_string_lossy().into_owned();}ui.add(egui::DragValue::new(&mut e.config.page).range(1..=256).prefix("TIFF page "));}
+                if e.config.task==Task::HintColor && e.config.source!=InputSource::Comparison{ui.label("RGBA hints: same size; alpha marks hint strength");ui.text_edit_singleline(&mut e.config.hints);if ui.button(crate::i18n::text("Choose local hints…")).clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Hint image",&["png","tif","tiff"]).pick_file(){e.config.hints=p.to_string_lossy().into_owned();}}
+                ui.label(crate::i18n::text("Local model bundle · inspect its license before copying locally"));
                 let model_path=e.config.manifest.clone();
-                ui.text_edit_singleline(&mut e.config.manifest);if ui.button("Choose model manifest…").clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Model manifest",&["json"]).pick_file(){e.config.manifest=p.to_string_lossy().into_owned();}
+                ui.text_edit_singleline(&mut e.config.manifest);if ui.button(crate::i18n::text("Choose model manifest…")).clicked()&&let Some(p)=rfd::FileDialog::new().add_filter("Model manifest",&["json"]).pick_file(){e.config.manifest=p.to_string_lossy().into_owned();}
                 if model_path!=e.config.manifest {e.config.approved_manifest=None;e.config.model_label.clear();e.model_review=None;e.allow_model_copy=false;}
                 ui.small("Inspection checks hashes and notice; the bounded CPU helper checks ONNX before execution.");
                 let r=ui.button("Inspect model and LICENSE.txt");self.local_inference.model_review=Some(r.rect);review_model=r.clicked();
@@ -513,23 +513,23 @@ impl Drawer {
                     ui.label(format!("{} {} · {} · {} bytes",review.manifest.name,review.manifest.version,review.manifest.license,review.weights_bytes));
                     egui::ScrollArea::vertical().id_salt("local-model-license").max_height(100.).show(ui,|ui|{ui.label(&review.license_text);});
                     let r=ui.checkbox(&mut e.allow_model_copy,"I reviewed LICENSE.txt and confirm permission for local copy/use");self.local_inference.model_permission=Some(r.rect);
-                    let r=ui.add_enabled(e.allow_model_copy,egui::Button::new("Install reviewed bundle locally"));self.local_inference.model_install=Some(r.rect);install_model=r.clicked();
+                    let r=ui.add_enabled(e.allow_model_copy,egui::Button::new(crate::i18n::text("Install reviewed bundle locally")));self.local_inference.model_install=Some(r.rect);install_model=r.clicked();
                 }
-                if e.config.approved_manifest.is_some(){ui.small(format!("Approved local registration: {}",e.config.model_label));forget_model=ui.button("Forget registration; keep model files").clicked();}
+                if e.config.approved_manifest.is_some(){ui.small(format!("Approved local registration: {}",e.config.model_label));forget_model=ui.button(crate::i18n::text("Forget registration; keep model files")).clicked();}
 
             });
             if old!=e.config{e.input=None;e.images=None;e.prepared=None;e.result=None;e.accept_low=false;}
-            let r=ui.add_enabled(fresh&&!busy,egui::Button::new("1. Freeze and preview input"));self.local_inference.input=Some(r.rect);input=r.clicked();
+            let r=ui.add_enabled(fresh&&!busy,egui::Button::new(crate::i18n::text("1. Freeze and preview input")));self.local_inference.input=Some(r.rect);input=r.clicked();
             if e.scroll_to_input{ui.scroll_to_rect(r.rect,Some(egui::Align::Center));e.scroll_to_input=false;}
-            let r=ui.add_enabled(fresh&&!busy&&e.input.is_some()&&e.config.approved_manifest.is_some(),egui::Button::new("2. Run verified local model"));self.local_inference.run=Some(r.rect);run=r.clicked();
+            let r=ui.add_enabled(fresh&&!busy&&e.input.is_some()&&e.config.approved_manifest.is_some(),egui::Button::new(crate::i18n::text("2. Run verified local model")));self.local_inference.run=Some(r.rect);run=r.clicked();
             let can=e.result.as_ref().is_some_and(|r|!r.low_confidence(e.threshold)||e.accept_low);
-            let r=ui.add_enabled(fresh&&!busy&&can&&e.prepared.is_some(),egui::Button::new("3. Adopt as one Undo"));self.local_inference.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel local inference").clicked();
+            let r=ui.add_enabled(fresh&&!busy&&can&&e.prepared.is_some(),egui::Button::new(crate::i18n::text("3. Adopt as one Undo")));self.local_inference.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel local inference")).clicked();
             if busy{ui.horizontal(|ui|{ui.spinner();ui.label("Local task running · CPU · 512 MiB helper limit · 120 seconds maximum");});}
             if let Some(i)=&e.input{ui.small(format!("Frozen input {} × {}; transparent colors excluded; white matte for model RGB. Selection keeps page coordinates.",i.image.width,i.image.height));}
             if let Some(images)=&e.images{ui.horizontal(|ui|{for(label,image)in[("Frozen input",&images[0]),("Result",&images[1])]{ui.vertical(|ui|{ui.label(label);ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(112.,112.)));});}});}
             if let Some(out)=&e.result{
                 ui.small(&out.report);
-                if !out.points.is_empty(){ui.add(egui::Slider::new(&mut e.threshold,0. ..=1.).text("Joint confidence threshold"));let low=out.points.iter().filter(|p|p[2]<e.threshold).count();ui.label(format!("2D pose, {} joints; {} below threshold. Preview colors use threshold 0.5; adopted colors use the current threshold.",out.points.len(),low));if low>0{ui.colored_label(egui::Color32::YELLOW,"Low confidence: review input and joints before adoption.");ui.checkbox(&mut e.accept_low,"I reviewed and accept uncertain joints");}}
+                if !out.points.is_empty(){ui.add(egui::Slider::new(&mut e.threshold,0. ..=1.).text("Joint confidence threshold"));let low=out.points.iter().filter(|p|p[2]<e.threshold).count();ui.label(format!("2D pose, {} joints; {} below threshold. Preview colors use threshold 0.5; adopted colors use the current threshold.",out.points.len(),low));if low>0{ui.colored_label(egui::Color32::YELLOW,"Low confidence: review input and joints before adoption.");ui.checkbox(&mut e.accept_low,crate::i18n::text("I reviewed and accept uncertain joints"));}}
             }
             ui.small("Pose becomes a new editable 2D vector layer. Image results become a new raster layer at native output size; the canvas and original layers stay unchanged. Models and file paths are not saved in the document.");
         });

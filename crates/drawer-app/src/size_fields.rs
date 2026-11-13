@@ -29,7 +29,11 @@ pub(super) fn fields(
     );
     egui::Grid::new("size-values").show(ui, |ui| {
         for axis in 0..2 {
-            ui.label(if axis == 0 { "Width" } else { "Height" });
+            ui.label(crate::i18n::text(if axis == 0 {
+                "Width"
+            } else {
+                "Height"
+            }));
             let response = super::edit::finite(
                 ui,
                 if axis == 0 {
@@ -49,7 +53,7 @@ pub(super) fn fields(
             ui.end_row();
         }
         if edit_dpi {
-            ui.label("DPI");
+            ui.label(crate::i18n::text("DPI"));
             let previous = size.dpi.clone();
             if super::edit::finite(ui, &mut size.dpi, f64::MIN_POSITIVE, 1e9, false, "size")
                 .changed()
@@ -63,7 +67,14 @@ pub(super) fn fields(
         }
     });
     let mut locked = size.locked;
-    if crate::help::checkbox(ui, &mut locked, "Lock aspect ratio", "size").changed() {
+    if crate::help::checkbox(
+        ui,
+        &mut locked,
+        crate::i18n::text("Lock aspect ratio"),
+        "size",
+    )
+    .changed()
+    {
         let _ = size.lock(locked);
         changed = true;
     }
@@ -182,7 +193,7 @@ impl Presets {
                     }
                 });
             ui.horizontal(|ui| {
-                ui.label("Name");
+                ui.label(crate::i18n::text("Name"));
                 super::edit::text(ui, &mut self.name, "size");
                 if crate::help::button(ui, "Save current size", "size").clicked() {
                     action = Some(0);

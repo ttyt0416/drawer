@@ -54,11 +54,17 @@ pub(super) fn settings_ui(
                             );
                         }
                     });
-                if ui.add_enabled(n > 0, egui::Button::new("Up")).clicked() {
+                if ui
+                    .add_enabled(n > 0, egui::Button::new(crate::i18n::text("Up")))
+                    .clicked()
+                {
                     movement = Some((n, n - 1));
                 }
                 if ui
-                    .add_enabled(n + 1 < s.count as usize, egui::Button::new("Down"))
+                    .add_enabled(
+                        n + 1 < s.count as usize,
+                        egui::Button::new(crate::i18n::text("Down")),
+                    )
                     .clicked()
                 {
                     movement = Some((n, n + 1));

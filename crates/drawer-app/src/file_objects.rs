@@ -744,7 +744,7 @@ if ui.button("Preview clipboard to file").clicked(){action=Some(Action::Clipboar
             ui.allocate_ui(egui::vec2(580.,52.),|ui|{egui::ScrollArea::vertical().id_salt("source-results").max_height(52.).show(ui,|ui|{for note in &e.notes{ui.small(note);}});});
             ui.allocate_ui(egui::vec2(580.,100.),|ui|{if let Some(image)=&e.image{ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(96.,96.)));}});
             let r=ui.add_enabled(e.review_all&&e.prepared.is_some(),egui::Checkbox::new(&mut e.acknowledged,"I reviewed the successful updates and failures in this batch"));self.file_objects.acknowledge=Some(r.rect);
-            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&(!e.review_all||e.acknowledged),egui::Button::new("Apply reviewed file action"));self.file_objects.apply=Some(r.rect);apply=r.clicked();cancel=ui.button("Cancel").clicked();});
+            ui.horizontal(|ui|{let r=ui.add_enabled(e.prepared.is_some()&&(!e.review_all||e.acknowledged),egui::Button::new("Apply reviewed file action"));self.file_objects.apply=Some(r.rect);apply=r.clicked();cancel=ui.button(crate::i18n::text("Cancel")).clicked();});
             if ui.add_enabled(linked.is_some(),egui::Button::new("Restore original embedded layer")).clicked(){action=Some(Action::Restore);}
             ui.horizontal(|ui|{if ui.add_enabled(linked.is_some(),egui::Button::new("Open source document")).clicked(){source=Some(false);}
 if ui.add_enabled(linked.is_some(),egui::Button::new("Open source folder")).clicked(){source=Some(true);}});
