@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "target": "x86_64-pc-windows-msvc",
+  "system": "Windows",
+  "machine": "AMD64",
+  "executableSha256": "870e6ea8e3f5ff878e9596368c3a5560c0d4b40b3164defb4d8053190eae414f",
+  "commonCases": [
+    "controller_replay",
+    "mouse_virtual_pressure",
+    "native_generation",
+    "atomic_save",
+    "local_recovery",
+    "saved_state",
+    "sparse_raster",
+    "template_bundles"
+  ],
+  "elapsedSeconds": 52.375,
+  "separateHostDocumentExchange": "pending",
+  "physicalDeviceAndGraphicsFailures": "pending",
+  "grantsPlatformSupport": false
+}

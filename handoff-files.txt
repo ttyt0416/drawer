@@ -1415,3 +1415,6 @@ docs/process/portable-documents-network.json
 crates/drawer-app/src/local_compute.rs
 docs/process/local-compute.md
 docs/process/local-compute-network.json
+scripts/test-platform.py
+docs/process/platform-support.md
+docs/process/platform-windows-evidence.json
