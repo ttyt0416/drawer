@@ -1456,3 +1456,6 @@ crates/drawer-app/src/verification_performance.rs
 docs/process/performance-measurement.md
 docs/process/check-294-host.json
 docs/process/check-294-evidence.json
+crates/drawer-app/src/verification_pressure.rs
+docs/process/virtual-pressure-acceptance.md
+docs/process/check-295-evidence.json
