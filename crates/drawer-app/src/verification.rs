@@ -13,6 +13,8 @@ mod editor;
 mod history;
 #[path = "verification_masks.rs"]
 mod masks;
+#[path = "verification_native.rs"]
+mod native;
 #[path = "verification_strokes.rs"]
 mod strokes;
 pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<(), String> {
@@ -23,7 +25,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=291) {
+    if !matches!(item, 287..=292) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -41,6 +43,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         289 => capture::run(&root)?,
         290 => masks::run(&root)?,
         291 => history::run(&root)?,
+        292 => native::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(
@@ -88,4 +91,18 @@ fn write(path: &std::path::Path, value: &serde_json::Value) -> Result<(), String
     file.write_all(&bytes)
         .and_then(|()| file.sync_all())
         .map_err(|e| e.to_string())
+}
+
+pub(super) fn native_child(
+    mut args: impl Iterator<Item = std::ffi::OsString>,
+) -> Result<(), String> {
+    let root = std::path::PathBuf::from(args.next().ok_or("Missing native verification root")?);
+    let expected = args
+        .next()
+        .and_then(|v| v.into_string().ok())
+        .ok_or("Missing native manifest hash")?;
+    if args.next().is_some() {
+        return Err("Unexpected native verification arguments".into());
+    }
+    native::child(&root, &expected)
 }

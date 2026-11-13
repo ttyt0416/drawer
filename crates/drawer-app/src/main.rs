@@ -2781,6 +2781,13 @@ fn main() -> eframe::Result {
     }
     let mut args = std::env::args_os().skip(1);
     let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("--verify-native-roundtrip")) {
+        if let Err(error) = verification::native_child(args) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if first.as_deref() == Some(std::ffi::OsStr::new("--verify-item")) {
         if let Err(error) = verification::cli(args) {
             eprintln!("{error}");

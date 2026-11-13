@@ -1,0 +1,9 @@
+# Item 292: native save, close and reopen
+
+`scripts/test-checklist.ps1 -Item 292` runs 21 independently generated document cases. Cases cover every PageObject variant (including all four comic subtypes), raster/selection, folders/reference roles, masks, textures/rulers/vectors, editable vector scopes, line tools, color corrections, surface data, actual RGBA16 low bits, 3D geometry/lighting/cameras/views, genuine sparse tiles, timeline cells/PCM/timing/keyframes/pose sequences, and missing source resources. Every case gets a hidden Unicode/emoji layer name and is written under a Unicode/emoji directory.
+
+The parent compares complete DocumentState, current timeline frame and a deterministic 9×9 final-render probe grid before save and after dropping the live document and reopening it. Stored raster pixels/precision and all scene/animation metadata are compared as typed data. A special case uses a local-font contour snapshot, linked page cache and imported VRM; original font/page/model files are deleted before the second reopen. Font files are not embedded or redistributed.
+
+The packaged acceptance starts a separate hidden process with a fresh data-directory setting. It validates a hash-bound, bounded manifest and each Native input, opens every document, checks frame/render probes and re-encodes into a new owned directory. Canonical Native bytes must match exactly, covering the entire persisted payload and integrity footer. The child receipt is bound to the executable/manifest. Unit tests run the same read/re-encode function in process; only the packaged receipt claims a separate process. Inputs are bounded to 32 cases, 32 MiB per file, 128 MiB total; fixed filenames and local path checks prevent path traversal.
+
+Session history, document path/title derived from the opened file, and view-only UI state keep their documented scope. This is a fresh-process test on this Windows host; a separate offline computer remains pending in 272/283.
