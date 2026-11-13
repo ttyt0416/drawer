@@ -1405,3 +1405,4 @@ scripts/test-local-model-bundles.ps1
 docs/process/local-model-bundles.md
 docs/process/local-model-bundles-evidence.json
 docs/process/local-models-network.json
+docs/process/optional-dependencies.md

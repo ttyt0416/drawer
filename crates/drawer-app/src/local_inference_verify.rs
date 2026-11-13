@@ -42,6 +42,7 @@ fn check(value: bool, message: &str) -> Result<(), String> {
     if value { Ok(()) } else { Err(message.into()) }
 }
 pub(super) fn smoke(root: &Path) -> Result<(), String> {
+    optional_dependencies(root)?;
     let ctx = egui::Context::default();
     let mut app = Box::new(Drawer::new(&ctx, None));
     app.simple_view = true;
@@ -444,8 +445,150 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
     )?;
     Ok(())
 }
+// All cases use the production editor with no native GPU context. An optional
+// operation may fail, but must not become a prerequisite for local documents.
+fn optional_dependencies(root: &Path) -> Result<(), String> {
+    let dir = root.join("optional-dependencies");
+    std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    let ctx = egui::Context::default();
+    let storage = UserStorage::at(dir.join("data")).map_err(|e| e.to_string())?;
+    let mut app = Box::new(Drawer::new(&ctx, None).with_storage(storage));
+    app.simple_view = true;
+    app.create_canvas(CanvasSpec {
+        width: 32,
+        height: 32,
+        dpi: 300.,
+        background: Background::Transparent,
+    })
+    .map_err(|e| e.to_string())?;
+    let movie = dir.join("without-codec.mp4");
+    std::fs::write(&movie, b"owned missing-codec fixture").map_err(|e| e.to_string())?;
+    let mut time = 0.;
+    for case in 0..3 {
+        let before = app.documents[0].snapshot();
+        let counts = app.documents[0].history_counts();
+        match case {
+            0 => {
+                app.begin_local_inference()?;
+                let config = &mut app.local_inference.draft.as_mut().unwrap().config;
+                config.manifest = dir.join("missing-model.json").display().to_string();
+                config.approved_manifest = None;
+                check(
+                    app.review_model_bundle().is_err(),
+                    "Missing model was accepted",
+                )?;
+                check(
+                    app.start_inference(&ctx, true).is_err(),
+                    "Missing model executed",
+                )?;
+            }
+            1 => {
+                app.begin_movie_from(&ctx, &movie, false, None)?;
+                check(
+                    app.movie_dialog
+                        .as_ref()
+                        .is_some_and(|d| d.decoder_missing()),
+                    "Missing codec did not explain its dependency",
+                )?;
+                check(
+                    app.accept_movie().is_err(),
+                    "Missing codec adopted a partial clip",
+                )?;
+                app.movie_dialog = None;
+            }
+            _ => {
+                app.resources.current.ram_mib = 64;
+                app.begin_local_inference()?;
+                check(
+                    app.start_inference(&ctx, false)
+                        .is_err_and(|e| e.contains("memory")),
+                    "Insufficient auxiliary memory was not rejected",
+                )?;
+            }
+        }
+        check(
+            app.local_inference.job.is_none()
+                && app.documents[0].snapshot() == before
+                && app.documents[0].history_counts() == counts,
+            "Optional failure changed document/history",
+        )?;
+        if app.local_inference.draft.is_some() {
+            settle(&ctx, &mut app, &mut time);
+            frame(
+                &ctx,
+                &mut app,
+                &mut time,
+                vec![egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Default::default(),
+                }],
+            );
+            check(
+                !app.inference_unconfirmed(),
+                "Failed auxiliary panel trapped the editor",
+            )?;
+        }
+        settle(&ctx, &mut app, &mut time);
+        let pos = app
+            .canvas_view
+            .viewport_rect()
+            .ok_or("Canvas unavailable")?
+            .center()
+            + egui::vec2(case as f32 * 4., 0.);
+        for pressed in [true, false] {
+            frame(
+                &ctx,
+                &mut app,
+                &mut time,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        check(
+            app.documents[0].snapshot() != before
+                && app.documents[0].history_counts().0 == counts.0 + 1,
+            "Basic mouse brush failed after an optional failure",
+        )?;
+        let drawn = app.documents[0].snapshot();
+        app.init_recovery(&dir);
+        app.checkpoint_recovery()?;
+        app.quiesce_recovery();
+        check(
+            drawer_core::recovery::scan(&dir)?
+                .iter()
+                .any(|c| c.open().is_ok_and(|d| d.snapshot() == drawn)),
+            "Recovery lost basic edits",
+        )?;
+        let saved = dir.join(format!("basic-{case}.drawer"));
+        app.save_to(0, &saved)?;
+        check(
+            drawer_core::files::open(&saved, DEFAULT_DOCUMENT_BUDGET)
+                .map_err(|e| e.to_string())?
+                .snapshot()
+                == drawn,
+            "Local save/reopen failed after an optional failure",
+        )?;
+    }
+    app.finish_recovery();
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn optional_dependencies_preserve_mouse_save_open_and_recovery_without_gpu() {
+        let root = crate::tests::TestDirectory::new();
+        super::optional_dependencies(&root.0).unwrap();
+    }
     #[test]
     fn actual_local_model_inputs_onnx_preview_adoption_undo_stale_failure_cancel_and_cleanup() {
         let root = crate::tests::TestDirectory::new();
