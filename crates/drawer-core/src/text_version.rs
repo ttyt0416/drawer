@@ -84,6 +84,7 @@ pub fn prepare(d: &Document, selected: Option<&[u64]>) -> Result<Prepared, Strin
         *layout = Some(Box::new(next));
         changed += 1;
     }
+    crate::text_appearance::refresh(d, &mut state)?;
     crate::text_layout::validate_scene(&state.scene)?;
     crate::layer_groups::finish(d, &state)?;
     Ok(Prepared {

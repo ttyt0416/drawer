@@ -203,7 +203,7 @@ pub fn create(
             &Bundle {
                 version: 1,
                 application: env!("CARGO_PKG_VERSION").into(),
-                native_version: 125,
+                native_version: crate::files::VERSION,
                 source: source.clone(),
                 files,
             },
@@ -225,7 +225,7 @@ fn validate(root: &Path, c: &AtomicBool) -> Result<Bundle> {
     let root = browser::folder(root)?;
     let bundle = read::<Bundle>(&root.join("bundle.json"))?.ok_or("Missing bundle manifest")?;
     if bundle.version != 1
-        || bundle.native_version > 125
+        || bundle.native_version > crate::files::VERSION
         || bundle.application.len() > 64
         || !admitted(&bundle.files)
         || total(&bundle.files)? > LIMIT

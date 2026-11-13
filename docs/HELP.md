@@ -1895,3 +1895,6 @@ In **Local model inference…**, choose the requested processing device and save
 
 **Language, IME and confirmations / 언어·입력기·확인 설정** controls Korean/English interface labels and local tutorials/tool explanations. Apply to switch at runtime; the choice is saved in the workspace. Missing translations in detailed dialogs and dynamic diagnostics use English. User names, document text and shortcut bindings are preserved. Translation uses only bundled strings and local fonts; no service is contacted. Validated platform support remains Windows x64; restricted local plugins keep their existing limits.
 
+
+
+Native126 글자 외관 보존: 새로 만들거나 편집을 확정한 텍스트는 확정된 글리프 윤곽과 서식을 문서 안에 저장합니다. 원본 글꼴이 없어도 표시와 이동·변형은 유지됩니다. 내용·배치를 바꾸려면 사용 가능한 대체 글꼴을 선택하고 검토하세요. 글꼴 파일 자체를 포함하지 않습니다. Native1~125 문서는 이 외관 기록이 없으므로 원본 글꼴을 복원하거나 대체 결과를 직접 확인해야 합니다. 열기만으로 기존 배치 세대를 변경하지 않습니다.

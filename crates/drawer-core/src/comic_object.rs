@@ -312,11 +312,9 @@ impl Object {
         if let Kind::Balloon(b) = &mut out.kind
             && let Some(id) = b.text
             && let Some(n) = scene.catalog.objects.index(id, scene.objects.len())
-            && let Some(s) = crate::text_layout::Settings::from_object(&scene.objects[n])
-            && let Ok(layout) = crate::text_layout::layout(s.baseline, &s.text, s.size, &s.style)
+            && let Ok(paths) = crate::text_appearance::contours(scene, n)
         {
-            let points: Vec<_> = layout
-                .paths
+            let points: Vec<_> = paths
                 .iter()
                 .flatten()
                 .map(|p| self.transform.inverse().map(*p))

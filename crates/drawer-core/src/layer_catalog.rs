@@ -882,7 +882,7 @@ pub fn bounds_base(d: &Document, key: Key) -> Option<crate::scene::Rect> {
         Key::Object(_) => Some(transformed(
             match d.scene.objects.get(source_index(d, key)?)? {
                 PageObject::Comic(c) => c.resolved(&d.scene).bounds(),
-                o => o.bounds(),
+                _ => d.scene.object_bounds(source_index(d, key)?),
             },
             d.scene.transform,
         )),

@@ -531,6 +531,7 @@ impl Document {
     ) -> Result<bool, String> {
         after.scene.layer_ids.append(after.layers.len())?;
         crate::layer_catalog::reconcile(self, &mut after)?;
+        crate::text_appearance::refresh(self, &mut after)?;
         crate::cels::reconcile(self, &mut after)?;
         crate::timeline_timing::reconcile(&mut after);
         crate::render_order::reconcile(&mut after);

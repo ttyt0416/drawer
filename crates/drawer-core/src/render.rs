@@ -878,20 +878,28 @@ impl<'a> Renderer<'a> {
             .scene
             .objects
             .iter()
-            .map(|object| match object {
+            .enumerate()
+            .map(|(index, object)| match object {
                 PageObject::Text {
                     baseline,
                     text,
                     size_px,
                     layout,
                     color,
-                } => match text_paint::Text::new(
-                    *baseline,
-                    text,
-                    *size_px,
-                    *color,
-                    layout.as_deref(),
-                ) {
+                } => match document
+                    .scene
+                    .text_appearance
+                    .display(&document.scene, index)
+                    .and_then(|cached| {
+                        text_paint::Text::new(
+                            *baseline,
+                            text,
+                            *size_px,
+                            *color,
+                            layout.as_deref(),
+                            cached.as_deref(),
+                        )
+                    }) {
                     Ok(paths) => paths,
                     Err(error) => {
                         text_error = Some(error);
@@ -1517,12 +1525,27 @@ pub(crate) fn text_pixel_bounds_budget(
     if color[3] == 0 && layout.as_ref().is_none_or(|s| s.rich.is_none()) {
         return Err("Text contains no visible pixels".into());
     }
-    let paths = glyph_contours(*baseline, text, *size_px, layout.as_deref())?;
+    let cached = doc.scene.text_appearance.display(&doc.scene, index)?;
+    let paths = if let Some(g) = &cached {
+        contour_paths(
+            g.framed(layout.as_ref().map_or_else(Default::default, |s| s.frame))?
+                .paths,
+        )
+    } else {
+        glyph_contours(*baseline, text, *size_px, layout.as_deref())?
+    };
     let points = paths
         .iter()
         .flat_map(|p| &p.points)
         .map(|p| doc.scene.transform.map(*p));
-    let geometry = text_paint::Text::new(*baseline, text, *size_px, *color, layout.as_deref())?;
+    let geometry = text_paint::Text::new(
+        *baseline,
+        text,
+        *size_px,
+        *color,
+        layout.as_deref(),
+        cached.as_deref(),
+    )?;
     let bounds = if layout.as_ref().is_some_and(|s| s.rich.is_some()) {
         let b = geometry.bounds().ok_or("Text contains no visible pixels")?;
         crate::alignment_detail::rectangle(

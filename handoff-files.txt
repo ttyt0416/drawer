@@ -1422,3 +1422,11 @@ crates/drawer-app/src/i18n.rs
 locales/ko.json
 scripts/localize-ui.py
 docs/process/localization.md
+crates/drawer-app/src/verification.rs
+crates/drawer-app/src/verification_strokes.rs
+crates/drawer-core/src/text_appearance.rs
+crates/drawer-core/src/text_appearance_verify.rs
+scripts/test-checklist.ps1
+docs/process/stroke-acceptance.md
+docs/process/confirmed-text-appearance.md
+docs/process/check-287-evidence.json

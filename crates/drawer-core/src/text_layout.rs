@@ -681,6 +681,7 @@ pub fn prepare(
             name: "Mixed-font mapping".into(),
         });
     }
+    crate::text_appearance::refresh(d, &mut prepared.state)?;
     validate_scene(&prepared.state.scene)?;
     Ok(prepared)
 }
@@ -759,7 +760,7 @@ fn prepare_value(
 
 pub fn validate_scene(scene: &crate::scene::Scene) -> Result<(), String> {
     let mut total = 0usize;
-    for o in &scene.objects {
+    for (n, o) in scene.objects.iter().enumerate() {
         if let PageObject::Text {
             layout: Some(style),
             baseline,
@@ -768,8 +769,16 @@ pub fn validate_scene(scene: &crate::scene::Scene) -> Result<(), String> {
             ..
         } = o
         {
-            let l = layout(*baseline, text, *size_px, style)?;
-            total = total.saturating_add(l.paths.iter().map(Vec::len).sum::<usize>());
+            let points = if let Some(cache) = scene.text_appearance.display(scene, n)? {
+                cache.points()
+            } else {
+                layout(*baseline, text, *size_px, style)?
+                    .paths
+                    .iter()
+                    .map(Vec::len)
+                    .sum::<usize>()
+            };
+            total = total.saturating_add(points);
             if total > 1024 * 1024 {
                 return Err("Page text outline point budget exceeded".into());
             }

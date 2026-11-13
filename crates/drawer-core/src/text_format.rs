@@ -357,12 +357,14 @@ impl Presets {
         Ok(())
     }
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Paint {
     pub color: Option<[u8; 4]>,
     pub border: Option<Border>,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PaintRange {
     pub start: usize,
     pub end: usize,

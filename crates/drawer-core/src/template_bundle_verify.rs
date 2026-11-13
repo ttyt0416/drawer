@@ -220,8 +220,10 @@ pub fn portable_resources(root: &Path) -> Result<(), String> {
     let original = d.snapshot();
     let history = d.history_counts();
     let pixels = |d: &Document| -> Vec<_> {
+        let renderer = crate::render::Renderer::new(d);
         (0..d.height)
-            .flat_map(|y| (0..d.width).map(move |x| d.composite_pixel(x, y)))
+            .flat_map(|y| (0..d.width).map(move |x| (x, y)))
+            .map(|(x, y)| renderer.pixel([x as f64 + 0.5, y as f64 + 0.5]))
             .collect()
     };
     let before = pixels(&d);

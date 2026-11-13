@@ -216,6 +216,11 @@ pub struct WorldMesh {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scene {
+    #[serde(
+        default,
+        skip_serializing_if = "crate::text_appearance::Data::is_default"
+    )]
+    pub text_appearance: crate::text_appearance::Data,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raster_tiles: Option<Vec<crate::tiled_raster::Stored>>,
     #[serde(default, skip_serializing_if = "crate::world3d::Data::is_default")]
@@ -403,6 +408,7 @@ impl Scene {
                     })
             })
             && self.appearance.valid()
+            && self.text_appearance.valid()
             && self.surface_effects.valid()
             && self
                 .lines
@@ -527,6 +533,7 @@ impl Scene {
             + self.render_order.entries.len() * std::mem::size_of::<crate::render_order::Entry>()
             + self.file_objects.bytes()
             + self.appearance.bytes()
+            + self.text_appearance.bytes()
             + self.surface_effects.bytes()
             + self.last_batch_filter.as_ref().map_or(0, |r| r.bytes())
             + self.mesh_edit.as_ref().map_or(0, |e| e.bytes())
@@ -594,12 +601,15 @@ impl Scene {
         let points = self.physical_points(period_px, dpi);
         [72.0 / points[0], 72.0 / points[1]]
     }
+    pub fn object_bounds(&self, index: usize) -> Rect {
+        crate::text_appearance::bounds(self, index).unwrap_or_else(|| self.objects[index].bounds())
+    }
     pub fn clipped_objects(&self, output: Rect) -> Vec<usize> {
         self.objects
             .iter()
             .enumerate()
-            .filter_map(|(index, object)| {
-                let bounds = object.bounds();
+            .filter_map(|(index, _object)| {
+                let bounds = self.object_bounds(index);
                 let corners = [
                     bounds.min,
                     [bounds.max[0], bounds.min[1]],

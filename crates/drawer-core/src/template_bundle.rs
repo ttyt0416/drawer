@@ -109,6 +109,7 @@ fn payloads(
     // A full page snapshot preserves editable layer/folder/cut/timeline dependencies together.
     let mut copy = crate::layer_merge::preview(&d.snapshot(), d.current_frame)?;
     copy.light_table = d.light_table.clone();
+    crate::text_appearance::freeze_all(&mut copy.scene)?;
     let mut embedded_links = Vec::new();
     let mut images = Vec::new();
     if let Some(root) = embedded_root {

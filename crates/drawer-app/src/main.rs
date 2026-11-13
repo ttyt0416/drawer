@@ -196,6 +196,7 @@ mod uv_paint;
 mod vector_cleanup;
 mod vector_scope;
 mod velocity_pressure;
+mod verification;
 mod view_commands;
 mod warp_filters;
 mod work_library;
@@ -2779,6 +2780,13 @@ fn main() -> eframe::Result {
     }
     let mut args = std::env::args_os().skip(1);
     let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("--verify-item")) {
+        if let Err(error) = verification::cli(args) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if first.as_deref() == Some(std::ffi::OsStr::new("--verify-local-references")) {
         if let Err(error) = local_references::cli(args) {
             eprintln!("{error}");

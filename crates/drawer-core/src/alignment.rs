@@ -118,11 +118,10 @@ pub fn bounds(doc: &Document, item: Item) -> Result<Rect, String> {
             })
         }
         Item::Object(i) => mapped(
-            doc.scene
-                .objects
-                .get(i)
-                .ok_or("Missing page object")?
-                .bounds(),
+            {
+                doc.scene.objects.get(i).ok_or("Missing page object")?;
+                doc.scene.object_bounds(i)
+            },
             doc.scene.transform,
         ),
         Item::Vector(id) => {

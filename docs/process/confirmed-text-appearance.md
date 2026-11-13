@@ -1,0 +1,9 @@
+# Confirmed text appearance (Native 126)
+
+New or changed text committed through the editor stores an input-bound snapshot of its confirmed glyph contours, rich paint ranges and backgrounds. It keeps editable Unicode text, local font content identities, ruby, mixed mappings and the original layout generation. No font file is embedded. Cached contours are transformed by the text frame, so moving or transforming confirmed text does not need the original font. A replacement is required before changing content/layout that uses an unavailable local font. Explicit replacement is an ordinary undoable document edit.
+
+The snapshot uses a bounded binary payload with SHA-256 and zlib inside Native JSON. Loading validates input identity, target IDs, stream length/hash, finite coordinates, counts, working memory and old-version guards before rendering. Limits are 2 MiB base64 payload per document, 20 MiB decoded binary, 32 MiB accounted cache memory, 1,048,576 points and 65,536 paths. Resource bundles explicitly freeze uncached legacy text before export, while the original document remains unchanged.
+
+Native versions 1–125 did not store confirmed glyph appearance. Opening an old file preserves its layout generation and does not invent a missing snapshot or silently reflow and save it. When its original font is missing, restore that font or explicitly choose and review an available replacement. Appearance that was never saved cannot be recovered from a font identifier alone.
+
+Verification uses the full Renderer, not raster-layer-only compositing. The local tests delete the owned original font, invalidate font data and compare exact RGBA before/after native reopen, affine movement and replacement Undo. Both plain and rich text are exercised; a relocated bundle additionally combines ruby, mixed mappings, linked page caches and a model. Tampered metadata, wrong old headers, stale text signatures, excessive counts and non-finite points are refused.

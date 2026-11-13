@@ -844,6 +844,7 @@ dependencies = [
  "base64",
  "crc32fast",
  "epaint_default_fonts",
+ "flate2",
  "gif",
  "icu_casemap",
  "image",

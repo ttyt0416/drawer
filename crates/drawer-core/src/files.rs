@@ -6,7 +6,7 @@ use std::{
 };
 
 const MAGIC: &[u8; 8] = b"DRAWER\r\n";
-pub(crate) const VERSION: u32 = 125;
+pub(crate) const VERSION: u32 = 126;
 const MAX_SCENE_BYTES: usize = 4 * 1024 * 1024;
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
@@ -494,6 +494,11 @@ fn read_native_body(
                 "Editable page containers and compound/clipped frames require version94",
             ));
         }
+        if version < 126 && !document.scene.text_appearance.is_default() {
+            return Err(invalid(
+                "Confirmed text appearance requires native version126",
+            ));
+        }
         if version < 93
             && (!document.scene.comics.is_default()
                 || document
@@ -773,6 +778,11 @@ fn read_native_body(
     if reader.read(&mut trailing)? != 0 {
         return Err(invalid("Unexpected document data"));
     }
+    crate::text_appearance::validate_native(
+        &document.scene,
+        budget.saturating_sub(document.allocation_bytes()),
+    )
+    .map_err(invalid)?;
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;
     crate::light_table::save_destination(&document, path).map_err(invalid)?;
     document.mark_saved(path.into());
@@ -941,6 +951,11 @@ pub(crate) fn native_scene(document: &Document) -> io::Result<Vec<u8>> {
         document.height,
         &document.layers,
         &document.scene,
+    )
+    .map_err(invalid)?;
+    crate::text_appearance::validate_native(
+        &document.scene,
+        crate::document::DEFAULT_DOCUMENT_BUDGET.saturating_sub(document.allocation_bytes()),
     )
     .map_err(invalid)?;
     crate::text_layout::validate_scene(&document.scene).map_err(invalid)?;

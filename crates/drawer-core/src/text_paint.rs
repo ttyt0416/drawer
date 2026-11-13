@@ -16,7 +16,25 @@ impl Text {
         size: f64,
         color: [u8; 4],
         style: Option<&crate::text_layout::Style>,
+        cached: Option<&crate::text_appearance::Geometry>,
     ) -> Result<Self, String> {
+        if let Some(cached) = cached {
+            let g = cached.framed(style.map_or_else(Default::default, |s| s.frame))?;
+            if !g.rich {
+                return Ok(Self {
+                    plain: text_contour_tree::Set::new(contour_paths(g.paths)),
+                    color,
+                    ..Default::default()
+                });
+            }
+            return Ok(Self::rich(
+                g.paths,
+                g.backgrounds,
+                g.paint,
+                g.background,
+                color,
+            ));
+        }
         let Some(style) = style.filter(|s| s.rich.is_some()) else {
             return Ok(Self {
                 plain: text_contour_tree::Set::new(glyph_contours(baseline, text, size, style)?),
@@ -25,12 +43,27 @@ impl Text {
             });
         };
         let layout = crate::text_layout::layout(baseline, text, size, style)?;
-        let background = text_contour_tree::Set::new(contour_paths(layout.backgrounds));
         let background_color = style.typeset.as_ref().map_or([0; 4], |o| o.background);
-        let mut paths = layout.paths.into_iter().enumerate().peekable();
+        Ok(Self::rich(
+            layout.paths,
+            layout.backgrounds,
+            layout.paint,
+            background_color,
+            color,
+        ))
+    }
+    fn rich(
+        paths: Vec<Vec<Point>>,
+        backgrounds: Vec<Vec<Point>>,
+        paint: Vec<crate::text_format::PaintRange>,
+        background_color: [u8; 4],
+        color: [u8; 4],
+    ) -> Self {
+        let background = text_contour_tree::Set::new(contour_paths(backgrounds));
+        let mut paths = paths.into_iter().enumerate().peekable();
         let mut groups = vec![];
         let mut index = vec![];
-        for p in layout.paint {
+        for p in paint {
             let mut current = vec![];
             while paths.peek().is_some_and(|(i, _)| *i < p.end) {
                 let (i, path) = paths.next().unwrap();
@@ -50,14 +83,14 @@ impl Text {
                 groups.push((set, p.paint));
             }
         }
-        Ok(Self {
+        Self {
             background,
             background_color,
             color,
             groups,
             index: text_contour_tree::Set::new(index),
             ..Default::default()
-        })
+        }
     }
     pub fn bounds(&self) -> Option<Rect> {
         let base = self.index.bounds().or_else(|| self.plain.bounds());

@@ -38,10 +38,24 @@ pub(super) fn run_with_materials(
     cancel: &AtomicBool,
     progress: &AtomicUsize,
 ) -> Result<Outcome, String> {
+    run_seeded(sequence, materials, None, cancel, progress)
+}
+/// Verification-only initial pixels are separate from the existing public record
+/// format. Callers must retain that seed with their verification receipt.
+pub(super) fn run_seeded(
+    sequence: &Sequence,
+    materials: Arc<drawer_core::material_library::Library>,
+    seed: Option<&[[u8; 4]]>,
+    cancel: &AtomicBool,
+    progress: &AtomicUsize,
+) -> Result<Outcome, String> {
     if !materials.valid() {
         return Err("Invalid local replay material snapshot".into());
     }
     sequence.validate()?;
+    if seed.is_some_and(|p| p.len() != sequence.width as usize * sequence.height as usize) {
+        return Err("Verification seed dimensions differ from the input record".into());
+    }
     if cancel.load(Ordering::Relaxed) {
         return Err("Virtual replay cancelled".into());
     }
@@ -56,6 +70,9 @@ pub(super) fn run_with_materials(
     })
     .map_err(|e| e.to_string())?;
     app.documents[0].layers[0].pixels.fill(sequence.background);
+    if let Some(seed) = seed {
+        app.documents[0].layers[0].pixels.copy_from_slice(seed);
+    }
     app.documents[0].mark_saved("virtual-baseline.drawer".into());
     app.simple_view = true;
     app.set_tool(sequence.tool);

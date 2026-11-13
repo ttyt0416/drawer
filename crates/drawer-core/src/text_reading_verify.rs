@@ -264,6 +264,8 @@ pub fn lifecycle(root: &std::path::Path) -> Result<(), String> {
     let mut basic = crate::text_layout_verify::settings();
     basic.style = Style::default();
     d.commit_state(t::prepare(&d, None, &basic)?.state)?;
+    // Historical v86 files have no v126 confirmed-contour field.
+    d.scene.text_appearance = Default::default();
     let basic_file = root.join("reading-basic86.drawer");
     crate::files::save(&mut d, &basic_file).map_err(|e| e.to_string())?;
     let mut bytes = std::fs::read(&basic_file).map_err(|e| e.to_string())?;

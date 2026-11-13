@@ -215,6 +215,8 @@ pub fn verify(root: &std::path::Path) -> Result<(), String> {
     let mut old = crate::text_layout_verify::fixture()?;
     let p = t::prepare(&old, None, &crate::text_layout_verify::settings())?;
     old.commit_state(p.state)?;
+    // Model the historical wire data, before confirmed contours existed.
+    old.scene.text_appearance = Default::default();
     let path = root.join("preserved-v89.drawer");
     crate::files::save(&mut old, &path).map_err(|e| e.to_string())?;
     let mut b = std::fs::read(&path).map_err(|e| e.to_string())?;
