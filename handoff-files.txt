@@ -1438,3 +1438,6 @@ crates/drawer-app/src/input_diagnostics.rs
 crates/drawer-app/src/verification_capture.rs
 docs/process/capture-acceptance.md
 docs/process/check-289-evidence.json
+crates/drawer-app/src/verification_masks.rs
+docs/process/mask-acceptance.md
+docs/process/check-290-evidence.json

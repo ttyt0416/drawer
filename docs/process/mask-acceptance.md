@@ -1,0 +1,7 @@
+# Item 290: edit restrictions and spatial effect boundaries
+
+Run `scripts/test-checklist.ps1 -Item 290`. The new matrix compares dense and genuine 64×64 sparse-tile storage on a 130×4 page: Pen/Eraser × alpha lock off/on × selection coverage 0/128/255 × dense/sparse (24 cases). Selection straddles x63/64; transparent pixels retain nonzero hidden RGB. Every selection-blocked original RGBA pixel stays exact. Alpha lock preserves all original alpha and transparent hidden RGB. Dense/sparse output and semantic Undo/Redo must match; no-effect edits make no history.
+
+A checkerboard with selected motion blur proves selected pixels change while every original outside-selection pixel remains exact. Active spatial glow with final output mask 0/128/255 checks exact expected alpha at x62,63,64,65,127,128,129. These new cases supplement the existing independent soft-coverage equations for all seven tips, pigment/clone/dual paths, linked/placed masks, mask native roundtrips, source clipping before halo expansion, final effect and parent-folder masks after expansion, and 16-bit precision/native/Undo/refusal cases. The production filter options equations and lifecycle are included.
+
+The receipt records each matrix combination and output-mask expected alpha. It is local deterministic processing evidence, not physical device evidence. Source masks and clipping limit effect input; a spatial effect may extend beyond that input. Final effect/folder output masks bound the complete effect contribution.
