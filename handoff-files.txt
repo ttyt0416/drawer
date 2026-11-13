@@ -1465,3 +1465,5 @@ docs/process/physical-tilt-buttons.md
 docs/process/physical-297-template.json
 docs/process/physical-latency.md
 docs/process/physical-298-template.json
+docs/process/physical-device-lifecycle.md
+docs/process/physical-299-template.json

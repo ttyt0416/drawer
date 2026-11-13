@@ -3032,3 +3032,9 @@ Published전의 정상파일은 이전 바이트와 정확히 일치하고 Publi
 사용자의 실물 펜 검증 보류 지시에 따라 slow-line/fast-line/display-latency/event-latency/long-session/driver-comparison의6개 절차와 독립된 빈 기록 양식을 마련했다. 빌드 해시/Native 형식을 결합하고 장치/드라이버/OS/백엔드/모니터/설정·원시 이벤트/영상의 시계/표본율/불확도·문서 전후/자료 경로를 기록하도록 했다. 각 사례 not_run·관측값/측정/결과 비어 있음·physicalDeviceValidated=false를 검증했다. 합성 시험을 실물 합격 자료로 쓰지 않으며 실제 결과 전까지 298번 체크박스는 미완료다. 상세 범위는 docs/process/physical-latency.md 참조.
 
 문서/JSON 구조·빌드 해시·6개 미실행 상태·체크리스트/외부 복사본과 전달 목록을 확인했다. 프로그램 소스 변경이 없으므로 검증된295번 배포본을 유지한다(SHA-256 91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072). 항목별 준비 커밋·푸시 후 임시 파일과 이전 캐시를 정리하고 최신 릴리스 재사용을 확인했다.
+
+### 299 — 장치 분리·재연결·절전 복귀: 실물 시험 절차·기록 양식 준비, 실행 대기
+
+사용자의 실물 펜 검증 보류 지시에 따라 disconnect-during-stroke/disconnect-held-button/reconnect-fresh-press/suspend-resume/multiple-devices/documents-preserved의6개 절차와 독립된 빈 기록 양식을 마련했다. 빌드 해시/Native 형식을 결합하고 장치/드라이버/OS/백엔드/모니터/설정·원시 이벤트/영상의 시계/표본율/불확도·문서 전후/자료 경로를 기록하도록 했다. 각 사례 not_run·관측값/측정/결과 비어 있음·physicalDeviceValidated=false를 검증했다. 합성 시험을 실물 합격 자료로 쓰지 않으며 실제 결과 전까지 299번 체크박스는 미완료다. 상세 범위는 docs/process/physical-device-lifecycle.md 참조.
+
+문서/JSON 구조·빌드 해시·6개 미실행 상태·체크리스트/외부 복사본과 전달 목록을 확인했다. 프로그램 소스 변경이 없으므로 검증된295번 배포본을 유지한다(SHA-256 91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072). 항목별 준비 커밋·푸시 후 임시 파일과 이전 캐시를 정리하고 최신 릴리스 재사용을 확인했다.

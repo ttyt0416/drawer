@@ -1,0 +1,104 @@
+{
+  "format": "Drawer physical verification template",
+  "version": 1,
+  "item": 299,
+  "status": "pending_hardware",
+  "physicalDeviceValidated": false,
+  "recordedAtUtc": null,
+  "tester": null,
+  "referenceBuild": {
+    "executableSha256": "91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072",
+    "nativeVersion": 126
+  },
+  "device": {
+    "manufacturer": null,
+    "model": null,
+    "driverVersion": null,
+    "firmwareVersion": null,
+    "connection": null,
+    "supportedPressure": null,
+    "supportedTilt": null,
+    "supportedEraser": null,
+    "reportedButtons": null
+  },
+  "environment": {
+    "os": null,
+    "requestedBackend": null,
+    "activeBackend": null,
+    "fallbackReason": null,
+    "monitorModels": null,
+    "resolutions": null,
+    "dpiScales": null,
+    "refreshRatesHz": null,
+    "desktopLayout": null
+  },
+  "settings": {
+    "tool": null,
+    "brushSizeDocumentPx": null,
+    "pressureMinimum": null,
+    "pressureMaximum": null,
+    "pressureCurve": null,
+    "stabilization": null,
+    "buttonMappings": null,
+    "tabletMapping": null
+  },
+  "capture": {
+    "rawEventsPath": null,
+    "rawEventClock": null,
+    "samplingHz": null,
+    "samplingRateSource": null,
+    "videoPath": null,
+    "videoFps": null,
+    "clockSynchronization": null,
+    "measurementUncertaintyMs": null
+  },
+  "cases": [
+    {
+      "id": "disconnect-during-stroke",
+      "procedure": "획 도중 실제 장치를 분리하고 미확정 획이 시작 전으로 복원되며 새 이력을 만들지 않는지 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "disconnect-held-button",
+      "procedure": "펜/버튼을 누른 상태의 분리에서 접촉·버튼·누른 키 상태가 남지 않는지 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "reconnect-fresh-press",
+      "procedure": "재연결 후 누른 채 이동은 새 획이 되지 않고 들어 올린 뒤 새 누름으로 정상 시작하는지 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "suspend-resume",
+      "procedure": "실제 절전/복귀의 시간과 상태를 기록하고 미확정 획·입력 컨텍스트·복귀 후 첫 획을 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "multiple-devices",
+      "procedure": "서로 다른 장치와 실제 마우스를 전환해 소유권·중복 입력 억제·설정 분리를 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "documents-preserved",
+      "procedure": "분리/복귀 전후 저장 문서·미저장 복구본·도구·팝업 시험 칠하기·로컬 설정 보존을 비교한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    }
+  ],
+  "measurements": [],
+  "nativeBeforePath": null,
+  "nativeAfterPath": null,
+  "result": null,
+  "remainingIssues": []
+}
