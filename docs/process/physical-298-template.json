@@ -1,0 +1,104 @@
+{
+  "format": "Drawer physical verification template",
+  "version": 1,
+  "item": 298,
+  "status": "pending_hardware",
+  "physicalDeviceValidated": false,
+  "recordedAtUtc": null,
+  "tester": null,
+  "referenceBuild": {
+    "executableSha256": "91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072",
+    "nativeVersion": 126
+  },
+  "device": {
+    "manufacturer": null,
+    "model": null,
+    "driverVersion": null,
+    "firmwareVersion": null,
+    "connection": null,
+    "supportedPressure": null,
+    "supportedTilt": null,
+    "supportedEraser": null,
+    "reportedButtons": null
+  },
+  "environment": {
+    "os": null,
+    "requestedBackend": null,
+    "activeBackend": null,
+    "fallbackReason": null,
+    "monitorModels": null,
+    "resolutions": null,
+    "dpiScales": null,
+    "refreshRatesHz": null,
+    "desktopLayout": null
+  },
+  "settings": {
+    "tool": null,
+    "brushSizeDocumentPx": null,
+    "pressureMinimum": null,
+    "pressureMaximum": null,
+    "pressureCurve": null,
+    "stabilization": null,
+    "buttonMappings": null,
+    "tabletMapping": null
+  },
+  "capture": {
+    "rawEventsPath": null,
+    "rawEventClock": null,
+    "samplingHz": null,
+    "samplingRateSource": null,
+    "videoPath": null,
+    "videoFps": null,
+    "clockSynchronization": null,
+    "measurementUncertaintyMs": null
+  },
+  "cases": [
+    {
+      "id": "slow-line",
+      "procedure": "느린 직선·곡선의 입력 궤적과 보이는 획을 기록한다. 손 움직임의 잔차와 장치 자체의 떨림을 동일시하지 않는다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "fast-line",
+      "procedure": "빠른 선과 방향 전환에서 누락·불연속·끝점 차이를 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "display-latency",
+      "procedure": "영상 또는 외부 표시 측정의 시각 기준·프레임률·불확도를 명시하고 접촉→표시 지연의 분포를 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "event-latency",
+      "procedure": "이벤트 도착/계산/렌더/제출/표시 중 실제로 관측한 시점을 구분해 기록한다. 서로 다른 시계는 동기화 방법을 남긴다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "long-session",
+      "procedure": "정한 장시간 세션의 실제 시작/종료·획수·누락률·메모리 변화와 드라이버/장치 조건을 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "driver-comparison",
+      "procedure": "같은 브러시·배율·표시 장치·표본 조건에서 각 사용 가능한 백엔드/드라이버를 별도 시행한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    }
+  ],
+  "measurements": [],
+  "nativeBeforePath": null,
+  "nativeAfterPath": null,
+  "result": null,
+  "remainingIssues": []
+}

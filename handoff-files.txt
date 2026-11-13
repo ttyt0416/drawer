@@ -1463,3 +1463,5 @@ docs/process/physical-pressure.md
 docs/process/physical-296-template.json
 docs/process/physical-tilt-buttons.md
 docs/process/physical-297-template.json
+docs/process/physical-latency.md
+docs/process/physical-298-template.json
