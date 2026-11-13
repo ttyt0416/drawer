@@ -116,7 +116,7 @@ impl LocalImage {
         doc.layers[0].pixels.copy_from_slice(&self.pixels);
         Ok(doc)
     }
-    fn png(&self) -> io::Result<Vec<u8>> {
+    pub(crate) fn png(&self) -> io::Result<Vec<u8>> {
         if !self.valid() {
             return Err(invalid("Invalid reference pixels"));
         }

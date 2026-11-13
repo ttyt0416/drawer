@@ -1410,3 +1410,5 @@ crates/drawer-core/src/plugin_runtime.rs
 crates/drawer-app/src/local_plugins.rs
 docs/process/restricted-plugins.md
 docs/process/restricted-plugins-network.json
+docs/process/portable-documents.md
+docs/process/portable-documents-network.json

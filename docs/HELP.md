@@ -1889,3 +1889,5 @@ Save in background…는 시작 시점의 상태를 저장하며 그 뒤 그린 
 
 Use **Restricted local plugins…** in the layer commands to import a local JSON pixel program, preview it, and adopt a new layer as one Undo. The included inversion example needs no installation. Programs cannot access files, network, processes or native code. Infinite loops stop at the execution limit. Escape discards output; source layers stay editable. **Keep a verified copy** saves the program under local user data `plugins` for reuse after restart. This host accepts only its restricted bytecode format, not DLL/WASM/Python plugins.
 
+For a portable document, open **Local templates and resource bundles** and choose **Portable: copy linked image caches** before export. Move the complete directory and validate/import it at the destination. Linked PNGs use relative bundle names and are rebound locally. Native model/material/text appearance data travels with the document. Font files are not redistributed; missing fonts keep cached appearance and show their original name with local replacement guidance. Keeping original links is also available; opening never refreshes them automatically.
+

@@ -15,6 +15,7 @@ pub(super) struct Panel {
     name: String,
     kind: Kind,
     copy_masks: bool,
+    embed_linked_caches: bool,
     reviewed: bool,
     prepared: Option<Box<core::Prepared>>,
     job: Option<Job>,
@@ -45,7 +46,8 @@ impl Drawer {
         }
         let path = PathBuf::from(&p.path);
         drawer_core::file_objects::local_path(&path)?;
-        let budget = DEFAULT_DOCUMENT_BUDGET
+        let budget = self
+            .resource_budget()
             .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum());
         let copy = if export {
             let d = &self.documents[self.active.ok_or("Open a source page first")?];
@@ -61,6 +63,7 @@ impl Drawer {
         let masks = self.materials.library.clone();
         let name = p.name.clone();
         let kind = p.kind;
+        let embed = p.embed_linked_caches;
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = cancel.clone();
         let (tx, rx) = mpsc::channel();
@@ -68,7 +71,8 @@ impl Drawer {
             .name("local-template-bundle".into())
             .spawn(move || {
                 let result = if let Some(d) = copy {
-                    core::export(&d, &path, &name, kind, &masks, &flag).map(|()| Value::Exported)
+                    core::export_resources(&d, &path, &name, kind, &masks, &flag, embed)
+                        .map(|()| Value::Exported)
                 } else {
                     core::import(&path, budget, &flag).map(|p| Value::Imported(Box::new(p)))
                 };
@@ -88,7 +92,8 @@ impl Drawer {
         let prepared = p.prepared.as_ref().ok_or("Prepare a template first")?;
         if self.tabs.len() >= 256
             || prepared.document.resident_bytes()
-                > DEFAULT_DOCUMENT_BUDGET
+                > self
+                    .resource_budget()
                     .saturating_sub(self.documents.iter().map(Document::resident_bytes).sum())
         {
             return Err("Template no longer fits workspace memory/view limits".into());
@@ -145,24 +150,31 @@ impl Drawer {
         let mut close = false;
         let mut action = "";
         p.controls.clear();
-        egui::Window::new("Local templates and resource bundles").open(&mut open).default_width(570.).show(ctx,|ui|{
+        egui::Window::new("Local templates and resource bundles").order(egui::Order::Foreground).open(&mut open).default_width(570.).default_pos(egui::pos2(20.,20.)).show(ctx,|ui|{
+            egui::ScrollArea::vertical().max_height(350.).show(ui,|ui|{
             ui.label("Editable full-page snapshots preserve layer stacks, comic cuts and timelines together.");
             ui.label("Native image/cel/model/audio/font caches are included. Linked sources refresh only on explicit request.");
+            ui.small("Font files are not redistributed. Text keeps Unicode, formatting and cached glyph appearance. Review a local replacement before editing missing fonts; use outline/raster export when needed.");
             ui.add_enabled_ui(p.job.is_none(),|ui|{
                 ui.horizontal(|ui|{ui.label("Folder");if ui.text_edit_singleline(&mut p.path).changed(){p.prepared=None;p.reviewed=false;}
                     if ui.button("Browse existing…").clicked() && let Some(f)=rfd::FileDialog::new().pick_folder(){p.path=f.display().to_string();p.prepared=None;p.reviewed=false;}});
                 ui.horizontal(|ui|{ui.label("Template name");ui.text_edit_singleline(&mut p.name);});
                 ui.horizontal(|ui|{for kind in Kind::ALL{ui.selectable_value(&mut p.kind,kind,kind.label());}});
                 ui.label("Export: enter a NEW folder path. Import: choose a previously exported folder.");
+                let r=ui.checkbox(&mut p.embed_linked_caches,"Portable: copy linked image caches into the bundle (preserve original document links)");p.controls.insert("embed-links",r.rect);
                 ui.horizontal(|ui|{for(key,label)in[("export","Export new bundle"),("prepare","Validate import")]{let b=ui.button(label);p.controls.insert(key,b.rect);if b.clicked(){action=key;}}});
                 if let Some(v)=&p.prepared{
                     ui.separator();ui.label(format!("{} · {} · {}×{} · {:.2}DPI · {} raster layers · {} frames",v.name,v.kind.label(),v.document.width,v.document.height,v.document.dpi,v.document.layers.len(),v.document.animation.as_ref().map_or(1,|a|a.frames)));
                     ui.label(format!("{} archived mask definitions. Existing frozen stroke IDs/settings stay unchanged.",v.masks.assets().len()));
+                    for notice in &v.notices {ui.small(notice);}
                     ui.checkbox(&mut p.copy_masks,"Also copy archived masks into my local library with new IDs");
-                    ui.checkbox(&mut p.reviewed,"Reviewed: open a new unsaved document, preserving existing documents");
-                    let b=ui.add_enabled(p.reviewed,egui::Button::new("Create from template"));p.controls.insert("apply",b.rect);if b.clicked(){action="apply";}
                 }
             });
+            });
+            if p.prepared.is_some() && p.job.is_none() {
+                ui.checkbox(&mut p.reviewed,"Reviewed: open a new unsaved document, preserving existing documents");
+                let b=ui.add_enabled(p.reviewed,egui::Button::new("Create from template"));p.controls.insert("apply",b.rect);if b.clicked(){action="apply";}
+            }
             if p.job.is_some(){ui.spinner();let b=ui.button("Cancel job");p.controls.insert("cancel-job",b.rect);if b.clicked(){if let Some(j)=&p.job{j.cancel.store(true,Ordering::Relaxed);}p.message="Cancellation requested; waiting for owned temporary cleanup".into();}}
             ui.label(&p.message);let b=ui.button("Close / discard preview");p.controls.insert("close",b.rect);if b.clicked(){close=true;}
         });
@@ -191,6 +203,33 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
+    #[test]
+    fn configured_template_memory_limit_refuses_before_worker_or_document_change() {
+        let ctx = egui::Context::default();
+        let mut app = Drawer::new(&ctx, None);
+        app.create_canvas(CanvasSpec {
+            width: 4096,
+            height: 1536,
+            dpi: 300.,
+            background: Background::Transparent,
+        })
+        .unwrap();
+        app.resources.current.ram_mib = 64;
+        let original = app.documents[0].snapshot();
+        let root = crate::tests::TestDirectory::new();
+        let mut panel = Panel {
+            path: root.0.join("memory-bundle").display().to_string(),
+            name: "Memory limit".into(),
+            ..Default::default()
+        };
+        assert!(
+            app.template_job(&mut panel, true)
+                .is_err_and(|e| e.contains("memory"))
+        );
+        assert!(panel.job.is_none());
+        assert_eq!(app.documents[0].snapshot(), original);
+    }
     #[test]
     fn template_pointer_review_cancel_and_new_document() {
         let t = crate::tests::TestDirectory::new();

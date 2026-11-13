@@ -42,6 +42,26 @@ struct Manifest {
     kind: Kind,
     frame: u32,
     files: Vec<File>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    embedded_links: Vec<EmbeddedLink>,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmbeddedLink {
+    target: crate::layer_search::Key,
+    file: String,
+}
+fn cached_png(link: &crate::file_objects::Link) -> Result<Vec<u8>, String> {
+    let crate::material_layer::Source::Image(image) = &link.cache.source else {
+        return Err("Linked cache is not an image".into());
+    };
+    crate::references::LocalImage {
+        width: image.width,
+        height: image.height,
+        pixels: image.pixels.as_ref().clone(),
+    }
+    .png()
+    .map_err(|e| e.to_string())
 }
 fn label(s: &str) -> bool {
     !s.is_empty() && s == s.trim() && s.chars().count() <= 64 && !s.chars().any(char::is_control)
@@ -74,6 +94,7 @@ fn payloads(
     kind: Kind,
     masks: &Library,
     cancel: &AtomicBool,
+    embedded_root: Option<&Path>,
 ) -> Result<Vec<(String, Vec<u8>)>, String> {
     assets::canceled(cancel)?;
     if !label(name)
@@ -88,6 +109,32 @@ fn payloads(
     // A full page snapshot preserves editable layer/folder/cut/timeline dependencies together.
     let mut copy = crate::layer_merge::preview(&d.snapshot(), d.current_frame)?;
     copy.light_table = d.light_table.clone();
+    let mut embedded_links = Vec::new();
+    let mut images = Vec::new();
+    if let Some(root) = embedded_root {
+        for (n, link) in copy.scene.file_objects.entries.iter_mut().enumerate() {
+            assets::canceled(cancel)?;
+            let file = format!("linked-{n:03}.png");
+            let png = cached_png(link)?;
+            if png.len() > 16 * 1024 * 1024
+                || images
+                    .iter()
+                    .map(|(_, b): &(String, Vec<u8>)| b.len())
+                    .sum::<usize>()
+                    .saturating_add(png.len())
+                    > NATIVE_LIMIT
+            {
+                return Err("Portable linked caches exceed16MiB each /64MiB total".into());
+            }
+            embedded_links.push(EmbeddedLink {
+                target: link.target,
+                file: file.clone(),
+            });
+            images.push((file.clone(), png));
+            link.path = root.join(file);
+            link.selection = Default::default();
+        }
+    }
     let native = crate::files::native_bytes(&copy).map_err(|e| e.to_string())?;
     let masks = serde_json::to_vec(masks).map_err(|e| e.to_string())?;
     if native.len() > NATIVE_LIMIT || masks.len() > MASK_LIMIT {
@@ -97,8 +144,9 @@ fn payloads(
         ("template.drawer".into(), native),
         ("masks.json".into(), masks),
     ];
+    values.extend(images);
     let m = Manifest {
-        version: 1,
+        version: if embedded_root.is_some() { 2 } else { 1 },
         native_version: crate::files::VERSION,
         name: name.into(),
         kind,
@@ -111,11 +159,13 @@ fn payloads(
                 sha256: assets::hash(b),
             })
             .collect(),
+        embedded_links,
     };
-    values.push((
-        "manifest.json".into(),
-        serde_json::to_vec_pretty(&m).map_err(|e| e.to_string())?,
-    ));
+    let manifest = serde_json::to_vec_pretty(&m).map_err(|e| e.to_string())?;
+    if manifest.len() > 65536 {
+        return Err("Portable bundle manifest exceeds64KiB".into());
+    }
+    values.push(("manifest.json".into(), manifest));
     assets::canceled(cancel)?;
     Ok(values)
 }
@@ -128,18 +178,32 @@ pub fn export(
     masks: &Library,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
-    crate::file_objects::local_path(path)?;
-    let parent = path
-        .parent()
-        .ok_or("Missing template parent")?
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
+    export_resources(d, path, name, kind, masks, cancel, false)
+}
+pub fn export_resources(
+    d: &Document,
+    path: &Path,
+    name: &str,
+    kind: Kind,
+    masks: &Library,
+    cancel: &AtomicBool,
+    embed_linked_caches: bool,
+) -> Result<(), String> {
+    let path = crate::file_browser::new_path(path)?;
+    let parent = crate::file_browser::folder(path.parent().ok_or("Missing template parent")?)?;
     let name_on_disk = path.file_name().ok_or("Missing template folder name")?;
     let destination = assets::checked(&parent, Path::new(name_on_disk), false)?;
     if destination.exists() {
         return Err("Choose a new template folder; existing files are never overwritten".into());
     }
-    let values = payloads(d, name, kind, masks, cancel)?;
+    let values = payloads(
+        d,
+        name,
+        kind,
+        masks,
+        cancel,
+        embed_linked_caches.then_some(destination.as_path()),
+    )?;
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let temp = parent.join(format!(
         ".drawer-template-{}-{}.tmp",
@@ -184,6 +248,7 @@ pub struct Prepared {
     pub document: Document,
     pub masks: Library,
     pub source: PathBuf,
+    pub notices: Vec<String>,
 }
 impl Prepared {
     /// New IDs in the user's library; frozen document references stay immutable.
@@ -199,35 +264,60 @@ impl Prepared {
 }
 /// Entire bundle is validated before returning an independent, unsaved document.
 pub fn import(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Prepared, String> {
-    crate::file_objects::local_path(path)?;
-    let root = path.canonicalize().map_err(|e| e.to_string())?;
+    let root = crate::file_browser::folder(path)?;
     assets::checked(path, Path::new("manifest.json"), true)?;
     let m: Manifest = serde_json::from_slice(&read(&root, "manifest.json", 65536, cancel)?)
         .map_err(|e| e.to_string())?;
-    if m.version != 1
+    if ![1, 2].contains(&m.version)
         || m.native_version == 0
         || m.native_version > crate::files::VERSION
         || !label(&m.name)
-        || m.files.len() != 2
+        || m.embedded_links.len() > 256
+        || m.version == 1 && !m.embedded_links.is_empty()
+        || m.files.len() != 2 + m.embedded_links.len()
         || m.files[0].path != "template.drawer"
         || m.files[1].path != "masks.json"
     {
         return Err("Unsupported template manifest/version or resource path".into());
     }
+    let mut targets = std::collections::BTreeSet::new();
+    for (n, link) in m.embedded_links.iter().enumerate() {
+        if link.file != format!("linked-{n:03}.png")
+            || m.files[n + 2].path != link.file
+            || !targets.insert(link.target)
+        {
+            return Err("Invalid portable resource map".into());
+        }
+    }
     for p in fs::read_dir(&root).map_err(|e| e.to_string())? {
         let p = p.map_err(|e| e.to_string())?;
-        if !["manifest.json", "template.drawer", "masks.json"]
-            .iter()
-            .any(|n| p.file_name() == *n)
+        if p.file_name() != "manifest.json"
+            && !m.files.iter().any(|f| p.file_name() == f.path.as_str())
         {
             return Err("Unexpected template resource".into());
         }
     }
-    if budget < NATIVE_LIMIT.min(m.files[0].bytes).saturating_mul(3) + m.files[1].bytes {
+    let total = m
+        .files
+        .iter()
+        .try_fold(0usize, |n, f| n.checked_add(f.bytes))
+        .ok_or("Bundle size overflow")?;
+    if total > 136 * 1024 * 1024
+        || budget
+            < NATIVE_LIMIT
+                .min(m.files[0].bytes)
+                .saturating_mul(3)
+                .saturating_add(total)
+    {
         return Err("Insufficient workspace memory for template validation".into());
     }
     let mut data = Vec::new();
-    for (f, limit) in m.files.iter().zip([NATIVE_LIMIT, MASK_LIMIT]) {
+    for (n, f) in m.files.iter().enumerate() {
+        let limit = match n {
+            0 => NATIVE_LIMIT,
+            1 => MASK_LIMIT,
+            _ => 16 * 1024 * 1024,
+        };
         if f.bytes > limit || !assets::valid_hash(&f.sha256) {
             return Err("Invalid template resource size/hash".into());
         }
@@ -247,9 +337,48 @@ pub fn import(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Prepare
     let mut d = crate::files::read_native_snapshot(
         &root.join("template.drawer"),
         b,
-        budget.saturating_sub(b.len()),
+        budget.saturating_sub(total),
     )
     .map_err(|e| e.to_string())?;
+    for (n, link) in m.embedded_links.iter().enumerate() {
+        let cached = d
+            .scene
+            .file_objects
+            .entries
+            .iter_mut()
+            .find(|l| l.target == link.target)
+            .ok_or("Portable resource target missing")?;
+        if cached_png(cached)? != data[n + 2] {
+            return Err("Portable PNG differs from native cache".into());
+        }
+        cached.path = root.join(&link.file);
+        cached.selection = Default::default();
+    }
+    let mut notices = vec![format!(
+        "{} linked image caches copied with relative bundle names. Model geometry/textures, audio, image materials and text appearance caches are embedded in the native document.",
+        m.embedded_links.len()
+    )];
+    if d.scene.file_objects.entries.len() > m.embedded_links.len() {
+        notices.push("Original source links retained; their files are not probed automatically. Use cached appearances or explicitly relink to a local file.".into());
+    }
+    let mut fonts = Vec::new();
+    for object in &d.scene.objects {
+        if let crate::scene::PageObject::Text {
+            layout: Some(style),
+            ..
+        } = object
+        {
+            for font in style.fonts() {
+                if let crate::text_layout::Font::Local(reference) = font
+                    && !fonts.contains(&font)
+                    && crate::font_library::data(reference).is_none()
+                {
+                    fonts.push(font);
+                    notices.push(format!("Missing font: {}. Unicode, formatting, layout version and cached glyph appearance are preserved. Select and review a local replacement before editing; no font file is redistributed.",font.label()));
+                }
+            }
+        }
+    }
     let masks: Library = serde_json::from_slice(&data[1]).map_err(|e| e.to_string())?;
     if !masks.valid()
         || m.kind == Kind::Animation && d.animation.is_none()
@@ -270,6 +399,7 @@ pub fn import(path: &Path, budget: usize, cancel: &AtomicBool) -> Result<Prepare
         document: d,
         masks,
         source: root,
+        notices,
     })
 }
 #[path = "template_bundle_verify.rs"]
