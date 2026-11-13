@@ -15,6 +15,8 @@ mod history;
 mod masks;
 #[path = "verification_native.rs"]
 mod native;
+#[path = "verification_performance.rs"]
+mod performance;
 #[path = "verification_recovery.rs"]
 mod recovery;
 #[path = "verification_strokes.rs"]
@@ -27,7 +29,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=293) {
+    if !matches!(item, 287..=294) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -47,6 +49,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         291 => history::run(&root)?,
         292 => native::run(&root)?,
         293 => recovery::run(&root)?,
+        294 => performance::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(
@@ -78,7 +81,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
     write(
         &root.join("receipt.json"),
         &serde_json::json!({
-            "format":"Drawer checklist acceptance","version":1,"item":item,"passed":true,
+            "format":"Drawer checklist acceptance","version":1,"item":item,"passed":item!=294,
             "appVersion":env!("CARGO_PKG_VERSION"),"nativeVersion":version,
             "physicalDeviceValidated":false,"report":report,
         }),

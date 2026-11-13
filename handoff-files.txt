@@ -1452,3 +1452,7 @@ docs/process/check-292-evidence.json
 crates/drawer-app/src/verification_recovery.rs
 docs/process/save-crash-acceptance.md
 docs/process/check-293-evidence.json
+crates/drawer-app/src/verification_performance.rs
+docs/process/performance-measurement.md
+docs/process/check-294-host.json
+docs/process/check-294-evidence.json

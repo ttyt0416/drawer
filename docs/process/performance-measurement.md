@@ -1,0 +1,11 @@
+# Item 294: partial CPU measurements and remaining display criteria
+
+Run `scripts/test-checklist.ps1 -Item 294 -MeasurementOnly`. This is explicitly a measurement run, not a completed acceptance item. Its receipt has `passed=false`, `criterionComplete=false` and `measurementOnly=true`; the checklist stays unchecked.
+
+The actual Rust engine processes generated valid 4096²/20-layer and 8192²/100-layer RGBA8 sparse documents without first allocating their dense equivalents. One layer is active; the rest are blank and this condition is recorded. Pen size is 100 document pixels. Each document records three short two-sample and three long 65-sample CPU strokes, exact semantic Undo/Redo, and 32×32 CPU-render probe timings for normal/0.125 zoom/37-degree rotation. p50/p95/min/max and sample counts are exploratory measurements. They exclude OS input, GUI event dispatch, full-window rendering, texture upload, presentation and display scanout. The small sample count is not a long-duration latency guarantee.
+
+A frozen Native save runs in another thread. At its Created stage the writer pauses while the live document paints over shared existing pixels, then resumes. The reopened save must equal the frozen state while the live document differs. The report records live CPU paint time, save duration including the stage pause, and observed owned-directory bytes at save stages. Document-plus-history resident bytes are an allocation estimate, not process RAM or GPU VRAM.
+
+`check-294-host.json` records the actual OS/CPU/physical memory/display adapter and driver inventory. It does not claim to be the 16 GiB reference machine. The app reports unavailable input-to-display/frame/process RAM/VRAM fields as null and leaves the criterion incomplete.
+
+Remaining full criteria: reference GPU/driver/display and active-pixel conditions; actual event-to-present/display p95≤50 ms; full-window frame p95≤33 ms; complete-workload process RAM≤8 GiB; measured VRAM and temporary disk over the workload; repeated Undo, zoom/rotation and editing during real asynchronous save; short and long-duration sessions, with CPU fallback reported separately. Instrumented presentation timestamps and external display/video timing must be identified separately. Sparse baseline data here and its CPU timings cannot certify these missing measurements.

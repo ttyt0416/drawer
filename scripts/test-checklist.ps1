@@ -1,5 +1,7 @@
-param([ValidateRange(1,309)][int]$Item,[string]$Evidence,[ValidateRange(5,900)][int]$TimeoutSeconds=180)
+param([ValidateRange(1,309)][int]$Item,[switch]$MeasurementOnly,[string]$Evidence,[ValidateRange(5,900)][int]$TimeoutSeconds=180)
 $ErrorActionPreference='Stop'
+if($MeasurementOnly -and $Item -ne 294){throw 'MeasurementOnly is reserved for item294'}
+$expectedPass= -not [bool]$MeasurementOnly
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $tag='{0:000}' -f $Item
 $base=Join-Path $repo ('.verify-'+$tag+'-check-'+[guid]::NewGuid().ToString('N'))
@@ -23,10 +25,12 @@ try {
     $receipt=Join-Path $base 'receipt.json'
     if((Get-Item -LiteralPath $receipt).Length -gt 8MB){throw 'Verification receipt exceeds8MiB'}
     $report=Get-Content -LiteralPath $receipt -Raw -Encoding utf8|ConvertFrom-Json
-    if($report.format -ne 'Drawer checklist acceptance' -or $report.version -ne 1 -or $report.item -ne $Item -or $report.passed -ne $true -or $report.physicalDeviceValidated -ne $false -or $report.nativeVersion -ne $package.nativeMax){throw 'Verification receipt identity mismatch'}
-    $result=[ordered]@{version=1;item=$Item;executableSha256=$sha;receiptSha256=(Get-FileHash -LiteralPath $receipt).Hash.ToLowerInvariant();result=$report}
+    if($report.format -ne 'Drawer checklist acceptance' -or $report.version -ne 1 -or $report.item -ne $Item -or $report.passed -ne $expectedPass -or $report.physicalDeviceValidated -ne $false -or $report.nativeVersion -ne $package.nativeMax){throw 'Verification receipt identity mismatch'}
+    if($MeasurementOnly -and $report.report.criterionComplete -ne $false){throw 'Partial measurement identity mismatch'}
+    $result=[ordered]@{version=1;measurementOnly=[bool]$MeasurementOnly;item=$Item;executableSha256=$sha;receiptSha256=(Get-FileHash -LiteralPath $receipt).Hash.ToLowerInvariant();result=$report}
     [IO.File]::WriteAllText($evidencePath,($result|ConvertTo-Json -Depth 100 -Compress)+"`n",[Text.UTF8Encoding]::new($false))
-    Write-Output "Checklist $Item acceptance passed; physical device validation=false; evidence=$Evidence"
+    if($MeasurementOnly){Write-Output "Checklist $Item CPU measurement recorded; criterionComplete=false; evidence=$Evidence"}
+    else{Write-Output "Checklist $Item acceptance passed; physical device validation=false; evidence=$Evidence"}
 } finally {
     if($process -and -not $process.HasExited){$process.Kill();$process.WaitForExit()}
     $env:DRAWER_DATA_DIR=$oldData;$env:PATH=$oldPath
