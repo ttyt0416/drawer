@@ -179,7 +179,6 @@ fn verify_views(root: &std::path::Path, library: &Library) -> Result<(), String>
 }
 fn verify_termination() -> Result<(), String> {
     use drawer_core::pointer_input::Phase;
-    let mut expected = None;
     for end in 0..3 {
         let (ctx, mut app) = setup()?;
         app.set_quick_brush_size(4.0)?;
@@ -235,11 +234,11 @@ fn verify_termination() -> Result<(), String> {
         if app.drawing.pending() {
             return Err("Water termination retained a session".into());
         }
-        if end == 2 {
+        if end != 0 {
             if app.documents[0].snapshot() != original
                 || app.documents[0].history_counts() != (0, 0)
             {
-                return Err("Escape retained watercolor edge pixels".into());
+                return Err("Cancellation retained watercolor edge pixels".into());
             }
         } else {
             let doc = &mut app.documents[0];
@@ -251,13 +250,6 @@ fn verify_termination() -> Result<(), String> {
                 ));
             }
             let after = doc.snapshot();
-            if let Some(before) = &expected {
-                if *before != doc.layers[0].pixels {
-                    return Err("Focus-loss edge differs from normal release".into());
-                }
-            } else {
-                expected = Some(doc.layers[0].pixels.clone());
-            }
             if !doc.undo() || doc.snapshot() != original || !doc.redo() || doc.snapshot() != after {
                 return Err("Water termination postprocessing did not undo atomically".into());
             }

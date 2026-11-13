@@ -1,0 +1,9 @@
+# Item 289: release and forced interruption
+
+`scripts/test-checklist.ps1 -Item 289` runs 7 tools × 2 watercolor-edge states × 5 ending causes through the actual editor (70 cases). Eraser starts opaque, smudge crosses a blue/red pigment boundary, and other tools start transparent. An Up at logical x=1200 lies outside the 1100-point application window and must commit exactly once. Focus loss, PointerGone, Escape and a virtual pen device Cancel restore the entire committed baseline with unchanged history. A later held move/release cannot resume; a new Down/Move/Up must recover.
+
+The former watercolor-edge exception committed a stroke on focus loss. It now follows the common cancellation rule, matching the checklist and the ordinary stroke-end contract. Normal Up still applies the edge processing once in the same history transaction. The production texture-popup renderer, cancellation and local settings restart tests are also run. The full app suite includes simultaneous device ownership and held-key focus-reset regressions.
+
+Cancellation causes are saved to `settings/input-cancellations.json` when user storage is present. Only the latest 32 monotonic sequence numbers and one of four fixed causes are retained; no coordinates, key values, document names or content are logged. Writes use the verified atomic writer. Invalid existing logs and foreign temporary files are preserved, and diagnostic write failure never changes the cancellation result. The acceptance case checks the actual persisted focus-loss cause; separate tests cover restart, the bound and refused writes.
+
+These are synthetic OS-event adapter/editor tests. Actual driver capture loss, device disconnect, suspend/resume and physical mixed-device behavior remain the explicit hardware checks in 299–300. No original product or computer-use tool is involved.

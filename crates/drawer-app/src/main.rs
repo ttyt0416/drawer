@@ -76,6 +76,7 @@ mod human_rig;
 mod i18n;
 mod image_import_dialog;
 mod information;
+mod input_diagnostics;
 mod input_replay;
 mod keyframes;
 mod layer_comps;

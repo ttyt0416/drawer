@@ -114,6 +114,7 @@ struct PendingSample {
 }
 #[derive(Default)]
 pub(super) struct Drawing {
+    pub cancellation_reasons: std::collections::VecDeque<&'static str>,
     pub work_input: Option<u64>,
     pub text_tool_active: bool,
     pub text_tool_request: Option<text_tool::Request>,
@@ -281,6 +282,15 @@ impl Drawing {
     }
     pub(super) fn cancel_sample(&mut self) {
         self.sample_pending = None;
+    }
+    fn cancel_due(&mut self, reason: &'static str) {
+        if self.pending() {
+            if self.cancellation_reasons.len() == 32 {
+                self.cancellation_reasons.pop_front();
+            }
+            self.cancellation_reasons.push_back(reason);
+        }
+        self.cancel();
     }
     fn cancel(&mut self) {
         self.vector_eraser = None;
@@ -945,7 +955,7 @@ impl Drawing {
                 );
                 self.finish_document(doc);
             }
-            Decision::Cancel => self.cancel(),
+            Decision::Cancel => self.cancel_due("capture-or-device-cancel"),
             Decision::Busy => {
                 self.error =
                     Some("Another device owns the stroke; release and press again to draw".into())
@@ -953,7 +963,7 @@ impl Drawing {
             _ => {}
         }
     }
-    fn focus_loss(&mut self, documents: &mut [Document]) {
+    fn focus_loss(&mut self, _documents: &mut [Document]) {
         let mut path = self.selection.take().filter(|s| s.journal.is_some());
         if let Some(s) = &mut path {
             s.journal.as_mut().unwrap().cancel_contact();
@@ -968,15 +978,7 @@ impl Drawing {
         }
         self.controls.reset();
         self.touch.reset();
-        if self
-            .active
-            .as_ref()
-            .is_some_and(|s| s.stroke.style().water_edges())
-        {
-            self.finish(documents);
-        } else {
-            self.cancel();
-        }
+        self.cancel_due("focus-loss");
         if path.is_some() {
             self.selection = path;
         }
@@ -1020,7 +1022,7 @@ impl Drawing {
         if self.pending() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.controls.reset();
             self.touch.clear_touches();
-            self.cancel();
+            self.cancel_due("escape");
             self.events.clear();
             ctx.input_mut(|i| {
                 i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
@@ -1980,7 +1982,20 @@ impl Drawer {
             self.status = Some(e);
         }
     }
+    fn flush_input_cancellations(&mut self) {
+        if let Some(storage) = &self.storage
+            && !self.drawing.cancellation_reasons.is_empty()
+        {
+            let reasons: Vec<_> = self.drawing.cancellation_reasons.drain(..).collect();
+            if let Err(e) = crate::input_diagnostics::append(storage, &reasons) {
+                self.status = Some(format!(
+                    "Input cancelled; local diagnostic could not be saved: {e}"
+                ));
+            }
+        }
+    }
     pub(super) fn process_drawing(&mut self, ctx: &egui::Context) {
+        self.flush_input_cancellations();
         self.guard_path_layer();
         self.sync_layer_identity();
         if self.drawing.quick_mask {
@@ -2243,7 +2258,7 @@ impl Drawer {
                 Err(error) => {
                     self.drawing.controls.reset();
                     self.drawing.touch.reset();
-                    self.drawing.cancel();
+                    self.drawing.cancel_due("native-input-failure");
                     self.drawing.incoming.clear();
                     self.drawing.gui = Some(vec![]);
                     self.status = Some(error);
@@ -2258,6 +2273,7 @@ impl Drawer {
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))
         }) {
             self.drawing.focus_loss(&mut self.documents);
+            self.flush_input_cancellations();
             if let Some(e) = self.drawing.error.take() {
                 self.status = Some(e);
             }
@@ -2269,6 +2285,7 @@ impl Drawer {
         } else {
             self.drawing.advance(ctx, &mut self.documents);
         }
+        self.flush_input_cancellations();
         if let Some(e) = self.drawing.error.take() {
             self.status = Some(e);
             ctx.request_repaint();
