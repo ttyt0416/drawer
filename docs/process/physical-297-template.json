@@ -1,0 +1,104 @@
+{
+  "format": "Drawer physical verification template",
+  "version": 1,
+  "item": 297,
+  "status": "pending_hardware",
+  "physicalDeviceValidated": false,
+  "recordedAtUtc": null,
+  "tester": null,
+  "referenceBuild": {
+    "executableSha256": "91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072",
+    "nativeVersion": 126
+  },
+  "device": {
+    "manufacturer": null,
+    "model": null,
+    "driverVersion": null,
+    "firmwareVersion": null,
+    "connection": null,
+    "supportedPressure": null,
+    "supportedTilt": null,
+    "supportedEraser": null,
+    "reportedButtons": null
+  },
+  "environment": {
+    "os": null,
+    "requestedBackend": null,
+    "activeBackend": null,
+    "fallbackReason": null,
+    "monitorModels": null,
+    "resolutions": null,
+    "dpiScales": null,
+    "refreshRatesHz": null,
+    "desktopLayout": null
+  },
+  "settings": {
+    "tool": null,
+    "brushSizeDocumentPx": null,
+    "pressureMinimum": null,
+    "pressureMaximum": null,
+    "pressureCurve": null,
+    "stabilization": null,
+    "buttonMappings": null,
+    "tabletMapping": null
+  },
+  "capture": {
+    "rawEventsPath": null,
+    "rawEventClock": null,
+    "samplingHz": null,
+    "samplingRateSource": null,
+    "videoPath": null,
+    "videoFps": null,
+    "clockSynchronization": null,
+    "measurementUncertaintyMs": null
+  },
+  "cases": [
+    {
+      "id": "tilt-axes",
+      "procedure": "기울기를 지원하는 장치에서 각 축의 방향과 중간/극단 각도를 기록하고 팁 방향과 비교한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "unsupported-tilt",
+      "procedure": "기울기 미지원 또는 속성 누락 시 기본 기울기 동작과 사용 가능 여부 안내를 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "inverted-eraser",
+      "procedure": "지원 펜을 뒤집어 지우개 전환·들기·다시 누름을 확인하고 현재 획의 도구 고정 규칙과 비교한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "button-mapping",
+      "procedure": "보고된 논리 버튼 번호별로 배정한 동작을 각각 실행하고 Pointer/Wintab의 번호 차이를 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "held-exit",
+      "procedure": "버튼을 누른 채 영역/창을 이탈했다가 해제·재진입하여 눌림 고착과 원치 않는 새 획이 없는지 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "missing-attributes",
+      "procedure": "지원하지 않는 지우개/버튼 속성을 임의 생성하지 않고 기본 동작과 안내가 유지되는지 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    }
+  ],
+  "measurements": [],
+  "nativeBeforePath": null,
+  "nativeAfterPath": null,
+  "result": null,
+  "remainingIssues": []
+}

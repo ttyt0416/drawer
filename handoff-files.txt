@@ -1461,3 +1461,5 @@ docs/process/virtual-pressure-acceptance.md
 docs/process/check-295-evidence.json
 docs/process/physical-pressure.md
 docs/process/physical-296-template.json
+docs/process/physical-tilt-buttons.md
+docs/process/physical-297-template.json
