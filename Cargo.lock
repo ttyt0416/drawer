@@ -829,6 +829,8 @@ dependencies = [
  "michiu_window",
  "raw-window-handle",
  "rfd",
+ "serde",
+ "serde_json",
  "sha2",
  "tiff",
  "windows",

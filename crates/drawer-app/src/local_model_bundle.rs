@@ -13,6 +13,11 @@ impl Drawer {
             config.approved_manifest = Some(r.manifest_sha256.clone());
             config.model_label = format!("{} {} · {}", r.name, r.version, r.license);
         }
+        if let Some(storage) = &self.storage {
+            config.compute = crate::local_compute::Settings::load(storage).map_err(|e| {
+                format!("Local processing preference could not be read; original preserved: {e}")
+            })?;
+        }
         Ok(config)
     }
     fn model_memory_admission(&self, path: &Path) -> Result<(), String> {

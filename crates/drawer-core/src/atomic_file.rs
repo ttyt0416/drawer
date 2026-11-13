@@ -66,7 +66,7 @@ fn stamp(path: &Path) -> io::Result<Option<(u64, [u8; 32])>> {
     }
     Ok(Some((count, h.finalize().into())))
 }
-pub(crate) fn publish(
+pub fn publish(
     path: &Path,
     temporary: &Path,
     write: impl FnOnce(&mut BufWriter<fs::File>) -> io::Result<()>,

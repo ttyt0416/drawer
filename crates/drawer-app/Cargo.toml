@@ -5,6 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["float_roundtrip"] }
 sha2 = "=0.10.9"
 drawer-infer = { path = "../drawer-infer" }
 drawer-core = { path = "../drawer-core" }

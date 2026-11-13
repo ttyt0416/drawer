@@ -1891,3 +1891,5 @@ Use **Restricted local plugins…** in the layer commands to import a local JSON
 
 For a portable document, open **Local templates and resource bundles** and choose **Portable: copy linked image caches** before export. Move the complete directory and validate/import it at the destination. Linked PNGs use relative bundle names and are rebound locally. Native model/material/text appearance data travels with the document. Font files are not redistributed; missing fonts keep cached appearance and show their original name with local replacement guidance. Keeping original links is also available; opening never refreshes them automatically.
 
+In **Local model inference…**, choose the requested processing device and save it locally if desired. This build provides the CPU ONNX engine and no GPU adapter/SDK. A GPU request is refused locally unless **Explicitly allow CPU fallback** is selected; results report the CPU device actually used. No SDK/model is downloaded. Local model registrations remember their reviewed content hashes; missing models show installation guidance. Discard an unsuccessful preview to continue basic editing, saving and recovery.
+

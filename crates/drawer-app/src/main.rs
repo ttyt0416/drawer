@@ -96,6 +96,7 @@ mod lighting;
 mod line_tones;
 mod line_tools;
 mod local_color;
+mod local_compute;
 mod local_inference;
 mod local_plugins;
 mod local_references;

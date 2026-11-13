@@ -1412,3 +1412,6 @@ docs/process/restricted-plugins.md
 docs/process/restricted-plugins-network.json
 docs/process/portable-documents.md
 docs/process/portable-documents-network.json
+crates/drawer-app/src/local_compute.rs
+docs/process/local-compute.md
+docs/process/local-compute-network.json

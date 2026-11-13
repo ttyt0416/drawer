@@ -290,6 +290,70 @@ pub(super) fn smoke(root: &Path) -> Result<(), String> {
         "Source file/page changed",
     )?;
     // The same user-selected model can be compared against fixed owned samples.
+    app.begin_local_inference()?;
+    app.local_inference
+        .draft
+        .as_mut()
+        .unwrap()
+        .config
+        .compute
+        .device = crate::local_compute::Device::Gpu;
+    app.start_inference(&ctx, false)?;
+    wait(&ctx, &mut app, &mut time)?;
+    check(
+        app.start_inference(&ctx, true)
+            .is_err_and(|e| e.contains("GPU unavailable"))
+            && app.local_inference.job.is_none()
+            && app.documents[0].snapshot() == original,
+        "Unsupported GPU did not fail locally without changing the document",
+    )?;
+    app.local_inference
+        .draft
+        .as_mut()
+        .unwrap()
+        .config
+        .compute
+        .allow_cpu_fallback = true;
+    app.local_inference
+        .draft
+        .as_ref()
+        .unwrap()
+        .config
+        .compute
+        .save(app.storage.as_ref().unwrap())
+        .map_err(|e| e.to_string())?;
+    app.start_inference(&ctx, false)?;
+    wait(&ctx, &mut app, &mut time)?;
+    app.start_inference(&ctx, true)?;
+    wait(&ctx, &mut app, &mut time)?;
+    check(
+        app.local_inference
+            .draft
+            .as_ref()
+            .unwrap()
+            .result
+            .as_ref()
+            .is_some_and(|r| r.report.contains("CPU fallback")),
+        "Explicit CPU fallback did not execute the real local helper",
+    )?;
+    app.local_inference.draft.as_mut().unwrap().accept_low = true;
+    app.adopt_inference()?;
+    check(
+        app.documents[0].undo() && app.documents[0].snapshot() == original,
+        "CPU fallback Undo changed the source",
+    )?;
+    app.begin_local_inference()?;
+    check(
+        app.local_inference
+            .draft
+            .as_ref()
+            .unwrap()
+            .config
+            .compute
+            .allow_cpu_fallback,
+        "Processing preference did not reload",
+    )?;
+    app.local_inference.draft = None;
     // Comparison previews deliberately have no document adoption state.
     for task in Task::ALL {
         app.begin_local_inference()?;

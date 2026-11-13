@@ -47,6 +47,7 @@ struct Config {
     approved_manifest: Option<String>,
     model_label: String,
     hints: String,
+    compute: crate::local_compute::Settings,
 }
 #[derive(Clone)]
 struct Frozen {
@@ -222,6 +223,9 @@ impl Drawer {
                 "Install a reviewed local model and approve its license before execution".into(),
             );
         }
+        if run {
+            e.config.compute.execution()?;
+        }
         let frozen = if run {
             Some(
                 e.input
@@ -315,6 +319,8 @@ impl Drawer {
                         &c,
                         Duration::from_secs(120),
                     )?;
+                    out.report
+                        .push_str(&format!("\n{}", config.compute.execution()?));
                     core::checked(&c)?;
                     let d = if config.source == InputSource::Comparison {
                         out.report.push_str(&format!(
@@ -477,11 +483,16 @@ impl Drawer {
         let mut open = !ctx.input(|i| i.key_pressed(egui::Key::Escape));
         let (mut input, mut run, mut apply, mut cancel) = (false, false, false, false);
         let (mut review_model, mut install_model, mut forget_model) = (false, false, false);
+        let mut save_compute = false;
         egui::Window::new("Local models — pose / color / restoration").order(egui::Order::Foreground).default_width(550.).default_height(660.).vscroll(true).max_height(660.).default_pos(egui::pos2(25.,10.)).collapsible(false).open(&mut open).show(ctx,|ui|{
             ui.small(drawer_infer::GUIDE);
             if !fresh{ui.colored_label(egui::Color32::YELLOW,"Page/frame changed. Cancel and reopen to freeze a new input.");}
             ui.add_enabled_ui(!busy,|ui|{
                 egui::ComboBox::from_label("Task").selected_text(e.config.task.label()).show_ui(ui,|ui|{for task in Task::ALL{ui.selectable_value(&mut e.config.task,task,task.label());}});
+                ui.horizontal(|ui|{ui.label("Requested processing device");ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Cpu,"CPU");ui.radio_value(&mut e.config.compute.device,crate::local_compute::Device::Gpu,"GPU (unavailable in this build)");});
+                ui.checkbox(&mut e.config.compute.allow_cpu_fallback,"Explicitly allow CPU fallback if GPU is unavailable");
+                match e.config.compute.execution(){Ok(message)=>{ui.small(message);},Err(message)=>{ui.colored_label(egui::Color32::YELLOW,message);}}
+                save_compute=ui.button("Save processing device preference locally").clicked();
                 if old.task!=e.config.task {
                     match self.registered_model_config(e.config.task) {
                         Ok(model)=>{e.config.manifest=model.manifest;e.config.approved_manifest=model.approved_manifest;e.config.model_label=model.model_label;},
@@ -532,6 +543,25 @@ impl Drawer {
         }
         if review_model && let Err(err) = self.review_model_bundle() {
             self.status = Some(err);
+        }
+        if save_compute {
+            let result = (|| -> Result<(), String> {
+                let storage = self
+                    .storage
+                    .as_ref()
+                    .ok_or("Local settings storage unavailable")?;
+                self.local_inference
+                    .draft
+                    .as_ref()
+                    .ok_or("Local models closed")?
+                    .config
+                    .compute
+                    .save(storage)
+                    .map_err(|e| e.to_string())
+            })();
+            if let Err(err) = result {
+                self.status = Some(err);
+            }
         }
         if install_model && let Err(err) = self.install_model_bundle() {
             self.status = Some(err);
