@@ -3,6 +3,10 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
 };
+#[path = "verification_coordinates.rs"]
+mod coordinates;
+#[path = "verification_editor.rs"]
+mod editor;
 #[path = "verification_strokes.rs"]
 mod strokes;
 pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<(), String> {
@@ -13,7 +17,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if item != 287 {
+    if !matches!(item, 287 | 288) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -25,7 +29,11 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .map_err(|e| format!("Choose a NEW local verification directory: {e}"))?;
     let marker = serde_json::json!({"format":"Drawer owned verification","version":1,"item":item,"pid":std::process::id()});
     write(&root.join("owner.json"), &marker)?;
-    let report = strokes::run(&root)?;
+    let report = match item {
+        287 => strokes::run(&root)?,
+        288 => coordinates::run()?,
+        _ => unreachable!(),
+    };
     let mut sample = drawer_core::document::Document::create(
         drawer_core::document::CanvasSpec {
             width: 1,

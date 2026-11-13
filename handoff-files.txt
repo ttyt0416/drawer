@@ -1430,3 +1430,7 @@ scripts/test-checklist.ps1
 docs/process/stroke-acceptance.md
 docs/process/confirmed-text-appearance.md
 docs/process/check-287-evidence.json
+crates/drawer-app/src/verification_editor.rs
+crates/drawer-app/src/verification_coordinates.rs
+docs/process/coordinate-acceptance.md
+docs/process/check-288-evidence.json

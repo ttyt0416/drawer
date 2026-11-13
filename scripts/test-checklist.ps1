@@ -25,7 +25,7 @@ try {
     $report=Get-Content -LiteralPath $receipt -Raw -Encoding utf8|ConvertFrom-Json
     if($report.format -ne 'Drawer checklist acceptance' -or $report.version -ne 1 -or $report.item -ne $Item -or $report.passed -ne $true -or $report.physicalDeviceValidated -ne $false -or $report.nativeVersion -ne $package.nativeMax){throw 'Verification receipt identity mismatch'}
     $result=[ordered]@{version=1;item=$Item;executableSha256=$sha;receiptSha256=(Get-FileHash -LiteralPath $receipt).Hash.ToLowerInvariant();result=$report}
-    [IO.File]::WriteAllText($evidencePath,($result|ConvertTo-Json -Depth 100)+"`n",[Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($evidencePath,($result|ConvertTo-Json -Depth 100 -Compress)+"`n",[Text.UTF8Encoding]::new($false))
     Write-Output "Checklist $Item acceptance passed; physical device validation=false; evidence=$Evidence"
 } finally {
     if($process -and -not $process.HasExited){$process.Kill();$process.WaitForExit()}
