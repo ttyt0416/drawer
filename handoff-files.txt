@@ -1406,3 +1406,7 @@ docs/process/local-model-bundles.md
 docs/process/local-model-bundles-evidence.json
 docs/process/local-models-network.json
 docs/process/optional-dependencies.md
+crates/drawer-core/src/plugin_runtime.rs
+crates/drawer-app/src/local_plugins.rs
+docs/process/restricted-plugins.md
+docs/process/restricted-plugins-network.json

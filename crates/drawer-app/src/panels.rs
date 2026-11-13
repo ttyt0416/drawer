@@ -660,6 +660,7 @@ impl Drawer {
                                         ("Color correction layers…", "adjustment-layer"),
                                         ("Color deepen: pixels / layer…", "color-deepen"),
                                         ("Local model inference…", "local-inference"),
+                                        ("Restricted local plugins…", "local-plugins"),
                                         ("Metallic foil material…", "metallic-material"),
                                         ("Local reference colors…", "local-reference-color"),
                                         ("Local light / shadow colors…", "local-light-shadow"),

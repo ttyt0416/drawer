@@ -97,6 +97,7 @@ mod line_tones;
 mod line_tools;
 mod local_color;
 mod local_inference;
+mod local_plugins;
 mod local_references;
 mod material_layer;
 mod material_library;
@@ -343,6 +344,7 @@ struct Drawer {
     comics_view_session: std::collections::BTreeMap<u64, drawer_core::comic_view::Viewport>,
     local_color: Box<local_color::Panel>,
     local_inference: Box<local_inference::Panel>,
+    local_plugins: Box<local_plugins::Panel>,
     transform_review: Box<transform_review::Panel>,
     color_corrections: color_corrections::Panel,
     deform: deform::Panel,
@@ -569,6 +571,7 @@ impl Drawer {
             comics_view_session: Default::default(),
             local_color: Default::default(),
             local_inference: Default::default(),
+            local_plugins: Default::default(),
             transform_review: Default::default(),
             color_corrections: Default::default(),
             deform: Default::default(),
@@ -1153,6 +1156,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
         self.story_text_window(ui.ctx());
         self.local_color_window(ui.ctx());
         self.local_inference_window(ui.ctx());
+        self.local_plugins_window(ui.ctx());
         self.color_corrections_window(ui.ctx());
         self.deform_window(ui.ctx());
         self.mesh_deform_window(ui.ctx());
@@ -2135,6 +2139,10 @@ impl eframe::App for Drawer {
                 }
                 if let Err(e) = local_inference::smoke(&root) {
                     eprintln!("Local model inference: {e}");
+                    fail_smoke();
+                }
+                if let Err(e) = local_plugins::smoke(&root) {
+                    eprintln!("Restricted local plugins: {e}");
                     fail_smoke();
                 }
                 if let Err(e) = local_color::deepen_smoke(&root) {

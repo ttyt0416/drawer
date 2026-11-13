@@ -1885,3 +1885,7 @@ Local resources…에서 단계 수·기록 메모리·연속 명령의 묶음 �
 ### 백그라운드 저장과 자동 복구
 
 Save in background…는 시작 시점의 상태를 저장하며 그 뒤 그린 획은 변경 표시로 남습니다. 쓰기 중 겹친 저장은 완료 후 다시 시도합니다. Local resources…에서 시간·편집 수정 간격과 로컬 복구/백업 세대 수를 설정할 수 있습니다. 프로젝트의 페이지 순서와 메타데이터도 함께 복구합니다. 복구 프로젝트를 열었다면 별도 로컬 프로젝트로 저장한 뒤 원래 복구 세션을 삭제할 수 있습니다.
+# Restricted local plugins
+
+Use **Restricted local plugins…** in the layer commands to import a local JSON pixel program, preview it, and adopt a new layer as one Undo. The included inversion example needs no installation. Programs cannot access files, network, processes or native code. Infinite loops stop at the execution limit. Escape discards output; source layers stay editable. **Keep a verified copy** saves the program under local user data `plugins` for reuse after restart. This host accepts only its restricted bytecode format, not DLL/WASM/Python plugins.
+
