@@ -877,6 +877,8 @@ impl Document {
 
 #[path = "history_audit.rs"]
 pub mod audit;
+#[path = "history_roundtrip.rs"]
+pub mod roundtrip;
 #[path = "saved_revision.rs"]
 pub mod saved_revision;
 

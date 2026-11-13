@@ -9,6 +9,8 @@ mod capture;
 mod coordinates;
 #[path = "verification_editor.rs"]
 mod editor;
+#[path = "verification_history.rs"]
+mod history;
 #[path = "verification_masks.rs"]
 mod masks;
 #[path = "verification_strokes.rs"]
@@ -21,7 +23,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=290) {
+    if !matches!(item, 287..=291) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -38,6 +40,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         288 => coordinates::run()?,
         289 => capture::run(&root)?,
         290 => masks::run(&root)?,
+        291 => history::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(

@@ -105,6 +105,7 @@ pub fn run() -> Result<(), String> {
         )?;
     }
     check(!d.redo() && d.dirty, "Redo endpoint / dirty status")?;
+    let mut audited = d.audit_history_roundtrip()?.by_kind;
     d.mark_saved("history-audit.drawer".into());
     check(
         !d.dirty && d.undo() && d.dirty && d.redo() && !d.dirty,
@@ -268,6 +269,15 @@ pub fn run() -> Result<(), String> {
             && d.redo()
             && d.snapshot() == after,
         "Multi-layer paint did not remain one transaction",
+    )?;
+    for (kind, count) in d.audit_history_roundtrip()?.by_kind {
+        *audited.entry(kind).or_default() += count;
+    }
+    check(
+        ["Pixel", "Pixels", "Multi", "Scene", "State"]
+            .iter()
+            .all(|k| audited.get(k).is_some_and(|n| *n > 0)),
+        "History audit did not exercise every retained transaction format",
     )?;
     check(
         other.snapshot() == other_before && other.history_counts() == (0, 0),

@@ -649,6 +649,7 @@ pub mod book_options;
 pub mod work_library;
 
 pub use history::audit as history_audit;
+pub use history::roundtrip as history_roundtrip;
 pub use history::saved_revision;
 
 mod native_integrity;

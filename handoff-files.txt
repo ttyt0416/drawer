@@ -1441,3 +1441,8 @@ docs/process/check-289-evidence.json
 crates/drawer-app/src/verification_masks.rs
 docs/process/mask-acceptance.md
 docs/process/check-290-evidence.json
+crates/drawer-app/src/verification_history.rs
+crates/drawer-core/src/history_roundtrip.rs
+docs/process/history-acceptance.md
+docs/process/check-291-workspace.json
+docs/process/check-291-evidence.json
