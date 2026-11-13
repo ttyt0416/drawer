@@ -1,0 +1,104 @@
+{
+  "format": "Drawer physical verification template",
+  "version": 1,
+  "item": 296,
+  "status": "pending_hardware",
+  "physicalDeviceValidated": false,
+  "recordedAtUtc": null,
+  "tester": null,
+  "referenceBuild": {
+    "executableSha256": "91b08f2773ba20b2e57d93f58f173d70fbe33db7568680671957bb3738ef7072",
+    "nativeVersion": 126
+  },
+  "device": {
+    "manufacturer": null,
+    "model": null,
+    "driverVersion": null,
+    "firmwareVersion": null,
+    "connection": null,
+    "supportedPressure": null,
+    "supportedTilt": null,
+    "supportedEraser": null,
+    "reportedButtons": null
+  },
+  "environment": {
+    "os": null,
+    "requestedBackend": null,
+    "activeBackend": null,
+    "fallbackReason": null,
+    "monitorModels": null,
+    "resolutions": null,
+    "dpiScales": null,
+    "refreshRatesHz": null,
+    "desktopLayout": null
+  },
+  "settings": {
+    "tool": null,
+    "brushSizeDocumentPx": null,
+    "pressureMinimum": null,
+    "pressureMaximum": null,
+    "pressureCurve": null,
+    "stabilization": null,
+    "buttonMappings": null,
+    "tabletMapping": null
+  },
+  "capture": {
+    "rawEventsPath": null,
+    "rawEventClock": null,
+    "samplingHz": null,
+    "samplingRateSource": null,
+    "videoPath": null,
+    "videoFps": null,
+    "clockSynchronization": null,
+    "measurementUncertaintyMs": null
+  },
+  "cases": [
+    {
+      "id": "slow-ramp",
+      "procedure": "천천히 접촉하고 정상 범위까지 눌렀다가 들어 올린다. 시작 압력과 크기/불투명도 반응을 각각 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "fast-ramp",
+      "procedure": "빠른 접촉과 빠른 압력 변화를 반복하고 빠진 접촉·튀는 굵기·고착을 기록한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "light-dots",
+      "procedure": "가벼운 점을 반복해 원시 접촉이 보고된 경우와 앱의 클릭 임계값에 의해 차단된 경우를 구분한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "maximum",
+      "procedure": "장치가 보고한 최대값과 선택한 최대값 설정의 실제 포화를 기록한다. 보고 범위를 임의로 0~1이라고 가정하지 않는다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "curves",
+      "procedure": "선형/비선형 곡선과 최소/최대값 설정별로 느린 선·빠른 선의 결과를 비교한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    },
+    {
+      "id": "lift-new-press",
+      "procedure": "완전히 들어 올린 뒤 새 접촉을 반복해 이전 필압·버튼 상태가 재사용되지 않는지 확인한다.",
+      "status": "not_run",
+      "observations": null,
+      "artifacts": []
+    }
+  ],
+  "measurements": [],
+  "nativeBeforePath": null,
+  "nativeAfterPath": null,
+  "result": null,
+  "remainingIssues": []
+}
