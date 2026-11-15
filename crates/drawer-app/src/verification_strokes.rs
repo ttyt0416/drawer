@@ -184,7 +184,7 @@ fn blank(width: u32, height: u32) -> Result<Document, String> {
     )
     .map_err(|e| e.to_string())
 }
-fn edge_cases(root: &Path) -> Result<(), String> {
+pub(super) fn edge_cases(root: &Path) -> Result<(), String> {
     let mut line = blank(2, 2)?;
     let mut state = line.snapshot();
     state

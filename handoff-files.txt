@@ -1472,3 +1472,6 @@ docs/process/physical-300-template.json
 crates/drawer-app/src/verification_replay.rs
 docs/process/input-replay-acceptance.md
 docs/process/check-301-evidence.json
+crates/drawer-app/src/verification_pictures.rs
+docs/process/owned-test-pictures.md
+docs/process/check-302-evidence.json
