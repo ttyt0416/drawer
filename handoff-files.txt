@@ -1492,3 +1492,7 @@ crates/drawer-app/src/accessibility.rs
 crates/drawer-app/src/verification_accessibility.rs
 docs/process/accessibility-acceptance.md
 docs/process/check-306-evidence.json
+scripts/input-validation-status.py
+docs/process/check-307-suite.json
+docs/process/input-validation-status.json
+docs/process/input-validation-status.md

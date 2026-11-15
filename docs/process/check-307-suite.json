@@ -1,0 +1,577 @@
+{
+  "format": "Drawer input suite evidence",
+  "version": 1,
+  "counts": {
+    "drawer-app": 370,
+    "drawer-core": 670,
+    "drawer-infer": 8,
+    "drawer-platform": 21,
+    "xtask": 8
+  },
+  "passed": 1077,
+  "externalCodecIgnored": 1,
+  "selectedInputTests": [
+    {
+      "crate": "drawer-app",
+      "name": "brush_material::tests::independent_zero_water_dilution_in_mouse_and_pen_pipeline"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "brush_dynamics::tests::actual_input_pressure_tilt_speed_mouse_fallback_and_seed"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "brush_material::tests::pigment_water_native_mouse_replay_and_transparent_foreground"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "brush_variation::tests::production_color_dual_seed_transparency_and_cancel"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::path_draft::tests::transient_path_journal_add_edit_branch_and_cancel"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::selection_edit::storage_budget::native_app_state_stays_below_96_kib_on_the_one_mib_main_stack"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::backend_change_and_retry_finish_pending_stroke_once_and_discard_old_input"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::bucket::tests::mouse_pen_preview_release_cancel_references_selected_fill_and_restart"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::completed_finger_stroke_precedes_gesture_in_the_same_input_batch"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::brush_parameters_freeze_on_down_and_zero_opacity_has_no_history"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::mapped_input_scale_change_finishes_once_and_held_pen_does_not_restart"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::missing_release_escape_same_frame_click_frozen_tool_and_quit_finish"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::pen_mouse_interleaving_keeps_device_owner_and_one_event_one_stroke"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::native_geometry_pressure_and_stabilization_are_frozen_and_escape_cancels"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::cursor_modes_use_identical_strokes_and_empty_selection_cannot_paint"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::selection_edit::tests::wand_and_brush_mouse_pen_preview_pressure_cancel_undo_restart"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::pressure_filter_is_frozen_in_one_history_and_cancel_drops_its_state"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::pen_tilt_eraser_button_release_missing_attributes_and_view_transform"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "brush_composite::tests::production_composition_replay_cancel_and_independent_settings_restart"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::mouse_fast_drag_preview_one_undo_eraser_and_view_coordinates"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::touch_gestures_finger_ink_pen_priority_and_focus_use_the_actual_pipeline"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::promoted_mouse_before_during_after_pen_matches_pen_only_and_real_mouse_is_kept"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::transparent_foreground_smudge_carries_layer_pigment_with_frozen_mouse_and_pen_settings"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::zero_pressure_floors_and_tip_shape_are_frozen_until_commit"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::pen_pressure_reaches_pixels_mouse_uses_one_and_stroke_keeps_mapping"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::texture_only_mouse_and_pen_freeze_style_and_native_recipe_in_one_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_edit::tests::vector_tips_preview_apply_undo_and_overlay_workspace"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_edit::tests::vector_pressure_reset_preview_scopes_cancel_native_and_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::magnetic_lasso::tests::magnetic_single_multiple_scopes_mouse_pen_delete_and_cancel"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_erase::tests::vector_eraser_selection_delete_drag_preview_cancel_save_and_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::tests::mouse_and_pen_without_pressure_tilt_match_full_pressure_for_every_tip"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_edit::tests::vector_nodes_mouse_add_delete_corner_smooth_preview_cancel_and_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::path_draft::tests::click_path_keyboard_ime_pressure_transition_decisions_native_and_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_edit::tests::vector_mouse_pressure_points_color_numbers_cancellation_and_temporary_tool"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::vector_edit::tests::vector_refinement_mouse_preview_cancel_save_numeric_and_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "input_replay::tests::local_record_roundtrip_damage_limits_foreign_temporary_file_and_worker_ui_preserve_drawings"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "input_replay::tests::smoothed_tapered_native_replay_click_end_cursor_and_missing_release"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "drawing::auto_shape::tests::hold_shape_mouse_pen_outputs_controls_keep_cancel_and_single_undo"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "input_replay::tests::sparse_thin_pen_mouse_curves_same_timestamps_and_frozen_parameters_replay"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "input_replay::tests::replay_repeats_actual_pixels_timestamp_groups_zero_half_full_and_missing_end"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::escape_and_reconstruction_budget_failure_discard_every_pending_pixel"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::cancelling_during_computation_never_publishes_partial_pixels_or_metadata"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::preview_is_temporary_settings_are_frozen_and_native_metadata_reopens_with_pixels"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::stationary_frame_clock_previews_then_commits_the_same_fixed_time_dabs"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::off_is_full_pressure_while_local_settings_and_input_records_preserve_curves_times_seed"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "mouse_pressure::tests::prediction_replay_speed_and_missing_release_use_real_pixel_undo_path"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "pointer_input::tests::mapping_replay_reaches_pixels_and_outside_or_missing_area_cannot_start_a_stroke"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "pointer_input::tests::device_settings_cancel_apply_backup_restart_leave_document_unchanged"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "pointer_input::tests::untyped_gui_touch_retains_ids_and_promoted_sequence_is_not_a_mouse"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "precision::tests::text_focus_and_ime_leave_arrow_and_opacity_input_to_the_field"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "precision::tests::held_movement_release_target_change_focus_and_modal_input_never_stick"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "precision::tests::keyboard_line_opacity_and_eyedropper_use_production_pixel_history_path"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "pointer_input::tests::pressure_relative_coordinates_and_numbered_buttons_reach_actual_pixels"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "pressure_settings::tests::pressure_draft_cancel_apply_backup_restart_and_local_preset_validation"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "precision::tests::tool_values_limits_shortcuts_unsupported_modes_and_restart_are_separate_from_document"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "stroke_filter::tests::native_pen_event_filter_and_missing_mouse_pressure_use_production_replay"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "tip_sequence::tests::production_replay_all_orders_seed_and_deleted_asset"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "tip_texture::tests::production_tip_texture_views_focus_escape_and_restart"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "verification::replay::tests::saved_input_seeds_identity_timing_and_exact_repeats"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "verification::pressure::tests::virtual_extrema_curve_pixels_nonfinite_contact_rollback_fresh_press_and_abrupt_replay"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "verification::capture::tests::outside_release_all_tools_water_edges_cancel_restore_fresh_press_and_local_log"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "verification::strokes::tests::all_basic_tools_mouse_contacts_pixels_batching_and_degenerate_edges"
+    },
+    {
+      "crate": "drawer-app",
+      "name": "verification::coordinates::tests::native_dpi_fractional_zoom_rotation_flip_first_point_and_actual_pixels"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::dissolve_binary_coverage_frequency_repeat_and_seed"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::dissolve_masks_opacity_alpha_lock_water_and_repeat"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::geometric_quality_changes_edges_and_preserves_pixel_grid_and_tool_roles"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::independent_alpha_rgb_rules_and_endpoints"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::pressure_pickup_is_independent_of_opacity_and_quality"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::selection_texture_and_global_opacity_apply_once_to_special_modes"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::scatter_tests::circular_particles_face_center_independently_from_scatter_rotation"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::tests::actual_stroke_directions_and_independent_input_factors"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::tests::curves_ranges_random_multiply_then_clamp_and_missing_inputs"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::tests::seeded_pixels_frozen_configuration_cancel_redo_and_spacing_link"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::actual_alpha_grid_and_final_opacity_precede_density_comparison"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::mix_mode_tests::stripe_modes_perceptual_and_running_quality_are_independent"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::alpha_lock_precedes_density_and_no_supply_never_injects_foreground_in_boundary_combinations"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::eraser_ignores_pigment_only_options_and_alpha_lock_preserves_hidden_rgb"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::each_numeric_control_changes_pixels_with_the_other_parameters_fixed"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::invalid_material_limits_and_legacy_style_defaults_reject_without_changes"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::pigment_pickup_supply_retention_density_alpha_and_dilution_are_distinct"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::wet_diffusion_applies_global_opacity_once_even_inside_an_opaque_surrounding"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::tests::preset_native_reopen_legacy_defaults_and_nonfinite_rejection"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_material::tests::zero_water_dilution_and_zero_smear_pickup_retention_are_independent"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_dynamics::tests::velocity_opacity_pressure_size_time_edges_and_native_roundtrip"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_variation::tests::hsv_round_trip_scopes_channels_and_invalid_bounds"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_variation::tests::all_six_blends_change_pixels_and_secondary_mask_can_extend_primary"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_variation::tests::mask_blends_match_independent_numeric_expectations"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_variation::tests::seeded_rgba_dabs_zero_variation_transparency_cancel_and_history"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_variation::tests::preset_native_round_trip_and_missing_legacy_fields"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "brush_composite::tests::actual_pixels_folders_history_and_native_reopen"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "input_replay::tests::brush_parameters_roundtrip_legacy_defaults_and_invalid_numbers_reject"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "input_replay::tests::fixed_records_validate_pressure_jumps_missing_end_and_reject_reverse_time"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::dynamics_tests::real_velocity_excludes_clocks_missing_time_uses_fallback_and_bad_input_is_atomic"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::all_materials_reconstruct_from_original_and_wet_finish_is_applied_once"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::cancellation_during_reconstruction_and_diffusion_keeps_original_pixels"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::final_taper_reconstructs_original_instead_of_overpainting_preview_and_undoes_once"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::metadata_compression_keeps_different_geometry_and_pressure_sources_separate"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::point_short_overlap_disabled_and_curve_knots_have_explicit_pressure_rules"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::smoothing_finishes_at_real_endpoint_and_preserves_raw_curve_pressure_tilt_and_cancel"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::metadata_capacity_failure_preserves_pixels_and_compressed_records_follow_undo_redo"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::seeded_replays_are_deterministic_frozen_and_log_preserves_order_and_times"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::stale_original_invalid_settings_and_record_path_limits_never_commit_partial_pixels"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::speed_factor_is_separate_and_missing_repeated_reverse_and_wrapped_clocks_are_safe"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pen_controls::tests::button_mapping_priority_unsupported_defaults_and_ignore_until_lift"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pen_controls::tests::click_threshold_crossing_missing_pressure_release_and_detach"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pen_controls::tests::relative_speed_cursor_retention_clipping_and_absolute_mouse"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pointer_input::tests::identity_order_ownership_release_cancel_and_separate_settings"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pointer_input::tests::missing_pressure_defaults_one_reported_zero_is_kept_and_nonpen_tilt_is_zero"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pointer_input::tests::optional_pen_attributes_normalize_tilt_and_do_not_change_other_kinds"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pointer_input::tests::os_origin_only_suppresses_pen_promotions_when_native_pen_is_available"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "precision::tests::locks_empty_selection_invalid_deltas_and_missing_layers_preserve_document"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "precision::tests::document_pixel_movement_is_view_independent_grouped_reversible_and_outside_safe"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "precision::tests::net_zero_new_press_saved_boundary_and_stale_revision_do_not_merge_unrelated_edits"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "precision::tests::selected_feathered_pixels_move_from_original_and_keep_one_history_entry"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "precision::tests::selection_border_uses_document_translation_after_page_transform"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pressure::tests::monotone_curve_range_clamps_output_and_rejects_invalid_configuration"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pressure::tests::legacy_workspace_defaults_and_import_scope_preserve_pressure"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "pressure::tests::per_device_contact_independence_frozen_composition_validation_and_legacy"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "mouse_pressure::tests::fixed_spray_ticks_and_seed_ignore_frame_segmentation_and_bad_clocks_do_not_backlog"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_ends::method_tests::length_percentage_fade_hold_and_legacy_fields"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_ends::method_tests::taper_is_path_length_based_across_sparse_and_dense_mouse_events"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_ends::tests::independent_end_switches_overlap_dot_bounds_and_missing_legacy_fields"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_filter::tests::constant_pressure_position_filter_does_not_change_pressure_or_pressure_only_positions"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_ends::tests::start_end_geometry_is_independent_from_native_pressure_and_history"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_filter::tests::invalid_pressure_and_legacy_settings_do_not_advance_state_or_replace_curves"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_filter::tests::position_pressure_jitter_are_independent_and_replay_uses_one_filter_per_event"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "stroke_filter::tests::filters_preset_and_native_style_roundtrip_keep_original_pressure_mapping"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_sequence::tests::all_orders_actual_masks_missing_fallback_cancel_and_single_history"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_sequence::tests::singleton_limits_and_random_seeds_are_distinct"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_texture::tests::full_and_quarter_turns_match_exact_coordinate_rotations"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_texture::tests::legacy_bounds_and_disabled_slots"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_texture::tests::tiny_negative_rotated_tile_coordinates_stay_in_bounds"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_sequence::persistence_tests::preset_native_legacy_and_deleted_ids_preserve_frozen_settings"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_texture::tests::per_tip_modes_flips_secondary_and_water_edges"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "tip_texture::tests::transforms_each_change_and_portable_dependencies"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "touch::tests::native_batch_manipulation_preserves_centroid_across_dpi_rotation_and_mirror"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "touch::tests::pen_priority_palms_count_change_and_focus_never_restart_held_finger_ink"
+    },
+    {
+      "crate": "drawer-core",
+      "name": "touch::tests::unrelated_devices_promotions_settings_and_rejected_ui_contacts_are_isolated"
+    }
+  ],
+  "testLogSha256": "876e1ec6be10bef718ba4181d2fab509790c538ee5a2a60812e547b71cded17a",
+  "clippyLogSha256": "2b36be9da843dde409d59dcc2ea069c31fe825858a3d75af4ea9a1ff2aabf19a",
+  "rustSourceTreeSha256": "6c9551577a1a641eba296fff417808a57501d1131b0a9ba4bc70d065b1eb90cc",
+  "cargoLockSha256": "71c62936c8577807dd33ad406edc8dbd456e04582ffe334314ddfaac10006201",
+  "executableSha256": "4e9cc955e28a480f9c1ba92a6bc4de046fd03eecf9c01037f0ba98b011613105",
+  "nativeVersion": 126,
+  "nativeAdapterInitialization": [
+    "native_pen=Requested Pointer; active Pointer.  Physical pen validation pending. · Touch adapter attached; physical touch validation pending",
+    "wintab_initialization=Requested Wintab; active Wintab.  Physical pen validation pending."
+  ]
+}
