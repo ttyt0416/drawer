@@ -94,16 +94,57 @@ impl Drawer {
         result
     }
     pub(super) fn apply_theme(&self, ctx: &egui::Context) {
-        let theme = match self.workspaces.store.current.information.theme {
+        let wanted = match self.workspaces.store.current.information.theme {
             Theme::Dark => egui::Theme::Dark,
             Theme::Light => egui::Theme::Light,
         };
-        if ctx.theme() != theme {
-            ctx.set_theme(match theme {
-                egui::Theme::Dark => egui::ThemePreference::Dark,
-                egui::Theme::Light => egui::ThemePreference::Light,
-            });
+        let high = self.interface.settings.high_contrast;
+        let key = egui::Id::new("drawer-contrast-theme");
+        let previous = ctx.data(|d| d.get_temp::<(egui::Theme, bool)>(key));
+        if previous == Some((wanted, high)) {
+            return;
         }
+        ctx.data_mut(|d| d.insert_temp(key, (wanted, high)));
+        if previous.is_none() && !high && ctx.theme() == wanted {
+            return;
+        }
+        let actual = if high { egui::Theme::Dark } else { wanted };
+        ctx.set_theme(match actual {
+            egui::Theme::Dark => egui::ThemePreference::Dark,
+            egui::Theme::Light => egui::ThemePreference::Light,
+        });
+        let mut v = match actual {
+            egui::Theme::Dark => egui::Visuals::dark(),
+            egui::Theme::Light => egui::Visuals::light(),
+        };
+        if high {
+            v.override_text_color = Some(egui::Color32::WHITE);
+            v.weak_text_color = Some(egui::Color32::WHITE);
+            v.panel_fill = egui::Color32::BLACK;
+            v.window_fill = egui::Color32::BLACK;
+            v.extreme_bg_color = egui::Color32::BLACK;
+            v.faint_bg_color = egui::Color32::BLACK;
+            v.text_edit_bg_color = Some(egui::Color32::BLACK);
+            v.window_stroke = egui::Stroke::new(2., egui::Color32::WHITE);
+            v.selection.bg_fill = egui::Color32::from_gray(70);
+            v.selection.stroke = egui::Stroke::new(2., egui::Color32::WHITE);
+            v.hyperlink_color = egui::Color32::YELLOW;
+            for w in [
+                &mut v.widgets.noninteractive,
+                &mut v.widgets.inactive,
+                &mut v.widgets.hovered,
+                &mut v.widgets.active,
+                &mut v.widgets.open,
+            ] {
+                w.bg_fill = egui::Color32::BLACK;
+                w.weak_bg_fill = egui::Color32::BLACK;
+                w.bg_stroke = egui::Stroke::new(2., egui::Color32::WHITE);
+                w.fg_stroke = egui::Stroke::new(2., egui::Color32::WHITE);
+            }
+        } else if actual == egui::Theme::Dark {
+            v.selection.bg_fill = egui::Color32::from_rgb(48, 126, 105);
+        }
+        ctx.set_visuals(v);
     }
     fn refresh_output_profile(&mut self, path: Option<&PathBuf>) {
         let key = path.map(|p| {

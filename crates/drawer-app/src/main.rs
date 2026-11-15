@@ -8,6 +8,7 @@ use drawer_core::storage::UserStorage;
 use eframe::egui;
 use std::{path::PathBuf, sync::Arc};
 mod abr;
+mod accessibility;
 mod acquisition;
 mod action_controls;
 mod action_repeat;
@@ -279,6 +280,7 @@ struct Drawer {
     revert_pending: Option<u64>,
     panels: panels::Panels,
     interface: ui_scale::Interface,
+    keyboard: accessibility::Navigator,
     workspaces: Box<workspaces::Workspaces>,
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
@@ -506,6 +508,7 @@ impl Drawer {
             revert_pending: None,
             panels: panels::Panels::new(ctx),
             interface: ui_scale::Interface::new(ctx),
+            keyboard: Default::default(),
             workspaces: Default::default(),
             controls: Default::default(),
             tool_input: Default::default(),
@@ -874,6 +877,7 @@ impl Drawer {
         if self.data_maintenance_gate(ui) {
             return;
         }
+        self.accessibility_keys(ui.ctx());
         for doc in &mut self.documents {
             if let Err(e) = doc.configure_history(self.resources.current.history) {
                 self.status = Some(e);
@@ -1027,6 +1031,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
                     && !self.native_input.open
                     && !self.pressure.open
                     && !self.replay.open
+                    && !self.keyboard.open
                     && !self.acquisition.open
                     && !self.properties.open
                     && !self.brush_presets.open
@@ -1053,7 +1058,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
                         ui.horizontal_wrapped(|ui| {
                             for tip in BrushTip::ALL {
                                 if ui
-                                    .selectable_label(self.selected == tip, crate::i18n::text(tip.label()))
+                                    .selectable_label(self.selected == tip, if self.selected==tip{format!("[x] {}",crate::i18n::text(tip.label()))}else{crate::i18n::text(tip.label()).to_string()})
                                     .clicked()
                                 {
                                     self.set_tool(tip);
@@ -1224,6 +1229,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
         self.persist_navigator();
         self.panel_settings(ui.ctx());
         self.interface_settings(ui.ctx());
+        self.accessibility_window(ui.ctx());
         self.resolve_context_help(ui.ctx());
         self.help_window(ui.ctx());
         self.update_input_preferences(ui.ctx());

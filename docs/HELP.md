@@ -1900,3 +1900,10 @@ In **Local model inference…**, choose the requested processing device and save
 Native126 글자 외관 보존: 새로 만들거나 편집을 확정한 텍스트는 확정된 글리프 윤곽과 서식을 문서 안에 저장합니다. 원본 글꼴이 없어도 표시와 이동·변형은 유지됩니다. 내용·배치를 바꾸려면 사용 가능한 대체 글꼴을 선택하고 검토하세요. 글꼴 파일 자체를 포함하지 않습니다. Native1~125 문서는 이 외관 기록이 없으므로 원본 글꼴을 복원하거나 대체 결과를 직접 확인해야 합니다. 열기만으로 기존 배치 세대를 변경하지 않습니다.
 
 입력 강제 중단 사유는 로컬 설정 폴더의 input-cancellations.json에 최근32개만 기록합니다. 그림·좌표·키 내용은 기록하지 않습니다. 기록에 실패해도 진행 획 취소와 기존 그림 보존은 유지합니다.
+
+
+## accessibility | Keyboard navigation and contrast | F10 Tab ShiftTab Enter Escape contrast scale
+
+Press F10 to search commands and open panel settings, information, interface size or help. With the search field focused, Up/Down selects and Enter runs. Tab/Shift+Tab reaches the rows and buttons; Enter activates the focused control. Escape closes this window and returns focus. Escape also closes interface/panel settings. F1 opens local help for the focused control. Unavailable commands explain the reason. Close the pending decision dialog before running another command.
+
+High contrast uses a black/white interface with visible borders and textual selection marks. It changes interface preferences, not document colors or drawing history. Interface size supports50–200%. The preference is local and survives restart. Physical assistive-device and screen-reader conformance is not certified by the keyboard simulation.

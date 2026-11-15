@@ -28,6 +28,7 @@ impl Drawer {
             || self.native_input.open
             || self.pressure.open
             || self.replay.open
+            || self.keyboard.open
             || self.properties.open
             || self.brush_presets.open
             || self.textures.modal()

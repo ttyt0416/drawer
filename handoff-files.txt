@@ -1488,3 +1488,7 @@ docs/process/check-304-evidence.json
 crates/drawer-app/src/verification_paths.rs
 docs/process/path-acceptance.md
 docs/process/check-305-evidence.json
+crates/drawer-app/src/accessibility.rs
+crates/drawer-app/src/verification_accessibility.rs
+docs/process/accessibility-acceptance.md
+docs/process/check-306-evidence.json

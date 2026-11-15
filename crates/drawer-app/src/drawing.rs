@@ -2267,7 +2267,8 @@ impl Drawer {
         }
         self.drawing.prepare(ctx);
         if ctx.input(|i| {
-            !i.focused
+            self.keyboard.open
+                || !i.focused
                 || i.events
                     .iter()
                     .any(|e| matches!(e, egui::Event::WindowFocused(false)))

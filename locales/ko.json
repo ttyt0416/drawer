@@ -441,5 +441,9 @@
   "Recent documents": "최근 문서",
   "Views": "보기",
   "Top raster": "맨 위 래스터",
-  "Save captured revision in background": "고정한 수정본을 백그라운드에 저장"
+  "Save captured revision in background": "고정한 수정본을 백그라운드에 저장",
+  "Commands and panels": "명령과 패널",
+  "Find a command": "명령 찾기",
+  "Run selected command": "선택한 명령 실행",
+  "High contrast": "고대비"
 }

@@ -21,6 +21,23 @@ impl Interface {
     }
 }
 impl Drawer {
+    pub(super) fn interface_contrast(
+        &mut self,
+        ctx: &egui::Context,
+        enabled: bool,
+    ) -> Result<(), String> {
+        let next = Settings {
+            high_contrast: enabled,
+            ..self.interface.settings
+        };
+        if let Some(storage) = &self.storage {
+            next.save(storage).map_err(|e| e.to_string())?;
+        }
+        self.interface.settings = next;
+        self.interface.saved = Some(next);
+        self.apply_theme(ctx);
+        Ok(())
+    }
     pub(super) fn observe_scale(&mut self, ctx: &egui::Context) {
         let after = ctx.pixels_per_point() as f64;
         let before = self.interface.ppp;

@@ -10,6 +10,8 @@ use std::{
 pub struct Settings {
     pub version: u32,
     pub zoom: f32,
+    #[serde(default)]
+    pub high_contrast: bool,
     /// Pan is stored in device pixels, independent of UI/monitor scale.
     pub default_view: Option<View>,
 }
@@ -18,6 +20,7 @@ impl Default for Settings {
         Self {
             version: 1,
             zoom: 1.0,
+            high_contrast: false,
             default_view: None,
         }
     }

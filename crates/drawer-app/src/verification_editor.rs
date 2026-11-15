@@ -41,6 +41,10 @@ impl Editor {
         Ok(e)
     }
     pub fn frame(&mut self, events: Vec<egui::Event>) {
+        self.frame_modifiers(events, egui::Modifiers::NONE);
+    }
+    pub fn frame_modifiers(&mut self, mut events: Vec<egui::Event>, modifiers: egui::Modifiers) {
+        events.insert(0, egui::Event::ModifiersChanged(modifiers));
         let mut input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,

@@ -45,7 +45,12 @@ pub(super) fn button(
     label: impl Into<String>,
     topic: &'static str,
 ) -> egui::Response {
-    let response = ui.button(label.into());
+    let response = ui.button(label.into()).on_hover_ui(|ui| {
+        ui.label(format!(
+            "F1: {}",
+            help::find(topic).map_or(topic, |t| t.title)
+        ));
+    });
     tag(ui.ctx(), &response, topic);
     response
 }
@@ -55,7 +60,22 @@ pub(super) fn selectable(
     label: impl Into<String>,
     topic: &'static str,
 ) -> egui::Response {
-    let response = ui.selectable_label(selected, label.into());
+    let label = label.into();
+    let response = ui
+        .selectable_label(
+            selected,
+            if selected {
+                format!("[x] {label}")
+            } else {
+                label
+            },
+        )
+        .on_hover_ui(|ui| {
+            ui.label(format!(
+                "F1: {}",
+                help::find(topic).map_or(topic, |t| t.title)
+            ));
+        });
     tag(ui.ctx(), &response, topic);
     response
 }
