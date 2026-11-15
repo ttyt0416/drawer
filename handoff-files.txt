@@ -1481,3 +1481,7 @@ scripts/test-process-memory.ps1
 docs/process/stability-acceptance.md
 docs/process/check-303-evidence.json
 docs/process/check-303-runner-regression.json
+crates/drawer-core/src/settings_compat.rs
+crates/drawer-app/src/verification_compatibility.rs
+docs/process/compatibility-acceptance.md
+docs/process/check-304-evidence.json

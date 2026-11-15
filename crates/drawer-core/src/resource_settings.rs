@@ -80,6 +80,7 @@ impl Settings {
     pub fn save(&self, storage: &crate::storage::UserStorage) -> io::Result<()> {
         self.valid().map_err(io::Error::other)?;
         let path = storage.root().join("settings/resources.json");
+        crate::settings_compat::guard::<Self>(&path, self)?;
         let data = serde_json::to_vec(self).map_err(io::Error::other)?;
         crate::atomic_file::publish(
             &path,

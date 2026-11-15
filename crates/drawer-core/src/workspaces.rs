@@ -884,6 +884,7 @@ impl Store {
             return Err(io::Error::other("Invalid workspace collection"));
         }
         let path = storage.root().join("settings/workspaces.json");
+        crate::settings_compat::guard(&path, self)?;
         if path.exists() && Self::load(storage).is_err() {
             write_bytes(
                 &storage.root().join("settings/workspaces.damaged.json"),
@@ -956,7 +957,11 @@ fn read_bytes(path: &Path) -> io::Result<Vec<u8>> {
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> io::Result<T> {
     serde_json::from_slice(&read_bytes(path)?).map_err(io::Error::other)
 }
-pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+pub(crate) fn write_json<T: Serialize + serde::de::DeserializeOwned>(
+    path: &Path,
+    value: &T,
+) -> io::Result<()> {
+    crate::settings_compat::guard(path, value)?;
     write_bytes(path, &serde_json::to_vec(value).map_err(io::Error::other)?)
 }
 fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {

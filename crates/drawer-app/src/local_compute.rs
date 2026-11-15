@@ -70,6 +70,7 @@ impl Settings {
             &storage.root().join("settings/local-compute.json"),
         )
         .map_err(io::Error::other)?;
+        drawer_core::settings_compat::guard(&path, &self)?;
         let temp =
             drawer_core::file_browser::new_path(&path.with_file_name("local-compute-write.tmp"))
                 .map_err(io::Error::other)?;

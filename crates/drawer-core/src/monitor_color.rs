@@ -69,6 +69,7 @@ impl Settings {
         }
         self.prepare()?;
         let path = storage.root().join("settings/monitor-color.json");
+        crate::settings_compat::guard::<Self>(&path, self).map_err(|e| e.to_string())?;
         if fs::symlink_metadata(&path).is_ok_and(|m| !m.is_file() || m.file_type().is_symlink()) {
             return Err("Monitor destination must be a regular file".into());
         }

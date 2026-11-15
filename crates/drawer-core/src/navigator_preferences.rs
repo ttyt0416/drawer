@@ -70,6 +70,7 @@ impl Preferences {
             return Err(io::Error::other("Invalid navigator preferences"));
         }
         let path = storage.root().join("settings/navigator.json");
+        crate::settings_compat::guard::<Self>(&path, &self)?;
         if path.exists() {
             if fs::metadata(&path)?.len() > 65536 {
                 return Err(io::Error::other("Navigator settings exceed recovery limit"));

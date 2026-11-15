@@ -261,6 +261,7 @@ impl PresetBook {
         if !self.valid() {
             return Err(io::Error::other("Invalid canvas presets"));
         }
+        crate::settings_compat::guard(path, self)?;
         atomic(path, &serde_json::to_vec(self).map_err(io::Error::other)?)
     }
     pub fn save(&self, storage: &UserStorage) -> io::Result<()> {
@@ -268,6 +269,7 @@ impl PresetBook {
             return Err(io::Error::other("Invalid canvas presets"));
         }
         let path = storage.root().join("settings/canvas-presets.json");
+        crate::settings_compat::guard::<Self>(&path, self)?;
         if path.exists() {
             if fs::metadata(&path)?.len() > 65536 {
                 return Err(io::Error::other(

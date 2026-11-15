@@ -31,6 +31,7 @@ pub mod references;
 pub mod render;
 pub mod scene;
 pub mod selection;
+pub mod settings_compat;
 pub mod sizing;
 pub mod storage;
 pub mod template_bundle;

@@ -142,6 +142,7 @@ impl AidPreferences {
             ));
         }
         let path = storage.root().join("settings/aids.json");
+        crate::settings_compat::guard::<Self>(&path, &self)?;
         if path.exists() {
             let backup = if Self::load(storage).is_ok() {
                 "aids.previous.json"

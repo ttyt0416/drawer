@@ -70,7 +70,7 @@ pub fn request(path: &Path) -> io::Result<Request> {
     }
     Ok(r)
 }
-pub fn write<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+pub fn write<T: Serialize + serde::de::DeserializeOwned>(path: &Path, value: &T) -> io::Result<()> {
     crate::workspaces::write_json(path, value)
 }
 pub fn reply(path: &Path) -> io::Result<Reply> {

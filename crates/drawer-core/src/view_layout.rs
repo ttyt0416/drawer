@@ -76,6 +76,7 @@ impl Layout {
             return Err(io::Error::other("Invalid view layout"));
         }
         let path = storage.root().join("settings/views.json");
+        crate::settings_compat::guard::<Self>(&path, self)?;
         if path.exists() {
             if fs::metadata(&path)?.len() > 1024 * 1024 {
                 return Err(io::Error::other("View layout exceeds recovery limit"));

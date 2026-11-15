@@ -359,6 +359,7 @@ impl Settings {
             return Err(io::Error::other("Invalid interpolation settings"));
         }
         let path = storage.root().join("settings/interpolation.json");
+        crate::settings_compat::guard::<Self>(&path, &self)?;
         if path.exists() {
             if fs::metadata(&path)?.len() > 65536 {
                 return Err(io::Error::other(

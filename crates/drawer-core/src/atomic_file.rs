@@ -74,7 +74,9 @@ pub fn publish(
     tick: &mut impl FnMut(Stage) -> io::Result<()>,
 ) -> io::Result<Outcome> {
     let original = stamp(path)?;
-    let healthy = original.is_some() && validate(path).is_ok();
+    let validation = original.as_ref().map(|_| validate(path));
+    let healthy = matches!(&validation, Some(Ok(())));
+    let validation_error = validation.and_then(Result::err).map(|e| e.to_string());
     let mut outcome = Outcome {
         preserved_unverified: None,
     };
@@ -97,6 +99,7 @@ pub fn publish(
     tick(Stage::Synced)?;
     drop(writer);
     validate(temporary)?;
+    crate::settings_compat::candidate(path, temporary, validation_error.as_deref())?;
     tick(Stage::Verified)?;
     if original.is_some() && healthy {
         // Never follow or replace an unreviewed link at the predecessor path.

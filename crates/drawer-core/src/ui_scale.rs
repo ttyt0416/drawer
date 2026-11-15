@@ -55,6 +55,7 @@ impl Settings {
             return Err(io::Error::other("Invalid interface settings"));
         }
         let path = storage.root().join("settings/interface.json");
+        crate::settings_compat::guard::<Self>(&path, &self)?;
         if path.exists() {
             if fs::metadata(&path)?.len() > 65536 {
                 return Err(io::Error::other("Interface settings exceed recovery limit"));
