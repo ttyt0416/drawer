@@ -1485,3 +1485,6 @@ crates/drawer-core/src/settings_compat.rs
 crates/drawer-app/src/verification_compatibility.rs
 docs/process/compatibility-acceptance.md
 docs/process/check-304-evidence.json
+crates/drawer-app/src/verification_paths.rs
+docs/process/path-acceptance.md
+docs/process/check-305-evidence.json

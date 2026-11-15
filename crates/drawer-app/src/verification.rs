@@ -17,6 +17,8 @@ mod history;
 mod masks;
 #[path = "verification_native.rs"]
 mod native;
+#[path = "verification_paths.rs"]
+mod paths;
 #[path = "verification_performance.rs"]
 mod performance;
 #[path = "verification_pictures.rs"]
@@ -39,7 +41,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=295 | 301..=304) {
+    if !matches!(item, 287..=295 | 301..=305) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -65,6 +67,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         302 => pictures::run(&root)?,
         303 => stability::run(&root)?,
         304 => compatibility::run(&root)?,
+        305 => paths::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(

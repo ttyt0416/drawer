@@ -1,5 +1,23 @@
 use super::*;
 use std::{collections::HashSet, path::Path};
+fn save_failure(path: &Path, error: &std::io::Error) -> String {
+    let (reason, action) = if matches!(error.raw_os_error(), Some(32 | 33)) {
+        (
+            "File is locked by another operation",
+            "Release the lock or choose another file",
+        )
+    } else if std::fs::metadata(path).is_ok_and(|m| m.permissions().readonly()) {
+        ("Target is read-only", "Choose a writable file or folder")
+    } else if error.kind() == std::io::ErrorKind::PermissionDenied {
+        ("Permission denied", "Choose a folder you can write to")
+    } else {
+        (
+            "Save failed",
+            "Keep the drawing open and retry with a valid local destination",
+        )
+    };
+    format!("{reason}: {}. {action}. ({error})", path.display())
+}
 
 pub(super) struct DocumentTab {
     pub proof: drawer_core::soft_proof::Settings,
@@ -364,7 +382,7 @@ impl Drawer {
             return self.queue_native_save(index, &target, None);
         }
         let saved = drawer_core::files::save_report(&mut self.documents[index], &target)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| save_failure(&target, &e))?;
         if let Some(copy) = saved.preserved_unverified {
             self.status = Some(format!(
                 "Saved. Previous unreadable bytes preserved separately: {}",
