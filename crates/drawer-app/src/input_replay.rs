@@ -1,5 +1,6 @@
 use super::*;
 use drawer_core::input_replay::{Record, Sequence, checksum};
+use sha2::{Digest, Sha256};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc,
@@ -101,6 +102,8 @@ pub(super) fn run_seeded(
     frame(&ctx, &mut app, 0.0, vec![]);
     frame(&ctx, &mut app, 0.01, vec![]);
     let before = app.documents[0].snapshot();
+    let started = std::time::Instant::now();
+    let mut cpu_frames_ms = Vec::new();
     let mut n = 0;
     let mut frames = 2;
     while n < sequence.samples.len() {
@@ -128,9 +131,11 @@ pub(super) fn run_seeded(
             events.push(event);
             n += 1;
         }
+        let frame_started = std::time::Instant::now();
         app.drawing
             .virtual_events(events, sequence.pen_backend_available);
         frame(&ctx, &mut app, 1.0 + micros as f64 / 1e6, vec![]);
+        cpu_frames_ms.push(frame_started.elapsed().as_secs_f64() * 1000.);
         frames += 1;
         progress.store(n, Ordering::Relaxed);
     }
@@ -139,6 +144,7 @@ pub(super) fn run_seeded(
         .virtual_events(vec![], sequence.pen_backend_available);
     let end = sequence.samples.last().unwrap().micros as f64 / 1e6 + 1.01;
     frame(&ctx, &mut app, end, vec![egui::Event::WindowFocused(false)]);
+    let cpu_total_ms = started.elapsed().as_secs_f64() * 1000.;
     frames += 1;
     if app.drawing.pending() {
         return Err("Virtual input retained a contact after cancellation".into());
@@ -177,6 +183,25 @@ pub(super) fn run_seeded(
             incomplete_cancelled,
             passed,
             frames,
+            measurement: seed
+                .is_none()
+                .then(|| drawer_core::input_replay::Measurement {
+                    version: 1,
+                    app_version: env!("CARGO_PKG_VERSION").into(),
+                    engine_version: "drawer-input-pipeline-1".into(),
+                    input_sha256: format!(
+                        "{:x}",
+                        Sha256::digest(serde_json::to_vec(sequence).expect("validated sequence"))
+                    ),
+                    rgba_sha256: format!(
+                        "{:x}",
+                        Sha256::digest(pixels.iter().flatten().copied().collect::<Vec<_>>())
+                    ),
+                    cpu_frames_ms,
+                    cpu_total_ms,
+                    physical_device_validated: false,
+                    display_latency_ms: None,
+                }),
         },
         pixels,
     })
@@ -317,6 +342,7 @@ impl Drawer {
             if let Err(e)=self.replay.sequence.validate(){ui.colored_label(egui::Color32::YELLOW,e);}
             if let Some(result)=&self.replay.result {
                 ui.label("Last completed replay result (its input is included in the saved report)");
+                if let Some(m)=&result.record.measurement {ui.label(format!("CPU replay {:.3} ms · {} frames · display latency unmeasured",m.cpu_total_ms,m.cpu_frames_ms.len()));ui.label(format!("Input SHA-256 {}",m.input_sha256));}
                 ui.label(if result.record.sequence.expected_checksum.is_some() {"Exact expected pixel fingerprint checked"}else{"No expected pixel fingerprint set; stroke count and undo/redo checked"});
                 ui.colored_label(if result.record.passed {egui::Color32::LIGHT_GREEN}else{egui::Color32::LIGHT_RED},format!("{} · {} strokes · RGBA {} · incomplete cancelled {} · undo/redo verified",if result.record.passed {"PASS"}else{"FAIL"},result.record.actual_strokes,result.record.checksum,result.record.incomplete_cancelled));
                 if let Some(texture)=&self.replay.texture {ui.image((texture.id(),texture.size_vec2()*3.0));}

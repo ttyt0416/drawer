@@ -247,6 +247,22 @@ pub struct Record {
     pub incomplete_cancelled: bool,
     pub passed: bool,
     pub frames: usize,
+    /// Optional for legacy records. CPU timings never represent pen/display latency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measurement: Option<Measurement>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Measurement {
+    pub version: u32,
+    pub app_version: String,
+    pub engine_version: String,
+    pub input_sha256: String,
+    pub rgba_sha256: String,
+    pub cpu_frames_ms: Vec<f64>,
+    pub cpu_total_ms: f64,
+    pub physical_device_validated: bool,
+    pub display_latency_ms: Option<f64>,
 }
 impl Record {
     pub fn save(&self, path: &Path) -> io::Result<()> {

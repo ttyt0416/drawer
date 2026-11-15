@@ -1469,3 +1469,6 @@ docs/process/physical-device-lifecycle.md
 docs/process/physical-299-template.json
 docs/process/physical-driver-monitors.md
 docs/process/physical-300-template.json
+crates/drawer-app/src/verification_replay.rs
+docs/process/input-replay-acceptance.md
+docs/process/check-301-evidence.json

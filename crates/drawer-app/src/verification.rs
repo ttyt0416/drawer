@@ -21,6 +21,8 @@ mod performance;
 mod pressure;
 #[path = "verification_recovery.rs"]
 mod recovery;
+#[path = "verification_replay.rs"]
+mod replay;
 #[path = "verification_strokes.rs"]
 mod strokes;
 pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<(), String> {
@@ -31,7 +33,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         .ok_or("Invalid checklist number")?
         .parse::<u32>()
         .map_err(|_| "Invalid checklist number")?;
-    if !matches!(item, 287..=295) {
+    if !matches!(item, 287..=295 | 301) {
         return Err("This acceptance number has no implemented scenario".into());
     }
     let root = PathBuf::from(args.next().ok_or("Missing new verification directory")?);
@@ -53,6 +55,7 @@ pub(super) fn cli(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<
         293 => recovery::run(&root)?,
         294 => performance::run(&root)?,
         295 => pressure::run()?,
+        301 => replay::run(&root)?,
         _ => unreachable!(),
     };
     let mut sample = drawer_core::document::Document::create(
