@@ -2686,6 +2686,13 @@ pub(super) fn smoke_painting() -> Result<(), String> {
     Ok(())
 }
 
+impl Drawer {
+    pub(super) fn cancel_graphics_input(&mut self) {
+        self.drawing.focus_loss(&mut self.documents);
+        self.flush_input_cancellations();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -33,6 +33,7 @@ try {
     $report=Get-Content -LiteralPath $receipt -Raw -Encoding utf8|ConvertFrom-Json
     if($report.format -ne 'Drawer checklist acceptance' -or $report.version -ne 1 -or $report.item -ne $Item -or $report.passed -ne $expectedPass -or $report.physicalDeviceValidated -ne $false -or $report.nativeVersion -ne $package.nativeMax){throw 'Verification receipt identity mismatch'}
     if($MeasurementOnly -and $report.report.criterionComplete -ne $false){throw 'Partial measurement identity mismatch'}
+    if($Item -eq 308 -and ($report.report.criterionComplete -ne $false -or $report.report.cases.Count -ne 4 -or $report.report.realDriverRemovalTested -ne $false -or $report.report.gpuOomExhaustionInduced -ne $false)){throw 'Owned graphics injection must not certify the untested hardware matrix'}
     $result=[ordered]@{version=1;measurementOnly=[bool]$MeasurementOnly;item=$Item;executableSha256=$sha;receiptSha256=(Get-FileHash -LiteralPath $receipt).Hash.ToLowerInvariant();result=$report}
     if($Item -eq 303){
         if($report.report.minimumSoakSeconds -ne 600 -or $report.report.durationSeconds -lt 600 -or $memory.Count -lt 500){throw 'Incomplete long-session measurement'}
@@ -40,6 +41,7 @@ try {
     }
     [IO.File]::WriteAllText($evidencePath,($result|ConvertTo-Json -Depth 100 -Compress)+"`n",[Text.UTF8Encoding]::new($false))
     if($MeasurementOnly){Write-Output "Checklist $Item CPU measurement recorded; criterionComplete=false; evidence=$Evidence"}
+    elseif($Item -eq 308){Write-Output "Checklist 308 recovery/restart checks passed; hardware criterion pending; evidence=$Evidence"}
     else{Write-Output "Checklist $Item acceptance passed; physical device validation=false; evidence=$Evidence"}
 } finally {
     if($process -and -not $process.HasExited){$process.Kill();$process.WaitForExit()}

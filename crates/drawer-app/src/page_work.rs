@@ -1048,6 +1048,12 @@ impl Drawer {
     }
 }
 
+impl Panel {
+    pub(super) fn reset_graphics(&mut self) {
+        self.images.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

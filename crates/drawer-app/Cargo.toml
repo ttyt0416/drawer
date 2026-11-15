@@ -29,3 +29,5 @@ michiu_window = "=0.0.3"
 winsafe = { version = "=0.0.29", features = ["user"] }
 windows = { version = "=0.62.2", features = ["Win32_Foundation"] }
 raw-window-handle = "=0.6.2"
+winit = { version = "=0.30.13", default-features = false, features = ["rwh_06"] }
+egui-winit = { version = "=0.36.2", default-features = false }

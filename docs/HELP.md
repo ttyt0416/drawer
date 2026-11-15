@@ -1907,3 +1907,10 @@ Native126 글자 외관 보존: 새로 만들거나 편집을 확정한 텍스�
 Press F10 to search commands and open panel settings, information, interface size or help. With the search field focused, Up/Down selects and Enter runs. Tab/Shift+Tab reaches the rows and buttons; Enter activates the focused control. Escape closes this window and returns focus. Escape also closes interface/panel settings. F1 opens local help for the focused control. Unavailable commands explain the reason. Close the pending decision dialog before running another command.
 
 High contrast uses a black/white interface with visible borders and textual selection marks. It changes interface preferences, not document colors or drawing history. Interface size supports50–200%. The preference is local and survives restart. Physical assistive-device and screen-reader conformance is not certified by the keyboard simulation.
+
+
+## graphics-recovery | Display recovery and software mode | GPU CPU software OpenGL restart display failure
+
+GPU display initialization/context/memory errors can reopen the local interface using CPU rendering and Windows GDI. Open documents, view state and document Undo/Redo are moved in memory. Unconfirmed previews and pending input are cancelled. File originals are preserved. The software window continues mouse editing and local saving. Local document composition uses the same core renderer in both display modes.
+
+F10 → Display recovery lets you choose software display now or after restart. After an automatic failure the preference stays on software until you clear it. Drawer.exe --software-rendering [local files] also starts this mode. To try the GPU again, clear the preference and restart. Software mode may redraw more slowly, embeds auxiliary panels in the main interface and bounds the display to16M pixels. Documents keep their original dimensions and precision. No remote computation is used.

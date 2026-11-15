@@ -59,6 +59,10 @@ impl Drawer {
                 ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                 self.interface.open = false;
                 self.keyboard.restore(ctx);
+            } else if self.graphics.open {
+                ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+                self.graphics.open = false;
+                self.keyboard.restore(ctx);
             } else if self.panels.open {
                 ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
                 self.panels.open = false;
@@ -76,9 +80,11 @@ impl Drawer {
         let down = direction > 0;
         let up = direction < 0;
         let mut commands = self.workspaces.store.current.actions.commands();
-        commands.extend(["@scale", "@panels", "@information", "@help"].map(String::from));
+        commands
+            .extend(["@scale", "@panels", "@information", "@help", "@graphics"].map(String::from));
         let labels = self.workspaces.store.current.actions.clone();
         let label = |id: &str| match id {
+            "@graphics" => "Display recovery".to_string(),
             "@scale" => crate::i18n::text("Interface size").to_string(),
             "@panels" => crate::i18n::text("Panel settings").to_string(),
             "@information" => crate::i18n::text("Information").to_string(),
@@ -236,6 +242,7 @@ impl Drawer {
         if let Some(id) = execute {
             self.keyboard.open = false;
             match id.as_str() {
+                "@graphics" => self.graphics.open = true,
                 "@scale" => self.interface.open = true,
                 "@panels" => self.panels.open = true,
                 "@information" => self.workspaces.store.current.information.visible = true,

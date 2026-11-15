@@ -1496,3 +1496,11 @@ scripts/input-validation-status.py
 docs/process/check-307-suite.json
 docs/process/input-validation-status.json
 docs/process/input-validation-status.md
+crates/drawer-app/src/graphics.rs
+crates/drawer-app/src/graphics_settings.rs
+crates/drawer-app/src/graphics_verify.rs
+crates/drawer-app/src/software_painter.rs
+crates/drawer-platform/src/graphics.rs
+docs/process/graphics-recovery.md
+docs/process/check-308-host.json
+docs/process/check-308-evidence.json

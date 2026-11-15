@@ -124,6 +124,21 @@ impl Input {
             })
             .collect())
     }
+    #[cfg(windows)]
+    pub fn detach(&self) {
+        let old = {
+            let mut s = self.state.borrow_mut();
+            let old = (s.driver.take(), s.touch.take(), s.owner.take());
+            s.window = 0;
+            s.queue.clear();
+            s.down = [false; 3];
+            s.blocked = false;
+            s.requested = None;
+            s.touch_contacts.clear();
+            old
+        };
+        drop(old);
+    }
     pub fn attached(&self) -> bool {
         self.state.try_borrow().is_ok_and(|s| s.window != 0)
     }
@@ -312,6 +327,9 @@ pub mod book_print;
 #[allow(unsafe_code)]
 pub mod audio;
 
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub mod graphics;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 pub mod local_errors;

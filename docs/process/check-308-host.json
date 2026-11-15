@@ -1,0 +1,16 @@
+{
+  "format": "Drawer graphics host inventory",
+  "version": 1,
+  "item": 308,
+  "observedLocalDate": "2026-11-15",
+  "query": "Win32_VideoController: Name, DriverVersion (read only)",
+  "displayAdapters": [
+    {
+      "name": "NVIDIA GeForce RTX 5060 Ti",
+      "driverVersion": "32.0.16.1088"
+    }
+  ],
+  "otherGpuDriverCombinationsTested": false,
+  "physicalDeviceRemovalTested": false,
+  "systemDriverStopped": false
+}

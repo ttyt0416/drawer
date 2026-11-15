@@ -70,6 +70,11 @@ mod gaussian;
 mod gradient;
 mod gradient_ramp;
 mod graph_edit;
+#[cfg(windows)]
+mod graphics;
+mod graphics_settings;
+#[cfg(windows)]
+mod graphics_verify;
 mod help;
 mod history_audit;
 mod history_navigation;
@@ -160,6 +165,7 @@ mod size_fields;
 mod sizing_dialog;
 mod snapping;
 mod soft_proof;
+mod software_painter;
 mod source_choices;
 mod spatial_blur;
 mod special_rulers;
@@ -281,6 +287,7 @@ struct Drawer {
     panels: panels::Panels,
     interface: ui_scale::Interface,
     keyboard: accessibility::Navigator,
+    graphics: graphics_settings::Panel,
     workspaces: Box<workspaces::Workspaces>,
     controls: action_controls::Controls,
     tool_input: tool_input::ToolInput,
@@ -509,6 +516,7 @@ impl Drawer {
             panels: panels::Panels::new(ctx),
             interface: ui_scale::Interface::new(ctx),
             keyboard: Default::default(),
+            graphics: Default::default(),
             workspaces: Default::default(),
             controls: Default::default(),
             tool_input: Default::default(),
@@ -792,7 +800,10 @@ impl Drawer {
         }
     }
 
-    fn with_storage(mut self, storage: UserStorage) -> Self {
+    fn with_storage(self, storage: UserStorage) -> Self {
+        self.with_storage_recovery(storage, true)
+    }
+    fn with_storage_recovery(mut self, storage: UserStorage, initialize_recovery: bool) -> Self {
         self.load_monitor_color(&storage);
         self.load_auto_actions(&storage);
         self.load_file_browser(&storage);
@@ -861,7 +872,10 @@ impl Drawer {
         self.load_world_preferences(&storage);
         self.load_world_views(&storage);
         self.load_resources(&storage);
-        self.load_recovery(&storage);
+        self.load_graphics(&storage);
+        if initialize_recovery {
+            self.load_recovery(&storage);
+        }
         self.storage = Some(storage);
         self
     }
@@ -1229,6 +1243,7 @@ if ui.button("Release editing pin").clicked(){self.finish_stroke();if let Some(n
         self.persist_navigator();
         self.panel_settings(ui.ctx());
         self.interface_settings(ui.ctx());
+        self.graphics_window(ui.ctx());
         self.accessibility_window(ui.ctx());
         self.resolve_context_help(ui.ctx());
         self.help_window(ui.ctx());
@@ -1260,7 +1275,14 @@ impl eframe::App for Drawer {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        self.display.poll_monitors(ui.ctx(), frame);
+        self.run_ui(ui, Some(frame));
+    }
+}
+impl Drawer {
+    pub(crate) fn run_ui(&mut self, ui: &mut egui::Ui, mut frame: Option<&mut eframe::Frame>) {
+        if let Some(frame) = frame.as_deref_mut() {
+            self.display.poll_monitors(ui.ctx(), frame);
+        }
         if (self.data_maintenance.busy() || self.work_library.busy())
             && ui.ctx().input(|i| i.viewport().close_requested())
         {
@@ -1389,10 +1411,14 @@ impl eframe::App for Drawer {
                 fail_smoke();
             }
             if self.frames >= 6 && self.sizing_dialog.is_none() {
-                let native_ime = preferences::native_probe(frame).unwrap_or_else(|e| {
-                    eprintln!("IME probe: {e}");
-                    fail_smoke()
-                });
+                let native_ime = frame
+                    .as_deref()
+                    .ok_or_else(|| "Native frame unavailable".to_string())
+                    .and_then(preferences::native_probe)
+                    .unwrap_or_else(|e| {
+                        eprintln!("IME probe: {e}");
+                        fail_smoke()
+                    });
                 if self.layout.rendered_windows != self.tabs.len()
                     || !self.workspaces.store.current.layout.panel_locks[0].position
                 {
@@ -2874,6 +2900,16 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    #[cfg(windows)]
+    if first.as_deref() == Some(std::ffi::OsStr::new("--verify-graphics-case")) {
+        if let Err(e) = graphics_verify::cli(args) {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    let force_cpu = first.as_deref() == Some(std::ffi::OsStr::new("--software-rendering"));
+    let first = if force_cpu { args.next() } else { first };
     let (smoke_output, startup_paths) =
         if first.as_deref() == Some(std::ffi::OsStr::new("--smoke-test")) {
             (
@@ -2910,6 +2946,31 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
+    #[cfg(windows)]
+    {
+        let strict = smoke_output.is_some();
+        let factory: graphics::Factory = Box::new(move |ctx| {
+            let mut app = Drawer::new(ctx, smoke_output.clone())
+                .with_storage(UserStorage::from_environment().map_err(|e| e.to_string())?);
+            for path in &startup_paths {
+                if let Err(e) = app.open_path(path) {
+                    app.status = Some(format!("Cannot open {}: {e}", path.display()));
+                }
+            }
+            Ok(Box::new(app))
+        });
+        graphics::run(
+            options,
+            factory,
+            native_mouse,
+            strict,
+            force_cpu,
+            None,
+            None,
+        )
+        .map_err(|e| eframe::Error::AppCreation(std::io::Error::other(e).into()))
+    }
+    #[cfg(not(windows))]
     eframe::run_native(
         APP_NAME,
         options,

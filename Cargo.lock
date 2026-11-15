@@ -825,6 +825,7 @@ dependencies = [
  "drawer-infer",
  "drawer-platform",
  "eframe",
+ "egui-winit",
  "keepawake",
  "michiu_window",
  "raw-window-handle",
@@ -834,6 +835,7 @@ dependencies = [
  "sha2",
  "tiff",
  "windows",
+ "winit",
  "winsafe",
 ]
 
