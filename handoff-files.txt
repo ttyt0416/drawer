@@ -1475,3 +1475,9 @@ docs/process/check-301-evidence.json
 crates/drawer-app/src/verification_pictures.rs
 docs/process/owned-test-pictures.md
 docs/process/check-302-evidence.json
+crates/drawer-app/src/verification_stability.rs
+scripts/process-memory.ps1
+scripts/test-process-memory.ps1
+docs/process/stability-acceptance.md
+docs/process/check-303-evidence.json
+docs/process/check-303-runner-regression.json

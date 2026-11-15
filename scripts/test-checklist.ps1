@@ -1,5 +1,6 @@
 param([ValidateRange(1,309)][int]$Item,[switch]$MeasurementOnly,[string]$Evidence,[ValidateRange(5,900)][int]$TimeoutSeconds=180)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'process-memory.ps1')
 if($MeasurementOnly -and $Item -ne 294){throw 'MeasurementOnly is reserved for item294'}
 $expectedPass= -not [bool]$MeasurementOnly
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -20,7 +21,12 @@ try {
     $env:DRAWER_DATA_DIR=Join-Path $base 'data'
     $env:PATH=Join-Path $env:SystemRoot 'System32'
     $process=Start-Process -FilePath $exe -ArgumentList @('--verify-item',"$Item",('"'+$base+'"')) -WindowStyle Hidden -RedirectStandardError $errors -PassThru
-    if(-not $process.WaitForExit($TimeoutSeconds*1000)){$process.Kill();$process.WaitForExit();throw 'Owned verification timed out'}
+    $memory=[Collections.Generic.List[object]]::new()
+    $watch=[Diagnostics.Stopwatch]::StartNew()
+    while(-not $process.WaitForExit(1000)){
+        if($Item -eq 303){$process.Refresh();$memory.Add([ordered]@{seconds=$watch.Elapsed.TotalSeconds;privateBytes=$process.PrivateMemorySize64;workingSetBytes=$process.WorkingSet64});if($memory.Count % 60 -eq 0){Write-Output ("Soak303: {0:N0}s; samples={1}; private={2:N2}MiB" -f $watch.Elapsed.TotalSeconds,$memory.Count,($process.PrivateMemorySize64/1MB))}}
+        if($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds){$process.Kill();$process.WaitForExit();throw 'Owned verification timed out'}
+    }
     if($process.ExitCode -ne 0){if(Test-Path -LiteralPath $errors){Get-Content -LiteralPath $errors -Encoding utf8};throw 'Owned verification failed'}
     $receipt=Join-Path $base 'receipt.json'
     if((Get-Item -LiteralPath $receipt).Length -gt 8MB){throw 'Verification receipt exceeds8MiB'}
@@ -28,6 +34,10 @@ try {
     if($report.format -ne 'Drawer checklist acceptance' -or $report.version -ne 1 -or $report.item -ne $Item -or $report.passed -ne $expectedPass -or $report.physicalDeviceValidated -ne $false -or $report.nativeVersion -ne $package.nativeMax){throw 'Verification receipt identity mismatch'}
     if($MeasurementOnly -and $report.report.criterionComplete -ne $false){throw 'Partial measurement identity mismatch'}
     $result=[ordered]@{version=1;measurementOnly=[bool]$MeasurementOnly;item=$Item;executableSha256=$sha;receiptSha256=(Get-FileHash -LiteralPath $receipt).Hash.ToLowerInvariant();result=$report}
+    if($Item -eq 303){
+        if($report.report.minimumSoakSeconds -ne 600 -or $report.report.durationSeconds -lt 600 -or $memory.Count -lt 500){throw 'Incomplete long-session measurement'}
+        $result.processMemory=Get-SoakMemorySummary -Samples $memory
+    }
     [IO.File]::WriteAllText($evidencePath,($result|ConvertTo-Json -Depth 100 -Compress)+"`n",[Text.UTF8Encoding]::new($false))
     if($MeasurementOnly){Write-Output "Checklist $Item CPU measurement recorded; criterionComplete=false; evidence=$Evidence"}
     else{Write-Output "Checklist $Item acceptance passed; physical device validation=false; evidence=$Evidence"}
